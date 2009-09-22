@@ -1,0 +1,59 @@
+# Top level SConstruct file for lib_mptlsim
+
+import os
+import platform
+
+# Automatically set the -j option to No of available CPUs
+# user can override this by specifying -j option at runtime
+num_cpu = int(os.environ.get('NUM_CPU', 2))
+SetOption('num_jobs', num_cpu)
+print("running with -j%s" % GetOption('num_jobs'))
+
+# List of subdirectories where we have source code
+dirs = ['cache', 'core', 'lib', 'sim', 'stats', 'tools', 'x86']
+
+# Setup the environment
+env = Environment()
+env['CC'] = 'g++'
+env.Append(CCFLAGS = '-O2')
+
+# Include all the subdirectories into the CCFLAGS
+incflags_str = ''
+for dir in dirs:
+    incflags_str += '-I%s ' % dir
+
+env.Append(CCFLAGS = incflags_str)
+
+# Set all the -D flags
+debug = ARGUMENTS.get('debug', 0)
+if int(debug):
+    env.Append(CCFLAGS = '-g')
+# enable PTLSIM_HYPERVISOR
+env.Append(CCFLAGS = '-DPTLSIM_HYPERVISOR')
+# enable MPTLSIMQ
+env.Append(CCFLAGS = '-DMPTLSIMQ')
+
+# enable new cache code (TODO: Make this default when we release)
+env.Append(CCFLAGS = '-DNEW_CACHE')
+# Check for 64bit machine
+arch_type = platform.architecture()[0]
+if arch_type == '64bit':
+    env.Append(CCFLAGS = '-D__x86_64__')
+
+Export('env')
+
+print("Build Envrionment:")
+print("\tCC:%s" % env['CC'])
+print("\tCCFLAGS:%s" % env['CCFLAGS'])
+
+# Setup the build directory
+#VariantDir('build', dirs)
+
+# Now call the SConscript in all subdirectories to build object files
+objs = []
+for dir in dirs:
+#    VariantDir('build/%s' % dir , dir)
+    o = SConscript('%s/SConscript' % dir, variant_dir='build/%s' % dir) 
+    objs.append(o)
+
+#env.Library('build/libmptlsim', objs)

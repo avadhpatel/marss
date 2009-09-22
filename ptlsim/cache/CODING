@@ -1,0 +1,90 @@
+
+A Simple guideline for coding for new cache structures in MPtlsim:
+
+1. 
+Names for Class, Struct, or representing any types must be in mixed case
+starting with upper case and no '_' in name. For example:
+	class Cache
+	struct GlobalQueue
+
+2.
+Variable names must be in mixed case starting with lower case and no '_' in
+name. For example:
+	int cacheLineSize;
+	double cacheLinePower;
+
+3.
+Constant names must be in all upper case using '_' for seperation. For example:
+	const int MAX_ASSOC = 4;
+	const int L2_LINE_SIZE = 64;
+
+4.
+Function names must use '_' for separation with all lower case if possible. For
+example:
+	int get_length();
+	void set_length(int length);
+
+5.
+Private class variables must have '_' suffix for easy separation between local
+variables and class variables. For example:
+	int lineLength_;
+	int assoc_;
+
+6.
+Avoid unnecessary abbreviation of names when full name can be used. For example:
+	do not use - 
+		int getLineLen();
+	instead use -
+		int getLineLength();
+For representing 'number', one can use 'no' or 'No' as suffix not as prefix.
+For example:
+	do not use -
+		int getLineNumber();
+	can be written as -
+		int getLineNo();
+
+7.
+Whenever possible generic values should have the same name as their type. For
+example:
+	void setLine(CacheLine* cacheLine);
+	void setMemoryHierarchy(MemoryHierarchy* memoryHierarchy);
+
+8.
+For access of private variables use 'get', 'set'. And write all getters/setters 
+into the class definition so they will be treated as 'inline' by compiler.
+
+9.
+For boolean variables of class use 'is' as prefix. For example:
+	isSet, isFound, isWaiting
+Reason for this 'is' prefix is, it forces the programmer to choose meaningful
+names instead of just 'isFlag' that doesn't make any sense.
+
+10.
+Enumeration constants should be prefixed by a common type name. For example:
+	enum LineStatus {
+		LINE_STATUS_CACHE_ACCESS,
+		LINE_STATUS_WAITING_PORT,
+		LINE_STATUS_WAITING_INTERCONNECT,
+		LINE_STATUS_WAITING_RESPONSE,
+	};
+
+11.
+Opening bracket for class/function must be started in next line. For example:
+	do not use -
+		class Cache { 
+	instead use -
+		class Cache
+		{
+
+12.
+Opening bracket for loops/conditions like 'if/for/while/switch' should start in
+same line. For example:
+	if(line != null) {
+
+13.
+Any line should not exceed a width of 80 characters. Please follow this
+strictly as the code gets unreadable if its really long in just one line. For
+vim users, to automatically enforce line width to 80 characters add following
+line to your .vimrc
+	set textwidth=79
+

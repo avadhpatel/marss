@@ -1,0 +1,37 @@
+# Test trace file
+# format of input:
+# [clock] [coreid]:[dataFlag]:[r/w]:[address_in_hex] ... 
+# here,
+# clock = simulation clock value
+# dataFlag = i means instruction, d means data
+# address_in_hex = hex value of physical address to be requested
+
+0 0:i:r:0x200 1:i:r:0x5d0
+1 0:i:r:0x210
+2 1:i:r:0x5e0
+7 0:d:r:0x1f0
+
+# test cache port availability
+20	0:i:r:0x300 0:i:r:0x410 0:i:r:0x520 0:i:r:0x630
+
+# test icache buffer in cpu controllers
+80	1:i:r:0x1a0
+115	1:i:r:0x1a2
+116	1:i:r:0x1a4
+
+# test cache write after read (WAR) dependency
+200		0:d:w:0x2000	1:d:w:0x4000
+210		0:d:r:0x2000	1:d:r:0x4001
+
+# test the cache-update
+1000	0:d:r:0x1000
+1200	0:d:w:0x1000
+1240	0:d:w:0x1001
+1242	0:d:r:0x1001
+
+# test the serialization access to same line
+1430	0:d:r:0x20f0	1:d:r:0x20f0
+1600	0:d:w:0x20f0	1:d:w:0x20f0
+
+# execute untill clock reaches to 2000 cycles
+5000

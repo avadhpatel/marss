@@ -1,0 +1,142 @@
+#!/usr/bin/perl -w
+#
+# PTLsim: Cycle Accurate x86-64 Simulator
+# Data Store Template Builder
+#
+# Copyright 2006 Matt T. Yourst <yourst@yourst.com>
+#
+# This program parses a C header file, looking for the
+# structure definition specified by the first argument.
+# The struct itself, and any flags embedded in comments,
+# is then parsed and used to generate C++ code that
+# constructs a tree of DataStoreNodeTemplate objects.
+# This C++ file is then compiled and run to create
+# ptlsim.dst, a binary representation of the structure
+# used to reconstruct it as editable DataStoreNodes
+# inside PTLstats.
+#
+
+$target = $ARGV[0];
+
+@stack = ();
+$node = "root";
+$topnode = "";
+$depth = 0;
+$enabled = 0;
+
+sub padding {
+  my ($d) = shift;
+  print("  ");
+  for ($i = 0; $i < $d; $i++) { print("  "); }
+}
+
+print("int main(int argc, char** argv) {\n");
+
+while (<STDIN>) {
+  chomp;
+
+  if (/^\s*struct\s+(\w+)\s*\{\s*\/\/\s*rootnode\:\s*(.*)/) {
+    padding($depth);
+    $topnode = $1;
+    $node = $1;
+    $enabled = 1;
+    print("DataStoreNodeTemplate $node(\"" . $node . "\"); {\n");
+    $depth++;
+
+    $attr = $2;
+    if ($attr =~ /summable/) {
+      padding($depth);
+      print("$node.summable = 1;\n");
+    }
+    if ($attr =~ /identical/) {
+      padding($depth);
+      print("$node.identical_subtrees = 1;\n");
+    }
+
+    next;
+  }
+
+  next if (!$enabled);
+
+  if (/^\s*struct\s+(\w+)\s*\{\s*\/\/\s*node:\s*(.*)/) {
+    padding($depth);
+    $prevnode = $node;
+    push @stack,$node;
+    $node = $1;
+    $depth++;
+    print("DataStoreNodeTemplate& $node = $prevnode(\"$node\"); {\n");
+
+    $attr = $2;
+    if ($attr =~ /summable/) {
+      padding($depth);
+      print("$node.summable = 1;\n");
+    }
+    if ($attr =~ /identical/) {
+      padding($depth);
+      print("$node.identical_subtrees = 1;\n");
+    }
+  } elsif (/^\s*struct\s+(\w+)\s*\{/) {
+    padding($depth);
+    $prevnode = $node;
+    push @stack,$node;
+    $node = $1;
+    $depth++;
+    print("DataStoreNodeTemplate& $node = $prevnode(\"$node\"); {\n");
+  } elsif (/^\s*\}/) {
+    $node = pop @stack;
+    $depth--;
+    padding($depth);
+    print("}\n");
+  } elsif (/^\s*(\w+)\s+(\w+)\s*\;/) {
+    # Scalar
+    $type = $1; $name = $2;
+    padding($depth);
+    if ($type eq 'W64') { print("$node.addint(\"$name\");\n"); }
+    elsif ($type eq 'double') { print("$node.addfloat(\"$name\");\n"); }
+    #else { die("// line $.: Unknown type: $type\n"); }
+    else { print("$node.add(\"$name\", $type);\n"); }
+  } elsif (/^\s*(\w+)\s+(\w+)\s*\[(.+)\]\s*\;\s*$/) {
+    # type name[size]
+    $type = $1; $name = $2; $dims = $3;
+    padding($depth);
+    if ($type eq 'W64') { print("$node.addint(\"$name\", $dims);\n"); }
+    elsif ($type eq 'double') { print("$node.addfloat(\"$name\", $dims);\n"); }
+    elsif ($type eq 'char') { print("$node.addstring(\"$name\", $dims);\n"); }
+    else { die("// line $.: Unknown type: $type\n"); }
+  } elsif (/^\s*(\w+)\s+(\w+)\s*\[(.+)\]\s*\;\s*\/\/\s*label:\s+(.+)$/) {
+    # type name[size] // label: labelarray
+    $type = $1; $name = $2; $dims = $3; $label = $4;
+    padding($depth);
+    if ($type eq 'W64') { print("$node.histogram(\"$name\", $dims, $label);\n"); }
+    else { die("// line $.: Histograms and labeled histograms must use W64 type\n"); }
+  } elsif (/^\s*(\w+)\s+(\w+)\s*\[(.+)\]\s*\;\s*\/\/\s*histo:\s+(.+)$/) {
+    # type name[size] // histo: min, max, step
+    $type = $1; $name = $2; $dims = $3; $extra = $4;
+    padding($depth);
+    if ($type eq 'W64') { print("$node.histogram(\"$name\", $dims, $extra);\n"); }
+    else { die("// line $.: Histograms and labeled histograms must use W64 type\n"); }
+  } elsif (/^\s*\/\//) {
+    # Comment line
+  } elsif (/^\s*\#/) {
+    # Preprocessor line
+  } elsif (/^$/) {
+    # Blank line
+  } else {
+    die("// line $.: Unrecognized line '$_'\n");
+  }
+
+  $enabled = ($depth != 0);
+
+  if (!$enabled) {
+    if ($topnode eq $target) {
+      print("\n");
+      print("  odstream os(cout.filehandle());\n");
+      print("  os << $target;\n");
+      print("  os.close();\n");
+      print("}\n");
+    }
+
+    $topnode = "";
+  }
+}
+
