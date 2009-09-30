@@ -5,6 +5,9 @@
 // Copyright 1999-2008 Matt T. Yourst <yourst@yourst.com>
 //
 
+#include <cpu.h>
+#include <helper.h>
+
 #include <decode.h>
 
 //
@@ -14,23 +17,26 @@
 #define FP_STACK_MASK 0x3f
 
 void assist_x87_fprem(Context& ctx) {
-  assert(false);
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+	ctx.setup_qemu_switch();
+	helper_fprem();
+//  assert(false);
+  ctx.eip = ctx.reg_nextrip;
 }
 
 #define make_two_input_x87_func_with_pop(name, expr) \
 void assist_x87_##name(Context& ctx) { \
-  W64& tos = ctx.commitarf[REG_fptos]; \
-  W64& st0 = ctx.fpstack[tos >> 3]; \
-  W64& st1 = ctx.fpstack[((tos >> 3) + 1) & 0x7]; \
+  W64& tos = ctx.fpstt; \
+  W64& st0 = ctx.fpregs[tos >> 3]; \
+  W64& st1 = ctx.fpregs[((tos >> 3) + 1) & 0x7]; \
   SSEType st0u(st0); SSEType st1u(st1); \
   (expr); \
   st1 = st1u.w64; \
-  X87StatusWord* sw = (X87StatusWord*)&ctx.commitarf[REG_fpsw]; \
+  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus; \
   sw->c1 = 0; sw->c2 = 0; \
-  clearbit(ctx.commitarf[REG_fptags], tos); \
+  ctx.fptags[tos] = 0; \
+  /*clearbit(ctx.commitarf[REG_fptags], tos);*/ \
   tos = (tos + 8) & FP_STACK_MASK; \
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip]; \
+  ctx.eip = ctx.reg_nextrip; \
 }
 
 // Fix macro problems:
@@ -74,26 +80,26 @@ make_two_input_x87_func_with_pop(fyl2xp1, st1u.d = x87_fyl2xp1(st1u.d, st0u.d));
 make_two_input_x87_func_with_pop(fpatan, st1u.d = x87_fpatan(st1u.d, st0u.d));
 
 void assist_x87_fscale(Context& ctx) {
-  W64& tos = ctx.commitarf[REG_fptos];
-  W64& st0 = ctx.fpstack[tos >> 3];
-  W64& st1 = ctx.fpstack[((tos >> 3) + 1) & 0x7];
+  W64& tos = ctx.fpstt;
+  W64& st0 = ctx.fpregs[tos >> 3];
+  W64& st1 = ctx.fpregs[((tos >> 3) + 1) & 0x7];
   SSEType st0u(st0); SSEType st1u(st1);
   st0u.d = st0u.d * math::exp2(math::trunc(st1u.d));
   st0 = st0u.w64;
-  X87StatusWord* sw = (X87StatusWord*)&ctx.commitarf[REG_fpsw];
+  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
   sw->c1 = 0; sw->c2 = 0;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 #define log2 old_log2
 
 #define make_unary_x87_func(name, expr) \
 void assist_x87_##name(Context& ctx) { \
-  W64& r = ctx.fpstack[ctx.commitarf[REG_fptos] >> 3]; \
+  W64& r = ctx.fpregs[ctx.fpstt >> 3]; \
   SSEType ra(r); ra.d = (expr); r = ra.w64; \
-  X87StatusWord* sw = (X87StatusWord*)&ctx.commitarf[REG_fpsw]; \
+  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus; \
   sw->c1 = 0; sw->c2 = 0; \
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip]; \
+  ctx.eip = ctx.reg_nextrip; \
 }
 
 make_unary_x87_func(fsqrt, math::sqrt(ra.d));
@@ -102,7 +108,7 @@ make_unary_x87_func(fcos, math::cos(ra.d));
 make_unary_x87_func(f2xm1, math::exp2(ra.d) - 1);
 
 void assist_x87_frndint(Context& ctx) {
-  W64& r = ctx.fpstack[ctx.commitarf[REG_fptos] >> 3];
+  W64& r = ctx.fpregs[ctx.fpstt >> 3];
   SSEType ra(r);
   switch (ctx.fpcw.rc) {
   case 0: // round to nearest (round)
@@ -115,24 +121,25 @@ void assist_x87_frndint(Context& ctx) {
     ra.d = math::trunc(ra.d); break;
   }
   r = ra.w64;
-  X87StatusWord* sw = (X87StatusWord*)&ctx.commitarf[REG_fpsw];
+  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
   sw->c1 = 0; sw->c2 = 0;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 #define make_two_output_x87_func_with_push(name, expr) \
 void assist_x87_##name(Context& ctx) { \
-  W64& tos = ctx.commitarf[REG_fptos]; \
-  W64& st0 = ctx.fpstack[tos >> 3]; \
-  W64& st1 = ctx.fpstack[((tos >> 3) - 1) & 0x7]; \
+  W64& tos = ctx.fpstt; \
+  W64& st0 = ctx.fpregs[tos >> 3]; \
+  W64& st1 = ctx.fpregs[((tos >> 3) - 1) & 0x7]; \
   SSEType st0u(st0); SSEType st1u(st1); \
   expr; \
   st0 = st0u.w64; st1 = st1u.w64; \
-  X87StatusWord* sw = (X87StatusWord*)&ctx.commitarf[REG_fpsw]; \
+  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus; \
   sw->c1 = 0; sw->c2 = 0; \
   tos = (tos - 8) & FP_STACK_MASK; \
-  setbit(ctx.commitarf[REG_fptags], tos); \
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip]; \
+  ctx.fptags[tos] = 1; \
+  /*setbit(ctx.commitarf[REG_fptags], tos); */\
+  ctx.eip = ctx.reg_nextrip; \
 }
 
 // st(0) = sin(st(0)) and push cos(orig st(0))
@@ -144,101 +151,112 @@ make_two_output_x87_func_with_push(fptan, (st1u.d = 1.0, st0u.d = math::tan(st0u
 make_two_output_x87_func_with_push(fxtract, (st1u.d = math::significand(st0u.d), st0u.d = math::ilogb(st0u.d)));
 
 void assist_x87_fprem1(Context& ctx) {
-  W64& tos = ctx.commitarf[REG_fptos];
-  W64& st0 = ctx.fpstack[tos >> 3];
-  W64& st1 = ctx.fpstack[((tos >> 3) - 1) & 0x7];
+  W64& tos = ctx.fpstt;
+  W64& st0 = ctx.fpregs[tos >> 3];
+  W64& st1 = ctx.fpregs[((tos >> 3) - 1) & 0x7];
   SSEType st0u(st0); SSEType st1u(st1);
 
   X87StatusWord fpsw;
   asm("fldl %[st1]; fldl %[st0]; fprem1; fstsw %%ax; fstpl %[st0]; ffree %%st(0); fincstp;" : [st0] "+m" (st0u.d), "=a" (*(W16*)&fpsw) : [st1] "m" (st1u.d));
   st0 = st0u.w64;
 
-  X87StatusWord* sw = (X87StatusWord*)&ctx.commitarf[REG_fpsw];
+  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
   sw->c0 = fpsw.c0;
   sw->c1 = fpsw.c1;
   sw->c2 = fpsw.c2;
   sw->c3 = fpsw.c3;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_x87_fxam(Context& ctx) {
-  W64& r = ctx.fpstack[ctx.commitarf[REG_fptos] >> 3];
+  W64& r = ctx.fpregs[ctx.fpstt >> 3];
   SSEType ra(r);
 
   X87StatusWord fpsw;
   asm("fxam; fstsw %%ax" : "=a" (*(W16*)&fpsw) : "t" (ra.d));
 
-  X87StatusWord* sw = (X87StatusWord*)&ctx.commitarf[REG_fpsw];
+  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
   sw->c0 = fpsw.c0;
   sw->c1 = fpsw.c1;
   sw->c2 = fpsw.c2;
   sw->c3 = fpsw.c3;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 // We need a general purpose "copy from user virtual addresses" function
 
 void assist_x87_fld80(Context& ctx) {
   // Virtual address is in sr2
-  Waddr addr = ctx.commitarf[REG_ar1];
-  X87Reg data;
+  Waddr addr = ctx.reg_ar1;
+//  X87Reg data;
+  CPU86_LDoubleU data;
 
-  PageFaultErrorCode pfec;
-  Waddr faultaddr;
-  int bytes = ctx.copy_from_user(data, addr, sizeof(X87Reg), pfec, faultaddr);
+  ctx.setup_qemu_switch();
+  data = helper_fldt(addr);
 
-  if (bytes < sizeof(X87Reg)) {
-    ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
-    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-    return;
-  }
+//  PageFaultErrorCode pfec;
+//  Waddr faultaddr;
+//  int bytes = ctx.copy_from_user(data, addr, sizeof(X87Reg), pfec, faultaddr);
+//
+//  if (bytes < sizeof(X87Reg)) {
+//    ctx.eip = ctx.reg_selfrip;
+//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
+//    return;
+//  }
+//
 
+  // Avadh: Check the conversation from CPU86_LDoubleU to X87Reg
   // Push on stack
-  W64& tos = ctx.commitarf[REG_fptos];
+  W64& tos = ctx.fpstt;
   tos = (tos - 8) & FP_STACK_MASK;
-  ctx.fpstack[tos >> 3] = x87_fp_80bit_to_64bit(&data);
-  setbit(ctx.commitarf[REG_fptags], tos);
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.fpregs[tos >> 3] = x87_fp_80bit_to_64bit((X87Reg*)&data);
+// setbit(ctx.commitarf[REG_fptags], tos);
+  ctx.fptags[tos] = 1; 
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_x87_fstp80(Context& ctx) {
   // Store and pop from stack
-  W64& tos = ctx.commitarf[REG_fptos];
-  X87Reg data;
-  x87_fp_64bit_to_80bit(&data, ctx.fpstack[tos >> 3]);
+  W64& tos = ctx.fpstt;
+  CPU86_LDoubleU data;
+  x87_fp_64bit_to_80bit((X87Reg*)&data, ctx.fpregs[tos >> 3]);
 
   // Virtual address is in sr2
-  Waddr addr = ctx.commitarf[REG_ar1];
+  Waddr addr = ctx.reg_ar1;
 
-  PageFaultErrorCode pfec;
-  Waddr faultaddr;
-  int bytes = ctx.copy_to_user(addr, data, sizeof(X87Reg), pfec, faultaddr);
+  ctx.setup_qemu_switch();
+  helper_fstt(data, addr);
 
-  if (bytes < sizeof(X87Reg)) {
-    ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
-    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-    return;
-  }
+//  PageFaultErrorCode pfec;
+//  Waddr faultaddr;
+//  int bytes = ctx.copy_to_user(addr, data, sizeof(X87Reg), pfec, faultaddr);
+//
+//  if (bytes < sizeof(X87Reg)) {
+//    ctx.eip = ctx.reg_selfrip;
+//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
+//    return;
+//  }
 
-  clearbit(ctx.commitarf[REG_fptags], tos);
+//  clearbit(ctx.commitarf[REG_fptags], tos);
+  ctx.fptags[tos] = 0; 
   tos = (tos + 8) & FP_STACK_MASK;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_x87_fsave(Context& ctx) {
   //++MTY TODO
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
 void assist_x87_frstor(Context& ctx) {
   //++MTY TODO
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
 void assist_x87_fclex(Context& ctx) {
-  X87StatusWord fpsw = ctx.commitarf[REG_fpsw];
+  X87StatusWord fpsw = ctx.fpus;
   fpsw.pe = 0;
   fpsw.ue = 0;
   fpsw.oe = 0;
@@ -248,15 +266,18 @@ void assist_x87_fclex(Context& ctx) {
   fpsw.sf = 0;
   fpsw.es = 0;
   fpsw.b = 0;
-  ctx.commitarf[REG_fpsw] = fpsw;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.fpus = fpsw;
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_x87_finit(Context& ctx) {
   ctx.fpcw = 0x037f;
-  ctx.commitarf[REG_fpsw] = 0;
-  ctx.commitarf[REG_fptags] = 0;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.fpus = 0;
+//  ctx.commitarf[REG_fptags] = 0;
+  foreach(i, 8) {
+	  ctx.fptags[i] = 0;
+  }
+  ctx.eip = ctx.reg_nextrip;
 }
 
 //
@@ -648,7 +669,7 @@ bool TraceDecoder::decode_x87() {
       DECODE(eform, ra, w_mode);
       EndOfDecode();
       operand_load(REG_temp1, ra, OP_ld);
-      TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, REG_temp1, 1, offsetof(Context, fpcw)); stp.internal = 1; this << stp;
+      TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, REG_temp1, 1, offsetof(Context, fpuc)); stp.internal = 1; this << stp;
     }
     break;
   }
@@ -677,7 +698,7 @@ bool TraceDecoder::decode_x87() {
       // fnstcw
       DECODE(eform, rd, w_mode);
       EndOfDecode();
-      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof(Context, fpcw)); ldp.internal = 1; this << ldp;
+      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof(Context, fpuc)); ldp.internal = 1; this << ldp;
       result_store(REG_temp1, REG_temp0, rd);
     }
     break;

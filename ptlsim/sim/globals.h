@@ -64,7 +64,9 @@ typedef signed short W16s;
 typedef unsigned char byte;
 typedef unsigned char W8;
 typedef signed char W8s;
+#ifndef NULL
 #define NULL 0
+#endif
 #define null NULL
 
 #ifdef __x86_64__
@@ -78,16 +80,20 @@ typedef W32 Waddr;
 #include <math.h>
 #include <float.h>
 
-#define __stringify_1(x) #x
-#define stringify(x) __stringify_1(x)
+//#define __stringify_1(x) #x
+//#define stringify(x) __stringify_1(x)
 
 #define alignto(x) __attribute__ ((aligned (x)))
 #define insection(x) __attribute__ ((section (x)))
 #define packedstruct __attribute__ ((packed))
 #define noinline __attribute__((noinline))
 
+#ifndef unlikely
 #define unlikely(x) (__builtin_expect(!!(x), 0))
+#endif 
+#ifndef likely
 #define likely(x) (__builtin_expect(!!(x), 1))
+#endif 
 #define isconst(x) (__builtin_constant_p(x))
 #define getcaller() (__builtin_return_address(0))
 #define asmlinkage extern "C"
@@ -155,9 +161,11 @@ template <typename T> struct ispointer_t<T*> { static const bool pointer = 1; };
 #define ispointer(T) (ispointer_t<T>::pointer)
 #define isprimitive(T) (isprimitive_t<T>::primitive)
 
+#ifndef offsetof
 // Null pointer to the specified object type, for computing field offsets
 template <typename T> static inline T* nullptr() { return (T*)(Waddr)0; }
 #define offsetof(T, field) ((Waddr)(&(nullptr<T>()->field)) - ((Waddr)nullptr<T>()))
+#endif
 #define baseof(T, field, ptr) ((T*)(((byte*)(ptr)) - offsetof(T, field)))
 // Restricted (non-aliased) pointers:
 #define noalias __restrict__

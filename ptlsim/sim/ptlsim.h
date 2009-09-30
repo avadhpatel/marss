@@ -16,16 +16,12 @@
 #include <kernel.h>
 #endif
 #include <ptlhwdef.h>
-#include <config.h>
+#include <config-parser.h>
 #include <datastore.h>
-
-#ifdef MPTLSIMQ
-#define MAX_CONTEXTS 1
 
 #define INVALID_MFN 0xffffffffffffffffULL
 #define INVALID_PHYSADDR 0xffffffffffffffffULL
 
-#endif
 
 extern W64 sim_cycle;
 extern W64 unhalted_cycle_count;
@@ -45,122 +41,6 @@ struct PTLsimCore{
   virtual PTLsimCore& getcore() const{ return (*((PTLsimCore*)null));}
 };
 
-#ifdef MPTLSIMQ
-//
-// Physical memory extent descriptor constructed
-// by QEMU for each unique physical memory extent
-// and passed to the PTLsim hypervisor as a list
-// during boot time.
-//
-// This structure must occupy exactly 16 bytes.
-//
-struct PhysicalMemoryExtent {
-  W64 physaddr;                // Starting physical address
-  W64 length;                  // Length in bytes
-  W16 type;                    // Extent type (PHYS_MEM_EXTENT_xxx)
-  W16 flags;                   // Misc flags
-  W32 io_device_index;         // Unique QEMU generated index if this extent is for an I/O device
-  W64 host_mem_offset;         // Offset of mapped memory in QEMU space (to uniquely identify extents)
-};
-
-//
-// Maximum number of physical memory extents.
-//
-// Since KVM can only handle up to 32 phys mem slots,
-// 64 should be enough to cover all I/O maps too.
-//
-#define MAX_PHYS_MEM_EXTENTS 64
-
-//
-// Physical memory extent types:
-//
-// At most 16 of these types can be defined, since we store the type
-// in a 4-bit field starting at bit 40 of each physical address during
-// simulation, as well as a 4-bit field in PhysicalMemoryExtentTag.
-//
-enum {
-  PHYS_MEM_TYPE_DRAM,          // Normal cacheable DRAM
-  PHYS_MEM_TYPE_ROM,           // Read Only Memory
-  PHYS_MEM_TYPE_UNCACHED,      // Uncacheable DRAM (e.g. frame buffers, etc)
-  PHYS_MEM_TYPE_HYPERSPACE,    // PTLsim hypervisor space for microcode access
-  PHYS_MEM_TYPE_MMIO,          // Memory Mapped I/O space (unless specialized below)
-  PHYS_MEM_TYPE_MMIO_PTLCALL,  // PTLcall MMIO page
-  PHYS_MEM_TYPE_MMIO_APIC,     // Local APIC
-  PHYS_MEM_TYPE_MMIO_HPET,     // High Performance Event Timer (HPET)
-  PHYS_MEM_TYPE_INVALID,       // Invalid extent (none of the above)
-  PHYS_MEM_TYPE_COUNT,
-};
-
-static const char* phys_mem_type_names[PHYS_MEM_TYPE_COUNT] = {"DRAM", "rom", "uc", "hyperspace", "mmio", "mmio_ptlcall", "mmio_apic", "mmio_hpet", "invalid"};
-
-//
-// Physical Memory
-//
-
-typedef W64 pfn_t;
-typedef W64 mfn_t;
-
-static inline W64 pages_to_kb(W64 pages) { return (pages * 4096) / 1024; }
-static inline W64 pages_to_mb(W64 pages) { return (pages * 4096) / (1024 * 1024); }
-
-static inline int get_mfn_type(mfn_t mfn) {
-  // return get_physaddr_type(mfn << 12);
-  Level1PTE pte = get_physmap_pte(mfn);
-  return PhysicalMemoryExtentTag(pte.avlhi).type;
-}
-
-static inline int get_mfn_extent_id(mfn_t mfn) {
-  // return get_physaddr_type(mfn << 12);
-  Level1PTE pte = get_physmap_pte(mfn);
-  return PhysicalMemoryExtentTag(pte.avlhi).extentid;
-}
-
-static inline bool is_valid_mfn(mfn_t mfn) {
-  return ((mfn <= bootinfo.highest_mfn) && (get_mfn_type(mfn) != PHYS_MEM_TYPE_INVALID));
-}
-
-static inline bool is_cacheable_mfn(mfn_t mfn) {
-  int type = get_mfn_type(mfn);
-  return ((type == PHYS_MEM_TYPE_DRAM) | (type == PHYS_MEM_TYPE_ROM) | (type == PHYS_MEM_TYPE_HYPERSPACE));
-}
-
-static inline bool is_cacheable_physaddr(W64 physaddr) {
-  return is_cacheable_mfn(physaddr >> 12);
-}
-
-static inline bool is_valid_physaddr(W64 physaddr) { return is_valid_mfn(physaddr >> 12); }
-
-
-//
-// Self modifying code support
-//
-
-static inline bool smc_isdirty(mfn_t mfn) {
-  // MFN (2^28)-1 is INVALID_MFN as stored in RIPVirtPhys:
-  if unlikely (!is_cacheable_mfn(mfn)) return false;
-  return phys_pagedir[mfn].d;
-}
-
-static inline void smc_setdirty(mfn_t mfn) {
-  if unlikely (!is_cacheable_mfn(mfn)) return;
-  Level1PTE& pte = phys_pagedir[mfn];
-  //
-  // This is thread-safe since we never clear the dirty bit once it's set
-  // unless we also have other interlocks in place:
-  //
-  if likely (pte.d) return;
-  pte.atomic_update_dirty(true);
-}
-
-static inline void smc_cleardirty(Waddr mfn) {
-  if unlikely (!is_cacheable_mfn(mfn)) return;
-  Level1PTE& pte = phys_pagedir[mfn];
-  pte.atomic_update_dirty(false);
-}
-
-
-#endif
-
 struct PTLsimMachine {
   bool initialized;
   PTLsimMachine() { initialized = 0; }
@@ -178,36 +58,7 @@ struct PTLsimMachine {
   
   stringbuf machine_name;
 
-#ifdef MPTLSIMQ
-  ContextBase* user_ctx[MAX_CONTEXTS];
-  ContextBase* hyper_ctx[MAX_CONTEXTS];
-  byte* per_vcpu_stack_top[MAX_CONTEXTS];
-  W64 per_vcpu_stack_size[MAX_CONTEXTS];
-//  TaskStateSegment* per_vcpu_tss[MAX_CONTEXTS];
-  W64 ptlsim_page_count;
-  byte* heap_start;
-  byte* heap_end;
-//  Level1PTE* level1_ptes;
-//  Level2PTE* level2_ptes;
-//  Level3PTE* level3_ptes;
-//  Level4PTE* toplevel_page_table;
-  SegmentDescriptor* gdt;
-  GateDescriptor* idt;
-  W64 vcpu_count;
-  W64s pending_commands_from_host;
-  W64 next_command_uuid;
-  W64 abort_request;
-  W64 total_dram_pages;
-  W64 highest_mfn;
-  W64 ptlcall_pending_on_vcpu_bitmap;
-  W64 phys_mem_extent_count;
-  PhysicalMemoryExtent phys_mem_extents[MAX_PHYS_MEM_EXTENTS];
-#endif
 };
-
-#ifdef MPTLSIMQ
-extern PTLsimMachine *machine;
-#endif
 
 struct TransOpBuffer {
   TransOp uops[MAX_TRANSOP_BUFFER_SIZE];
@@ -446,13 +297,5 @@ ostream& operator <<(ostream& os, const PTLsimConfig& config);
 extern bool logenable;
 #define logable(level) (unlikely (logenable && (config.loglevel >= level)))
 void force_logging_enabled();
-
-#ifdef MPTLSIMQ
-// MPtlsimQ
-extern int contextcount;
-static inline Context& contextof(int vcpu) {
-	return *((Context*)machine->user_ctx[vcpu]);
-}
-#endif
 
 #endif // _PTLSIM_H_

@@ -903,7 +903,7 @@ int TraceDecoder::bias_by_segreg(int basereg) {
 
     assert(segid >= 0);
 
-    int varoffs = offsetof(Context, seg[segid].base);
+    int varoffs = offsetof(Context, segs[segid].base);
 
     TransOp ldp(OP_ld, REG_temp6, REG_ctx, REG_imm, REG_zero, 3, varoffs); ldp.internal = 1; this << ldp;
     this << TransOp(OP_add, REG_temp6, REG_temp6, basereg, REG_zero, 3);
@@ -1370,7 +1370,7 @@ void print_invalid_insns(int op, const byte* ripstart, const byte* rip, int vali
 }
 
 void assist_invalid_opcode(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
@@ -1636,35 +1636,50 @@ void assist_exec_page_fault(Context& ctx) {
   // translation and tell the main loop to start translating again at the
   // cut-off instruction's starting byte.
   //
-  Waddr faultaddr = ctx.commitarf[REG_ar1];
-  PageFaultErrorCode pfec = ctx.commitarf[REG_ar2];
+  Waddr faultaddr = ctx.reg_ar1;
+  PageFaultErrorCode pfec = ctx.reg_ar2;
 
-#ifdef PTLSIM_HYPERVISOR
-  Level1PTE pte = ctx.virt_to_pte(faultaddr);
-  bool page_now_valid = (pte.p & (!pte.nx) & ((!ctx.kernel_mode) ? pte.us : 1));
-  if unlikely (!page_now_valid) ctx.flush_tlb_virt(faultaddr);
-#else
-  bool page_now_valid = asp.fastcheck((byte*)faultaddr, asp.execmap);
-#endif
+  // Avadh: In QEMU we have to check if we have valid page in TLB entry
+  // for the given faultaddr
+  W64 tlb_addr;
+  int mmu_idx = cpu_mmu_index((CPUX86State*)&ctx);
+  int index = (faultaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+
+  bool page_now_valid;
+  tlb_addr = ctx.tlb_table[mmu_idx][index].addr_read;
+  if( (faultaddr & TARGET_PAGE_MASK) ==
+		  (tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK)) ) {
+	  page_now_valid = true;
+  } else {
+	  page_now_valid = false;
+  }
+
+//#ifdef PTLSIM_HYPERVISOR
+//  Level1PTE pte = ctx.virt_to_pte(faultaddr);
+//  bool page_now_valid = (pte.p & (!pte.nx) & ((!ctx.kernel_mode) ? pte.us : 1));
+//  if unlikely (!page_now_valid) ctx.flush_tlb_virt(faultaddr);
+//#else
+//  bool page_now_valid = asp.fastcheck((byte*)faultaddr, asp.execmap);
+//#endif
   if unlikely (page_now_valid) {
     if (logable(3)) {
       logfile << "Spurious PageFaultOnExec detected at fault rip ",
-        (void*)(Waddr)ctx.commitarf[REG_selfrip], " with faultaddr ",
+        (void*)(Waddr)ctx.reg_selfrip, " with faultaddr ",
         (void*)faultaddr, " @ ", total_user_insns_committed, 
         " user commits (", sim_cycle, " cycles)";
     }
-    bbcache.invalidate(RIPVirtPhys(ctx.commitarf[REG_selfrip]).update(ctx), INVALIDATE_REASON_SPURIOUS);
-    ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+    bbcache.invalidate(RIPVirtPhys(ctx.reg_selfrip).update(ctx), INVALIDATE_REASON_SPURIOUS);
+    ctx.eip = ctx.reg_selfrip;
     return;
   }
 
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
 }
 
 void assist_gp_fault(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
-  ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault, ctx.commitarf[REG_ar1]);
+  ctx.eip = ctx.reg_selfrip;
+  ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault, ctx.reg_ar1);
 }
 
 bool TraceDecoder::invalidate() {

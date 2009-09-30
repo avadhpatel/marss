@@ -9,6 +9,9 @@ num_cpu = int(os.environ.get('NUM_CPU', 2))
 SetOption('num_jobs', num_cpu)
 print("running with -j%s" % GetOption('num_jobs'))
 
+# Location of QEMU directory (default is '../qemu/')
+qemu_dir = "../qemu"
+
 # List of subdirectories where we have source code
 dirs = ['cache', 'core', 'lib', 'sim', 'stats', 'tools', 'x86']
 
@@ -23,15 +26,18 @@ for dir in dirs:
     incflags_str += '-I%s ' % dir
 
 env.Append(CCFLAGS = incflags_str)
+env.Append(CCFLAGS = "-I" + qemu_dir)
+env.Append(CCFLAGS = "-I" + qemu_dir + "/target-i386")
+env.Append(CCFLAGS = "-I" + qemu_dir + "/fpu")
+env.Append(CCFLAGS = "-I" + qemu_dir + "/x86_64-softmmu")
 
 # Set all the -D flags
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
     env.Append(CCFLAGS = '-g')
 # enable PTLSIM_HYPERVISOR
-env.Append(CCFLAGS = '-DPTLSIM_HYPERVISOR')
-# enable MPTLSIMQ
-env.Append(CCFLAGS = '-DMPTLSIMQ')
+env.Append(CCFLAGS = '-DPTLSIM_HYPERVISOR -DNEED_CPU_H')
+env.Append(CCFLAGS = '-D__STDC_FORMAT_MACROS')
 
 # enable new cache code (TODO: Make this default when we release)
 env.Append(CCFLAGS = '-DNEW_CACHE')

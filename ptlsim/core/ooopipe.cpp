@@ -48,11 +48,11 @@ void OutOfOrderCoreCacheCallbacks::icache_wakeup(LoadStoreInfo lsi, W64 physaddr
                  && (floor(thread->waiting_for_icache_fill_physaddr,
                            Memory::L1I_LINE_SIZE) == 
 					 floor(physaddr, Memory::L1I_LINE_SIZE))) {
-      if (logable(6)) logfile << "[vcpu ", thread->ctx.vcpuid, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
+      if (logable(6)) logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
       thread->waiting_for_icache_fill = 0;
       thread->waiting_for_icache_fill_physaddr = 0;
     }else{
-      if (logable(6)) logfile << "[vcpu ", thread->ctx.vcpuid, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr, " after floor : ",
+      if (logable(6)) logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr, " after floor : ",
                         (void*) floor(thread->waiting_for_icache_fill_physaddr, Memory::L1D_LINE_SIZE), " delivered ", (void*) physaddr,endl;
       //     assert(0);
     }
@@ -173,7 +173,7 @@ void ThreadContext::flush_pipeline() {
     }     
   }
   
-  reset_fetch_unit(ctx.commitarf[REG_rip]);
+  reset_fetch_unit(ctx.eip);
   rob_states.reset();
 
   ROB.reset();
@@ -269,7 +269,7 @@ void ThreadContext::external_to_core_state() {
     PhysicalRegister* physreg = (i == REG_zero) ? zeroreg : rf.alloc(threadid);
     assert(physreg); /// need increase rf size if failed.
     physreg->archreg = i;
-    physreg->data = ctx.commitarf[i];
+    physreg->data = ctx[i];
     physreg->flags = 0;
     commitrrt[i] = physreg;
   }
@@ -320,7 +320,7 @@ void ThreadContext::redispatch_deadlock_recovery() {
   if (logable(3)) logfile << " redispatch_deadlock_recovery, flush_pipeline.",endl;
   flush_pipeline();
   last_commit_at_cycle = previous_last_commit_at_cycle; /// so we can exit after no commit after deadlock recovery a few times in a roll
-  logfile << "[vcpu ", ctx.vcpuid, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
+  logfile << "[vcpu ", ctx.cpu_index, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
   /*
   //
   // This is a more selective scheme than the full pipeline flush.
@@ -1726,18 +1726,18 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
     MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
 
     if (!lock) {
-      logfile << "ERROR: thread ", ctx.vcpuid, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock was ", lock, endl;
+      logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock was ", lock, endl;
       assert(false);
     }
 
-    if (lock->vcpuid != ctx.vcpuid) {
-      logfile << "ERROR: thread ", ctx.vcpuid, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock vcpuid was ", lock->vcpuid, endl;
+    if (lock->vcpuid != ctx.cpu_index) {
+      logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock vcpuid was ", lock->vcpuid, endl;
       assert(false);
     }
 
     if unlikely (config.event_log_enabled) {
       OutOfOrderCoreEvent* event = core.eventlog.add(EVENT_RELEASE_MEM_LOCK);
-      event->threadid = ctx.vcpuid;
+      event->threadid = ctx.cpu_index;
       event->loadstore.sfr.physaddr = lockaddr >> 3;
     }
 
@@ -1840,7 +1840,7 @@ int ReorderBufferEntry::commit() {
     }
 
 #ifdef PTLSIM_HYPERVISOR
-    if unlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && (ctx.cr0.ts | (subrob.uop.is_x87 & ctx.cr0.em))) {
+    if unlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK)))) {
       subrob.physreg->data = EXCEPTION_FloatingPointNotAvailable;
       subrob.physreg->flags = FLAG_INV;
       if unlikely (subrob.lsq) subrob.lsq->invalid = 1;
@@ -1863,7 +1863,7 @@ int ReorderBufferEntry::commit() {
       // Capture the faulting virtual address for page faults
       if ((ctx.exception == EXCEPTION_PageFaultOnRead) |
           (ctx.exception == EXCEPTION_PageFaultOnWrite)) {
-        ctx.cr2 = subrob.origvirt;
+        ctx.cr[2] = subrob.origvirt;
       }
 #endif
 
@@ -1918,7 +1918,7 @@ int ReorderBufferEntry::commit() {
 
     // See notes in handle_exception():
     if likely (isclass(uop.opcode, OPCLASS_CHECK) & (ctx.exception == EXCEPTION_SkipBlock)) {
-      thread.chk_recovery_rip = ctx.commitarf[REG_rip] + uop.bytes;
+      thread.chk_recovery_rip = ctx.eip + uop.bytes;
       if unlikely (config.event_log_enabled) event->type = EVENT_COMMIT_SKIPBLOCK;
       per_context_ooocore_stats_update(threadid, commit.result.skipblock++);
     } else {
@@ -1977,7 +1977,7 @@ int ReorderBufferEntry::commit() {
     W64 lockaddr = lsq->physaddr << 3;
     MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
 
-    if unlikely (lock && (lock->vcpuid != thread.ctx.vcpuid)) {
+    if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
       if unlikely (config.event_log_enabled) core.eventlog.add_commit(EVENT_COMMIT_MEM_LOCKED, this);
 
       per_context_ooocore_stats_update(threadid, commit.result.memlocked++);
@@ -2055,9 +2055,9 @@ int ReorderBufferEntry::commit() {
 #endif
 #endif
 
-  assert(ctx.commitarf[REG_rip] == uop.rip);
+  assert(ctx.eip == uop.rip);
 
-  if likely (uop.som) assert(ctx.commitarf[REG_rip] == uop.rip); 
+  if likely (uop.som) assert(ctx.eip == uop.rip); 
 
   //
   // The commit of all uops in the x86 macro-op is guaranteed to happen after this point
@@ -2077,7 +2077,7 @@ int ReorderBufferEntry::commit() {
     thread.commitrrt[uop.rd] = physreg;
     thread.commitrrt[uop.rd]->addcommitref(uop.rd, thread.threadid);
 
-    if likely (uop.rd < ARCHREG_COUNT) ctx.commitarf[uop.rd] = physreg->data;
+    if likely (uop.rd < ARCHREG_COUNT) ctx[uop.rd] = physreg->data;
 
     physreg->rob = null;
   }
@@ -2085,22 +2085,22 @@ int ReorderBufferEntry::commit() {
   if likely (uop.eom) {
     if unlikely (uop.rd == REG_rip) {
       assert(isbranch(uop.opcode));
-      ctx.commitarf[REG_rip] = physreg->data;
+      ctx.eip = physreg->data;
     } else {
       assert(!isbranch(uop.opcode));
-      ctx.commitarf[REG_rip] += uop.bytes;
+      ctx.eip += uop.bytes;
     }
-    if unlikely (config.event_log_enabled) event->commit.target_rip = ctx.commitarf[REG_rip];
+    if unlikely (config.event_log_enabled) event->commit.target_rip = ctx.eip;
   }
 
   if likely ((!ld) & (!st) & (!uop.nouserflags)) {
     W64 flagmask = setflags_to_x86_flags[uop.setflags];
-    ctx.commitarf[REG_flags] = (ctx.commitarf[REG_flags] & ~flagmask) | (physreg->flags & flagmask);
+    ctx.eflags = (ctx.eflags & ~flagmask) | (physreg->flags & flagmask);
 
     per_context_ooocore_stats_update(threadid, commit.setflags.no += (uop.setflags == 0));
     per_context_ooocore_stats_update(threadid, commit.setflags.yes += (uop.setflags != 0));
 
-    if unlikely (config.event_log_enabled) event->commit.state.reg.rdflags = ctx.commitarf[REG_flags];
+    if unlikely (config.event_log_enabled) event->commit.state.reg.rdflags = ctx.eflags;
 
     if likely (uop.setflags & SETFLAG_ZF) {
       thread.commitrrt[REG_zf]->uncommitref(REG_zf, thread.threadid);
@@ -2165,9 +2165,9 @@ int ReorderBufferEntry::commit() {
         
   }
 
-  if unlikely (pteupdate) {
-    ctx.update_pte_acc_dirty(virtpage, pteupdate);
-  }
+  //if unlikely (pteupdate) {
+  //  ctx.update_pte_acc_dirty(virtpage, pteupdate);
+  //}
 
   //
   // Free physical registers, load/store queue entries, etc.
@@ -2230,7 +2230,7 @@ int ReorderBufferEntry::commit() {
     // instruction in sequence from within the branch predictor logic.
     //
     W64 end_of_branch_x86_insn = uop.rip + uop.bytes;
-    bool taken = (ctx.commitarf[REG_rip] != end_of_branch_x86_insn);
+    bool taken = (ctx.eip != end_of_branch_x86_insn);
     bool predtaken = (uop.riptaken != end_of_branch_x86_insn);
 
     if unlikely (config.event_log_enabled) {
@@ -2238,7 +2238,7 @@ int ReorderBufferEntry::commit() {
       event->commit.predtaken = predtaken;
     }
 
-    thread.branchpred.update(uop.predinfo, end_of_branch_x86_insn, ctx.commitarf[REG_rip]);
+    thread.branchpred.update(uop.predinfo, end_of_branch_x86_insn, ctx.eip);
     per_context_ooocore_stats_update(threadid, branchpred.updates++);
   }
 
@@ -2266,13 +2266,13 @@ int ReorderBufferEntry::commit() {
   thread.ROB.commit(*this);
 
   if unlikely (uop_is_barrier) {
-    if unlikely (config.event_log_enabled) core.eventlog.add(EVENT_COMMIT_ASSIST, RIPVirtPhys(ctx.commitarf[REG_rip]))->threadid = thread.threadid;
+    if unlikely (config.event_log_enabled) core.eventlog.add(EVENT_COMMIT_ASSIST, RIPVirtPhys(ctx.eip))->threadid = thread.threadid;
     per_context_ooocore_stats_update(threadid, commit.result.barrier++);
     return COMMIT_RESULT_BARRIER;
   }
 
   if unlikely (uop_is_eom & thread.stop_at_next_eom) {
-    logfile << "[vcpu ", thread.ctx.vcpuid, "] Stopping at cycle ", sim_cycle, " (", total_user_insns_committed, " commits)", endl;
+    logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_user_insns_committed, " commits)", endl;
     return COMMIT_RESULT_STOP;
   }
 

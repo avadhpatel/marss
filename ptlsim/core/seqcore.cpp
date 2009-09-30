@@ -668,7 +668,7 @@ struct SequentialCore {
 
     exception = 0;
 
-    W64 physaddr = (annul) ? INVALID_PHYSADDR : ctx.check_and_translate(addr, uop.size, STORE, uop.internal, exception, pfec, pteupdate, pteused);
+    W64 physaddr = (annul) ? INVALID_PHYSADDR : ctx.check_and_translate(addr, uop.size, STORE, uop.internal, exception, pfec);
     return physaddr;
   }
 
@@ -699,7 +699,7 @@ struct SequentialCore {
       // effect on the cycle accurate results.
       //
       if unlikely (config.event_log_enabled) {
-        SequentialCoreEvent* event = eventlog.add(EVENT_LOAD_STORE_UNALIGNED, ctx.vcpuid, uop, arf[REG_rip], current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+        SequentialCoreEvent* event = eventlog.add(EVENT_LOAD_STORE_UNALIGNED, ctx.cpu_index, uop, arf[REG_rip], current_uop_in_macro_op, current_uuid, total_user_insns_committed);
         event->loadstore.virtaddr = origaddr;
       }
 
@@ -718,7 +718,7 @@ struct SequentialCore {
     }
 
     if unlikely (config.event_log_enabled) {
-      SequentialCoreEvent* event = eventlog.add((STORE) ? EVENT_STORE : EVENT_LOAD, ctx.vcpuid, uop, arf[REG_rip], current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+      SequentialCoreEvent* event = eventlog.add((STORE) ? EVENT_STORE : EVENT_LOAD, ctx.cpu_index, uop, arf[REG_rip], current_uop_in_macro_op, current_uuid, total_user_insns_committed);
       event->loadstore.sfr = state;
       event->loadstore.virtaddr = addr;
       event->loadstore.origaddr = origaddr;
@@ -770,7 +770,7 @@ struct SequentialCore {
     state.datavalid = !annul;
 
     if unlikely (config.event_log_enabled) {
-      SequentialCoreEvent* event = eventlog.add(EVENT_STORE, ctx.vcpuid, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+      SequentialCoreEvent* event = eventlog.add(EVENT_STORE, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
       event->loadstore.sfr = state;
       event->loadstore.virtaddr = addr;
       event->loadstore.origaddr = origaddr;
@@ -869,7 +869,7 @@ struct SequentialCore {
         state.datavalid = 1;
 
         if unlikely (config.event_log_enabled) {
-          SequentialCoreEvent* event = eventlog.add(EVENT_LOAD_ANNUL, ctx.vcpuid, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+          SequentialCoreEvent* event = eventlog.add(EVENT_LOAD_ANNUL, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
           event->loadstore.sfr = state;
           event->loadstore.virtaddr = addr;
           event->loadstore.origaddr = origaddr;
@@ -892,7 +892,7 @@ struct SequentialCore {
     state.bytemask = 0xff;
 
     if unlikely (config.event_log_enabled) {
-      SequentialCoreEvent* event = eventlog.add(EVENT_LOAD, ctx.vcpuid, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+      SequentialCoreEvent* event = eventlog.add(EVENT_LOAD, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
       event->loadstore.sfr = state;
       event->loadstore.virtaddr = addr;
       event->loadstore.origaddr = origaddr;
@@ -913,7 +913,7 @@ struct SequentialCore {
 
   void external_to_core_state(const Context& ctx) {
     foreach (i, ARCHREG_COUNT) {
-      arf[i] = ctx.commitarf[i];
+      arf[i] = ctx[i];
       arflags[i] = 0;
     }
     for (int i = ARCHREG_COUNT; i < TRANSREG_COUNT; i++) {
@@ -921,24 +921,24 @@ struct SequentialCore {
       arflags[i] = 0;
     }
 
-    arflags[REG_flags] = ctx.commitarf[REG_flags];
+    arflags[REG_flags] = ctx.eflags;
   }
 
   void core_to_external_state(Context& ctx) {
     foreach (i, ARCHREG_COUNT) {
-      ctx.commitarf[i] = arf[i];
+      ctx[i] = arf[i];
     }
   }
 
   bool handle_barrier() {
     core_to_external_state(ctx);
 
-    int assistid = ctx.commitarf[REG_rip];
+    int assistid = ctx.eip;
     assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
 
     if (logable(5)) {
-      logfile << "[vcpu ", ctx.vcpuid, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
-        (RIPVirtPhys(ctx.commitarf[REG_selfrip]).update(ctx)), "; return to ", (void*)(Waddr)ctx.commitarf[REG_nextrip],
+      logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
+        (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
         ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
     }
 
@@ -963,11 +963,11 @@ struct SequentialCore {
 #endif
     }
 
-    reset_fetch(ctx.commitarf[REG_rip]);
+    reset_fetch(ctx.eip);
     external_to_core_state(ctx);
 #ifndef PTLSIM_HYPERVISOR
     if (requested_switch_to_native) {
-      logfile << "PTL call requested switch to native mode at rip ", (void*)(Waddr)ctx.commitarf[REG_rip], endl;
+      logfile << "PTL call requested switch to native mode at rip ", (void*)(Waddr)ctx.eip, endl;
       return false;
     }
 #endif
@@ -979,7 +979,7 @@ struct SequentialCore {
 
 #ifdef PTLSIM_HYPERVISOR
     if (logable(4)) {
-      logfile << "PTL Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.commitarf[REG_rip], 
+      logfile << "PTL Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip, 
         " at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
     }
 
@@ -992,35 +992,35 @@ struct SequentialCore {
     case EXCEPTION_PageFaultOnRead:
     case EXCEPTION_PageFaultOnWrite:
     case EXCEPTION_PageFaultOnExec:
-      ctx.x86_exception = EXCEPTION_x86_page_fault; break;
+      ctx.exception_index = EXCEPTION_x86_page_fault; break;
     case EXCEPTION_FloatingPointNotAvailable:
-      ctx.x86_exception = EXCEPTION_x86_fpu_not_avail; break;
+      ctx.exception_index = EXCEPTION_x86_fpu_not_avail; break;
     case EXCEPTION_FloatingPoint:
-      ctx.x86_exception = EXCEPTION_x86_fpu; break;
+      ctx.exception_index = EXCEPTION_x86_fpu; break;
     default:
       logfile << "Unsupported internal exception type ", exception_name(ctx.exception), endl, flush;
       assert(false);
     }
 
-    if unlikely ((ctx.x86_exception == EXCEPTION_x86_page_fault) && (ctx.cr2 == 0xffffffff00000018)) eventlog.print(logfile);
+    if unlikely ((ctx.exception_index == EXCEPTION_x86_page_fault) && (ctx.cr[2] == 0xffffffff00000018)) eventlog.print(logfile);
 
     if (logable(4)) {
       logfile << ctx;
       logfile << sshinfo;
     }
 
-    ctx.propagate_x86_exception(ctx.x86_exception, ctx.error_code, ctx.cr2);
+    ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code, ctx.cr[2]);
 
     external_to_core_state(ctx);
 
     return true;
 #else
     if (logable(6)) 
-      logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.commitarf[REG_rip], 
+      logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.eip, 
         ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
 
     stringbuf sb;
-    logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.commitarf[REG_rip], " @ ", 
+    logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.eip, " @ ", 
       total_user_insns_committed, " commits (", total_uops_committed, " uops): genuine user exception (",
       exception_name(ctx.exception), "); aborting", endl;
     logfile << ctx, endl;
@@ -1055,7 +1055,7 @@ struct SequentialCore {
       logfile.flush();
     }
 
-    reset_fetch(ctx.commitarf[REG_rip]);
+    reset_fetch(ctx.eip);
     external_to_core_state(ctx);
 
     return true;
@@ -1078,7 +1078,7 @@ struct SequentialCore {
 
       if unlikely (config.event_log_enabled) {
         TransOp dummyuop; setzero(dummyuop);
-        SequentialCoreEvent* event = eventlog.add(EVENT_TRANSLATE, ctx.vcpuid, dummyuop, rip, 0, 0, total_user_insns_committed);
+        SequentialCoreEvent* event = eventlog.add(EVENT_TRANSLATE, ctx.cpu_index, dummyuop, rip, 0, 0, total_user_insns_committed);
         event->bb.rvp = rvp;
         event->bb.bb = current_basic_block;
         event->bb.bbcount = current_basic_block->count;
@@ -1104,11 +1104,11 @@ struct SequentialCore {
     
     bool barrier = 0;
 
-    if (logable(5)) logfile << "[vcpu ", ctx.vcpuid, "] Sequentially executing basic block ", bb->rip, " (", bb->count, " uops), insn limit ", insnlimit, endl;
+    if (logable(5)) logfile << "[vcpu ", ctx.cpu_index, "] Sequentially executing basic block ", bb->rip, " (", bb->count, " uops), insn limit ", insnlimit, endl;
 
     if unlikely (config.event_log_enabled) {
       TransOp dummyuop; setzero(dummyuop);
-      SequentialCoreEvent* event = eventlog.add(EVENT_EXECUTE_BB, ctx.vcpuid, dummyuop, bb->rip, 0, 0, total_user_insns_committed);
+      SequentialCoreEvent* event = eventlog.add(EVENT_EXECUTE_BB, ctx.cpu_index, dummyuop, bb->rip, 0, 0, total_user_insns_committed);
       event->bb.rvp = bb->rip;
       event->bb.bb = bb;
       event->bb.bbcount = bb->count;
@@ -1227,12 +1227,12 @@ struct SequentialCore {
 
 #ifdef PTLSIM_HYPERVISOR
       if unlikely (uop.is_sse|uop.is_x87) {
-        force_fpu_not_avail_fault = ctx.cr0.ts | (uop.is_x87 & ctx.cr0.em);
+        force_fpu_not_avail_fault = (ctx.cr[0] & CR0_TS_MASK) | (uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK));
       }
 #endif
       if unlikely (force_fpu_not_avail_fault) {
         if unlikely (config.event_log_enabled) {
-          SequentialCoreEvent* event = eventlog.add(EVENT_ISSUE, ctx.vcpuid, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+          SequentialCoreEvent* event = eventlog.add(EVENT_ISSUE, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
           IssueState state;
           state.reg.rdflags = FLAG_INV;
           state.reg.rddata = EXCEPTION_FloatingPointNotAvailable;
@@ -1262,13 +1262,13 @@ struct SequentialCore {
           ctx.exception = LO32(state.reg.rddata);
           ctx.error_code = HI32(state.reg.rddata); // page fault error code
 #ifdef PTLSIM_HYPERVISOR
-          ctx.cr2 = origvirt;
+          ctx.cr[2] = origvirt;
 #endif
           arf[REG_flags] = saved_flags;
           return SEQEXEC_EXCEPTION;
         } else if (status == ISSUE_REFETCH) {
           if unlikely (config.event_log_enabled) {
-            SequentialCoreEvent* event = eventlog.add(EVENT_ALIGNMENT_FIXUP, ctx.vcpuid, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+            SequentialCoreEvent* event = eventlog.add(EVENT_ALIGNMENT_FIXUP, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
             event->alignfixup.uopindex = uopindex;
           }
           bb->transops[uopindex].unaligned = 1;
@@ -1281,7 +1281,7 @@ struct SequentialCore {
         synthop(state, radata, rbdata, rcdata, raflags, rbflags, rcflags); 
 
         if unlikely (config.event_log_enabled) {
-          SequentialCoreEvent* event = eventlog.add(EVENT_BRANCH, ctx.vcpuid, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+          SequentialCoreEvent* event = eventlog.add(EVENT_BRANCH, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
           event->issue.state = state;
         }
 
@@ -1293,7 +1293,7 @@ struct SequentialCore {
         if unlikely (state.reg.rdflags & FLAG_INV) ctx.exception = LO32(state.reg.rddata);
 
         if unlikely (config.event_log_enabled) {
-          SequentialCoreEvent* event = eventlog.add(EVENT_ISSUE, ctx.vcpuid, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+          SequentialCoreEvent* event = eventlog.add(EVENT_ISSUE, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
           event->issue.state = state;
         }
 
@@ -1301,7 +1301,7 @@ struct SequentialCore {
           if (isclass(uop.opcode, OPCLASS_CHECK) & (ctx.exception == EXCEPTION_SkipBlock)) {
             W64 chk_recovery_rip = arf[REG_rip] + bytes_in_current_insn;
             if unlikely (config.event_log_enabled) {
-              SequentialCoreEvent* event = eventlog.add(EVENT_SKIPBLOCK, ctx.vcpuid, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+              SequentialCoreEvent* event = eventlog.add(EVENT_SKIPBLOCK, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
               event->skipblock.bytes_in_current_insn = bytes_in_current_insn;
               event->skipblock.chk_recovery_rip = chk_recovery_rip;
             }
@@ -1352,7 +1352,7 @@ struct SequentialCore {
 
       if unlikely (pteupdate) {
         if unlikely (config.event_log_enabled) {
-          SequentialCoreEvent* event = eventlog.add(EVENT_PTE_UPDATE, ctx.vcpuid, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+          SequentialCoreEvent* event = eventlog.add(EVENT_PTE_UPDATE, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
           event->pteupdate.virtaddr = origvirt;
           event->pteupdate.pteupdate = pteupdate;
         }
@@ -1365,7 +1365,7 @@ struct SequentialCore {
           cmtrec->pte_update_count++;
           */
         } else {
-          ctx.update_pte_acc_dirty(origvirt, pteupdate);
+          //ctx.update_pte_acc_dirty(origvirt, pteupdate);
         }
       }
 
@@ -1388,7 +1388,7 @@ struct SequentialCore {
           int assistid = arf[REG_rip];
           assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
           TransOp dummyuop; setzero(dummyuop);
-          SequentialCoreEvent* event = eventlog.add(EVENT_ASSIST, ctx.vcpuid, dummyuop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
+          SequentialCoreEvent* event = eventlog.add(EVENT_ASSIST, ctx.cpu_index, dummyuop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
           event->assist.id = assistid;
           event->assist.rip = arf[REG_selfrip];
           event->assist.ptl_pip = (W64)assist;
@@ -1635,7 +1635,7 @@ struct SequentialMachine: public PTLsimMachine {
 
 #ifdef PTLSIM_HYPERVISOR
         if unlikely (ctx.dirty) {
-          logfile << "VCPU ", ctx.vcpuid, " context was dirty: update core model internal state", endl;
+          logfile << "VCPU ", ctx.cpu_index, " context was dirty: update core model internal state", endl;
           core.external_to_core_state(ctx);
           ctx.dirty = 0;
         }

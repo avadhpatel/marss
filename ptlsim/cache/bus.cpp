@@ -11,8 +11,8 @@
 #include <test.h>
 #else
 #include <ptlsim.h>
-#define PTLSIM_PUBLIC_ONLY
-#include <ptlhwdef.h>
+//#define PTLSIM_PUBLIC_ONLY
+//#include <ptlhwdef.h>
 #endif
 
 #include <bus.h>

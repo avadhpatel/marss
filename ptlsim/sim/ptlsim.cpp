@@ -622,10 +622,14 @@ void update_progress() {
       Context& ctx = contextof(i);
 #ifdef PTLSIM_HYPERVISOR
       if (!ctx.running) {
-        static const char* runstate_names[] = {"running", "runnable", "blocked", "offline"}; 
-        const char* runstate_name = (inrange(ctx.runstate.state, 0, lengthof(runstate_names)-1)) ? runstate_names[ctx.runstate.state] : "???";
+//        static const char* runstate_names[] = {"running", "runnable", "blocked", "offline"}; 
+//        const char* runstate_name = (inrange(ctx.runstate.state, 0, lengthof(runstate_names)-1)) ? runstate_names[ctx.runstate.state] : "???";
 
-        sb << " (", runstate_name, ":",ctx.runstate.state, ")";
+		  static const char* runstate_names[] = {"stopped", "running"};
+		  const char* runstate_name = (inrange(ctx.running, 0, CONTEXT_RUNNING)) ? runstate_names[ctx.running] : "???";
+
+//        sb << " (", runstate_name, ":",ctx.runstate.state, ")";
+        sb << " (", runstate_name, ":",ctx.running, ")";
         if(!sim_cycle){
           ctx.running = 1;
         }

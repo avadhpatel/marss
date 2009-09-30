@@ -8,9 +8,9 @@
 #include <ptlsim.h>
 #include <dcache.h>
 
-#ifndef PTLSIM_HYPERVISOR
-Context ctx alignto(4096) insection(".ctx");
-#endif
+//#ifndef PTLSIM_HYPERVISOR
+//Context ctx alignto(4096) insection(".ctx");
+//#endif
 
 const char* opclass_names[OPCLASS_COUNT] = {
   "logic", "addsub", "addsubc", "addshift", "sel", "cmp", "br.cc", "jmp", "bru", 
@@ -277,17 +277,113 @@ const char* arch_reg_names[TRANSREG_COUNT] = {
   "zf", "cf", "of", "imm", "mem", "tr8", "tr9", "tr10",
 };
 
+Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec) {
+
+	exception = 0;
+	pfec = 0;
+
+	if unlikely (lowbits(virtaddr, sizeshift)) {
+		exception = EXCEPTION_UnalignedAccess;
+		return INVALID_PHYSADDR;
+	}
+
+	if unlikely (internal) {
+		//
+		// Directly mapped to PTL space (microcode load/store)
+		// We need to patch in PTLSIM_VIRT_BASE since in 32-bit
+		// mode, ctx.virt_addr_mask will chop off these bits.
+		//
+		// Now in QEMU we dont have any special mapping of this 
+		// memory region, so virtualaddress is where we
+		// will store the internal data
+		//
+		return virtaddr;
+	}
+
+	// TODO : We are currently looking directly at the TLB of QEMU
+	// we don't simulate multilevel page entries right now.
+	bool page_not_present;
+	bool page_read_only;
+	bool page_kernel_only;
+
+	int mmu_index = cpu_mmu_index((CPUState*)this);
+	int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+	W64 tlb_addr = tlb_table[mmu_index][index].addr_read;
+	if likely ((addr & TARGET_PAGE_MASK) == (tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
+		// we find valid TLB entry, return the physical address for it
+		return (Waddr)(virtaddr + tlb_table[mmu_index][page_index].addend);
+	}
+	// Can't find valid TLB entry, its an exception
+	exception = (store) ? EXCEPTION_PageFaultOnWrite : EXCEPTION_PageFaultOnRead;
+	pfec.rw = store;
+	pfec.us = (!kernel_mode);
+
+	//
+	// Flush out the bogus TLB entry to avoid an infinite loop after the
+	// kernel updates the page tables. Technically only valid PTEs should
+	// be cached in the TLB, but we don't know what "valid" means until
+	// we do the full protection checks. Hence we just invalidate it here:
+	//
+	//flush_tlb_virt(virtaddr);
+	//
+	// Avadh: TODO and also needs to check that in QEMU do we need to flush
+	// the TLB?
+	return INVALID_PHYSADDR;
+}
+
+Waddr Context::virt_to_pte_phys_addr(W64 rawvirt, int level) {
+	logfile << "call to Context::virt_to_pte_phys_addr, function not implemented\n";
+	assert(0);
+	return INVALID_PHYSADDR;
+}
+
+void Context::update_mode_count() {
+	if likely (!kernel_mode) {
+		W64 prev_cycles = cycles_at_last_mode_switch;
+		W64 prev_insns = insns_at_last_mode_switch;
+		W64 delta_cycles = sim_cycle - cycles_at_last_mode_switch;
+		W64 delta_insns = user_instructions_commited - 
+			insns_at_last_mode_switch;
+
+		cycles_at_last_mode_switch = sim_cycle;
+		insns_at_last_mode_switch = user_instructions_commited;
+
+		if likely (use64) {
+			per_core_event_update(cpu_index, cycles_in_mode.user64 += delta_cycles);
+			per_core_event_update(cpu_index, insns_in_mode.use64 += delta_insns);
+		} else {
+			per_core_event_update(cpu_index, cycles_in_mode.user32 += delta_cycles);
+			per_core_event_update(cpu_index, insns_in_mode.use32 += delta_insns);
+		}
+	}
+}
+
+bool Context::check_events() const {
+	return ((interrupt_request | exception_index) > 0 ? true : false);
+}
+
+bool Context::event_upcall() {
+	// In QEMU based ptlsim, in our main execution loop we will 
+	// check if any of the CPU has any interrupt or exception pending
+	// and if flag is set it will automatically transfer the execution
+	// to QEMU to handle the interrupts/exceptions.
+	// So there is no need to send any trigger to QEMU for this via
+	// this function.
+	return true;
+}
+
 void Context::fxsave(FXSAVEStruct& state) {
-  state.cw = fpcw;
+  state.cw = fpuc;
   // clear everything but 4 FP status flag bits (c3/c2/c1/c0):
-  state.sw = commitarf[REG_fpsw] & ((0x7 << 8) | (1 << 14));
-  int tos = commitarf[REG_fptos] >> 3;
+  state.sw = fpus & ((0x7 << 8) | (1 << 14));
+  int tos = fpstt ;
   assert(inrange(tos, 0, 7));
   state.sw.tos = tos;
   state.tw = 0;
 
   // Prepare tag word (special format for FXSAVE)
-  foreach (i, 8) state.tw |= (bit(commitarf[REG_fptags], i*8) << i);
+//  foreach (i, 8) state.tw |= (bit(commitarf[REG_fptags], i*8) << i);
+  foreach (i, 8) state.tw |= (bit(fptags[i], 0) << i);
 
   // Prepare actual registers
   foreach (i, 8) x87_fp_64bit_to_80bit(&state.fpregs[i].reg, fpstack[lowbits(tos + i, 3)]);
@@ -308,21 +404,24 @@ void Context::fxsave(FXSAVEStruct& state) {
   state.mxcsr_mask = 0x0000ffff; // all MXCSR features supported
 
   foreach (i, (use64) ? 16 : 8) {
-    state.xmmregs[i].lo = commitarf[REG_xmml0 + i*2];
-    state.xmmregs[i].hi = commitarf[REG_xmmh0 + i*2];
+//    state.xmmregs[i].lo = commitarf[REG_xmml0 + i*2];
+    state.xmmregs[i].lo = xmm_regs[i]._d[0];
+//    state.xmmregs[i].hi = commitarf[REG_xmmh0 + i*2];
+    state.xmmregs[i].hi = xmm_regs[i]._d[1];
   }
 }
 
 void Context::fxrstor(const FXSAVEStruct& state) {
-  commitarf[REG_fptos] = state.sw.tos * 8;
-  commitarf[REG_fpsw] = state.sw;
-  fpcw = state.cw;
+  fpstt = state.sw.tos;
+  fpus = state.sw;
+  fpuc = state.cw;
 
-  commitarf[REG_fptags] = 0;
+//  commitarf[REG_fptags] = 0;
   foreach (i, 8) {
     // FXSAVE struct uses an abbreviated tag word with 8 bits (0 = empty, 1 = used)
     int used = bit(state.tw, i);
-    commitarf[REG_fptags] |= ((W64)used) << i*8;
+	fptags[i] = used;
+//    commitarf[REG_fptags] |= ((W64)used) << i*8;
   }
 
   // x86 FSAVE state is in order of stack rather than physical registers:
@@ -333,8 +432,10 @@ void Context::fxrstor(const FXSAVEStruct& state) {
   mxcsr = state.mxcsr & state.mxcsr_mask;
 
   foreach (i, (use64) ? 16 : 8) {
-    commitarf[REG_xmml0 + i*2] = state.xmmregs[i].lo;
-    commitarf[REG_xmmh0 + i*2] = state.xmmregs[i].hi;
+//    commitarf[REG_xmml0 + i*2] = state.xmmregs[i].lo;
+//    commitarf[REG_xmmh0 + i*2] = state.xmmregs[i].hi;
+    xmm_regs[i]._d[0] = state.xmmregs[i].lo;
+    xmm_regs[i]._d[1] = state.xmmregs[i].hi;
   }
 }
 
@@ -614,7 +715,7 @@ ostream& operator <<(ostream& os, const UserContext& arf) {
 #ifndef PTLSIM_HYPERVISOR
   for (int i = 7; i >= 0; i--) {
     int stackid = (i - (arf[REG_fptos] >> 3)) & 0x7;
-    os << "  fp", i, "  st(", stackid, ")  ", /* (bit(arf[REG_fptags], i*8) ? "Valid" : "Empty"), */ "  0x", hexstring(ctx.fpstack[i], 64), " => ", *((double*)&ctx.fpstack[i]), endl;
+    os << "  fp", i, "  st(", stackid, ")  ", /* (bit(arf[REG_fptags], i*8) ? "Valid" : "Empty"), */ "  0x", hexstring(ctx.fpregs[i], 64), " => ", *((double*)&ctx.fpregs[i]), endl;
   }
 #endif
   return os;
@@ -731,7 +832,7 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   os << "VCPU State:", endl;
   os << "  Architectural Registers:", endl;
   foreach (i, ARCHREG_COUNT) {
-    os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.commitarf[i], 64);
+    os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx[i], 64);
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
 
@@ -739,60 +840,60 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   os << "  Flags:", endl;
   os << "    Running?   ", ((ctx.running) ? "running" : "blocked"), endl;
   if unlikely (ctx.dirty) os << "    Context is dirty: refresh any internal state cached by active core model", endl;
-  os << "    Mode:      ", ((ctx.kernel_mode) ? "kernel" : "user"), ((ctx.kernel_in_syscall) ? " (in syscall)" : ""), endl;
+  os << "    Mode:      ", ((ctx.kernel_mode) ? "kernel" : "user"), endl;
   os << "    32/64:     ", ((ctx.use64) ? "64-bit x86-64" : "32-bit x86"), endl;
-  os << "    x87 state: ", ((ctx.i387_valid) ? "valid" : "invalid"), endl;
-  os << "    Event dis: ", ((ctx.syscall_disables_events) ? " syscall" : ""), ((ctx.failsafe_disables_events) ? " failsafe" : ""), endl;
+//  os << "    x87 state: ", ((ctx.i387_valid) ? "valid" : "invalid"), endl;
+//  os << "    Event dis: ", ((ctx.syscall_disables_events) ? " syscall" : ""), ((ctx.failsafe_disables_events) ? " failsafe" : ""), endl;
   os << "    IntEFLAGS: ", hexstring(ctx.internal_eflags, 32), " (df ", ((ctx.internal_eflags & FLAG_DF) != 0), ")", endl;
 #endif
   os << "  Segment Registers:", endl;
-  os << "    cs ", ctx.seg[SEGID_CS], endl;
-  os << "    ss ", ctx.seg[SEGID_SS], endl;
-  os << "    ds ", ctx.seg[SEGID_DS], endl;
-  os << "    es ", ctx.seg[SEGID_ES], endl;
-  os << "    fs ", ctx.seg[SEGID_FS], endl;
-  os << "    gs ", ctx.seg[SEGID_GS], endl;
+  os << "    cs ", ctx.segs[SEGID_CS], endl;
+  os << "    ss ", ctx.segs[SEGID_SS], endl;
+  os << "    ds ", ctx.segs[SEGID_DS], endl;
+  os << "    es ", ctx.segs[SEGID_ES], endl;
+  os << "    fs ", ctx.segs[SEGID_FS], endl;
+  os << "    gs ", ctx.segs[SEGID_GS], endl;
 #ifdef PTLSIM_HYPERVISOR
   os << "  Segment Control Registers:", endl;
-  os << "    ldt ", hexstring(ctx.ldtvirt, 64), "  ld# ", hexstring(ctx.ldtsize, 64), "  gd# ", hexstring(ctx.gdtsize, 64), endl;
-  os << "    gdt mfns"; foreach (i, 16) { os << " ", ctx.gdtpages[i]; } os << endl;
-  os << "    fsB ", hexstring(ctx.fs_base, 64), "  gsB ", hexstring(ctx.gs_base_user, 64), "  gkB ", hexstring(ctx.gs_base_kernel, 64), endl;
+//  os << "    ldt ", hexstring(ctx.ldtvirt, 64), "  ld# ", hexstring(ctx.ldtsize, 64), "  gd# ", hexstring(ctx.gdtsize, 64), endl;
+//  os << "    gdt mfns"; foreach (i, 16) { os << " ", ctx.gdtpages[i]; } os << endl;
+//  os << "    fsB ", hexstring(ctx.fs_base, 64), "  gsB ", hexstring(ctx.gs_base_user, 64), "  gkB ", hexstring(ctx.gs_base_kernel, 64), endl;
   os << "  Control Registers:", endl;
-  os << "    cr0 ", ctx.cr0, endl;
-  os << "    cr2 ", hexstring(ctx.cr2, 64), "  fault virtual address", endl;
-  os << "    cr3 ", hexstring(ctx.cr3, 64), "  page table base (mfn ", (ctx.cr3 >> 12), ")", endl;
-  os << "    cr4 ", ctx.cr4, endl;
-  os << "    kss ", hexstring(ctx.kernel_ss, 64), "  ksp ", hexstring(ctx.kernel_sp, 64), "  vma ", hexstring(ctx.vm_assist, 64),endl;
-  os << "    kPT ", intstring(ctx.kernel_ptbase_mfn, 16), endl;
-  os << "    uPT ", intstring(ctx.user_ptbase_mfn, 16), endl;
+  os << "    cr0 ", ctx.cr[0], endl;
+  os << "    cr2 ", hexstring(ctx.cr[2], 64), "  fault virtual address", endl;
+  os << "    cr3 ", hexstring(ctx.cr[3], 64), "  page table base (mfn ", (ctx.cr[3] >> 12), ")", endl;
+  os << "    cr4 ", ctx.cr[4], endl;
+//  os << "    kss ", hexstring(ctx.kernel_ss, 64), "  ksp ", hexstring(ctx.kernel_sp, 64), "  vma ", hexstring(ctx.vm_assist, 64),endl;
+//  os << "    kPT ", intstring(ctx.kernel_ptbase_mfn, 16), endl;
+//  os << "    uPT ", intstring(ctx.user_ptbase_mfn, 16), endl;
   os << "  Debug Registers:", endl;
-  os << "    dr0 ", hexstring(ctx.dr0, 64), "  dr1 ", hexstring(ctx.dr1, 64), "  dr2 ", hexstring(ctx.dr2, 64),  "  dr3 ", hexstring(ctx.dr3, 64), endl;
-  os << "    dr4 ", hexstring(ctx.dr4, 64), "  dr5 ", hexstring(ctx.dr5, 64), "  dr6 ", hexstring(ctx.dr6, 64),  "  dr7 ", hexstring(ctx.dr7, 64), endl;
+  os << "    dr0 ", hexstring(ctx.dr[0], 64), "  dr1 ", hexstring(ctx.dr[1], 64), "  dr2 ", hexstring(ctx.dr[2], 64),  "  dr3 ", hexstring(ctx.dr[3], 64), endl;
+  os << "    dr4 ", hexstring(ctx.dr[4], 64), "  dr5 ", hexstring(ctx.dr[5], 64), "  dr6 ", hexstring(ctx.dr[6], 64),  "  dr7 ", hexstring(ctx.dr[7], 64), endl;
   os << "  Callbacks:", endl;
-  os << "    event_callback_rip    ", hexstring(ctx.event_callback_rip, 64), endl;
-  os << "    failsafe_callback_rip ", hexstring(ctx.failsafe_callback_rip, 64), endl;
-  os << "    syscall_rip           ", hexstring(ctx.syscall_rip, 64), endl;
-  os << "  Virtual IDT Trap Table:", endl;
-  foreach (i, lengthof(ctx.idt)) {
-    const TrapTarget& tt = ctx.idt[i];
-    if (tt.rip) {
-      os << "    ", intstring(i, 3), "  0x", hexstring(i, 8), ": ", hexstring((tt.cs << 3) | 3, 16), ":",
-        hexstring(signext64(tt.rip, 48), 64), " cpl ", tt.cpl, (tt.maskevents ? " mask-events" : ""), endl;
-    }
-  }
+//  os << "    event_callback_rip    ", hexstring(ctx.event_callback_rip, 64), endl;
+//  os << "    failsafe_callback_rip ", hexstring(ctx.failsafe_callback_rip, 64), endl;
+//  os << "    syscall_rip           ", hexstring(ctx.syscall_rip, 64), endl;
+//  os << "  Virtual IDT Trap Table:", endl;
+//  foreach (i, lengthof(ctx.idt)) {
+//    const TrapTarget& tt = ctx.idt[i];
+//    if (tt.rip) {
+//      os << "    ", intstring(i, 3), "  0x", hexstring(i, 8), ": ", hexstring((tt.cs << 3) | 3, 16), ":",
+//        hexstring(signext64(tt.rip, 48), 64), " cpl ", tt.cpl, (tt.maskevents ? " mask-events" : ""), endl;
+//    }
+//  }
   os << "  Exception and Event Control:", endl;
-  os << "    exception ", intstring(ctx.x86_exception, 2), "  errorcode ", hexstring(ctx.error_code, 32),
-    "  saved_upcall_mask ", hexstring(ctx.saved_upcall_mask, 8), endl;
+  os << "    exception ", intstring(ctx.exception_index, 2), "  errorcode ", hexstring(ctx.error_code, 32),
+    endl;
 #endif
 
   os << "  FPU:", endl;
-  os << "    FP Control Word: 0x", hexstring(ctx.fpcw, 32), endl;
+  os << "    FP Control Word: 0x", hexstring(ctx.fpuc, 32), endl;
   os << "    MXCSR:           0x", hexstring(ctx.mxcsr, 32), endl;
 
   for (int i = 7; i >= 0; i--) {
-    int stackid = (i - (ctx.commitarf[REG_fptos] >> 3)) & 0x7;
-    os << "    fp", i, "  st(", stackid, ")  ", (bit(ctx.commitarf[REG_fptags], i*8) ? "Valid" : "Empty"),
-      "  0x", hexstring(ctx.fpstack[i], 64), " => ", *((double*)&ctx.fpstack[i]), endl;
+    int stackid = (i - (ctx.fpstt >> 3)) & 0x7;
+    os << "    fp", i, "  st(", stackid, ")  ", (bit(ctx.fptags[i]) ? "Valid" : "Empty"),
+      "  0x", hexstring(ctx.fpregs[i], 64), " => ", *((double*)&ctx.fpregs[i]), endl;
   }
 
   os << "  Internal State:", endl;

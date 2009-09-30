@@ -710,7 +710,7 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   exception = 0;
 
-  Waddr physaddr = (annul) ? INVALID_PHYSADDR : ctx.check_and_translate(addr, uop.size, st, uop.internal, exception, pfec, pteupdate);
+  Waddr physaddr = (annul) ? INVALID_PHYSADDR : ctx.check_and_translate(addr, uop.size, st, uop.internal, exception, pfec);
 
 #ifdef WATTCH //The address is generated and tell (wakeup) the ldq
 	if(st) 
@@ -808,7 +808,7 @@ bool ReorderBufferEntry::release_mem_lock(bool forced) {
     event->loadstore.locking_rob = lock->rob;
   }
  
-  assert(lock->vcpuid == thread.ctx.vcpuid);
+  assert(lock->vcpuid == thread.ctx.cpu_index);
   assert(lock->uuid == uop.uuid);
   assert(lock->rob == index());
 
@@ -1087,7 +1087,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     // *unlocked* ADD [mem],1 on the high 4 bytes of the chunk.
     //
 
-    if unlikely (lock && (lock->vcpuid != thread.ctx.vcpuid)) {
+    if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
       //
       // Non-interlocked store intersected with a previously
       // locked block. We must replay the store until the block
@@ -1482,7 +1482,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     // cache chunk, while thread 1 is releasing a spinlock using an
     // *unlocked* ADD [mem],1 on the high 4 bytes of the chunk.
     //
-    if unlikely (lock && (lock->vcpuid != thread.ctx.vcpuid)) {
+    if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
       //
       // Some other thread or core has locked up this word: replay
       // the uop until it becomes unlocked.
@@ -1495,7 +1495,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       }
  
       // Double-locking within a thread is NOT allowed!
-      assert(lock->vcpuid != thread.ctx.vcpuid);
+      assert(lock->vcpuid != thread.ctx.cpu_index);
       ///assert(lock->threadid != threadid); //now need to consider coreid too:
       assert(!(lock->coreid == core.coreid && lock->threadid == threadid));
 
@@ -1506,7 +1506,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     // Issuing more than one ld.acq on the same block is not allowed:
     if (lock) {
-      logfile << "ERROR: thread ", thread.ctx.vcpuid, " uuid ", uop.uuid, " over physaddr ", (void*)physaddr, ": lock was already acquired by vcpuid ", lock->vcpuid, " uuid ", lock->uuid, " rob ", lock->rob, endl;
+      logfile << "ERROR: thread ", thread.ctx.cpu_index, " uuid ", uop.uuid, " over physaddr ", (void*)physaddr, ": lock was already acquired by vcpuid ", lock->vcpuid, " uuid ", lock->uuid, " rob ", lock->rob, endl;
       assert(false);
     }
  
@@ -1545,7 +1545,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         return ISSUE_NEEDS_REPLAY;
       }
  
-      lock->vcpuid = thread.ctx.vcpuid;
+      lock->vcpuid = thread.ctx.cpu_index;
       lock->uuid = uop.uuid;
       lock->rob = index();
       lock->threadid = threadid;
@@ -1939,7 +1939,7 @@ void ReorderBufferEntry::tlbwalk() {
       PageFaultErrorCode pfec;
       PTEUpdate pteupdate;
       Context& ctx = getthread().ctx;
-      Waddr physaddr = ctx.check_and_translate(virtaddr, 1, 0, 0, exception, pfec, pteupdate);
+      Waddr physaddr = ctx.check_and_translate(virtaddr, 1, 0, 0, exception, pfec);
       core.caches.initiate_prefetch(physaddr, uop.cachelevel);
     } else {
       probecache(virtaddr, null);

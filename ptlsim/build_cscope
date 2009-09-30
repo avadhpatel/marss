@@ -5,7 +5,7 @@ pushd `pwd`
 cd /
 #find /home/avadh/workspace/qemu-0.9.1/ -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.l' -o -name '*.y' > /home/avadh/bin/cscope.files
 echo "dr is $dr"
-find $dr -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.l' -o -name '*.y' -o -name '*.S' > $dr/cscope.files
+find $dr -path '*build*' -prune -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.l' -o -name '*.y' -o -name '*.S' > $dr/cscope.files
 
 popd
 #cscope -i /home/avadh/bin/cscope.files -b

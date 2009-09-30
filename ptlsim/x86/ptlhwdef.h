@@ -9,6 +9,11 @@
 #ifndef _PTLHWDEF_H
 #define _PTLHWDEF_H
 
+extern "C" {
+//#include <exec.h>
+#include <cpu.h>
+}
+
 //
 // NOTE: The first part of this file is included by assembly code,
 // so do not put any C/C++-specific things here until the label
@@ -205,6 +210,11 @@ extern const char* exception_names[EXCEPTION_COUNT];
 static inline const char* exception_name(W64 exception) {
   return (exception < EXCEPTION_COUNT) ? exception_names[exception] : "Unknown";
 }
+
+// PTLsim's internal memory related variables
+extern W64 PTLSIM_RAM_PHYSADDR;
+
+#define PTLSIM_RAM_SIZE 2*1024*1024
 
 //
 // Uniquely identifies any translation or basic block, including
@@ -525,27 +535,27 @@ struct GateDescriptor {
 // These are x86 exceptions, not PTLsim internal exceptions
 //
 enum {
-  EXCEPTION_x86_divide          = 0,
-  EXCEPTION_x86_debug           = 1,
-  EXCEPTION_x86_nmi             = 2,
-  EXCEPTION_x86_breakpoint      = 3,
-  EXCEPTION_x86_overflow        = 4,
-  EXCEPTION_x86_bounds          = 5,
-  EXCEPTION_x86_invalid_opcode  = 6,
-  EXCEPTION_x86_fpu_not_avail   = 7,
-  EXCEPTION_x86_double_fault    = 8,
-  EXCEPTION_x86_coproc_overrun  = 9,
-  EXCEPTION_x86_invalid_tss     = 10,
-  EXCEPTION_x86_seg_not_present = 11,
-  EXCEPTION_x86_stack_fault     = 12,
-  EXCEPTION_x86_gp_fault        = 13,
-  EXCEPTION_x86_page_fault      = 14,
-  EXCEPTION_x86_spurious_int    = 15,
-  EXCEPTION_x86_fpu             = 16,
-  EXCEPTION_x86_unaligned       = 17,
-  EXCEPTION_x86_machine_check   = 18,
-  EXCEPTION_x86_sse             = 19,
-  EXCEPTION_x86_count           = 20,
+  EXCEPTION_x86_divide          = EXCP00_DIVZ,
+  EXCEPTION_x86_debug           = EXCP01_DB,
+  EXCEPTION_x86_nmi             = EXCP02_NMI,
+  EXCEPTION_x86_breakpoint      = EXCP03_INT3,
+  EXCEPTION_x86_overflow        = EXCP04_INT0,
+  EXCEPTION_x86_bounds          = EXCP05_BOUND,
+  EXCEPTION_x86_invalid_opcode  = EXCP06_ILLOP,
+  EXCEPTION_x86_fpu_not_avail   = EXCP07_PREX,
+  EXCEPTION_x86_double_fault    = EXCP08_DBLE,
+  EXCEPTION_x86_coproc_overrun  = EXCP09_XERR,
+  EXCEPTION_x86_invalid_tss     = EXCP0A_TSS,
+  EXCEPTION_x86_seg_not_present = EXCP0B_NOSEG,
+  EXCEPTION_x86_stack_fault     = EXCP0C_STACK,
+  EXCEPTION_x86_gp_fault        = EXCP0D_GPF,
+  EXCEPTION_x86_page_fault      = EXCP0E_PAGE,
+  EXCEPTION_x86_spurious_int    = 15,  // Not supported in QEMU
+  EXCEPTION_x86_fpu             = EXCP10_COPR,
+  EXCEPTION_x86_unaligned       = EXCP11_ALIGN,
+  EXCEPTION_x86_machine_check   = EXCP12_MCHK,
+  EXCEPTION_x86_sse             = 19,  // Not supported in QEMU
+  EXCEPTION_x86_count           = 20,  // Not supported in QEMU
 };
 
 extern const char* x86_exception_names[256];
@@ -870,86 +880,204 @@ struct ContextBase {
   }
 };
 
-// Round up to a full page:
-struct Context: public ContextBase {
-  byte padding[PAGE_SIZE - sizeof(ContextBase)];
+enum {
+	CONTEXT_STOPPED = 0,
+	CONTEXT_RUNNING
+};
 
-  void propagate_x86_exception(byte exception, W32 errorcode = 0, Waddr virtaddr = 0);
+struct Context: public CPUX86State {
+  //byte padding[PAGE_SIZE - sizeof(ContextBase)];
 
-  Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, PTEUpdate& pteupdate, Level1PTE& pteused);
+  bool use32;
+  bool use64;
+  bool kernel_mode;
+  byte running;
+  byte dirty; // VCPU was just brought online
+  Waddr virt_addr_mask;
+  W32 internal_eflags; // parts of EFLAGS that are infrequently updated
 
-  Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, PTEUpdate& pteupdate) {
-    Level1PTE dummy;
-    return check_and_translate(virtaddr, sizeshift, store, internal, exception, pfec, pteupdate, dummy);
+  W64 cycles_at_last_mode_switch;
+  W64 insns_at_last_mode_switch;
+  W64 user_instructions_commited;
+  W64 kernel_instructions_commited;
+  W64 exception;
+  W64 reg_trace;
+  W64 reg_selfrip;
+  W64 reg_nextrip;
+  W64 reg_ar1;
+  W64 reg_ar2;
+
+  void change_runstate(int new_state) { running = new_state; }
+
+  void propagate_x86_exception(byte exception, W32 errorcode = 0, Waddr virtaddr = 0) {
+	  if(errorcode) {
+		  raise_exception_err((int)exception, (int)errorcode);
+	  } else {
+		  raise_exception((int)exception);
+	  }
   }
 
-  int copy_to_user(Waddr target, void* source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr);
-
-  int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec, Level1PTE& ptelo, Level1PTE& ptehi);
-
-  int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = false) {
-    Level1PTE ptelo;
-    Level1PTE ptehi;
-    return copy_from_user(target, source, bytes, pfec, faultaddr, forexec, ptelo, ptehi);
+  void setup_qemu_switch() {
+	  env = (CPUX86State*)this;
   }
 
-  int copy_from_user(void* target, Waddr source, int bytes) {
-    PageFaultErrorCode pfec;
-    Waddr faultaddr;
-    return copy_from_user(target, source, bytes, pfec, faultaddr, false);
-  }
+  Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec); //, PTEUpdate& pteupdate, Level1PTE& pteused);
 
-  int copy_to_user(Waddr target, void* source, int bytes) {
-    PageFaultErrorCode pfec;
-    Waddr faultaddr;
-    return copy_to_user(target, source, bytes, pfec, faultaddr);
-  }
+  //Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, PTEUpdate& pteupdate) {
+  //  Level1PTE dummy;
+  //  return check_and_translate(virtaddr, sizeshift, store, internal, exception, pfec, pteupdate, dummy);
+  //}
 
-  int write_segreg(unsigned int segid, W16 selector);
-  void reload_segment_descriptor(unsigned int segid, W16 selector);
-  void swapgs();
+  //int copy_to_user(Waddr target, void* source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr);
+
+  //int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec, Level1PTE& ptelo, Level1PTE& ptehi);
+
+  //int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = false) {
+  //  Level1PTE ptelo;
+  //  Level1PTE ptehi;
+  //  return copy_from_user(target, source, bytes, pfec, faultaddr, forexec, ptelo, ptehi);
+  //}
+
+  //int copy_from_user(void* target, Waddr source, int bytes) {
+  //  PageFaultErrorCode pfec;
+  //  Waddr faultaddr;
+  //  return copy_from_user(target, source, bytes, pfec, faultaddr, false);
+  //}
+
+  //int copy_to_user(Waddr target, void* source, int bytes) {
+  //  PageFaultErrorCode pfec;
+  //  Waddr faultaddr;
+  //  return copy_to_user(target, source, bytes, pfec, faultaddr);
+  //}
+
+  //int write_segreg(unsigned int segid, W16 selector);
+  //void reload_segment_descriptor(unsigned int segid, W16 selector);
+  //void swapgs();
   void init();
-  void fxsave(FXSAVEStruct& state);
-  void fxrstor(const FXSAVEStruct& state);
+  //void fxsave(FXSAVEStruct& state);
+  //void fxrstor(const FXSAVEStruct& state);
 
   Context() { }
 
 #ifdef PTLSIM_HYPERVISOR
-  void restorefrom(const vcpu_guest_context& ctx);
-  void restorefrom(const vcpu_extended_context& ctx);
-  void saveto(vcpu_guest_context& ctx);
-  void saveto(vcpu_extended_context& ctx);
+  //void restorefrom(const vcpu_guest_context& ctx);
+  //void restorefrom(const vcpu_extended_context& ctx);
+  //void saveto(vcpu_guest_context& ctx);
+  //void saveto(vcpu_extended_context& ctx);
 
-  bool gdt_entry_valid(W16 idx);
-  SegmentDescriptor get_gdt_entry(W16 idx);
+  //bool gdt_entry_valid(W16 idx);
+  //SegmentDescriptor get_gdt_entry(W16 idx);
 
 #ifndef PTLSIM_PUBLIC_ONLY
-  Level1PTE virt_to_host_pte(W64 rawvirt);
-  Level1PTE virt_to_pte(W64 rawvirt);
+  //Level1PTE virt_to_host_pte(W64 rawvirt);
+  //Level1PTE virt_to_pte(W64 rawvirt);
 #endif
 
   W64 virt_to_pte_phys_addr(Waddr virtaddr, int level = 0);
 
-  int virt_to_pte_span(Level1PTE* ptes, W64 virtaddr, int pagecount);
+  //int virt_to_pte_span(Level1PTE* ptes, W64 virtaddr, int pagecount);
 
   // Flush the context mini-TLB and propagate flush to any core-specific TLBs
-  void flush_tlb(bool propagate_flush_to_model = true);
-  void flush_tlb_virt(Waddr virtaddr, bool propagate_flush_to_model = true);
-  void print_tlb(ostream& os);
+  //void flush_tlb(bool propagate_flush_to_model = true);
+  //void flush_tlb_virt(Waddr virtaddr, bool propagate_flush_to_model = true);
+  //void print_tlb(ostream& os);
 
-  void update_pte_acc_dirty(W64 rawvirt, const PTEUpdate& update) {
-    return page_table_acc_dirty_update(rawvirt, cr3 >> 12, update);
-  }
+  //void update_pte_acc_dirty(W64 rawvirt, const PTEUpdate& update) {
+  //  return page_table_acc_dirty_update(rawvirt, cr3 >> 12, update);
+  //}
 
-  bool create_bounce_frame(W16 target_cs, Waddr target_rip, int action);
+  //bool create_bounce_frame(W16 target_cs, Waddr target_rip, int action);
   void update_mode_count();
   bool check_events() const;
   bool event_upcall();
-  bool change_runstate(int newstate);
 
   int page_table_level_count() const { return 4; }
+
+  W64 operator[](int index) {
+	  if unlikely (index < 0) {
+		  return (W64)-1;
+	  }
+	  else if likely (index < 16) {
+		  return (W64)(regs[index]);
+	  }
+	  else if(index < 48) {
+		  if(index % 2 == 0) {
+			  return (W64)(xmm_regs._d[0]);
+		  } else {
+			  return (W64)(xmm_regs._d[1]);
+		  }
+	  }
+	  else if(index == 48) {
+		  return (W64)(fpstt);
+	  } 
+	  else if(index == 49) {
+		  return (W64)(fpus);
+	  } 
+	  else if(index == 50) {
+		  W64 ret = 0;
+		  foreach(i, 8) {
+			  ret |= ((W64(fptags[i])) << 8*i);
+		  }
+		  return ret;
+	  } 
+	  else if(index == 51) {
+		  return (W64((Waddr)&fpregs[0]));
+	  } 
+	  else if(index == 52) {
+		  // Not implemented in Xen or anywhere else..
+		  return -1;
+	  } 
+	  else if(index == 53) {
+		  // Not implemented in Xen or anywhere else..
+		  return -1;
+	  } 
+	  else if(index == 54) {
+		  return reg_trace;
+	  } 
+	  else if(index == 55) {
+		  return (W64((Waddr)&this));
+	  } 
+	  else if(index == 56) {
+		  return (W64(eip));
+	  } 
+	  else if(index == 57) {
+		  return (W64(eflags));
+	  } 
+	  else if(index == 58) {
+		  // Not implemented in Xen or anywhere else..
+		  return -1;
+	  } 
+	  else if(index == 59) {
+		  return reg_selfrip;
+	  } 
+	  else if(index == 60) {
+		  return reg_nextrip;
+	  } 
+	  else if(index == 61) {
+		  return reg_ar1;
+	  } 
+	  else if(index == 62) {
+		  return reg_ar2;
+	  } 
+	  else if(index == 63) {
+		  return 0;
+	  } 
+
+	  return -1;
+  }
+
+  void update_mode(bool is_kernel) {
+	  kernel = is_kernel;
+  }
+
+  void cs_segment_updated(SegmentCache *seg) {
+	  use64 = (seg->flags & DESC_L_MASK) ? true : false;
+	  use32 = (seg->flags & DESC_B_MASK) ? true : false;
+	  virt_addr_mask = (use64 ? 0xffffffffffffffffULL : 0x00000000ffffffffULL);
+  }
+
 #else
-  void update_pte_acc_dirty(W64 rawvirt, const PTEUpdate& update) { }
+  //void update_pte_acc_dirty(W64 rawvirt, const PTEUpdate& update) { }
   void update_shadow_segment_descriptors();
 #endif
 };

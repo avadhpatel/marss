@@ -857,7 +857,7 @@ bool OutOfOrderCore::runcycle() {
       if (logable(3)) logfile << " COMMIT_RESULT_STOP, flush_pipeline().",endl;
       thread->flush_pipeline();
       thread->stall_frontend = 1;
-      machine.stopped[thread->ctx.vcpuid] = 1;
+      machine.stopped[thread->ctx.cpu_index] = 1;
       // Wait for other cores to sync up, so don't exit right away
       break;
     }
@@ -882,7 +882,7 @@ bool OutOfOrderCore::runcycle() {
       //
       logfile << "VCPU ", vctx.vcpuid, " context was dirty: update core model internal state", endl;
 
-      ThreadContext* tc = threads[vctx.vcpuid];
+      ThreadContext* tc = threads[vctx.cpu_index];
       assert(tc);
       assert(&tc->ctx == &vctx);
       tc->flush_pipeline();
@@ -899,7 +899,7 @@ bool OutOfOrderCore::runcycle() {
 //    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  2048 ) {
     if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 10*4096) {
       stringbuf sb;
-      sb << "[vcpu ", thread->ctx.vcpuid, "] thread ", thread->threadid, ": WARNING: At cycle ",
+      sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
         sim_cycle, ", ", total_user_insns_committed,  " user commits: no instructions have committed for ",
         (sim_cycle - thread->last_commit_at_cycle), " cycles; the pipeline could be deadlocked", endl;
       logfile << sb, flush;
@@ -1258,12 +1258,12 @@ bool ThreadContext::handle_barrier() {
   if (logable(3)) logfile << " handle_barrier, flush_pipeline.",endl;
   flush_pipeline();
 
-  int assistid = ctx.commitarf[REG_rip];
+  int assistid = ctx.eip;//ctx.commitarf[REG_rip];
   assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
   
   if (logable(4)) {
-    logfile << "[vcpu ", ctx.vcpuid, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
-      (RIPVirtPhys(ctx.commitarf[REG_selfrip]).update(ctx)), "; return to ", (void*)(Waddr)ctx.commitarf[REG_nextrip],
+    logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
+      (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
       ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
   }
   
@@ -1294,7 +1294,7 @@ bool ThreadContext::handle_barrier() {
 
 #ifndef PTLSIM_HYPERVISOR
   if (requested_switch_to_native) {
-    logfile << "PTL call requested switch to native mode at rip ", (void*)(Waddr)ctx.commitarf[REG_rip], endl;
+    logfile << "PTL call requested switch to native mode at rip ", (void*)(Waddr)ctx.eip, endl;
     return false;
   }
 #endif
@@ -1308,7 +1308,7 @@ bool ThreadContext::handle_exception() {
   flush_pipeline();
 
   if (logable(4)) {
-    logfile << "[vcpu ", ctx.vcpuid, "] Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.commitarf[REG_rip], 
+    logfile << "[vcpu ", ctx.cpu_index, "] Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip, 
       " at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
   }
 
@@ -1331,8 +1331,8 @@ bool ThreadContext::handle_exception() {
   // arise.
   //
   if (ctx.exception == EXCEPTION_SkipBlock) {
-    ctx.commitarf[REG_rip] = chk_recovery_rip;
-    if (logable(6)) logfile << "SkipBlock pseudo-exception: skipping to ", (void*)(Waddr)ctx.commitarf[REG_rip], endl, flush;
+    ctx.eip = chk_recovery_rip;
+    if (logable(6)) logfile << "SkipBlock pseudo-exception: skipping to ", (void*)(Waddr)ctx.eip, endl, flush;
     if (logable(3)) logfile << " EXCEPTION_SkipBlock, flush_pipeline.",endl;
     flush_pipeline();
     return true;
@@ -1351,11 +1351,11 @@ bool ThreadContext::handle_exception() {
   case EXCEPTION_PageFaultOnRead:
   case EXCEPTION_PageFaultOnWrite:
   case EXCEPTION_PageFaultOnExec:
-    ctx.x86_exception = EXCEPTION_x86_page_fault; break;
+    ctx.exception_index = EXCEPTION_x86_page_fault; break;
   case EXCEPTION_FloatingPointNotAvailable:
-    ctx.x86_exception = EXCEPTION_x86_fpu_not_avail; break;
+    ctx.exception_index = EXCEPTION_x86_fpu_not_avail; break;
   case EXCEPTION_FloatingPoint:
-    ctx.x86_exception = EXCEPTION_x86_fpu; break;
+    ctx.exception_index = EXCEPTION_x86_fpu; break;
   default:
     logfile << "Unsupported internal exception type ", exception_name(ctx.exception), endl, flush;
     assert(false);
@@ -1366,7 +1366,7 @@ bool ThreadContext::handle_exception() {
     logfile << sshinfo;
   }
 
-  ctx.propagate_x86_exception(ctx.x86_exception, ctx.error_code, ctx.cr2);
+  ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code, ctx.cr[2]);
 
   // Flush again, but restart at modified rip
   if (logable(3)) logfile << " handle_exception, flush_pipeline again.",endl;
@@ -1375,11 +1375,11 @@ bool ThreadContext::handle_exception() {
   return true;
 #else
   if (logable(6)) 
-    logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.commitarf[REG_rip], 
+    logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.eip,
       ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
 
   stringbuf sb;
-  logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.commitarf[REG_rip], " @ ", 
+  logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.eip, " @ ", 
     total_user_insns_committed, " commits (", total_uops_committed, " uops): genuine user exception (",
     exception_name(ctx.exception), "); aborting", endl;
   logfile << ctx, endl;
@@ -2188,8 +2188,6 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
   //logfile.set_ringbuf_mode(1);
 
-  global_power_manager.init(cores);
-
   // loop only break if all cores' threads are stopped at eom:
   for (;;) {
     if unlikely ((!logenable) && iterations >= config.start_log_at_iteration) {
@@ -2223,8 +2221,6 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
     memoryHierarchyPtr->clock();
 #endif
 
-	global_power_manager.clock();
-	
 	foreach (cur_core, NUMBER_OF_CORES){
 		OutOfOrderCore& core =* cores[cur_core];
 
@@ -2241,14 +2237,14 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 				if unlikely (!thread->ctx.running) {
 					if unlikely (stopping) {
 						// Thread is already waiting for an event: stop it now
-						logfile << "[vcpu ", thread->ctx.vcpuid, "] Already stopped at cycle ", sim_cycle, endl;
-						stopped[thread->ctx.vcpuid] = 1;
+						logfile << "[vcpu ", thread->ctx.cpu_index, "] Already stopped at cycle ", sim_cycle, endl;
+						stopped[thread->ctx.cpu_index] = 1;
 					} else {
 						if (thread->ctx.check_events()) thread->handle_interrupt();
 					}
 					continue;
 				}
-				MYDEBUG << "[vcpu ", thread->ctx.vcpuid, "] is running by [core ", core.coreid, "] [thread ", thread->threadid, "]", endl;
+				MYDEBUG << "[vcpu ", thread->ctx.cpu_index, "] is running by [core ", core.coreid, "] [thread ", thread->threadid, "]", endl;
 				//        logfile << " thread->total_insns_committed ", thread->total_insns_committed, "  config.stop_at_user_insns ",  config.stop_at_user_insns,
 				"finished[", cur_core,"][",cur_thread,"]", finished[cur_core][cur_thread], endl, flush;
 				if unlikely ( thread->total_insns_committed >= config.stop_at_user_insns && !finished[cur_core][cur_thread]) {
@@ -2448,7 +2444,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 void OutOfOrderCore::flush_tlb(Context& ctx, W8 threadid, bool selective, Waddr virtaddr) {
   ThreadContext& thread =* threads[threadid];
   if (logable(5)) {
-    logfile << "[vcpu ", ctx.vcpuid, "] core ", coreid, ", thread ", threadid, ": Flush TLBs";
+    logfile << "[vcpu ", ctx.cpu_index, "] core ", coreid, ", thread ", threadid, ": Flush TLBs";
     if (selective) logfile << " for virtaddr ", (void*)virtaddr, endl;
     logfile << endl;
     //logfile << "DTLB before: ", endl, caches.dtlb, endl;
@@ -2473,14 +2469,14 @@ void OutOfOrderCore::flush_tlb(Context& ctx, W8 threadid, bool selective, Waddr 
 void OutOfOrderMachine::flush_tlb(Context& ctx) {
   // This assumes all VCPUs are mapped as threads in a single SMT core
   W8 coreid = 0;
-  W8 threadid = ctx.vcpuid;
+  W8 threadid = ctx.cpu_index;
   cores[coreid]->flush_tlb(ctx, threadid);
 }
 
 void OutOfOrderMachine::flush_tlb_virt(Context& ctx, Waddr virtaddr) {
   // This assumes all VCPUs are mapped as threads in a single SMT core
   W8 coreid = 0;
-  W8 threadid = ctx.vcpuid;
+  W8 threadid = ctx.cpu_index;
   cores[coreid]->flush_tlb(ctx, threadid, true, virtaddr);
 }
 
@@ -2546,7 +2542,7 @@ void OutOfOrderMachine::update_stats(PTLsimStats& stats) {
     foreach (threadid, NUMBER_OF_THREAD_PER_CORE){
 #ifdef PTLSIM_HYPERVISOR
       // need to update the count other wise the last one will be lost
-      logfile << " update mode count for ctx ", cores[coreid]->threads[threadid]->ctx.vcpuid, endl;
+      logfile << " update mode count for ctx ", cores[coreid]->threads[threadid]->ctx.cpu_index, endl;
       cores[coreid]->threads[threadid]->ctx.update_mode_count();
 #endif
       PerContextOutOfOrderCoreStats& s = per_context_ooocore_stats_ref(coreid , threadid);

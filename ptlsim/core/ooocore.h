@@ -1826,8 +1826,6 @@ namespace OutOfOrderModel {
     ~OutOfOrderMachine();
 
 	void update_core_offchip_miss_count(int coreid);
-
-	GlobalPowerManager global_power_manager;
   };
 
   extern CycleTimer cttotal;

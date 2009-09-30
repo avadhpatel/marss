@@ -71,6 +71,9 @@ using Memory::BusStats;
             abort(); \
           } } while(0);
 
+#define per_core_event_ref(coreid) (*(((PerCoreEvents*)&stats.external.c0) + (coreid)))
+#define per_core_event_update(coreid, expr) stats.external.total.expr, per_core_event_ref(coreid).expr
+
 //
 // This file is run through dstbuild to auto-generate
 // the code to instantiate a DataStoreNodeTemplate tree.
@@ -97,6 +100,12 @@ struct EventsInMode { // rootnode: summable
   W64 legacy16;
   W64 microcode;
   W64 idle;
+};
+
+struct PerCoreEvents { // rootnode:
+    EventsInMode cycles_in_mode;
+    EventsInMode insns_in_mode;
+    EventsInMode uops_in_mode;
 };
 
 struct PTLsimStats { // rootnode:
@@ -243,9 +252,15 @@ struct PTLsimStats { // rootnode:
     W64 assists[ASSIST_COUNT]; // label: assist_names
     W64 traps[256]; // label: x86_exception_names
 #ifdef PTLSIM_HYPERVISOR
-    EventsInMode cycles_in_mode;
-    EventsInMode insns_in_mode;
-    EventsInMode uops_in_mode;
+	PerCoreEvents total;
+	PerCoreEvents c0;
+	PerCoreEvents c1;
+	PerCoreEvents c2;
+	PerCoreEvents c3;
+	PerCoreEvents c4;
+	PerCoreEvents c5;
+	PerCoreEvents c6;
+	PerCoreEvents c7;
 #endif
   } external;
 

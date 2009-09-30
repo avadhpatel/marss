@@ -7,18 +7,24 @@
 
 #include <decode.h>
 
+// QEMU Helper functions
+extern "C" {
+#include <helper.h>
+#include <cpu.h>
+}
+
 template <typename T> void assist_div(Context& ctx) {
-  Waddr rax = ctx.commitarf[REG_rax]; Waddr rdx = ctx.commitarf[REG_rdx];
-  asm("div %[divisor];" : "+a" (rax), "+d" (rdx) : [divisor] "q" ((T)ctx.commitarf[REG_ar1]));
-  ctx.commitarf[REG_rax] = rax; ctx.commitarf[REG_rdx] = rdx;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  Waddr rax = ctx.regs[R_EAX]; Waddr rdx = ctx.regs[R_EDX];
+  asm("div %[divisor];" : "+a" (rax), "+d" (rdx) : [divisor] "q" ((T)ctx.reg_ar1));
+  ctx.regs[R_EAX] = rax; ctx.regs[R_EDX] = rdx;
+  ctx.eip = ctx.reg_nextrip;
 }
 
 template <typename T> void assist_idiv(Context& ctx) {
-  Waddr rax = ctx.commitarf[REG_rax]; Waddr rdx = ctx.commitarf[REG_rdx];
-  asm("idiv %[divisor];" : "+a" (rax), "+d" (rdx) : [divisor] "q" ((T)ctx.commitarf[REG_ar1]));
-  ctx.commitarf[REG_rax] = rax; ctx.commitarf[REG_rdx] = rdx;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  Waddr rax = ctx.regs[R_EAX]; Waddr rdx = ctx.regs[R_EDX];
+  asm("idiv %[divisor];" : "+a" (rax), "+d" (rdx) : [divisor] "q" ((T)ctx.reg_ar1));
+  ctx.regs[R_EAX] = rax; ctx.regs[R_EDX] = rdx;
+  ctx.eip = ctx.reg_nextrip;
 }
 
 // Not possible in 64-bit mode
@@ -38,10 +44,10 @@ template void assist_idiv<W32>(Context& ctx);
 template void assist_idiv<W64>(Context& ctx);
 
 void assist_int(Context& ctx) {
-  byte intid = ctx.commitarf[REG_ar1];
+  byte intid = ctx.reg_ar1;
 #ifdef PTLSIM_HYPERVISOR
   // The returned rip is nextrip for explicit intN instructions:
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
   ctx.propagate_x86_exception(intid, 0);
 #else
   if (intid == 0x80) {
@@ -54,26 +60,28 @@ void assist_int(Context& ctx) {
 }
 
 #ifdef PTLSIM_HYPERVISOR
-extern void handle_xen_hypercall_assist(Context& ctx);
-
-extern void handle_syscall_assist(Context& ctx);
+//extern void handle_xen_hypercall_assist(Context& ctx);
+//
+//extern void handle_syscall_assist(Context& ctx);
 #endif
 
 void assist_syscall(Context& ctx) {
 #ifdef PTLSIM_HYPERVISOR
-  //
-  // SYSCALL has two distinct sets of semantics on Xen x86-64.
-  //
-  // When executed from user mode, it's a normal system call
-  // in the Linux sense, and Xen just relays control back
-  // to the guest domain's kernel.
-  //
-
-  if (ctx.kernel_mode) {
-    logfile << ctx, endl, flush;
-    assert(!ctx.kernel_mode);
-  }
-  handle_syscall_assist(ctx);
+//  //
+//  // SYSCALL has two distinct sets of semantics on Xen x86-64.
+//  //
+//  // When executed from user mode, it's a normal system call
+//  // in the Linux sense, and Xen just relays control back
+//  // to the guest domain's kernel.
+//  //
+//
+//  if (ctx.kernel_mode) {
+//    logfile << ctx, endl, flush;
+//    assert(!ctx.kernel_mode);
+//  }
+//  handle_syscall_assist(ctx);
+	ctx.setup_qemu_switch();
+	handle_syscall(ctx.regs[R_ECX]);
 #else
   if (ctx.use64) {
 #ifdef __x86_64__
@@ -87,29 +95,33 @@ void assist_syscall(Context& ctx) {
 }
 
 void assist_hypercall(Context& ctx) {
-#ifdef PTLSIM_HYPERVISOR
-  //
-  // SYSCALL has two distinct sets of semantics on Xen x86-64.
-  //
-  // When executed from kernel mode, it's interpreted as a
-  // hypercall into Xen itself.
-  //
-  if (!ctx.kernel_mode) {
-    logfile << ctx, endl, flush;
-    assert(ctx.kernel_mode);
-  }
-  handle_xen_hypercall_assist(ctx);
-#endif
+	cerr << "assist_hypercall is called, ", \
+		 "this function should not be called in QEMU\n";
+//#ifdef PTLSIM_HYPERVISOR
+//  //
+//  // SYSCALL has two distinct sets of semantics on Xen x86-64.
+//  //
+//  // When executed from kernel mode, it's interpreted as a
+//  // hypercall into Xen itself.
+//  //
+//  if (!ctx.kernel_mode) {
+//    logfile << ctx, endl, flush;
+//    assert(ctx.kernel_mode);
+//  }
+//  handle_xen_hypercall_assist(ctx);
+//#endif
 }
 
 void assist_sysenter(Context& ctx) {
-#ifdef PTLSIM_HYPERVISOR
-  //++MTY TODO
-  cerr << "assist_sysenter()", endl, flush;
-  assert(false);
-#else
-  handle_syscall_32bit(SYSCALL_SEMANTICS_SYSENTER);
-#endif
+	ctx.setup_qemu_switch();
+	helper_sysenter();
+//#ifdef PTLSIM_HYPERVISOR
+//  //++MTY TODO
+//  cerr << "assist_sysenter()", endl, flush;
+//  assert(false);
+//#else
+//  handle_syscall_32bit(SYSCALL_SEMANTICS_SYSENTER);
+//#endif
   // REG_rip is filled out for us
 }
 
@@ -241,104 +253,110 @@ union ProcessorMiscInfo {
   (0 << 24)) /* APIC ID (must be patched later!) */
 
 void assist_cpuid(Context& ctx) {
-  W64& rax = ctx.commitarf[REG_rax];
-  W64& rbx = ctx.commitarf[REG_rbx];
-  W64& rcx = ctx.commitarf[REG_rcx];
-  W64& rdx = ctx.commitarf[REG_rdx];
-
-  W32 func = rax;
-  if (logable(4)) {
-    logfile << "assist_cpuid: func 0x", hexstring(func, 32), " called from ",
-      (void*)(Waddr)ctx.commitarf[REG_selfrip], ":", endl;
-  }
-
-  switch (func) {
-  case 0: {
-    // Max avail function spec and vendor ID:
-    const W32* vendor = (const W32*)&cpuid_vendor;
-    rax = 1; // only one extended function
-    rbx = vendor[0];
-    rdx = vendor[1];
-    rcx = vendor[2];
-    break;
-  }
-
-  case 1: {
-    // Model and capability information
-    rax = PTLSIM_X86_MODEL_INFO; // model
-    rbx = PTLSIM_X86_MISC_INFO | (ctx.vcpuid << 24);
-    rcx = PTLSIM_X86_EXT_FEATURE;
-    rdx = PTLSIM_X86_FEATURE;
-    break;
-  }
-
-  case 0x80000000: {
-    // Max avail extended function spec and vendor ID:
-    const W32* vendor = (const W32*)&cpuid_vendor;
-    rax = 4;
-    rbx = vendor[0];
-    rdx = vendor[1];
-    rcx = vendor[2];
-    break;
-  }
-
-  case 0x80000001: {
-    // extended feature info
-    rax = PTLSIM_X86_MODEL_INFO;
-    rbx = 0; // brand ID
-    rcx = PTLSIM_X86_VENDOR_EXT_FEATURE;
-    rdx = PTLSIM_X86_VENDOR_FEATURE;
-    break;
-  }
-
-  case 0x80000002 ... 0x80000004: {
-    // processor name string
-    const W32* cpudesc = (const W32*)(&cpuid_description[(func - 0x80000002)*16]);
-    rax = cpudesc[0];
-    rbx = cpudesc[1];
-    rcx = cpudesc[2];
-    rdx = cpudesc[3];
-    break;
-  }
-
-  default: {
-    W32 eax, ebx, ecx, edx;
-    cpuid(func, eax, ebx, ecx, edx);
-    rax = eax;
-    rbx = ebx;
-    rcx = ecx;
-    rdx = edx;
-    break;
-  }
-  }
-
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+	ctx.setup_qemu_switch();
+	helper_cpuid();
+//  W64& rax = ctx.regs[R_EAX];
+//  W64& rbx = ctx.regs[R_EBX];
+//  W64& rcx = ctx.regs[R_ECX];
+//  W64& rdx = ctx.regs[R_EDX];
+//
+//  W32 func = rax;
+//  if (logable(4)) {
+//    logfile << "assist_cpuid: func 0x", hexstring(func, 32), " called from ",
+//      (void*)(Waddr)ctx.reg_selfrip, ":", endl;
+//  }
+//
+//  switch (func) {
+//  case 0: {
+//    // Max avail function spec and vendor ID:
+//    const W32* vendor = (const W32*)&cpuid_vendor;
+//    rax = 1; // only one extended function
+//    rbx = vendor[0];
+//    rdx = vendor[1];
+//    rcx = vendor[2];
+//    break;
+//  }
+//
+//  case 1: {
+//    // Model and capability information
+//    rax = PTLSIM_X86_MODEL_INFO; // model
+//    rbx = PTLSIM_X86_MISC_INFO | (ctx.cpu_index << 24);
+//    rcx = PTLSIM_X86_EXT_FEATURE;
+//    rdx = PTLSIM_X86_FEATURE;
+//    break;
+//  }
+//
+//  case 0x80000000: {
+//    // Max avail extended function spec and vendor ID:
+//    const W32* vendor = (const W32*)&cpuid_vendor;
+//    rax = 4;
+//    rbx = vendor[0];
+//    rdx = vendor[1];
+//    rcx = vendor[2];
+//    break;
+//  }
+//
+//  case 0x80000001: {
+//    // extended feature info
+//    rax = PTLSIM_X86_MODEL_INFO;
+//    rbx = 0; // brand ID
+//    rcx = PTLSIM_X86_VENDOR_EXT_FEATURE;
+//    rdx = PTLSIM_X86_VENDOR_FEATURE;
+//    break;
+//  }
+//
+//  case 0x80000002 ... 0x80000004: {
+//    // processor name string
+//    const W32* cpudesc = (const W32*)(&cpuid_description[(func - 0x80000002)*16]);
+//    rax = cpudesc[0];
+//    rbx = cpudesc[1];
+//    rcx = cpudesc[2];
+//    rdx = cpudesc[3];
+//    break;
+//  }
+//
+//  default: {
+//    W32 eax, ebx, ecx, edx;
+//    cpuid(func, eax, ebx, ecx, edx);
+//    rax = eax;
+//    rbx = ebx;
+//    rcx = ecx;
+//    rdx = edx;
+//    break;
+//  }
+//  }
+//
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_rdtsc(Context& ctx) {
-  W64& rax = ctx.commitarf[REG_rax];
-  W64& rdx = ctx.commitarf[REG_rdx];
-#ifdef PTLSIM_HYPERVISOR
-  W64 tsc = ctx.base_tsc + sim_cycle; 
-#else
-  W64 tsc = sim_cycle;
-#endif
-  rax = LO32(tsc);
-  rdx = HI32(tsc);
-
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+	ctx.setup_qemu_switch();
+	helper_rdtsc();
+//  W64& rax = ctx.regs[R_EAX];
+//  W64& rdx = ctx.regs[R_EDX];
+//#ifdef PTLSIM_HYPERVISOR
+//  W64 tsc = ctx.tsc_offset + sim_cycle; 
+//#else
+//  W64 tsc = sim_cycle;
+//#endif
+//  rax = LO32(tsc);
+//  rdx = HI32(tsc);
+//
+  ctx.eip = ctx.reg_nextrip;
 }
 
 //
 // Pop from stack into flags register, with checking for reserved bits
 //
 void assist_popf(Context& ctx) {
-  W32 flags = ctx.commitarf[REG_ar1];
-  // bit 1 is always '1', and bits {3, 5, 15} are always '0':
-  flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
-  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
-  ctx.commitarf[REG_flags] = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+	ctx.setup_qemu_switch();
+	helper_fpop();
+//  W32 flags = ctx.reg_ar1;
+//  // bit 1 is always '1', and bits {3, 5, 15} are always '0':
+//  flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
+//  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
+//  ctx.eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
+  ctx.eip = ctx.reg_nextrip;
 
   // Update internal flags too (only update non-standard flags in internal_flags_bits):
   // Equivalent to these uops:
@@ -353,12 +371,12 @@ void assist_popf(Context& ctx) {
 //
 void assist_cld(Context& ctx) {
   ctx.internal_eflags &= ~FLAG_DF;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];  
+  ctx.eip = ctx.reg_nextrip;  
 }
 
 void assist_std(Context& ctx) {
   ctx.internal_eflags |= FLAG_DF;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];  
+  ctx.eip = ctx.reg_nextrip;  
 }
 
 //
@@ -367,18 +385,21 @@ void assist_std(Context& ctx) {
 extern void assist_ptlcall(Context& ctx);
 
 void assist_write_segreg(Context& ctx) {
-  W16 selector = ctx.commitarf[REG_ar1];
-  byte segid = ctx.commitarf[REG_ar2];
+  W16 selector = ctx.reg_ar1;
+  byte segid = ctx.reg_ar2;
 
-  int exception = ctx.write_segreg(segid, selector);
+  ctx.setup_qemu_switch();
+  helper_load_seg(segid >> 3, selector);
 
-  if unlikely (exception) {
-    ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
-    ctx.propagate_x86_exception(exception, selector);
-    return;
-  }
-
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+//  int exception = ctx.write_segreg(segid, selector);
+//
+//  if unlikely (exception) {
+//    ctx.eip = ctx.reg_selfrip;
+//    ctx.propagate_x86_exception(exception, selector);
+//    return;
+//  }
+//
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_ldmxcsr(Context& ctx) {
@@ -386,7 +407,7 @@ void assist_ldmxcsr(Context& ctx) {
   // LDMXCSR needs to flush the pipeline since future FP instructions will
   // depend on its value and can't be issued out of order w.r.t the mxcsr.
   //
-  W32 mxcsr = (W32)ctx.commitarf[REG_ar1];
+  W32 mxcsr = (W32)ctx.reg_ar1;
 
   // Top bit of mxcsr archreg doubles as direction flag and other misc flags: preserve it
   ctx.mxcsr = (ctx.mxcsr & 0xffffffff00000000ULL) | mxcsr;
@@ -402,7 +423,7 @@ void assist_ldmxcsr(Context& ctx) {
   // no code checks for exception conditions in this manner. Otherwise each FP
   // uopimpl would need to update a speculative version of the mxcsr.
   //
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_fxsave(Context& ctx) {
@@ -410,31 +431,31 @@ void assist_fxsave(Context& ctx) {
 
   ctx.fxsave(state);
 
-  Waddr target = ctx.commitarf[REG_ar1] & ctx.virt_addr_mask;
+  Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
 
   PageFaultErrorCode pfec;
   Waddr faultaddr;
   int bytes = ctx.copy_to_user(target, &state, sizeof(state), pfec, faultaddr);
 
   if (bytes < sizeof(state)) {
-    ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+    ctx.eip = ctx.reg_selfrip;
     ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
     return;
   }
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_fxrstor(Context& ctx) {
   FXSAVEStruct state;
 
-  Waddr target = ctx.commitarf[REG_ar1] & ctx.virt_addr_mask;
+  Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
 
   PageFaultErrorCode pfec;
   Waddr faultaddr;
   int bytes = ctx.copy_from_user(&state, target, sizeof(state), pfec, faultaddr);
 
   if (bytes < sizeof(state)) {
-    ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+    ctx.eip = ctx.reg_selfrip;
     ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
     return;
   }
@@ -446,168 +467,196 @@ void assist_fxrstor(Context& ctx) {
   W32 mxcsr = ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
   x86_set_mxcsr(mxcsr);
 
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_wrmsr(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
-
-#ifdef PTLSIM_HYPERVISOR
-  if (ctx.kernel_mode) {
-    W64 value = (ctx.commitarf[REG_rdx] << 32) | LO32(ctx.commitarf[REG_rax]);
-    W32 msr = ctx.commitarf[REG_rcx];
-    bool invalid = 0;
-    switch (msr) {
-    case 0xc0000100:
-      ctx.seg[SEGID_FS].base = value; break;
-    case 0xc0000101:
-      ctx.seg[SEGID_GS].base = value; break;
-    case 0xc0000102:
-      ctx.swapgs_base = value; break;
-    default:
-      invalid = 1; break;
-    }
-    if (invalid) {
-      logfile << "Warning: wrmsr: invalid MSR write (msr  ", (void*)(Waddr)msr,
-        ") with value ", (void*)(Waddr)value, " from rip ",
-        (void*)(Waddr)ctx.commitarf[REG_rip], endl;
-      // Invalid MSR writes are ignored by Xen by default
-      // ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    } else {
-      ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
-    }
-  } else {
-    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-  }
-#else
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-#endif
+  ctx.eip = ctx.reg_selfrip;
+  ctx.setup_qemu_switch();
+  helper_wrmsr();
+//
+//#ifdef PTLSIM_HYPERVISOR
+//  if (ctx.kernel_mode) {
+//    W64 value = (ctx.regs[R_EDX] << 32) | LO32(ctx.regs[R_EAX]);
+//    W32 msr = ctx.regs[R_ECX];
+//    bool invalid = 0;
+//    switch (msr) {
+//    case 0xc0000100:
+//      ctx.segs[SEGID_FS].base = value; break;
+//    case 0xc0000101:
+//      ctx.segs[SEGID_GS].base = value; break;
+//    case 0xc0000102:
+//      ctx.swapgs_base = value; break;
+//    default:
+//      invalid = 1; break;
+//    }
+//    if (invalid) {
+//      logfile << "Warning: wrmsr: invalid MSR write (msr  ", (void*)(Waddr)msr,
+//        ") with value ", (void*)(Waddr)value, " from rip ",
+//        (void*)(Waddr)ctx.eip, endl;
+//      // Invalid MSR writes are ignored by Xen by default
+//      // ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//    } else {
+//      ctx.eip = ctx.reg_nextrip;
+//    }
+//  } else {
+//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//  }
+//#else
+//  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+//#endif
 }
 
 
 void assist_rdmsr(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
+  ctx.setup_qemu_switch();
+  helper_rdmsr();
 
-#ifdef PTLSIM_HYPERVISOR
-  if (ctx.kernel_mode) {
-    W32 msr = ctx.commitarf[REG_rcx];
-    W64 rc = 0;
-    bool invalid = 0;
-    switch (msr) {
-    case 0xc0000100:
-      rc = ctx.seg[SEGID_FS].base; break;
-    case 0xc0000101:
-      rc = ctx.seg[SEGID_GS].base; break;
-    case 0xc0000102:
-      rc = ctx.swapgs_base; break;
-    case 0xc0000080:
-      rc = ctx.efer; break;
-    default:
-      invalid = 1; break;
-    }
-    if (invalid) {
-      ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    } else {
-      ctx.commitarf[REG_rdx] = HI32(rc);
-      ctx.commitarf[REG_rax] = LO32(rc);
-      ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
-    }
-  } else {
-    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-  }
-#else
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-#endif
+//#ifdef PTLSIM_HYPERVISOR
+//  if (ctx.kernel_mode) {
+//    W32 msr = ctx.regs[R_ECX];
+//    W64 rc = 0;
+//    bool invalid = 0;
+//    switch (msr) {
+//    case 0xc0000100:
+//      rc = ctx.segs[SEGID_FS].base; break;
+//    case 0xc0000101:
+//      rc = ctx.segs[SEGID_GS].base; break;
+//    case 0xc0000102:
+//      rc = ctx.swapgs_base; break;
+//    case 0xc0000080:
+//      rc = ctx.efer; break;
+//    default:
+//      invalid = 1; break;
+//    }
+//    if (invalid) {
+//      ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//    } else {
+//      ctx.regs[R_EDX] = HI32(rc);
+//      ctx.regs[R_EAX] = LO32(rc);
+//      ctx.eip = ctx.reg_nextrip;
+//    }
+//  } else {
+//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//  }
+//#else
+//  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+//#endif
 }
 
 #ifdef PTLSIM_HYPERVISOR
 void assist_write_cr0(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
+  ctx.setup_qemu_switch();
+  helper_write_crN(0, ctx.reg_ar1);
 
-  if (!ctx.kernel_mode) {
-    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    return;
-  }
+//  if (!ctx.kernel_mode) {
+//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//    return;
+//  }
+//
+//  W64 val = ctx.reg_ar1;
+//
+//  if ((val ^ ctx.cr[0]) & ~(X86_CR0_TS)) {
+//    // Only allowed to change TS flag
+//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//    return;
+//  }
+//
+//  ctx.cr[0] = val;
 
-  W64 val = ctx.commitarf[REG_ar1];
-
-  if ((val ^ ctx.cr0) & ~(X86_CR0_TS)) {
-    // Only allowed to change TS flag
-    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    return;
-  }
-
-  ctx.cr0 = val;
-
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_write_cr2(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
+  ctx.setup_qemu_switch();
+  helper_write_crN(2, ctx.reg_ar1);
 
-  if (!ctx.kernel_mode) {
-    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    return;
-  }
-
-  W64 val = ctx.commitarf[REG_ar1];
-  sshinfo.vcpu_info[ctx.vcpuid].arch.cr2 = val;
-  ctx.cr2 = val;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+//  if (!ctx.kernel_mode) {
+//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//    return;
+//  }
+//
+//  W64 val = ctx.reg_ar1;
+//  sshinfo.vcpu_info[ctx.cpu_index].arch.cr2 = val;
+//  ctx.cr[2] = val;
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void switch_page_table(mfn_t mfn);
 
 void assist_write_cr3(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
+  ctx.setup_qemu_switch();
+  helper_write_crN(3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
 
-  if (!ctx.kernel_mode) {
-    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    return;
-  }
-
-  ctx.cr3 = ctx.commitarf[REG_ar1] & 0xfffffffffffff000ULL;
-  ctx.flush_tlb();
-  switch_page_table(ctx.cr3 >> 12);
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+//  if (!ctx.kernel_mode) {
+//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//    return;
+//  }
+//
+//  ctx.cr[3] = ctx.reg_ar1 & 0xfffffffffffff000ULL;
+//  ctx.flush_tlb();
+//  switch_page_table(ctx.cr[3] >> 12);
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_write_cr4(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
+  ctx.setup_qemu_switch();
+  helper_write_crN(4, ctx.reg_ar1);
 
-  if (!ctx.kernel_mode) {
-    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    return;
-  }
+//  if (!ctx.kernel_mode) {
+//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//    return;
+//  }
 
   // (Ignore all writes to CR4 under Xen)
 
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_write_debug_reg(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
 
   if (!ctx.kernel_mode) {
     ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
     return;
   }
 
-  W64 value = ctx.commitarf[REG_ar1];
-  W64 regid = ctx.commitarf[REG_ar2];
+  W64 value = ctx.reg_ar1;
+  W64 regid = ctx.reg_ar2;
 
-  switch (regid) {
-  case 0: ctx.dr0 = value; break;
-  case 1: ctx.dr1 = value; break;
-  case 2: ctx.dr2 = value; break;
-  case 3: ctx.dr3 = value; break;
-  case 4: ctx.dr4 = value; break;
-  case 5: ctx.dr5 = value; break;
-  case 6: ctx.dr6 = value; break;
-  case 7: ctx.dr7 = value; break;
-  };
+  ctx.setup_qemu_switch();
 
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+  if(regid < 4) {
+	  hw_breakpoint_remove(env, regid);
+	  ctx.dr[regid] = value;
+	  hw_breakpoint_insert(env, regid);
+  } else if(regid == 7) {
+	  for (i = 0; i < 4; i++)
+		  hw_breakpoint_remove(env, i);
+	  ctx.dr[7] = value;
+	  for (i = 0; i < 4; i++)
+		  hw_breakpoint_insert(env, i);
+  } else {
+	  ctx.dr[regid] = value;
+  }
+
+//  switch (regid) {
+//  case 0: ctx.dr[0] = value; break;
+//  case 1: ctx.dr[1] = value; break;
+//  case 2: ctx.dr[2] = value; break;
+//  case 3: ctx.dr[3] = value; break;
+//  case 4: ctx.dr[4] = value; break;
+//  case 5: ctx.dr[5] = value; break;
+//  case 6: ctx.dr[6] = value; break;
+//  case 7: ctx.dr[7] = value; break;
+//  };
+
+  ctx.eip = ctx.reg_nextrip;
 }
 
 #else
@@ -615,38 +664,38 @@ void assist_write_debug_reg(Context& ctx) {
 // Userspace PTLsim does not support these:
 //
 void assist_write_cr0(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
 void assist_write_cr2(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
 void assist_write_cr3(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
 void assist_write_cr4(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
 void assist_write_debug_reg(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 #endif
 
 void assist_iret16(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
 void assist_iret32(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
@@ -664,46 +713,52 @@ static inline ostream& operator <<(ostream& os, const IRETStackFrame& iretctx) {
 }
 
 void assist_iret64(Context& ctx) {
-#ifdef PTLSIM_HYPERVISOR
-  IRETStackFrame frame;
+	ctx.setup_qemu_switch();
+	// Avadh: Here we are calling interrupt return from real mode
+	// in QEMU wit shift type as 32 bit, Not sure this is correct
+	// or not.
+	helper_iret_real(1);
 
-  PageFaultErrorCode pfec;
-  Waddr faultaddr;
-
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
-
-  int n = ctx.copy_from_user(&frame, (Waddr)ctx.commitarf[REG_rsp], sizeof(frame), pfec, faultaddr);
-  if unlikely (n != sizeof(frame)) {
-    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-    return;
-  }
-
-  int exception;
-
-  if unlikely (exception = ctx.write_segreg(SEGID_SS, frame.ss)) {
-    ctx.propagate_x86_exception(exception, frame.ss & 0xfff8);
-    return;
-  }
-
-  if unlikely (exception = ctx.write_segreg(SEGID_CS, frame.cs)) {
-    ctx.propagate_x86_exception(exception, frame.cs & 0xfff8);
-    return;
-  }
-
-  if (logable(5)) {
-    logfile << "IRET64 from rip ", (void*)(Waddr)ctx.commitarf[REG_rip], ": iretctx @ ",
-      (void*)(Waddr)ctx.commitarf[REG_rsp], " = ", frame, " (", sim_cycle, " cycles, ",
-      total_user_insns_committed, " commits)", endl;
-  }
-
-  ctx.commitarf[REG_rip] = frame.rip;
-  ctx.commitarf[REG_rsp] = frame.rsp;
-  ctx.internal_eflags = frame.rflags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
-  ctx.commitarf[REG_flags] = frame.rflags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
-#else
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-#endif
+//#ifdef PTLSIM_HYPERVISOR
+//  IRETStackFrame frame;
+//
+//  PageFaultErrorCode pfec;
+//  Waddr faultaddr;
+//
+//  ctx.eip = ctx.reg_selfrip;
+//
+//  int n = ctx.copy_from_user(&frame, (Waddr)ctx.regs[R_ESP], sizeof(frame), pfec, faultaddr);
+//  if unlikely (n != sizeof(frame)) {
+//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
+//    return;
+//  }
+//
+//  int exception;
+//
+//  if unlikely (exception = ctx.write_segreg(SEGID_SS, frame.ss)) {
+//    ctx.propagate_x86_exception(exception, frame.ss & 0xfff8);
+//    return;
+//  }
+//
+//  if unlikely (exception = ctx.write_segreg(SEGID_CS, frame.cs)) {
+//    ctx.propagate_x86_exception(exception, frame.cs & 0xfff8);
+//    return;
+//  }
+//
+//  if (logable(5)) {
+//    logfile << "IRET64 from rip ", (void*)(Waddr)ctx.eip, ": iretctx @ ",
+//      (void*)(Waddr)ctx.regs[R_ESP], " = ", frame, " (", sim_cycle, " cycles, ",
+//      total_user_insns_committed, " commits)", endl;
+//  }
+//
+//  ctx.eip = frame.rip;
+//  ctx.regs[R_ESP] = frame.rsp;
+//  ctx.internal_eflags = frame.rflags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
+//  ctx.eflags = frame.rflags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
+//#else
+//  ctx.eip = ctx.reg_selfrip;
+//  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+//#endif
 }
 
 static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
@@ -730,23 +785,34 @@ void assist_ioport_in(Context& ctx) {
   // ar2 = sizeshift
   // rax = output
 
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
 
   if (!ctx.kernel_mode) {
     ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
     return;
   }
 
-  W64 port = ctx.commitarf[REG_ar1];
-  W64 sizeshift = ctx.commitarf[REG_ar2];
-  W64 value = x86_merge(ctx.commitarf[REG_rax], 0xffffffffffffffffULL, sizeshift);
+  W64 port = ctx.reg_ar1;
+  W64 sizeshift = ctx.reg_ar2;
 
-  logfile << "assist_ioport_in from rip ", (void*)(Waddr)ctx.commitarf[REG_selfrip], "): ",
-    "in port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) => 0x",
-    hexstring(value, 64), endl;
+  ctx.setup_qemu_switch();
+  W64 value;
+  if(sizeshift == 0) {
+	  value = helper_inb(port);
+  } else if(sizeshift == 1) {
+	  value = helper_inw(port);
+  } else {
+	  value = helper_inl(port);
+  }
 
-  ctx.commitarf[REG_rax] = value;
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+//  W64 value = x86_merge(ctx.regs[R_EAX], 0xffffffffffffffffULL, sizeshift);
+//
+//  logfile << "assist_ioport_in from rip ", (void*)(Waddr)ctx.reg_selfrip, "): ",
+//    "in port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) => 0x",
+//    hexstring(value, 64), endl;
+
+  ctx.regs[R_EAX] = value;
+  ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_ioport_out(Context& ctx) {
@@ -754,31 +820,40 @@ void assist_ioport_out(Context& ctx) {
   // ar2 = sizeshift
   // rax = value to write
 
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
 
   if (!ctx.kernel_mode) {
     ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
     return;
   }
 
-  W64 port = ctx.commitarf[REG_ar1];
-  W64 sizeshift = ctx.commitarf[REG_ar2];
-  W64 value = x86_merge(0, ctx.commitarf[REG_rax], sizeshift);
+  W64 port = ctx.reg_ar1;
+  W64 sizeshift = ctx.reg_ar2;
+  W64 value = x86_merge(0, ctx.regs[R_EAX], sizeshift);
 
-  logfile << "assist_ioport_out from rip ", (void*)(Waddr)ctx.commitarf[REG_selfrip], "): ",
-    "out port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) <= 0x",
-    hexstring(value, 64), endl;
+  ctx.setup_qemu_switch();
+  if(sizeshift == 0) {
+	  helper_outb(port, value);
+  } else if(sizeshift == 1) {
+	  helper_outw(port, value);
+  } else {
+	  helper_outl(port, value);
+  }
 
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_nextrip];
+//  logfile << "assist_ioport_out from rip ", (void*)(Waddr)ctx.reg_selfrip, "): ",
+//    "out port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) <= 0x",
+//    hexstring(value, 64), endl;
+
+  ctx.eip = ctx.reg_nextrip;
 }
 #else
 void assist_ioport_in(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 
 void assist_ioport_out(Context& ctx) {
-  ctx.commitarf[REG_rip] = ctx.commitarf[REG_selfrip];
+  ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 #endif
@@ -939,7 +1014,7 @@ bool TraceDecoder::decode_complex() {
     if (modrm.reg >= 6) MakeInvalid();
 
     int rdreg = (rd.type == OPTYPE_MEM) ? REG_temp0 : arch_pseudo_reg_to_arch_reg[rd.reg.reg];
-    TransOp ldp(OP_ld, rdreg, REG_ctx, REG_imm, REG_zero, 1, offsetof(Context, seg[modrm.reg].selector)); ldp.internal = 1; this << ldp;
+    TransOp ldp(OP_ld, rdreg, REG_ctx, REG_imm, REG_zero, 1, offsetof(Context, segs[modrm.reg].selector)); ldp.internal = 1; this << ldp;
 
     prefixes &= ~PFX_LOCK;
     if (rd.type == OPTYPE_MEM) result_store(rdreg, REG_temp5, rd);
@@ -1724,14 +1799,14 @@ bool TraceDecoder::decode_complex() {
     int offset;
 
     switch (modrm.reg) {
-    case 0: offset = offsetof(Context, cr0); break;
-    case 1: offset = offsetof(Context, cr1); break;
-    case 2: offset = offsetof(Context, cr2); break;
-    case 3: offset = offsetof(Context, cr3); break;
-    case 4: offset = offsetof(Context, cr4); break;
-    case 5: offset = offsetof(Context, cr5); break;
-    case 6: offset = offsetof(Context, cr6); break;
-    case 7: offset = offsetof(Context, cr7); break;
+    case 0: offset = offsetof(Context, cr[0]); break;
+    case 1: offset = offsetof(Context, cr[1]); break;
+    case 2: offset = offsetof(Context, cr[2]); break;
+    case 3: offset = offsetof(Context, cr[3]); break;
+    case 4: offset = offsetof(Context, cr[4]); break;
+    case 5: offset = offsetof(Context, cr[5]); break;
+    case 6: offset = offsetof(Context, cr[6]); break;
+    case 7: offset = offsetof(Context, cr[7]); break;
     default: MakeInvalid();
     }
 
@@ -1796,14 +1871,14 @@ bool TraceDecoder::decode_complex() {
     int offset;
 
     switch (modrm.reg) {
-    case 0: offset = offsetof(Context, dr0); break;
-    case 1: offset = offsetof(Context, dr1); break;
-    case 2: offset = offsetof(Context, dr2); break;
-    case 3: offset = offsetof(Context, cr3); break;
-    case 4: offset = offsetof(Context, dr4); break;
-    case 5: offset = offsetof(Context, dr5); break;
-    case 6: offset = offsetof(Context, dr6); break;
-    case 7: offset = offsetof(Context, dr7); break;
+    case 0: offset = offsetof(Context, dr[0]); break;
+    case 1: offset = offsetof(Context, dr[1]); break;
+    case 2: offset = offsetof(Context, dr[2]); break;
+    case 3: offset = offsetof(Context, cr[3]); break;
+    case 4: offset = offsetof(Context, dr[4]); break;
+    case 5: offset = offsetof(Context, dr[5]); break;
+    case 6: offset = offsetof(Context, dr[6]); break;
+    case 7: offset = offsetof(Context, dr[7]); break;
     default: MakeInvalid();
     }
 
@@ -2318,7 +2393,7 @@ bool TraceDecoder::decode_complex() {
     EndOfDecode();
     TransOp ldp1(OP_ld, REG_rdx, REG_zero, REG_imm, REG_zero, 3, (Waddr)&sim_cycle); ldp1.internal = 1; this << ldp1;
 #ifdef PTLSIM_HYPERVISOR
-    TransOp ldp2(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 3, offsetof(Context, base_tsc)); ldp2.internal = 1; this << ldp2;
+    TransOp ldp2(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 3, offsetof(Context, tsc_offset)); ldp2.internal = 1; this << ldp2;
     this << TransOp(OP_add, REG_rdx, REG_rdx, REG_temp0, REG_zero, 3);
 #endif
     this << TransOp(OP_mov, REG_rax, REG_zero, REG_rdx, REG_zero, 2);
