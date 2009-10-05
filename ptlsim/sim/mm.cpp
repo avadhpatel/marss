@@ -6,22 +6,29 @@
 //
 
 #include <globals.h>
-#ifdef PTLSIM_HYPERVISOR
-#include <ptlxen.h>
-#else
+//#ifdef PTLSIM_HYPERVISOR
+//#include <ptlxen.h>
+//#else
 #include <kernel.h>
-#endif
+//#endif
 #include <mm.h>
 #include <datastore.h>
 #include <mm-private.h>
 
-extern ostream logfile;
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+extern ofstream ptl_logfile;
 
 extern void early_printk(const char* s);
 
 #define ENABLE_MM_LOGGING
 
 static const int mm_event_buffer_size = 16384; // i.e. 256 KB
+
+static byte* heap_start;
+static byte* heap_end;
 
 #ifdef ENABLE_MM_LOGGING
 MemoryManagerEvent mm_event_buffer[mm_event_buffer_size];
@@ -42,7 +49,7 @@ void ptl_mm_set_logging(const char* mm_log_filename, int mm_event_buffer_size, b
   //
   if (mm_logging_fd < 0) {
     if (mm_log_filename) {
-      mm_logging_fd = sys_open(mm_log_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      mm_logging_fd = open(mm_log_filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     } else {
       mm_event_buffer_head = null;
       mm_event_buffer_tail = null;
@@ -69,7 +76,7 @@ void ptl_mm_flush_logging() {
   int count = mm_event_buffer_tail - mm_event_buffer_head;
   int bytes = count * sizeof(MemoryManagerEvent);
 
-  assert(sys_write(mm_logging_fd, mm_event_buffer_head, bytes) == bytes);
+  assert(write(mm_logging_fd, mm_event_buffer_head, bytes) == bytes);
   mm_event_buffer_tail = mm_event_buffer_head;
 }
 
@@ -124,11 +131,11 @@ void* object_of_interest = 0;
 bool is_inside_ptlsim(const void* pp) {
 #ifdef PTLSIM_HYPERVISOR
   Waddr p = Waddr(pp);
-  if likely (inrange(p, Waddr(PTLSIM_VIRT_BASE + (4096 * PTLSIM_FIRST_READ_ONLY_PAGE)), Waddr(bootinfo.heap_end)-1)) return true;
+  if likely (inrange(p, Waddr(PTLSIM_VIRT_BASE + (4096 * PTLSIM_FIRST_READ_ONLY_PAGE)), Waddr(heap_end)-1)) return true;
   if likely (!p) return true;
   if likely (print_validate_errors) {
-    cerr << "Error: pointer ", (void*)p, " is not in PTL space from ", bootinfo.heap_start, "-", bootinfo.heap_end, " (called from ", getcaller(), "); object of interest = ", object_of_interest, endl, flush;
-    logfile << "Error: pointer ", (void*)p, " is not in PTL space from ", bootinfo.heap_start, "-", bootinfo.heap_end, " (called from ", getcaller(), "); object of interest = ", object_of_interest, endl, flush;
+    cerr << "Error: pointer ", (void*)p, " is not in PTL space from ", heap_start, "-", heap_end, " (called from ", getcaller(), "); object of interest = ", object_of_interest, endl, flush;
+    ptl_logfile << "Error: pointer ", (void*)p, " is not in PTL space from ", heap_start, "-", heap_end, " (called from ", getcaller(), "); object of interest = ", object_of_interest, endl, flush;
   }
   return false;
 #else
@@ -139,11 +146,11 @@ bool is_inside_ptlsim(const void* pp) {
 bool is_inside_ptlsim_heap(const void* pp) {
 #ifdef PTLSIM_HYPERVISOR
   Waddr p = Waddr(pp);
-  if likely (inrange(p, Waddr(bootinfo.heap_start), Waddr(bootinfo.heap_end)-1)) return true;
+  if likely (inrange(p, Waddr(heap_start), Waddr(heap_end)-1)) return true;
   if likely (!p) return true;
   if likely (print_validate_errors) {
-    cerr << "Error: pointer ", (void*)p, " is not in PTL heap from ", bootinfo.heap_start, "-", bootinfo.heap_end, " (called from ", getcaller(), "); object of interest = ", object_of_interest, endl, flush;
-    logfile << "Error: pointer ", (void*)p, " is not in PTL heap from ", bootinfo.heap_start, "-", bootinfo.heap_end, " (called from ", getcaller(), "); object of interest = ", object_of_interest, endl, flush;
+    cerr << "Error: pointer ", (void*)p, " is not in PTL heap from ", heap_start, "-", heap_end, " (called from ", getcaller(), "); object of interest = ", object_of_interest, endl, flush;
+    ptl_logfile << "Error: pointer ", (void*)p, " is not in PTL heap from ", heap_start, "-", heap_end, " (called from ", getcaller(), "); object of interest = ", object_of_interest, endl, flush;
   }
   return false;
 #else
@@ -272,7 +279,7 @@ struct ExtentAllocator {
   void alloc_extent(FreeExtent* r) {
     bool DEBUG = 0;
 
-    if (DEBUG) logfile << "alloc_extent(", r, "): sizelink ", r->sizelink, ", startaddrlink ", r->startaddrlink, ", endaddrlink ", r->endaddrlink, ", extent_count ", extent_count, endl;
+    if (DEBUG) ptl_logfile << "alloc_extent(", r, "): sizelink ", r->sizelink, ", startaddrlink ", r->startaddrlink, ", endaddrlink ", r->endaddrlink, ", extent_count ", extent_count, endl;
 
     current_bytes_free -= (r->size * CHUNKSIZE);
     r->sizelink.unlink();
@@ -618,7 +625,7 @@ struct ExtentAllocator {
     }
 
     if (real_free_bytes != current_bytes_free) {
-      logfile << "WARNING: real_free_bytes = ", real_free_bytes, " but current_bytes_free ", current_bytes_free, endl;
+      ptl_logfile << "WARNING: real_free_bytes = ", real_free_bytes, " but current_bytes_free ", current_bytes_free, endl;
     }
 
     return current_bytes_free;
@@ -1080,8 +1087,8 @@ struct SlabAllocator {
     page = full_pages;
     while (page) {
       if (page->freecount != 0) {
-        logfile << "ERROR: supposedly full page ", page->getbase(), " in slab ", this, " for objsize ", objsize, " had free count ", page->freecount, " instead of zero as expected", endl;
-        logfile << *this;
+        ptl_logfile << "ERROR: supposedly full page ", page->getbase(), " in slab ", this, " for objsize ", objsize, " had free count ", page->freecount, " instead of zero as expected", endl;
+        ptl_logfile << *this;
         assert(page->freecount == 0);
       }
       bytes += page->freecount * objsize;
@@ -1169,7 +1176,7 @@ void ptl_mm_dump(ostream& os) {
 
 #ifdef PTLSIM_HYPERVISOR
 
-extern ostream logfile;
+extern ofstream ptl_logfile;
 
 //
 // Full-system PTLsim running on the bare hardware:
@@ -1186,18 +1193,18 @@ void* ptl_mm_alloc_private_pages(Waddr bytecount, int prot, Waddr base) {
   foreach (i, retry_count) {
     void* p = ptl_mm_try_alloc_private_pages(bytecount, prot, base, getcaller());
     if likely (p) return p;
-    logfile << "Before reclaim round ", i, ": largest free physical extent: ", pagealloc.largest_free_extent_bytes(), " bytes vs ", bytecount, " required bytes", endl;
-    ptl_mm_dump_free_bytes(logfile);
+    ptl_logfile << "Before reclaim round ", i, ": largest free physical extent: ", pagealloc.largest_free_extent_bytes(), " bytes vs ", bytecount, " required bytes", endl;
+    ptl_mm_dump_free_bytes(ptl_logfile);
     // The urgency MAX_URGENCY (currently 65536) means "free everything possible at all costs":
     ptl_mm_reclaim(bytecount, ((i == (retry_count-2)) ? MAX_URGENCY : i));
-    logfile << "After reclaim round ", i, ": largest free physical extent: ", pagealloc.largest_free_extent_bytes(), " bytes", endl, flush;
-    ptl_mm_dump_free_bytes(logfile);
+    ptl_logfile << "After reclaim round ", i, ": largest free physical extent: ", pagealloc.largest_free_extent_bytes(), " bytes", endl, flush;
+    ptl_mm_dump_free_bytes(ptl_logfile);
   }
 
   cerr << "ptl_mm_alloc_private_pages(", bytecount, " bytes): failed to reclaim some memory (called from ", (void*)getcaller(), ")", endl, flush;
-  logfile << "ptl_mm_alloc_private_pages(", bytecount, " bytes): failed to reclaim some memory (called from ", (void*)getcaller(), ")", endl, flush;
+  ptl_logfile << "ptl_mm_alloc_private_pages(", bytecount, " bytes): failed to reclaim some memory (called from ", (void*)getcaller(), ")", endl, flush;
 
-  ptl_mm_dump(logfile);
+  ptl_mm_dump(ptl_logfile);
 
   cerr << flush;
   assert(false);
@@ -1290,12 +1297,14 @@ void ptl_mm_zero_private_page(void* addr) {
   ptl_mm_zero_private_pages(addr, PAGE_SIZE);
 }
 
-void ptl_mm_init(byte* heap_start, byte* heap_end) {
+void ptl_mm_init(byte* heap_start_t, byte* heap_end_t) {
+	heap_start = heap_start_t;
+	heap_end = heap_end_t;
   page_is_slab_bitmap.reset();
 
 #ifdef PTLSIM_HYPERVISOR
   pagealloc.reset();
-  pagealloc.free(heap_start, heap_end - heap_start);
+  pagealloc.free(heap_start_t, heap_end_t - heap_start_t);
 #else
   // No special actions required
 #endif
@@ -1372,7 +1381,7 @@ void* ptl_mm_alloc(size_t bytes, void* caller) {
       void* newpool = ptl_mm_try_alloc_private_pages(pagebytes, prot, 0, getcaller());
       if unlikely (!newpool) {
         size_t largest_free_extent = pagealloc.largest_free_extent_bytes();
-        logfile << "mm: attempted to allocate ", bytes, " bytes: failed allocation of new gen pool chunk (",
+        ptl_logfile << "mm: attempted to allocate ", bytes, " bytes: failed allocation of new gen pool chunk (",
           pagebytes, " bytes) failed: largest_free_extent ", largest_free_extent, " vs rounded up orig bytes ",
           ceil(bytes, 4096), endl;
 
@@ -1386,7 +1395,7 @@ void* ptl_mm_alloc(size_t bytes, void* caller) {
           // Must have some space for at least this amount:
           assert(newpool);
         } else {
-          logfile << "mm: reclaim needed since alloc request exceeds largest free extent", endl;
+          ptl_logfile << "mm: reclaim needed since alloc request exceeds largest free extent", endl;
           pagebytes = ceil(bytes, PAGE_SIZE);
           newpool = ptl_mm_alloc_private_pages(pagebytes, prot, 0);
         }
@@ -1537,7 +1546,7 @@ void ptl_mm_free(void* p) {
 }
 
 void ptl_mm_validate() {
-  logfile << "ptl_mm_validate() called by ", getcaller(), endl;
+  ptl_logfile << "ptl_mm_validate() called by ", getcaller(), endl;
   pagealloc.fast_validate();
   genalloc.fast_validate();
   
@@ -1559,7 +1568,7 @@ int reclaim_handler_list_count = 0;
 
 bool ptl_mm_register_reclaim_handler(mm_reclaim_handler_t handler) {
   if (reclaim_handler_list_count == lengthof(reclaim_handler_list)) {
-    logfile << "Too many memory manager reclaim handlers while registering ", handler, endl;
+    ptl_logfile << "Too many memory manager reclaim handlers while registering ", handler, endl;
     assert(false);
     return false;
   }

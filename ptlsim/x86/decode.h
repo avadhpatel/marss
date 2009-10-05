@@ -548,7 +548,7 @@ struct BasicBlockCache: public SelfHashtable<RIPVirtPhys, BasicBlock, BB_CACHE_S
 
 extern BasicBlockCache bbcache;
 
-extern odstream bbcache_dump_file;
+extern ofstream bbcache_dump_file;
 
 //
 // This part is used when parsing stats.h to build the

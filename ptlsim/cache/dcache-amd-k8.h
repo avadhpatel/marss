@@ -222,7 +222,7 @@ namespace CacheSubsystem {
       int hitcountslot = clipto(hitcount / HITCOUNT_INTERVAL, 0, HITCOUNT_SLOTS-1);
       line_hitcount_histogram[hitcountslot]++;
 
-      if (logable(6) | FORCE_DEBUG) logfile << "[", cache_names[uniq], "] ", sim_cycle, ": evicted(", (void*)tag, "): lifetime ", lifetime, ", deadtime ", deadtime, ", hitcount ", hitcount, " (line addr ", &line, ")", endl;
+      if (logable(6) | FORCE_DEBUG) ptl_logfile << "[", cache_names[uniq], "] ", sim_cycle, ": evicted(", (void*)tag, "): lifetime ", lifetime, ", deadtime ", deadtime, ", hitcount ", hitcount, " (line addr ", &line, ")", endl;
     }
 
     static void filled(V& line, W64 tag) {
@@ -230,7 +230,7 @@ namespace CacheSubsystem {
       line.lasttime = sim_cycle;
       line.hitcount = 1;
 
-      if (logable(6) | FORCE_DEBUG) logfile << "[", cache_names[uniq], "] ", sim_cycle, ": filled(", (void*)tag, ")", " (line addr ", &line, ")", endl;
+      if (logable(6) | FORCE_DEBUG) ptl_logfile << "[", cache_names[uniq], "] ", sim_cycle, ": filled(", (void*)tag, ")", " (line addr ", &line, ")", endl;
     }
 
     static void inserted(V& line, W64 newtag, int way) {
@@ -243,7 +243,7 @@ namespace CacheSubsystem {
     }
 
     static void probed(V& line, W64 tag, int way, bool hit) { 
-      if (logable(6) | FORCE_DEBUG) logfile << "[", cache_names[uniq], "] ", sim_cycle, ": probe(", (void*)tag, "): ", (hit ? "HIT" : "miss"), " way ", way, ": hitcount ", line.hitcount, ", filltime ", line.filltime, ", lasttime ", line.lasttime, " (line addr ", &line, ")", endl;
+      if (logable(6) | FORCE_DEBUG) ptl_logfile << "[", cache_names[uniq], "] ", sim_cycle, ": probe(", (void*)tag, "): ", (hit ? "HIT" : "miss"), " way ", way, ": hitcount ", line.hitcount, ", filltime ", line.filltime, ", lasttime ", line.lasttime, " (line addr ", &line, ")", endl;
       if (hit) {
         line.hitcount++;
         line.lasttime = sim_cycle;
@@ -416,7 +416,7 @@ namespace CacheSubsystem {
       int way = base_t::select(tag, oldtag);
       W64 oldaddr = lowbits(oldtag, 36) << 12;
       if (logable(6)) {
-        logfile << "TLB insertion of virt page ", (void*)(Waddr)addr, " (virt addr ", 
+        ptl_logfile << "TLB insertion of virt page ", (void*)(Waddr)addr, " (virt addr ", 
           (void*)(Waddr)(addr), ") into way ", way, ": ",
           ((oldtag != tag) ? "evicted old entry" : "already present"), endl;
       }

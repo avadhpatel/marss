@@ -55,7 +55,7 @@ void MemoryHierarchy::setup_topology()
     }else if(!strcmp(config.cache_config_type, "private_L2")){
       private_L2_configuration();
     }else{
-      logfile << " unknown cache-config-type: ", config.cache_config_type, endl;
+      ptl_logfile << " unknown cache-config-type: ", config.cache_config_type, endl;
       assert(0);
     }
 }
@@ -350,7 +350,7 @@ void MemoryHierarchy::clock()
 		event = eventQueue_.head();
 		if(event->get_clock() <= sim_cycle) {
 			memdebug("Executing event: ", *event);
-			//logfile << "Executing event: ", *event,endl;
+			//ptl_logfile << "Executing event: ", *event,endl;
 			eventQueue_.free(event);
 			assert(event->execute());
 		} else {

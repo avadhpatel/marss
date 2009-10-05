@@ -23,6 +23,6 @@ extern Config config;
 
 extern W64 sim_cycle;
 
-extern ostream logfile;
+extern ostream ptl_logfile;
 
 #endif // MEM_TEST_H

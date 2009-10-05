@@ -14,6 +14,9 @@
 #ifndef _SUPERSTL_H_
 #define _SUPERSTL_H_
 
+#include <iostream>
+#include <fstream>
+
 //
 // Formatting
 //
@@ -34,8 +37,52 @@ char* format_number(char* buf, char* end, W64 num, int base, int size, int preci
 int format_integer(char* buf, int bufsize, W64s v, int size = 0, int flags = 0, int base = 10, int precision = 0);
 int format_float(char* buf, int bufsize, double v, int precision = 6, int pad = 0);
 
+//
+// Division functions
+//
+#ifdef __x86_64__
+
+#define do_div(n,base) ({					\
+	W32 __base = (base);				\
+	W32 __rem;						\
+	__rem = ((W64)(n)) % __base;			\
+	(n) = ((W64)(n)) / __base;				\
+	__rem;							\
+ })
+
+#else
+
+// 32-bit x86
+#define do_div(n,base) ({ \
+	W32 __upper, __low, __high, __mod, __base; \
+	__base = (base); \
+	asm("":"=a" (__low), "=d" (__high):"A" (n)); \
+	__upper = __high; \
+	if (__high) { \
+		__upper = __high % (__base); \
+		__high = __high / (__base); \
+	} \
+	asm("divl %2":"=a" (__low), "=d" (__mod):"rm" (__base), "0" (__low), "1" (__upper)); \
+	asm("":"=A" (n):"a" (__low),"d" (__high)); \
+	__mod; \
+})
+
+#endif
+
 
 namespace superstl {
+
+//	using namespace std;
+
+	typedef std::ostream ostream;
+	typedef std::istream istream;
+	typedef std::ofstream ofstream;
+	typedef std::ifstream ifstream;
+//	typedef std::iosflush iosflush;
+//	typedef std::cin cin;
+//	typedef std::cout cout;
+//	typedef std::cerr cerr;
+
   //
   // String buffer
   //
@@ -185,131 +232,154 @@ namespace superstl {
   static const char endl[] = "\n";
   static class iosflush { } flush;
 
-#define OSTREAM_BUF_SIZE 256
-
-  class odstream {
-  protected:
-    int fd;
-    byte* buf;
-    int bufsize;
-    int tail;
-    odstream* chain;
-    W64 offset;
-    bool ringbuf_mode;
-    byte* ringbuf;
-    int ringbuf_tail;
-  public:
-    bool close_on_destroy;
-
-    odstream();
-
-    bool open(const char* filename, bool append = false, int bufsize = 65536);
-
-    bool open(int fd, int bufsize = 65536);
-
-    void close();
-
-    int setbuf(int bufsize);
-
-    void setchain(odstream* chain);
-
-    void set_ringbuf_mode(bool new_ringbuf_mode);
-
-    ~odstream();
-
-    odstream(int fd) {
-      this->fd = -1;
-      open(fd);
-    }
-
-    odstream(const char* filename, bool append = false, int bufsize = 65536) {
-      this->fd = -1;
-      open(filename, append, bufsize);
-    }
-
-    int write(const void* buf, int count);
-
-    operator bool() const {
-      return ok();
-    }
-
-    bool ok() const {
-      return (fd >= 0);
-    }
-
-    int filehandle() const {
-      return fd;
-    }
-
-    W64 seek(W64 pos, int whence = SEEK_SET);
-
-    W64 where() const;
-
-    void flush();
-  };
-  
-  //
-  // Manipulators
-  //      
-  static inline odstream& operator <<(odstream& os, const iosflush& v) {
-    os.flush();
-    return os;
-  }
-
-  template <typename T>
-  static inline odstream& operator <<(odstream& os, const T& v) {
-    os.write(&v, sizeof(T));
-    return os;
-  }
-
-  template <typename T>
-  static inline odstream& operator ,(odstream& os, const T& v) {
-    return os << v;
-  }
-
-  class ostream: public odstream {
-  public:
-    ostream(): odstream() { }
-
-    ostream(int fd): odstream(fd) { }
-
-    ostream(const char* filename, bool append = false): odstream(filename, append) { }
-  };
-  
-  //
-  // Inserters
-  //
-
-  template <typename T>
-  static inline ostream& operator <<(ostream& os, const T& v) {
-    stringbuf sb;
-    sb << v;
-    os.write((char*)sb, sb.size());
-    return os;
-  }
-
+//#define OSTREAM_BUF_SIZE 256
+//
+//  class odstream {
+//  protected:
+//    int fd;
+//    byte* buf;
+//    int bufsize;
+//    int tail;
+//    odstream* chain;
+//    W64 offset;
+//    bool ringbuf_mode;
+//    byte* ringbuf;
+//    int ringbuf_tail;
+//  public:
+//    bool close_on_destroy;
+//
+//    odstream();
+//
+//    bool open(const char* filename, bool append = false, int bufsize = 65536);
+//
+//    bool open(int fd, int bufsize = 65536);
+//
+//    void close();
+//
+//    int setbuf(int bufsize);
+//
+//    void setchain(odstream* chain);
+//
+//    void set_ringbuf_mode(bool new_ringbuf_mode);
+//
+//    ~odstream();
+//
+//    odstream(int fd) {
+//      this->fd = -1;
+//      open(fd);
+//    }
+//
+//    odstream(const char* filename, bool append = false, int bufsize = 65536) {
+//      this->fd = -1;
+//      open(filename, append, bufsize);
+//    }
+//
+//    int write(const void* buf, int count);
+//
+//    operator bool() const {
+//      return ok();
+//    }
+//
+//    bool ok() const {
+//      return (fd >= 0);
+//    }
+//
+//    int filehandle() const {
+//      return fd;
+//    }
+//
+//    W64 seek(W64 pos, int whence = SEEK_SET);
+//
+//    W64 where() const;
+//
+//    void flush();
+//  };
+//  
+//  //
+//  // Manipulators
+//  //      
+//  static inline odstream& operator <<(odstream& os, const iosflush& v) {
+//    os.flush();
+//    return os;
+//  }
+//
+//  template <typename T>
+//  static inline odstream& operator <<(odstream& os, const T& v) {
+//    os.write(&v, sizeof(T));
+//    return os;
+//  }
+//
+//  template <typename T>
+//  static inline ostream& operator ,(ostream& os, const T& v) {
+//    return os << v;
+//  }
+//
+//  class ostream: public odstream {
+//  public:
+//    ostream(): odstream() { }
+//
+//    ostream(int fd): odstream(fd) { }
+//
+//    ostream(const char* filename, bool append = false): odstream(filename, append) { }
+//  };
+//  
+//  //
+//  // Inserters
+//  //
+//
+//  template <typename T>
+//  static inline ostream& operator <<(ostream& os, const T& v) {
+//    stringbuf sb;
+//    sb << v;
+//    os.write((char*)sb, sb.size());
+//    return os;
+//  }
+//
   static inline ostream& operator <<(ostream& os, const iosflush& v) {
     os.flush();
     return os;
   }
+//
+//  static inline ostream& operator <<(ostream& os, const char& v) {
+//    os.write(&v, sizeof(char));
+//    return os;
+//  }
+//
+//  static inline ostream& operator <<(ostream& os, const char* v) {
+//    if unlikely (!v) v = "<null>";
+//    os.write(v, strlen(v));
+//    return os;
+//  }
 
-  static inline ostream& operator <<(ostream& os, const char& v) {
-    os.write(&v, sizeof(char));
-    return os;
+  // Some generic functions to write to ostream
+#define OUTPUT_TO_OSTREAM(T) \
+  static inline ostream& operator <<(ostream& os, const T& t) { \
+	  return os.write(reinterpret_cast<const char*>(&t), sizeof(T)); \
   }
 
-  static inline ostream& operator <<(ostream& os, const char* v) {
-    if unlikely (!v) v = "<null>";
-    os.write(v, strlen(v));
-    return os;
-  }
+//  OUTPUT_TO_OSTREAM(W8);
+//  OUTPUT_TO_OSTREAM(W16);
+//  OUTPUT_TO_OSTREAM(W32);
+//  OUTPUT_TO_OSTREAM(W64);
 
   static inline ostream& operator <<(ostream& os, const stringbuf& v) { stringbuf sb; sb << (char*)v; os.write((char*)sb, sb.size()); return os; }
 
-  template <class T>
+//  static inline ofstream& operator <<(ofstream& os, const stringbuf& v) { stringbuf sb; sb << (char*)v; os.write((char*)sb, sb.size()); return os; }
+//
+//  static inline ostream& operator <<(ostream& os, const W64& v) {
+//	  return os.write(reinterpret_cast<const char*>(&v), sizeof(v));
+//  }
+
+  template <typename T>
   static inline ostream& operator ,(ostream& os, const T& v) {
     return os << v;
   }
+
+
+  //template <typename T>
+  //static inline ofstream& operator ,(ofstream& os, const T& v) {
+  //  return os << v;
+  //}
 
 #define DeclareStringBufToStream(T) inline ostream& operator <<(ostream& os, const T& arg) { stringbuf sb; sb << arg; os << sb; return os; }
 
@@ -515,93 +585,93 @@ namespace superstl {
 
   class readline;
 
-  //
-  // istream class
-  //
-  class idstream {
-  protected:
-    int fd;
-    int error;
-    int eos;
-    int head;
-    int tail;
-    int bufsize;
-    int bufused;
-    W32 bufmask;
-    W64 offset;
-    byte* buf;
-
-    int fillbuf();
-    int readbuf(byte* dest, int bytes);
-    int unread(int bytes);
-
-    inline int addmod(int a, int b) { return ((a + b) & bufmask); }
-
-    inline void reset() { fd = -1; error = 0; eos = 0; head = 0; tail = 0; buf = null; bufused = 0; bufsize = 0; bufmask = 0; offset = 0; close_on_destroy = 1; }
-
-  public:
-    bool close_on_destroy;
-
-    idstream() { reset(); }
-
-    bool open(const char* filename, int bufsize = 65536);
-
-    bool open(int fd, int bufsize = 65536);
-
-    int setbuf(int bufsize);
-
-    idstream(const char* filename) {
-      reset();
-      open(filename);
-    }
-
-    idstream(int fd) {
-      reset();
-      open(fd);
-    }
-    
-    void close();
-
-    ~idstream() {
-      if likely (close_on_destroy) close();
-    }
-
-    bool ok() const { return (!error); }
-    operator bool() { return ok(); }
-
-    int read(void* data, int count);
-
-    int filehandle() const { return fd; }
-
-    int readline(char* v, int len);
-    int readline(stringbuf& sb);
-
-    bool getc(char& c);
-
-    W64 seek(W64 pos, int whence = SEEK_SET);
-    W64 where() const;
-    W64 size() const;
-
-    void* mmap(long long size);
-  };
-
-  template <typename T>
-  inline idstream& operator >>(idstream& is, T& v) { 
-    is.read(&v, sizeof(T)); 
-    return is; 
-  }
-
-  template <typename T>
-  inline idstream& operator ,(idstream& is, T& v) {
-    return is >> v;
-  }
-
-  class istream: public idstream {
-  public:
-    istream(): idstream() { }
-    istream(const char* filename): idstream(filename) { }
-    istream(int fd): idstream(fd) { }
-  };
+//  //
+//  // istream class
+//  //
+//  class idstream {
+//  protected:
+//    int fd;
+//    int error;
+//    int eos;
+//    int head;
+//    int tail;
+//    int bufsize;
+//    int bufused;
+//    W32 bufmask;
+//    W64 offset;
+//    byte* buf;
+//
+//    int fillbuf();
+//    int readbuf(byte* dest, int bytes);
+//    int unread(int bytes);
+//
+//    inline int addmod(int a, int b) { return ((a + b) & bufmask); }
+//
+//    inline void reset() { fd = -1; error = 0; eos = 0; head = 0; tail = 0; buf = null; bufused = 0; bufsize = 0; bufmask = 0; offset = 0; close_on_destroy = 1; }
+//
+//  public:
+//    bool close_on_destroy;
+//
+//    idstream() { reset(); }
+//
+//    bool open(const char* filename, int bufsize = 65536);
+//
+//    bool open(int fd, int bufsize = 65536);
+//
+//    int setbuf(int bufsize);
+//
+//    idstream(const char* filename) {
+//      reset();
+//      open(filename);
+//    }
+//
+//    idstream(int fd) {
+//      reset();
+//      open(fd);
+//    }
+//    
+//    void close();
+//
+//    ~idstream() {
+//      if likely (close_on_destroy) close();
+//    }
+//
+//    bool ok() const { return (!error); }
+//    operator bool() { return ok(); }
+//
+//    int read(void* data, int count);
+//
+//    int filehandle() const { return fd; }
+//
+//    int readline(char* v, int len);
+//    int readline(stringbuf& sb);
+//
+//    bool getc(char& c);
+//
+//    W64 seek(W64 pos, int whence = SEEK_SET);
+//    W64 where() const;
+//    W64 size() const;
+//
+//    void* mmap(long long size);
+//  };
+//
+//  template <typename T>
+//  inline idstream& operator >>(idstream& is, T& v) { 
+//    is.read(&v, sizeof(T)); 
+//    return is; 
+//  }
+//
+//  template <typename T>
+//  inline idstream& operator ,(idstream& is, T& v) {
+//    return is >> v;
+//  }
+//
+//  class istream: public idstream {
+//  public:
+//    istream(): idstream() { }
+//    istream(const char* filename): idstream(filename) { }
+//    istream(int fd): idstream(fd) { }
+//  };
 
   class readline { 
   public:
@@ -613,18 +683,24 @@ namespace superstl {
   //inline istream& operator ,(istream& is, const readline& v) { return is >> v; }
 
   static inline istream& operator >>(istream& is, const readline& v) {
-    is.readline(v.buf, v.len);
+    is.read(v.buf, v.len);
+    return is;
+  }
+
+  template <typename T>
+  static inline ifstream& operator >>(ifstream& is, T& v) {
+    is.read((char*)(&v), sizeof(v));
     return is;
   }
 
   static inline istream& operator >>(istream& is, stringbuf& sb) {
-    is.readline(sb);
+    is.read(sb.buf, sb.length);
     return is;
   }
 
-  //
-  // Global streams:
-  //
+//  //
+//  // Global streams:
+//  //
   extern istream cin;
   extern ostream cout;
   extern ostream cerr;
@@ -787,6 +863,7 @@ namespace superstl {
 
   template <typename T, int size>
   static inline ostream& operator <<(ostream& os, const array<T, size>& v) {
+	  os , endl;
     os << "Array of ", size, " elements:", endl;
     for (int i = 0; i < size; i++) {
       os << "  [", i, "]: ", v[i], endl;

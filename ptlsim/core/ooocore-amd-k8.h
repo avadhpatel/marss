@@ -1274,9 +1274,9 @@ namespace OutOfOrderModel {
     OutOfOrderCoreEvent* start;
     OutOfOrderCoreEvent* end;
     OutOfOrderCoreEvent* tail;
-    ostream* logfile;
+    ostream* ptl_logfile;
 
-    EventLog() { start = null; end = null; tail = null; logfile = null; }
+    EventLog() { start = null; end = null; tail = null; ptl_logfile = null; }
 
     bool init(size_t bufsize);
     void reset();

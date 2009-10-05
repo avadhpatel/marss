@@ -472,13 +472,13 @@ void exp_op_mask(IssueState& state, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbf
 #if 0
   // For debugging purposes:
   if unlikely (logable(5)) {
-    logfile << "mask [", sizeof(T), ", ", ZEROEXT, ", ", SIGNEXT, ", ss = ", sizeshift, ", mcms ", mcms, " [shmask ", bitstring(shmask, 18), " (ms=", ms, " mc=", mc, " ds=", ds, " (mcms ", mcms, "))]:", endl;
-    logfile << "  M      = ", bitstring(M, 64), " 0x", hexstring(M, 64), endl;
-    logfile << "  rot rb = ", bitstring(x86_ror<T>(rb, ds), 64), " 0x", hexstring(x86_ror<T>(rb, ds), 64), endl;
-    logfile << "  ra     = ", hexstring(ra, 64), endl;
-    logfile << "  rb     = ", hexstring(rb, 64), endl;
-    logfile << "  rc     = ", hexstring(rc, 64), endl;
-    logfile << "  initrd = ", hexstring(rd, 64), endl;
+    ptl_logfile << "mask [", sizeof(T), ", ", ZEROEXT, ", ", SIGNEXT, ", ss = ", sizeshift, ", mcms ", mcms, " [shmask ", bitstring(shmask, 18), " (ms=", ms, " mc=", mc, " ds=", ds, " (mcms ", mcms, "))]:", endl;
+    ptl_logfile << "  M      = ", bitstring(M, 64), " 0x", hexstring(M, 64), endl;
+    ptl_logfile << "  rot rb = ", bitstring(x86_ror<T>(rb, ds), 64), " 0x", hexstring(x86_ror<T>(rb, ds), 64), endl;
+    ptl_logfile << "  ra     = ", hexstring(ra, 64), endl;
+    ptl_logfile << "  rb     = ", hexstring(rb, 64), endl;
+    ptl_logfile << "  rc     = ", hexstring(rc, 64), endl;
+    ptl_logfile << "  initrd = ", hexstring(rd, 64), endl;
   }
 #endif
 
@@ -554,11 +554,11 @@ void uop_impl_permb(IssueState& state, W64 ra, W64 rb, W64 rc, W16 raflags, W16 
   ab.w64.lo = ra;
   ab.w64.hi = rb;
 
-  if unlikely (DEBUG) logfile << "Permute: ", *(vec16b*)&ab, " by control 0x", hexstring(rc, 32), ":", endl;
+  if unlikely (DEBUG) ptl_logfile << "Permute: ", *(vec16b*)&ab, " by control 0x", hexstring(rc, 32), ":", endl;
   foreach (i, 8) {
     int which = bits(rc, i*4, 4);
 
-    if unlikely (DEBUG) logfile << "  z[", i, "] = ", "ab[", which, "] = 0x", hexstring(ab.bytes.b[which], 8), endl;
+    if unlikely (DEBUG) ptl_logfile << "  z[", i, "] = ", "ab[", which, "] = 0x", hexstring(ab.bytes.b[which], 8), endl;
     d.bytes.b[i] = ab.bytes.b[which];
   }
 
@@ -1368,7 +1368,7 @@ void name(IssueState& state, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W
   W64 rd; \
   vec16b va = buildvec(rb, ra); \
   vec16b vb = buildvec(0, 0); \
-  logfile << "va = ", va, ", vb = ", vb, endl; \
+  ptl_logfile << "va = ", va, ", vb = ", vb, endl; \
   if ((size == 0) & bit(sizemask, 0)) asm(#opcode0 " " extra "%[vb],%[va]; movq %[va],%[rd];" \
      : [rd] "=" W64_CONSTRAINT (rd), [va] "+x" (va), [vb] "+x" (vb)); \
   if ((size == 1) & bit(sizemask, 1)) asm(#opcode1 " " extra "%[vb],%[va]; movq %[va],%[rd];" \
@@ -1783,7 +1783,7 @@ uopimpl_func_t get_synthcode_for_uop(int op, int size, bool setflags, int cond, 
   case OP_vpack_ss:
     func = implmap_vpack_ss[size]; break;
   default:
-    logfile << "Unknown uop opcode ", op, flush, " (", nameof(op), ")", endl, flush;
+    ptl_logfile << "Unknown uop opcode ", op, flush, " (", nameof(op), ")", endl, flush;
     assert(false);
   }
   return func;

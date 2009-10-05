@@ -386,7 +386,7 @@ MESICacheLineState CacheController::get_new_state(
 	}
 
 	if(type == MEMORY_OP_UPDATE) {
-		logfile << "Queueentry: ", *queueEntry, endl;
+		ptl_logfile << "Queueentry: ", *queueEntry, endl;
 		assert(0);
 	}
 
@@ -704,7 +704,7 @@ void CacheController::handle_cache_insert(CacheQueueEntry *queueEntry,
 		} else if(type == MEMORY_OP_WRITE) {
 			queueEntry->line->state = MESI_MODIFIED;
 		} else {
-			logfile << "queueEntry : ", *queueEntry, endl;
+			ptl_logfile << "queueEntry : ", *queueEntry, endl;
 			assert(0);
 		}
 	}
@@ -716,7 +716,7 @@ void CacheController::complete_request(Message &message,
 	// first check that we have a valid line pointer in queue entry
 	// and then check that message has data flag set
 	if(queueEntry->line == null) {
-		logfile << "Completing entry without line: ",*queueEntry, endl;
+		ptl_logfile << "Completing entry without line: ",*queueEntry, endl;
 	}
 	assert(queueEntry->line);
 	assert(message.hasData);
@@ -1004,7 +1004,7 @@ bool CacheController::wait_interconnect_cb(void *arg)
 	queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]--;
 
 	if(queueEntry->sendTo == null)
-		logfile << "Queueentry: ", *queueEntry, endl;
+		ptl_logfile << "Queueentry: ", *queueEntry, endl;
 	assert(queueEntry->sendTo);
 
 	memdebug("Queue Entry: ", *queueEntry, endl);

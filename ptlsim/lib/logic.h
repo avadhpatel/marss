@@ -11,7 +11,7 @@
 #include <globals.h>
 #include <superstl.h>
 
-extern ostream logfile;
+extern ofstream ptl_logfile;
 
 template <typename T> 
 struct latch {

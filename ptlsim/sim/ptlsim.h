@@ -19,9 +19,12 @@
 #include <config-parser.h>
 #include <datastore.h>
 
+#include <sysemu.h>
+
 #define INVALID_MFN 0xffffffffffffffffULL
 #define INVALID_PHYSADDR 0xffffffffffffffffULL
 
+#define contextcount smp_cpus
 
 extern W64 sim_cycle;
 extern W64 unhalted_cycle_count;
@@ -41,9 +44,12 @@ struct PTLsimCore{
   virtual PTLsimCore& getcore() const{ return (*((PTLsimCore*)null));}
 };
 
+static Context* ptl_contexts[MAX_CONTEXTS];
+
 struct PTLsimMachine {
   bool initialized;
-  PTLsimMachine() { initialized = 0; }
+  bool stopped;
+  PTLsimMachine() { initialized = 0; stopped = 0;}
   virtual bool init(PTLsimConfig& config);
   virtual int run(PTLsimConfig& config);  
   virtual void update_stats(PTLsimStats& stats);
@@ -58,7 +64,14 @@ struct PTLsimMachine {
   
   stringbuf machine_name;
 
+  Context& contextof(W8 i) {
+	  return *ptl_contexts[i];
+  }
 };
+
+inline Context& contextof(W8 i) {
+	return *ptl_contexts[i];
+}
 
 struct TransOpBuffer {
   TransOp uops[MAX_TRANSOP_BUFFER_SIZE];
@@ -127,8 +140,8 @@ void synth_uops_for_bb(BasicBlock& bb);
 struct PTLsimStats;
 void print_banner(ostream& os, const PTLsimStats& stats, int argc = 0, char** argv = null);
 
-extern ostream logfile;
-extern ostream trace_mem_logfile;
+extern ofstream ptl_logfile;
+extern ofstream trace_mem_logfile;
 extern W64 sim_cycle;
 extern W64 user_insn_commits;
 extern W64 iterations;

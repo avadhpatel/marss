@@ -7,6 +7,7 @@
 
 #include <ptlsim.h>
 #include <dcache.h>
+#include <stats.h>
 
 //#ifndef PTLSIM_HYPERVISOR
 //Context ctx alignto(4096) insection(".ctx");
@@ -309,9 +310,9 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 	int mmu_index = cpu_mmu_index((CPUState*)this);
 	int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
 	W64 tlb_addr = tlb_table[mmu_index][index].addr_read;
-	if likely ((addr & TARGET_PAGE_MASK) == (tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
+	if likely ((virtaddr & TARGET_PAGE_MASK) == (tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
 		// we find valid TLB entry, return the physical address for it
-		return (Waddr)(virtaddr + tlb_table[mmu_index][page_index].addend);
+		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
 	}
 	// Can't find valid TLB entry, its an exception
 	exception = (store) ? EXCEPTION_PageFaultOnWrite : EXCEPTION_PageFaultOnRead;
@@ -332,7 +333,7 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 }
 
 Waddr Context::virt_to_pte_phys_addr(W64 rawvirt, int level) {
-	logfile << "call to Context::virt_to_pte_phys_addr, function not implemented\n";
+	ptl_logfile << "call to Context::virt_to_pte_phys_addr, function not implemented\n";
 	assert(0);
 	return INVALID_PHYSADDR;
 }
@@ -350,10 +351,10 @@ void Context::update_mode_count() {
 
 		if likely (use64) {
 			per_core_event_update(cpu_index, cycles_in_mode.user64 += delta_cycles);
-			per_core_event_update(cpu_index, insns_in_mode.use64 += delta_insns);
+			per_core_event_update(cpu_index, insns_in_mode.user64 += delta_insns);
 		} else {
 			per_core_event_update(cpu_index, cycles_in_mode.user32 += delta_cycles);
-			per_core_event_update(cpu_index, insns_in_mode.use32 += delta_insns);
+			per_core_event_update(cpu_index, insns_in_mode.user32 += delta_insns);
 		}
 	}
 }
@@ -372,71 +373,138 @@ bool Context::event_upcall() {
 	return true;
 }
 
-void Context::fxsave(FXSAVEStruct& state) {
-  state.cw = fpuc;
-  // clear everything but 4 FP status flag bits (c3/c2/c1/c0):
-  state.sw = fpus & ((0x7 << 8) | (1 << 14));
-  int tos = fpstt ;
-  assert(inrange(tos, 0, 7));
-  state.sw.tos = tos;
-  state.tw = 0;
+//void Context::fxsave(FXSAVEStruct& state) {
+//  state.cw = fpuc;
+//  // clear everything but 4 FP status flag bits (c3/c2/c1/c0):
+//  state.sw = fpus & ((0x7 << 8) | (1 << 14));
+//  int tos = fpstt ;
+//  assert(inrange(tos, 0, 7));
+//  state.sw.tos = tos;
+//  state.tw = 0;
+//
+//  // Prepare tag word (special format for FXSAVE)
+////  foreach (i, 8) state.tw |= (bit(commitarf[REG_fptags], i*8) << i);
+//  foreach (i, 8) state.tw |= (bit(fptags[i], 0) << i);
+//  // Prepare actual registers
+//  foreach (i, 8) x87_fp_64bit_to_80bit(&state.fpregs[i].reg, fpregs[lowbits(tos + i, 3)]);
+//
+//  state.fop = 0;
+//
+//  if (use64) {
+//    state.use64.rip = 0;
+//    state.use64.rdp = 0;
+//  } else {
+//    state.use32.eip = 0;
+//    state.use32.cs = 0;
+//    state.use32.dp = 0;
+//    state.use32.ds = 0;
+//  }
+//
+//  state.mxcsr = mxcsr;
+//  state.mxcsr_mask = 0x0000ffff; // all MXCSR features supported
+//
+//  foreach (i, (use64) ? 16 : 8) {
+////    state.xmmregs[i].lo = commitarf[REG_xmml0 + i*2];
+//    state.xmmregs[i].lo = xmm_regs[i]._d[0];
+////    state.xmmregs[i].hi = commitarf[REG_xmmh0 + i*2];
+//    state.xmmregs[i].hi = xmm_regs[i]._d[1];
+//  }
+//}
+//
+//void Context::fxrstor(const FXSAVEStruct& state) {
+//  fpstt = state.sw.tos;
+//  fpus = state.sw;
+//  fpuc = state.cw;
+//
+////  commitarf[REG_fptags] = 0;
+//  foreach (i, 8) {
+//    // FXSAVE struct uses an abbreviated tag word with 8 bits (0 = empty, 1 = used)
+//    int used = bit(state.tw, i);
+//	fptags[i] = used;
+////    commitarf[REG_fptags] |= ((W64)used) << i*8;
+//  }
+//
+//  // x86 FSAVE state is in order of stack rather than physical registers:
+//  foreach (i, 8) {
+//    fpstack[lowbits(state.sw.tos + i, 3)] = x87_fp_80bit_to_64bit(&state.fpregs[i].reg);
+//  }
+//
+//  mxcsr = state.mxcsr & state.mxcsr_mask;
+//
+//  foreach (i, (use64) ? 16 : 8) {
+////    commitarf[REG_xmml0 + i*2] = state.xmmregs[i].lo;
+////    commitarf[REG_xmmh0 + i*2] = state.xmmregs[i].hi;
+//    xmm_regs[i]._d[0] = state.xmmregs[i].lo;
+//    xmm_regs[i]._d[1] = state.xmmregs[i].hi;
+//  }
+//}
 
-  // Prepare tag word (special format for FXSAVE)
-//  foreach (i, 8) state.tw |= (bit(commitarf[REG_fptags], i*8) << i);
-  foreach (i, 8) state.tw |= (bit(fptags[i], 0) << i);
+int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec) {
 
-  // Prepare actual registers
-  foreach (i, 8) x87_fp_64bit_to_80bit(&state.fpregs[i].reg, fpstack[lowbits(tos + i, 3)]);
+	int n = 0 ;
+	pfec = 0;
 
-  state.fop = 0;
+	//FIXME: We have to check the page permission of both source and
+	//target to make sure that userspace can't copy from kernel mode
 
-  if (use64) {
-    state.use64.rip = 0;
-    state.use64.rdp = 0;
-  } else {
-    state.use32.eip = 0;
-    state.use32.cs = 0;
-    state.use32.dp = 0;
-    state.use32.ds = 0;
-  }
+	int exception;
+	Waddr source_paddr = check_and_translate(source, 0, false, false, exception, pfec);
 
-  state.mxcsr = mxcsr;
-  state.mxcsr_mask = 0x0000ffff; // all MXCSR features supported
+	if(exception > 0 || pfec > 0) {
+		faultaddr = source;
+		return 0;
+	}
+	n = min(4096 - lowbits(source, 12), (Waddr)bytes);
+	memcpy(target, (void*)source_paddr, n);
 
-  foreach (i, (use64) ? 16 : 8) {
-//    state.xmmregs[i].lo = commitarf[REG_xmml0 + i*2];
-    state.xmmregs[i].lo = xmm_regs[i]._d[0];
-//    state.xmmregs[i].hi = commitarf[REG_xmmh0 + i*2];
-    state.xmmregs[i].hi = xmm_regs[i]._d[1];
-  }
+	// Check if all the bytes are read in first page or not
+	if likely (n == bytes) return n;
+
+	source_paddr = check_and_translate(source + n, 0, false, false, exception, pfec);
+	if(exception > 0 || pfec > 0) {
+		faultaddr = source + n;
+		return 0;
+	}
+
+	Waddr next_page_addr = ((source >> TARGET_PAGE_BITS) + 1) << TARGET_PAGE_BITS;
+
+	memcpy((byte*)target + n, (void*)next_page_addr, bytes - n);
+	n = bytes;
+	return n;
 }
 
-void Context::fxrstor(const FXSAVEStruct& state) {
-  fpstt = state.sw.tos;
-  fpus = state.sw;
-  fpuc = state.cw;
+int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) {
 
-//  commitarf[REG_fptags] = 0;
-  foreach (i, 8) {
-    // FXSAVE struct uses an abbreviated tag word with 8 bits (0 = empty, 1 = used)
-    int used = bit(state.tw, i);
-	fptags[i] = used;
-//    commitarf[REG_fptags] |= ((W64)used) << i*8;
-  }
+	int n = 0 ;
 
-  // x86 FSAVE state is in order of stack rather than physical registers:
-  foreach (i, 8) {
-    fpstack[lowbits(state.sw.tos + i, 3)] = x87_fp_80bit_to_64bit(&state.fpregs[i].reg);
-  }
+	//FIXME: We have to check the page permission of both source and
+	//target to make sure that userspace can't copy from kernel mode
 
-  mxcsr = state.mxcsr & state.mxcsr_mask;
+	int exception;
+	PageFaultErrorCode pfec;
+	Waddr source_paddr = contextof(0).check_and_translate(source, 0, false, false, exception, pfec);
 
-  foreach (i, (use64) ? 16 : 8) {
-//    commitarf[REG_xmml0 + i*2] = state.xmmregs[i].lo;
-//    commitarf[REG_xmmh0 + i*2] = state.xmmregs[i].hi;
-    xmm_regs[i]._d[0] = state.xmmregs[i].lo;
-    xmm_regs[i]._d[1] = state.xmmregs[i].hi;
-  }
+	if(exception > 0 || pfec > 0) {
+		faultaddr = source;
+		return 0;
+	}
+	n = min(4096 - lowbits(source, 12), (Waddr)bytes);
+	memcpy(target, (void*)source_paddr, n);
+
+	// Check if all the bytes are read in first page or not
+	if likely (n == bytes) return n;
+
+	source_paddr = contextof(0).check_and_translate(source + n, 0, false, false, exception, pfec);
+	if(exception > 0 || pfec > 0) {
+		faultaddr = source + n;
+		return 0;
+	}
+
+	Waddr next_page_addr = ((source >> TARGET_PAGE_BITS) + 1) << TARGET_PAGE_BITS;
+
+	memcpy((byte*)target + n, (void*)next_page_addr, bytes - n);
+	n = bytes;
+	return n;
 }
 
 const char* datatype_names[DATATYPE_COUNT] = {
@@ -831,10 +899,43 @@ ostream& operator <<(ostream& os, const Context& ctx) {
 
   os << "VCPU State:", endl;
   os << "  Architectural Registers:", endl;
-  foreach (i, ARCHREG_COUNT) {
-    os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx[i], 64);
+  int i = 0;
+  for(i=0; i < CPU_NB_REGS; i++) {
+	  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.regs[i], 64);
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
+  for(i; i < 48; i++) {
+	  if(i % 2 == 0) {
+		  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.xmm_regs[i]._d[0], 64);
+	  } else {
+		  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.xmm_regs[i]._d[1], 64);
+	  }
+    if ((i % arfwidth) == (arfwidth-1)) os << endl;
+  }
+  os << "  ", padstring(arch_reg_names[48], -6), " 0x", hexstring(ctx.fpstt, 64);
+  os << "  ", padstring(arch_reg_names[49], -6), " 0x", hexstring(ctx.fpus, 64);
+  W64 t_fptag = 0;
+  foreach(j, 8) {
+	  t_fptag |= ((W64(ctx.fptags[i])) << 8 * i);
+  }
+  os << "  ", padstring(arch_reg_names[50], -6), " 0x", hexstring(t_fptag, 64);
+  os << "  ", padstring(arch_reg_names[51], -6), " 0x", hexstring(ctx.fpregs[0].d, 64), endl;
+  os << "  ", padstring(arch_reg_names[52], -6), " 0x", hexstring(ctx.invalid_reg, 64);
+  os << "  ", padstring(arch_reg_names[53], -6), " 0x", hexstring(ctx.invalid_reg, 64);
+  os << "  ", padstring(arch_reg_names[54], -6), " 0x", hexstring(ctx.reg_trace, 64);
+  os << "  ", padstring(arch_reg_names[55], -6), " 0x", hexstring(ctx.reg_ctx, 64), endl;
+  os << "  ", padstring(arch_reg_names[56], -6), " 0x", hexstring(ctx.eip, 64);
+  os << "  ", padstring(arch_reg_names[57], -6), " 0x", hexstring(ctx.eflags, 64);
+  os << "  ", padstring(arch_reg_names[58], -6), " 0x", hexstring(ctx.invalid_reg, 64);
+  os << "  ", padstring(arch_reg_names[59], -6), " 0x", hexstring(ctx.reg_selfrip, 64), endl;
+  os << "  ", padstring(arch_reg_names[60], -6), " 0x", hexstring(ctx.reg_nextrip, 64);
+  os << "  ", padstring(arch_reg_names[61], -6), " 0x", hexstring(ctx.reg_ar1, 64);
+  os << "  ", padstring(arch_reg_names[62], -6), " 0x", hexstring(ctx.reg_ar2, 64);
+  os << "  ", padstring(arch_reg_names[63], -6), " 0x", hexstring(ctx.reg_zero, 64), endl;
+//  foreach (i, ARCHREG_COUNT) {
+//    os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx[i], 64);
+//    if ((i % arfwidth) == (arfwidth-1)) os << endl;
+//  }
 
 #ifdef PTLSIM_HYPERVISOR
   os << "  Flags:", endl;
@@ -892,8 +993,8 @@ ostream& operator <<(ostream& os, const Context& ctx) {
 
   for (int i = 7; i >= 0; i--) {
     int stackid = (i - (ctx.fpstt >> 3)) & 0x7;
-    os << "    fp", i, "  st(", stackid, ")  ", (bit(ctx.fptags[i]) ? "Valid" : "Empty"),
-      "  0x", hexstring(ctx.fpregs[i], 64), " => ", *((double*)&ctx.fpregs[i]), endl;
+    os << "    fp", i, "  st(", stackid, ")  ", (ctx.fptags[i] ? "Valid" : "Empty"),
+      "  0x", hexstring(ctx.fpregs[i].d, 64), " => ", *((double*)&ctx.fpregs[i]), endl;
   }
 
   os << "  Internal State:", endl;

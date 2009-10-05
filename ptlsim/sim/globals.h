@@ -13,10 +13,10 @@
 // #define fullsys_debug   cerr << "fullsys_debug: cycle ", sim_cycle, " in ", __FILE__, ":", __LINE__, " (", __PRETTY_FUNCTION__, ")"
 // //#define USE_MSDEBUG logable(5)
 // #define USE_MSDEBUG config.memory_log
-// #define msdebug if(USE_MSDEBUG) logfile << " CYC ", sim_cycle, " ", __PRETTY_FUNCTION__, "(): \n"; if(USE_MSDEBUG) logfile
+// #define msdebug if(USE_MSDEBUG) ptl_logfile << " CYC ", sim_cycle, " ", __PRETTY_FUNCTION__, "(): \n"; if(USE_MSDEBUG) ptl_logfile
 
 // #define mstest assert(0)
-// #define msdebug1 if(USE_MSDEBUG) logfile
+// #define msdebug1 if(USE_MSDEBUG) ptl_logfile
 
 // debug segmentation fault
 // #define msdebug cerr << " CYC ", sim_cycle, " ", __PRETTY_FUNCTION__, "(): \n"; cerr
@@ -32,17 +32,18 @@ extern "C" {
 
 #define fullsys_debug   cerr << "fullsys_debug: cycle ", sim_cycle, " in ", __FILE__, ":", __LINE__, " (", __PRETTY_FUNCTION__, ")"
 #define USE_MSDEBUG (logable(5))
-#define msdebug if(USE_MSDEBUG) logfile << " CYC ", sim_cycle, " ", __PRETTY_FUNCTION__, "(): \n"; if(USE_MSDEBUG) logfile
-#define msdebug1 if(USE_MSDEBUG) logfile 
+#define msdebug if(USE_MSDEBUG) ptl_logfile << " CYC ", sim_cycle, " ", __PRETTY_FUNCTION__, "(): \n"; if(USE_MSDEBUG) ptl_logfile
+#define msdebug1 if(USE_MSDEBUG) ptl_logfile 
 #ifdef PTLSIM_HYPERVISOR
 #define ENABLE_SMT
 #endif
 
 #ifdef ENABLE_SMT
+#define MAX_CONTEXTS 4
 static const int MAX_THREADS_PER_CORE = 1;
-static const int NUMBER_OF_CORES = 8;
+static const int NUMBER_OF_CORES = 1;
 static const int NUMBER_OF_THREAD_PER_CORE = 1;
-static const int NUMBER_OF_CORES_PER_L2 = 8;
+static const int NUMBER_OF_CORES_PER_L2 = 1;
 
 
 #else
@@ -161,20 +162,20 @@ template <typename T> struct ispointer_t<T*> { static const bool pointer = 1; };
 #define ispointer(T) (ispointer_t<T>::pointer)
 #define isprimitive(T) (isprimitive_t<T>::primitive)
 
-#ifndef offsetof
+#ifndef offsetof_t
 // Null pointer to the specified object type, for computing field offsets
 template <typename T> static inline T* nullptr() { return (T*)(Waddr)0; }
-#define offsetof(T, field) ((Waddr)(&(nullptr<T>()->field)) - ((Waddr)nullptr<T>()))
+#define offsetof_t(T, field) ((Waddr)(&(nullptr<T>()->field)) - ((Waddr)nullptr<T>()))
 #endif
-#define baseof(T, field, ptr) ((T*)(((byte*)(ptr)) - offsetof(T, field)))
+#define baseof(T, field, ptr) ((T*)(((byte*)(ptr)) - offsetof_t(T, field)))
 // Restricted (non-aliased) pointers:
 #define noalias __restrict__
 
 // Default placement versions of operator new.
-inline void* operator new(size_t, void* p) { return p; }
-inline void* operator new[](size_t, void* p) { return p; }
-inline void operator delete(void*, void*) { }
-inline void operator delete[](void*, void*) { }
+//inline void* operator new(size_t, void* p) { return p; }
+//inline void* operator new[](size_t, void* p) { return p; }
+//inline void operator delete(void*, void*) { }
+//inline void operator delete[](void*, void*) { }
 
 // Base parameterless function type
 typedef void (*base_function_t)();

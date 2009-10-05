@@ -14,197 +14,197 @@
 bool force_synchronous_streams = false;
 
 namespace superstl {
-  //
-  // odstream
-  //
-  odstream::odstream() {
-    fd = -1;
-    buf = null;
-    bufsize = 0;
-    tail = 0;
-    close_on_destroy = 1;
-    ringbuf_mode = 0;
-    ringbuf = null;
-    ringbuf_tail = 0;
-    chain = null;
-    offset = 0;
-  }
-
-  odstream::~odstream() {
-    close();
-  }
-
-  bool odstream::open(const char* filename, bool append, int bufsize) {
-    if (fd >= 0) close();
-    fd = sys_open(filename, O_RDWR | O_CREAT | ((append) ? O_APPEND : O_TRUNC) | O_LARGEFILE, 0644);
-    if (fd < 0) return false;
-    buf = null;
-    this->bufsize = 0;
-    setbuf(bufsize);
-    close_on_destroy = 1;
-    ringbuf_mode = 0;
-    ringbuf = null;
-    chain = null;
-    offset = 0;
-    return true;
-  }
-
-  int odstream::setbuf(int newbufsize) {
-    if (fd < 0) return 0;
-    if (bufsize == newbufsize) return bufsize;
-    if (buf) delete buf;
-    bufsize = newbufsize;
-    if (!bufsize) return 0;
-    tail = 0;
-    buf = new byte[bufsize];
-    return bufsize;
-  }
-
-  bool odstream::open(int fd, int bufsize) {
-    if (this->fd >= 0) close();
-    this->fd = fd;
-    buf = null;
-    this->bufsize = 0;
-    setbuf(bufsize);
-    close_on_destroy = 0;
-    ringbuf_mode = 0;
-    ringbuf = null;
-    chain = null;
-    offset = 0;
-    return ok();
-  }
-
-  void odstream::close() {
-    if (fd < 0) return;
-    if (ringbuf_mode) set_ringbuf_mode(0);
-    flush();
-    if (buf) delete[] buf;
-    buf = null;
-    tail = 0;
-    if (close_on_destroy) sys_close(fd);
-    fd = -1;
-  }
-
-  //
-  // Copy all writes to secondary stream 'chain'.
-  //
-  void odstream::setchain(odstream* chain) {
-    this->chain = chain;
-  }
-
-  //
-  // If tail mode is enabled, every time the buffer fills,
-  // copy it to a backup buffer of the same size, then
-  // discard the current buffer, rather than writing its
-  // contents to the backing file.
-  //
-  // The first time tail mode is enabled, the buffer
-  // is flushed to the file first before starting
-  // this behavior. Similarly, when disabling tail
-  // mode, both the backup buffer and the real
-  // buffer are flushed to the stream (otherwise
-  // there would be no way to get the saved data).
-  // Flushes while in tail mode are no-ops.
-  //
-  // This mode is useful for log files where massive
-  // amounts of data would be generated but only
-  // the very last batch of log entries before a
-  // crash or assert failure are interesting.
-  //
-  void odstream::set_ringbuf_mode(bool new_ringbuf_mode) {
-    if (fd < 0) return;
-    if (ringbuf_mode == new_ringbuf_mode) return;
-
-    if (new_ringbuf_mode) {
-      // Transition from off -> on: first flush, then alloc
-      flush();
-      assert(!ringbuf);
-      
-      ringbuf = new byte[bufsize];
-      memset(ringbuf, 0, bufsize);
-      ringbuf_tail = 0;
-      ringbuf_mode = 1;
-    } else {
-      // Transition from on -> off: turn off, then flush
-      assert(ringbuf);
-      sys_write(fd, ringbuf, ringbuf_tail);
-      delete ringbuf;
-
-
-      ringbuf = null;
-      ringbuf_tail = 0;
-
-      ringbuf_mode = 0;
-      // Flush out last part of circular buffer: 
-      flush();
-    }
-  }
-
-  int odstream::write(const void* data, int count) {
-    if unlikely (!ok()) return 0;
-    if unlikely (!buf) {
-      return sys_write(fd, data, count);
-      if (chain) chain->write(data, count);
-    }
-
-    byte* p = (byte*)data;
-
-    int total = 0;
-
-    if unlikely (chain) chain->write(data, count);
-
-    while (count) {
-      int n = min(bufsize - tail, count);
-      memcpy(buf + tail, p, n);
-      tail += n;
-      assert(inrange(tail, 0, bufsize));
-      count -= n;
-      total += n;
-      p += n;
-      if unlikely (!n) {
-        flush();
-      }
-    }
-
-    offset += total;
-
-    if unlikely (force_synchronous_streams) flush();
-
-    return total;
-  }
-
-  void odstream::flush() {
-    if unlikely (chain) chain->flush();
-
-    if unlikely (ringbuf_mode) {
-      // Ignore partial flushes
-      if (tail < bufsize) return;
-
-      byte* temp = ringbuf;
-      ringbuf = buf;
-      buf = temp;
-
-      ringbuf_tail = tail;
-      tail = 0;
-      return;
-    }
-
-    if likely (buf) {
-      int rc = 0;
-      if (tail) rc = sys_write(fd, buf, tail);
-      tail = 0;
-    }
-  }
-
-  W64 odstream::seek(W64 pos, int whence) {
-    flush();
-    offset = sys_seek(fd, pos, whence);    
-    return offset;
-  }
-
-  W64 odstream::where() const {
-    return offset;
-  }
+//  //
+//  // odstream
+//  //
+//  odstream::odstream() {
+//    fd = -1;
+//    buf = null;
+//    bufsize = 0;
+//    tail = 0;
+//    close_on_destroy = 1;
+//    ringbuf_mode = 0;
+//    ringbuf = null;
+//    ringbuf_tail = 0;
+//    chain = null;
+//    offset = 0;
+//  }
+//
+//  odstream::~odstream() {
+//    close();
+//  }
+//
+//  bool odstream::open(const char* filename, bool append, int bufsize) {
+//    if (fd >= 0) close();
+//    fd = sys_open(filename, O_RDWR | O_CREAT | ((append) ? O_APPEND : O_TRUNC) | O_LARGEFILE, 0644);
+//    if (fd < 0) return false;
+//    buf = null;
+//    this->bufsize = 0;
+//    setbuf(bufsize);
+//    close_on_destroy = 1;
+//    ringbuf_mode = 0;
+//    ringbuf = null;
+//    chain = null;
+//    offset = 0;
+//    return true;
+//  }
+//
+//  int odstream::setbuf(int newbufsize) {
+//    if (fd < 0) return 0;
+//    if (bufsize == newbufsize) return bufsize;
+//    if (buf) delete buf;
+//    bufsize = newbufsize;
+//    if (!bufsize) return 0;
+//    tail = 0;
+//    buf = new byte[bufsize];
+//    return bufsize;
+//  }
+//
+//  bool odstream::open(int fd, int bufsize) {
+//    if (this->fd >= 0) close();
+//    this->fd = fd;
+//    buf = null;
+//    this->bufsize = 0;
+//    setbuf(bufsize);
+//    close_on_destroy = 0;
+//    ringbuf_mode = 0;
+//    ringbuf = null;
+//    chain = null;
+//    offset = 0;
+//    return ok();
+//  }
+//
+//  void odstream::close() {
+//    if (fd < 0) return;
+//    if (ringbuf_mode) set_ringbuf_mode(0);
+//    flush();
+//    if (buf) delete[] buf;
+//    buf = null;
+//    tail = 0;
+//    if (close_on_destroy) sys_close(fd);
+//    fd = -1;
+//  }
+//
+//  //
+//  // Copy all writes to secondary stream 'chain'.
+//  //
+//  void odstream::setchain(odstream* chain) {
+//    this->chain = chain;
+//  }
+//
+//  //
+//  // If tail mode is enabled, every time the buffer fills,
+//  // copy it to a backup buffer of the same size, then
+//  // discard the current buffer, rather than writing its
+//  // contents to the backing file.
+//  //
+//  // The first time tail mode is enabled, the buffer
+//  // is flushed to the file first before starting
+//  // this behavior. Similarly, when disabling tail
+//  // mode, both the backup buffer and the real
+//  // buffer are flushed to the stream (otherwise
+//  // there would be no way to get the saved data).
+//  // Flushes while in tail mode are no-ops.
+//  //
+//  // This mode is useful for log files where massive
+//  // amounts of data would be generated but only
+//  // the very last batch of log entries before a
+//  // crash or assert failure are interesting.
+//  //
+//  void odstream::set_ringbuf_mode(bool new_ringbuf_mode) {
+//    if (fd < 0) return;
+//    if (ringbuf_mode == new_ringbuf_mode) return;
+//
+//    if (new_ringbuf_mode) {
+//      // Transition from off -> on: first flush, then alloc
+//      flush();
+//      assert(!ringbuf);
+//      
+//      ringbuf = new byte[bufsize];
+//      memset(ringbuf, 0, bufsize);
+//      ringbuf_tail = 0;
+//      ringbuf_mode = 1;
+//    } else {
+//      // Transition from on -> off: turn off, then flush
+//      assert(ringbuf);
+//      sys_write(fd, ringbuf, ringbuf_tail);
+//      delete ringbuf;
+//
+//
+//      ringbuf = null;
+//      ringbuf_tail = 0;
+//
+//      ringbuf_mode = 0;
+//      // Flush out last part of circular buffer: 
+//      flush();
+//    }
+//  }
+//
+//  int odstream::write(const void* data, int count) {
+//    if unlikely (!ok()) return 0;
+//    if unlikely (!buf) {
+//      return sys_write(fd, data, count);
+//      if (chain) chain->write(data, count);
+//    }
+//
+//    byte* p = (byte*)data;
+//
+//    int total = 0;
+//
+//    if unlikely (chain) chain->write(data, count);
+//
+//    while (count) {
+//      int n = min(bufsize - tail, count);
+//      memcpy(buf + tail, p, n);
+//      tail += n;
+//      assert(inrange(tail, 0, bufsize));
+//      count -= n;
+//      total += n;
+//      p += n;
+//      if unlikely (!n) {
+//        flush();
+//      }
+//    }
+//
+//    offset += total;
+//
+//    if unlikely (force_synchronous_streams) flush();
+//
+//    return total;
+//  }
+//
+//  void odstream::flush() {
+//    if unlikely (chain) chain->flush();
+//
+//    if unlikely (ringbuf_mode) {
+//      // Ignore partial flushes
+//      if (tail < bufsize) return;
+//
+//      byte* temp = ringbuf;
+//      ringbuf = buf;
+//      buf = temp;
+//
+//      ringbuf_tail = tail;
+//      tail = 0;
+//      return;
+//    }
+//
+//    if likely (buf) {
+//      int rc = 0;
+//      if (tail) rc = sys_write(fd, buf, tail);
+//      tail = 0;
+//    }
+//  }
+//
+//  W64 odstream::seek(W64 pos, int whence) {
+//    flush();
+//    offset = sys_seek(fd, pos, whence);    
+//    return offset;
+//  }
+//
+//  W64 odstream::where() const {
+//    return offset;
+//  }
 
   //
   // stringbuf
@@ -539,286 +539,286 @@ namespace superstl {
     }
   }
 
-  //
-  // Input streams
-  //
-
-  bool idstream::open(const char* filename, int bufsize) {
-    if (fd >= 0) close();
-    fd = sys_open(filename, O_RDONLY | O_LARGEFILE, 0);
-    error = (fd < 0);
-    if (!ok()) return false;
-    setbuf(bufsize);
-    close_on_destroy = 1;
-    return true;
-  }
-
-  bool idstream::open(int fd, int bufsize) {
-    if (fd >= 0) close();
-    this->fd = fd;
-    error = (fd < 0);
-    if (!ok()) return false;
-    setbuf(bufsize);
-    close_on_destroy = 0;
-    return true;
-  }
-
-  int idstream::setbuf(int bufsize) {
-    if (buf) {
-      assert(this->bufsize > 0);
-      delete[] buf;
-    }
-
-    this->bufsize = bufsize;
-
-    buf = null;
-    if (!bufsize) {
-      return 0;
-    }
-
-    int bufbits = msbindex(bufsize) + 1;
-    bufsize = (1 << bufbits);
-    bufmask = bitmask(bufbits-1);
-
-    buf = new byte[bufsize];
-    head = 0;
-    tail = 0;
-    bufused = 0;
-
-    return bufsize;
-  }
-
-  int idstream::fillbuf() {
-    // For debugging only:
-    // cerr << "fillbuf fd ", fd, " (head ", head, ", tail ", tail, ", bufused ", bufused, ", bufsize ", bufsize, ", bufmask ", bufmask, ")", endl, flush;
-
-    if (eos) return 0;
-
-    if (bufused >= (bufsize/2)) return 1;
-
-    if (head < tail) {
-      // ....|||||||.....
-      //     h      t
-      // 0123456789abcdef
-      int lobytes = head;
-      int hibytes = bufsize - tail;
-
-      int hin = sys_read(fd, &buf[tail], hibytes);
-      if (hin < 0) hin = 0;
-      if ((hibytes > 0) & (hin == 0)) eos = 1; // end of stream?
-
-      tail = addmod(tail, hin);
-      bufused += hin;
-
-      if (hin == hibytes) {
-        // do low part
-        int lon = sys_read(fd, &buf[0], lobytes);
-        if (lon < 0) lon = 0;
-        if ((lobytes > 0) & (lon == 0)) eos = 1; // end of stream?
-        tail = addmod(tail, lon);
-        bufused += lon;
-      }
-    } else if (head > tail) {
-      // ||||.......|||||
-      //     t      h
-      // 0123456789abcdef
-
-      int bytes = (head - tail);
-      int n = sys_read(fd, &buf[tail], bytes);
-      if (n < 0) n = 0;
-
-      if ((bytes > 0) & (n == 0)) eos = 1; // end of stream?
-      tail = addmod(tail, n);
-      bufused += n;
-    } else {
-      // (head == tail):
-      if (bufused) {
-        // no action - buffer is full
-        assert(bufused == bufsize);
-      } else {
-        assert(bufused == 0);
-        // buffer empty
-        int bytes = bufsize;
-        int n = sys_read(fd, &buf[0], bytes);
-        if (n < 0) n = 0;
-
-        if ((bytes > 0) & (n == 0)) eos = 1; // end of stream?
-        head = 0;
-        tail = addmod(head, n);
-        bufused = n;
-      }
-    }
-
-    assert(inrange(head, 0, bufsize-1));
-    assert(inrange(tail, 0, bufsize-1));
-    assert(inrange(bufused, 0, bufsize));
-
-    return 1;
-  }
-
-  int idstream::unread(int bytes) {
-    assert(bytes <= bufused);
-    head = addmod(head, -bytes);
-    bufused += bytes;
-    assert(inrange(bufused, 0, bufsize));
-    assert(inrange(head, 0, bufsize-1));
-    assert(inrange(tail, 0, bufsize-1));
-    offset -= bytes;
-    return bytes;
-  }
-
-  int idstream::readbuf(byte* dest, int count) {
-    assert(count <= bufsize);
-    int n;
-    if (head < tail) {
-      // ....|||||||.....
-      //     h      t
-      // 0123456789abcdef
-      n = min(bufused, count);
-      memcpy(dest, &buf[head], n);
-      head = addmod(head, n);
-      bufused -= n;
-    } else if (head >= tail) {
-      // ||||.......|||||
-      //     t      h
-      // 0123456789abcdef
-      n = min(min(bufsize - head, count), bufused);
-      memcpy(dest, &buf[head], n);
-      head = addmod(head, n);
-      bufused -= n;
-    }
-    assert(inrange(bufused, 0, bufsize));
-    return n;
-  }
-
-  bool idstream::getc(char& c) {
-    if (!buf) return (sys_read(fd, &c, 1) == 1);
-
-    if (!bufused)
-      fillbuf();
-
-    if (!bufused) {
-      assert(eos);
-      error = 1;
-      return false;
-    }
-
-    c = buf[head];
-    head = addmod(head, 1);
-    bufused--;
-    offset++;
-    return true;
-  }
-
-  int idstream::read(void* dest, int count) {
-    if (!buf) return sys_read(fd, dest, count);
-
-    byte* p = (byte*)dest;
-    // Fill the buffer from the tail until the head
-    int r = 0;
-    while (count) {
-      fillbuf();
-      int n = readbuf(p, min(count, bufsize));
-      if (!n) {
-        // end of stream
-        error = 1;
-        return r;
-      }
-
-      r += n;
-      p += n;
-      count -= n;
-
-      offset += n;
-    }
-
-    return r;
-  }
-
-  void idstream::close() {
-    if (fd >= 0) sys_close(fd);
-    if (buf) {
-      delete[] buf;
-      buf = null;
-    }
-    fd = -1;
-    head = 0;
-    tail = 0;
-    bufused = 0;
-    bufmask = 0;
-    eos = 0;
-    error = 0;
-  }
-
-  int idstream::readline(char* v, int len) {
-    if (!len) return 0;
-
-    if (!ok()) {
-      v[0] = 0;
-      return 0;
-    }
-
-    foreach (i, len-1) {
-      char c;
-      bool ok = getc(c);
-
-      if ((!ok) | (c == '\n') | (c == '\r')) {
-        v[i] = 0;
-        return i;
-      }
-
-      v[i] = c;
-    }
-
-    v[len-1] = 0;
-    return len-1;
-  }
-
-  int idstream::readline(stringbuf& sb) {
-    if (!ok()) return 0;
-
-    for (;;) {
-      char c;
-      bool ok = getc(c);
-
-      if ((!ok) | (c == '\n') | (c == '\r')) return sb.size();
-
-      sb << c;
-    }
-
-    return sb.size();
-  }
-
-  W64 idstream::seek(W64 pos, int whence) {
-    bufused = 0;
-    head = 0;
-    tail = 0;
-    error = 0;
-    eos = 0;
-    offset = sys_seek(fd, pos, whence);
-    return offset;
-  }
-
-  W64 idstream::where() const {
-    return offset;
-  }
-
-  W64 idstream::size() const {
-    W64 oldpos = where();
-    W64 s = sys_seek(fd, 0, SEEK_END);
-    sys_seek(fd, oldpos, SEEK_SET);
-    return s;
-  }
-
-  void* idstream::mmap(long long size) {
-    void* p = sys_mmap(NULL, size, PROT_READ, MAP_PRIVATE | MAP_NORESERVE, filehandle(), 0);
-#ifdef __x86_64__
-    if ((W64s)p == -1LL) return null;
-#else
-    if ((W32)p == -1) return null;
-#endif
-    return p;
-  }
+//  //
+//  // Input streams
+//  //
+//
+//  bool idstream::open(const char* filename, int bufsize) {
+//    if (fd >= 0) close();
+//    fd = sys_open(filename, O_RDONLY | O_LARGEFILE, 0);
+//    error = (fd < 0);
+//    if (!ok()) return false;
+//    setbuf(bufsize);
+//    close_on_destroy = 1;
+//    return true;
+//  }
+//
+//  bool idstream::open(int fd, int bufsize) {
+//    if (fd >= 0) close();
+//    this->fd = fd;
+//    error = (fd < 0);
+//    if (!ok()) return false;
+//    setbuf(bufsize);
+//    close_on_destroy = 0;
+//    return true;
+//  }
+//
+//  int idstream::setbuf(int bufsize) {
+//    if (buf) {
+//      assert(this->bufsize > 0);
+//      delete[] buf;
+//    }
+//
+//    this->bufsize = bufsize;
+//
+//    buf = null;
+//    if (!bufsize) {
+//      return 0;
+//    }
+//
+//    int bufbits = msbindex(bufsize) + 1;
+//    bufsize = (1 << bufbits);
+//    bufmask = bitmask(bufbits-1);
+//
+//    buf = new byte[bufsize];
+//    head = 0;
+//    tail = 0;
+//    bufused = 0;
+//
+//    return bufsize;
+//  }
+//
+//  int idstream::fillbuf() {
+//    // For debugging only:
+//    // cerr << "fillbuf fd ", fd, " (head ", head, ", tail ", tail, ", bufused ", bufused, ", bufsize ", bufsize, ", bufmask ", bufmask, ")", endl, flush;
+//
+//    if (eos) return 0;
+//
+//    if (bufused >= (bufsize/2)) return 1;
+//
+//    if (head < tail) {
+//      // ....|||||||.....
+//      //     h      t
+//      // 0123456789abcdef
+//      int lobytes = head;
+//      int hibytes = bufsize - tail;
+//
+//      int hin = sys_read(fd, &buf[tail], hibytes);
+//      if (hin < 0) hin = 0;
+//      if ((hibytes > 0) & (hin == 0)) eos = 1; // end of stream?
+//
+//      tail = addmod(tail, hin);
+//      bufused += hin;
+//
+//      if (hin == hibytes) {
+//        // do low part
+//        int lon = sys_read(fd, &buf[0], lobytes);
+//        if (lon < 0) lon = 0;
+//        if ((lobytes > 0) & (lon == 0)) eos = 1; // end of stream?
+//        tail = addmod(tail, lon);
+//        bufused += lon;
+//      }
+//    } else if (head > tail) {
+//      // ||||.......|||||
+//      //     t      h
+//      // 0123456789abcdef
+//
+//      int bytes = (head - tail);
+//      int n = sys_read(fd, &buf[tail], bytes);
+//      if (n < 0) n = 0;
+//
+//      if ((bytes > 0) & (n == 0)) eos = 1; // end of stream?
+//      tail = addmod(tail, n);
+//      bufused += n;
+//    } else {
+//      // (head == tail):
+//      if (bufused) {
+//        // no action - buffer is full
+//        assert(bufused == bufsize);
+//      } else {
+//        assert(bufused == 0);
+//        // buffer empty
+//        int bytes = bufsize;
+//        int n = sys_read(fd, &buf[0], bytes);
+//        if (n < 0) n = 0;
+//
+//        if ((bytes > 0) & (n == 0)) eos = 1; // end of stream?
+//        head = 0;
+//        tail = addmod(head, n);
+//        bufused = n;
+//      }
+//    }
+//
+//    assert(inrange(head, 0, bufsize-1));
+//    assert(inrange(tail, 0, bufsize-1));
+//    assert(inrange(bufused, 0, bufsize));
+//
+//    return 1;
+//  }
+//
+//  int idstream::unread(int bytes) {
+//    assert(bytes <= bufused);
+//    head = addmod(head, -bytes);
+//    bufused += bytes;
+//    assert(inrange(bufused, 0, bufsize));
+//    assert(inrange(head, 0, bufsize-1));
+//    assert(inrange(tail, 0, bufsize-1));
+//    offset -= bytes;
+//    return bytes;
+//  }
+//
+//  int idstream::readbuf(byte* dest, int count) {
+//    assert(count <= bufsize);
+//    int n;
+//    if (head < tail) {
+//      // ....|||||||.....
+//      //     h      t
+//      // 0123456789abcdef
+//      n = min(bufused, count);
+//      memcpy(dest, &buf[head], n);
+//      head = addmod(head, n);
+//      bufused -= n;
+//    } else if (head >= tail) {
+//      // ||||.......|||||
+//      //     t      h
+//      // 0123456789abcdef
+//      n = min(min(bufsize - head, count), bufused);
+//      memcpy(dest, &buf[head], n);
+//      head = addmod(head, n);
+//      bufused -= n;
+//    }
+//    assert(inrange(bufused, 0, bufsize));
+//    return n;
+//  }
+//
+//  bool idstream::getc(char& c) {
+//    if (!buf) return (sys_read(fd, &c, 1) == 1);
+//
+//    if (!bufused)
+//      fillbuf();
+//
+//    if (!bufused) {
+//      assert(eos);
+//      error = 1;
+//      return false;
+//    }
+//
+//    c = buf[head];
+//    head = addmod(head, 1);
+//    bufused--;
+//    offset++;
+//    return true;
+//  }
+//
+//  int idstream::read(void* dest, int count) {
+//    if (!buf) return sys_read(fd, dest, count);
+//
+//    byte* p = (byte*)dest;
+//    // Fill the buffer from the tail until the head
+//    int r = 0;
+//    while (count) {
+//      fillbuf();
+//      int n = readbuf(p, min(count, bufsize));
+//      if (!n) {
+//        // end of stream
+//        error = 1;
+//        return r;
+//      }
+//
+//      r += n;
+//      p += n;
+//      count -= n;
+//
+//      offset += n;
+//    }
+//
+//    return r;
+//  }
+//
+//  void idstream::close() {
+//    if (fd >= 0) sys_close(fd);
+//    if (buf) {
+//      delete[] buf;
+//      buf = null;
+//    }
+//    fd = -1;
+//    head = 0;
+//    tail = 0;
+//    bufused = 0;
+//    bufmask = 0;
+//    eos = 0;
+//    error = 0;
+//  }
+//
+//  int idstream::readline(char* v, int len) {
+//    if (!len) return 0;
+//
+//    if (!ok()) {
+//      v[0] = 0;
+//      return 0;
+//    }
+//
+//    foreach (i, len-1) {
+//      char c;
+//      bool ok = getc(c);
+//
+//      if ((!ok) | (c == '\n') | (c == '\r')) {
+//        v[i] = 0;
+//        return i;
+//      }
+//
+//      v[i] = c;
+//    }
+//
+//    v[len-1] = 0;
+//    return len-1;
+//  }
+//
+//  int idstream::readline(stringbuf& sb) {
+//    if (!ok()) return 0;
+//
+//    for (;;) {
+//      char c;
+//      bool ok = getc(c);
+//
+//      if ((!ok) | (c == '\n') | (c == '\r')) return sb.size();
+//
+//      sb << c;
+//    }
+//
+//    return sb.size();
+//  }
+//
+//  W64 idstream::seek(W64 pos, int whence) {
+//    bufused = 0;
+//    head = 0;
+//    tail = 0;
+//    error = 0;
+//    eos = 0;
+//    offset = sys_seek(fd, pos, whence);
+//    return offset;
+//  }
+//
+//  W64 idstream::where() const {
+//    return offset;
+//  }
+//
+//  W64 idstream::size() const {
+//    W64 oldpos = where();
+//    W64 s = sys_seek(fd, 0, SEEK_END);
+//    sys_seek(fd, oldpos, SEEK_SET);
+//    return s;
+//  }
+//
+//  void* idstream::mmap(long long size) {
+//    void* p = sys_mmap(NULL, size, PROT_READ, MAP_PRIVATE | MAP_NORESERVE, filehandle(), 0);
+//#ifdef __x86_64__
+//    if ((W64s)p == -1LL) return null;
+//#else
+//    if ((W32)p == -1) return null;
+//#endif
+//    return p;
+//  }
 
   template <>
   char* dynarray<char*>::tokenize(char* string, const char* seplist) {
@@ -1154,9 +1154,9 @@ namespace superstl {
   // Global streams:
   //
 
-  istream cin(0);
-  ostream cout(1);
-  ostream cerr(2);
+//  istream cin(0);
+//  ostream cout(1);
+//  ostream cerr(2);
 
   static void close_streams() {
     cout.flush();

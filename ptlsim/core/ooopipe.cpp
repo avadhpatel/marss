@@ -40,7 +40,7 @@
 using namespace OutOfOrderModel;
 
 void OutOfOrderCoreCacheCallbacks::icache_wakeup(LoadStoreInfo lsi, W64 physaddr) {
-  if(logable(99)) logfile << " icache_wakeup addr ", (void*) physaddr, endl;
+  if(logable(99)) ptl_logfile << " icache_wakeup addr ", (void*) physaddr, endl;
   foreach (i, core.threadcount) {
     ThreadContext* thread = core.threads[i];
     if unlikely (thread 
@@ -48,11 +48,11 @@ void OutOfOrderCoreCacheCallbacks::icache_wakeup(LoadStoreInfo lsi, W64 physaddr
                  && (floor(thread->waiting_for_icache_fill_physaddr,
                            Memory::L1I_LINE_SIZE) == 
 					 floor(physaddr, Memory::L1I_LINE_SIZE))) {
-      if (logable(6)) logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
+      if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
       thread->waiting_for_icache_fill = 0;
       thread->waiting_for_icache_fill_physaddr = 0;
     }else{
-      if (logable(6)) logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr, " after floor : ",
+      if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr, " after floor : ",
                         (void*) floor(thread->waiting_for_icache_fill_physaddr, Memory::L1D_LINE_SIZE), " delivered ", (void*) physaddr,endl;
       //     assert(0);
     }
@@ -108,7 +108,7 @@ void ThreadContext::annul_fetchq() {
 
 void OutOfOrderCore::flush_pipeline_all() {
   // Clear per-thread state:
-  if (logable(3)) logfile << "flush_pipeline_all.",endl;
+  if (logable(3)) ptl_logfile << "flush_pipeline_all.",endl;
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
     thread->flush_pipeline();
@@ -118,7 +118,7 @@ void OutOfOrderCore::flush_pipeline_all() {
 }
 
 void ThreadContext::flush_pipeline() {
-  if (logable(3)) logfile << " core[", core.coreid,"] TH[", threadid, "] flush_pipeline()",endl;
+  if (logable(3)) ptl_logfile << " core[", core.coreid,"] TH[", threadid, "] flush_pipeline()",endl;
   core.caches.complete(threadid);
 
 #ifdef NEW_MEMORY
@@ -192,7 +192,7 @@ void ThreadContext::flush_pipeline() {
 
   // flush cache too:
 //   if(core.machine.memoryHierarchyPtr){
-//     logfile << " flush memoryHierarchy. ", endl;
+//     ptl_logfile << " flush memoryHierarchy. ", endl;
 //     core.machine.memoryHierarchyPtr->reset();
 //   }
   dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES;
@@ -227,7 +227,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
 //
 void ThreadContext::invalidate_smc() {
   if unlikely (smc_invalidate_pending) {
-    if (logable(5)) logfile << "SMC invalidate pending on ", smc_invalidate_rvp, endl;
+    if (logable(5)) ptl_logfile << "SMC invalidate pending on ", smc_invalidate_rvp, endl;
     bbcache.invalidate_page(smc_invalidate_rvp.mfnlo, INVALIDATE_REASON_SMC);
     if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache.invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
     smc_invalidate_pending = 0;
@@ -312,15 +312,15 @@ void ThreadContext::external_to_core_state() {
 // a result or are otherwise stalled.
 //
 void ThreadContext::redispatch_deadlock_recovery() {
-  if (logable(6)) core.dump_smt_state(logfile);
+  if (logable(6)) core.dump_smt_state(ptl_logfile);
 
   per_context_ooocore_stats_update(threadid, dispatch.redispatch.deadlock_flushes++);
   // don't want to reset the counter for no commit in this case
   W64 previous_last_commit_at_cycle = last_commit_at_cycle;
-  if (logable(3)) logfile << " redispatch_deadlock_recovery, flush_pipeline.",endl;
+  if (logable(3)) ptl_logfile << " redispatch_deadlock_recovery, flush_pipeline.",endl;
   flush_pipeline();
   last_commit_at_cycle = previous_last_commit_at_cycle; /// so we can exit after no commit after deadlock recovery a few times in a roll
-  logfile << "[vcpu ", ctx.cpu_index, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
+  ptl_logfile << "[vcpu ", ctx.cpu_index, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
   /*
   //
   // This is a more selective scheme than the full pipeline flush.
@@ -786,7 +786,6 @@ void ThreadContext::rename() {
         }
       }
       per_context_ooocore_stats_update(threadid, frontend.status.rob_full++);
-	  core.rob_stall_counter++;
       break;
     }
 
@@ -811,7 +810,6 @@ void ThreadContext::rename() {
         }
       }
       per_context_ooocore_stats_update(threadid, frontend.status.physregs_full++);
-	  core.phy_rf_stall_counter++;
       break;
     }
 
@@ -822,14 +820,12 @@ void ThreadContext::rename() {
     if unlikely (ld && (loads_in_flight >= LDQ_SIZE)) {
       if unlikely (config.event_log_enabled) { if likely (!prepcount) core.eventlog.add(EVENT_RENAME_LDQ_FULL)->threadid = threadid; }
       per_context_ooocore_stats_update(threadid, frontend.status.ldq_full++);
-	  core.lsq_stall_counter++;
       break;
     }
 
     if unlikely (st && (stores_in_flight >= STQ_SIZE)) {
       if unlikely (config.event_log_enabled) { if likely (!prepcount) core.eventlog.add(EVENT_RENAME_STQ_FULL)->threadid = threadid; }
       per_context_ooocore_stats_update(threadid, frontend.status.stq_full++);
-	  core.lsq_stall_counter++;
       break;
     }
 
@@ -1726,12 +1722,12 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
     MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
 
     if (!lock) {
-      logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock was ", lock, endl;
+      ptl_logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock was ", lock, endl;
       assert(false);
     }
 
     if (lock->vcpuid != ctx.cpu_index) {
-      logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock vcpuid was ", lock->vcpuid, endl;
+      ptl_logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock vcpuid was ", lock->vcpuid, endl;
       assert(false);
     }
 
@@ -1908,10 +1904,6 @@ int ReorderBufferEntry::commit() {
 #endif
 
   per_context_ooocore_stats_update(threadid, commit.opclass[opclassof(uop.opcode)]++);
-  if unlikely (isclass(uop.opcode, OPCLASS_FP) || 
-		  isclass(uop.opcode, OPCLASS_VEC_ALU)) {
-	  core.retired_mmx_fp_inst++;
-  }
 
   if unlikely (macro_op_has_exceptions) {
     if unlikely (config.event_log_enabled) event = core.eventlog.add_commit(EVENT_COMMIT_EXCEPTION_ACKNOWLEDGED, this);
@@ -2025,16 +2017,16 @@ int ReorderBufferEntry::commit() {
     else thread.consecutive_commits_inside_spinlock = 0;
 
     if (thread.consecutive_commits_inside_spinlock >= 512) {
-      logfile << "WARNING: at cycle ", sim_cycle, ": vcpu ", thread.ctx.vcpuid, " potentially deadlocked inside spinlock (commit rip ", (void*)ctx.commitarf[REG_rip],
+      ptl_logfile << "WARNING: at cycle ", sim_cycle, ": vcpu ", thread.ctx.vcpuid, " potentially deadlocked inside spinlock (commit rip ", (void*)ctx.commitarf[REG_rip],
         ", count ", thread.consecutive_commits_inside_spinlock, ", int mask ", sshinfo.vcpu_info[thread.ctx.vcpuid].evtchn_upcall_mask, endl, flush;
-      logfile << "Thread 0 rip ", (void*)core.thread[0]->ctx.commitarf[REG_rip], endl;
-      logfile << "Thread 1 rip ", (void*)core.thread[1]->ctx.commitarf[REG_rip], endl;
+      ptl_logfile << "Thread 0 rip ", (void*)core.thread[0]->ctx.commitarf[REG_rip], endl;
+      ptl_logfile << "Thread 1 rip ", (void*)core.thread[1]->ctx.commitarf[REG_rip], endl;
 
       thread.consecutive_commits_inside_spinlock = 0;
 
       if (thread0_stuck_in_spinlock && thread1_stuck_in_spinlock) {
-        logfile << "Both threads stuck in spinlock", endl;
-        //core.machine.dump_state(logfile); // This is implied by assert().
+        ptl_logfile << "Both threads stuck in spinlock", endl;
+        //core.machine.dump_state(ptl_logfile); // This is implied by assert().
         assert(false);
       }
     }
@@ -2066,9 +2058,9 @@ int ReorderBufferEntry::commit() {
 
   if unlikely (config.event_log_enabled) {
     if unlikely ((uop.rip.rip == config.log_backwards_from_trigger_rip) && (uop.som)) {
-      logfile << "Hit trigger rip ", (void*)(Waddr)config.log_backwards_from_trigger_rip, "; printing event ring buffer:", endl, flush;
-      core.eventlog.print(logfile);
-      logfile << "End of triggered event dump", endl, flush;
+      ptl_logfile << "Hit trigger rip ", (void*)(Waddr)config.log_backwards_from_trigger_rip, "; printing event ring buffer:", endl, flush;
+      core.eventlog.print(ptl_logfile);
+      ptl_logfile << "End of triggered event dump", endl, flush;
     }
   }
 
@@ -2272,7 +2264,7 @@ int ReorderBufferEntry::commit() {
   }
 
   if unlikely (uop_is_eom & thread.stop_at_next_eom) {
-    logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_user_insns_committed, " commits)", endl;
+    ptl_logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_user_insns_committed, " commits)", endl;
     return COMMIT_RESULT_STOP;
   }
 

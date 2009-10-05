@@ -18,6 +18,9 @@
 #endif
 #include <elf.h>
 
+#include <fstream>
+#include <syscalls.h>
+
 #ifndef CONFIG_ONLY
 //
 // Global variables
@@ -25,9 +28,10 @@
 PTLsimConfig config;
 ConfigurationParser<PTLsimConfig> configparser;
 PTLsimStats stats;
+PTLsimMachine ptl_machine;
 
-ostream logfile;
-ostream trace_mem_logfile;
+ofstream ptl_logfile;
+ofstream trace_mem_logfile;
 bool logenable = 0;
 W64 sim_cycle = 0;
 W64 unhalted_cycle_count = 0;
@@ -36,6 +40,15 @@ W64 total_uops_executed = 0;
 W64 total_uops_committed = 0;
 W64 total_user_insns_committed = 0;
 W64 total_basic_blocks_committed = 0;
+
+W64 last_printed_status_at_ticks;
+W64 last_printed_status_at_user_insn;
+W64 last_printed_status_at_cycle;
+W64 ticks_per_update;
+
+W64 last_stats_captured_at_cycle = 0;
+W64 tsc_at_start ;
+
 #endif
 
 void PTLsimConfig::reset() {
@@ -189,17 +202,17 @@ void ConfigurationParser<PTLsimConfig>::setup() {
 
   section("General Logging Control");
   add(quiet,                        "quiet",                "Do not print PTLsim system information banner");
-  add(log_filename,                 "logfile",              "Log filename (use /dev/fd/1 for stdout, /dev/fd/2 for stderr)");
+  add(log_filename,                 "ptl_logfile",              "Log filename (use /dev/fd/1 for stdout, /dev/fd/2 for stderr)");
   add(loglevel,                     "loglevel",             "Log level (0 to 99)");
   add(start_log_at_iteration,       "startlog",             "Start logging after iteration <startlog>");
   add(start_log_at_rip,             "startlogrip",          "Start logging after first translation of basic block starting at rip");
   add(log_on_console,               "consolelog",           "Replicate log file messages to console");
   add(log_ptlsim_boot,              "bootlog",              "Log PTLsim early boot and injection process (for debugging)");
-  add(log_buffer_size,              "logbufsize",           "Size of PTLsim logfile buffer (not related to -ringbuf)");
-  add(log_file_size,                "logfilesize",           "Size of PTLsim logfile");
+  add(log_buffer_size,              "logbufsize",           "Size of PTLsim ptl_logfile buffer (not related to -ringbuf)");
+  add(log_file_size,                "logfilesize",           "Size of PTLsim ptl_logfile");
   add(dump_state_now,               "dump-state-now",       "Dump the event log ring buffer and internal state of the active core");
   add(abort_at_end,                 "abort-at-end",         "Abort current simulation after next command (don't wait for next x86 boundary)");
-  add(mm_logfile,                   "mm-logfile",           "Log PTLsim memory manager requests (alloc, free) to this file (use with ptlmmlog)");
+  add(mm_logfile,                   "mm-ptl_logfile",           "Log PTLsim memory manager requests (alloc, free) to this file (use with ptlmmlog)");
   add(mm_log_buffer_size,           "mm-logbuf-size",       "Size of PTLsim memory manager log buffer (in events, not bytes)");
   add(enable_inline_mm_logging,     "mm-log-inline",        "Print every memory manager request in the main log file");
   add(enable_mm_validate,           "mm-validate",          "Validate every memory manager request against internal structures (slow)");
@@ -207,7 +220,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   section("Event Ring Buffer Logging Control");
   add(event_log_enabled,            "ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
   add(event_log_ring_buffer_size,   "ringbuf-size",         "Core event log ring buffer size: only save last <ringbuf> entries");
-  add(flush_event_log_every_cycle,  "flush-events",         "Flush event log ring buffer to logfile after every cycle");
+  add(flush_event_log_every_cycle,  "flush-events",         "Flush event log ring buffer to ptl_logfile after every cycle");
   add(log_backwards_from_trigger_rip,"ringbuf-trigger-rip", "Print event ring buffer when first uop in this rip is committed");
   add(log_trigger_virt_addr_start,   "ringbuf-trigger-virt-start", "Print event ring buffer when any virtual address in this range is touched");
   add(log_trigger_virt_addr_end,     "ringbuf-trigger-virt-end",   "Print event ring buffer when any virtual address in this range is touched");
@@ -297,12 +310,12 @@ void ConfigurationParser<PTLsimConfig>::setup() {
  add(verify_cache,               "verify-cache",                   "run simulation with storing actual data in cache");
  add(comparing_cache,               "comparing-cache",                   "run simulation with storing actual data in cache");
  add(trace_memory_updates,               "trace-memory-updates",                   "log memory updates");
- add(trace_memory_updates_logfile,        "trace-memory-updates-logfile",                   "logfile for memory updates");
+ add(trace_memory_updates_logfile,        "trace-memory-updates-ptl_logfile",                   "ptl_logfile for memory updates");
  
  section("Memory Event Ring Buffer Logging Control");
  add(mem_event_log_enabled,            "mem-ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
  add(mem_event_log_ring_buffer_size,   "mem-ringbuf-size",         "Core event log ring buffer size: only save last <ringbuf> entries");
- add(mem_flush_event_log_every_cycle,  "mem-flush-events",         "Flush event log ring buffer to logfile after every cycle");
+ add(mem_flush_event_log_every_cycle,  "mem-flush-events",         "Flush event log ring buffer to ptl_logfile after every cycle");
 
  section("bus configuration");
   add(atomic_bus_enabled,               "atomic_bus",               "Using single atomic bus instead of split bus");
@@ -371,7 +384,7 @@ void collect_common_sysinfo(PTLsimStats& stats) {
 
   sb.reset(); sb << __DATE__, " ", __TIME__;
   strput(stats.simulator.version.build_timestamp, sb);
-  stats.simulator.version.svn_revision = SVNREV;
+//  stats.simulator.version.svn_revision = SVNREV;
   strput(stats.simulator.version.svn_timestamp, stringify(SVNDATE));
   strput(stats.simulator.version.build_hostname, stringify(BUILDHOST));
   sb.reset(); sb << "gcc-", __GNUC__, ".", __GNUC_MINOR__;
@@ -398,12 +411,12 @@ stringbuf current_trace_memory_updates_logfile;
 
 void backup_and_reopen_logfile() {
   if (config.log_filename) {
-    if (logfile) logfile.close();
+    if (ptl_logfile) ptl_logfile.close();
     stringbuf oldname;
     oldname << config.log_filename, ".backup";
     sys_unlink(oldname);
     sys_rename(config.log_filename, oldname);
-    logfile.open(config.log_filename);
+    ptl_logfile.open(config.log_filename);
   }
 }
 
@@ -433,9 +446,9 @@ void capture_stats_snapshot(const char* name) {
   if unlikely (!statswriter) return;
 
   if (logable(100)|1) {
-    logfile << "Making stats snapshot uuid ", statswriter.next_uuid();
-    if (name) logfile << " named ", name;
-    logfile << " at cycle ", sim_cycle, endl;
+    ptl_logfile << "Making stats snapshot uuid ", statswriter.next_uuid();
+    if (name) ptl_logfile << " named ", name;
+    ptl_logfile << " at cycle ", sim_cycle, endl;
   }
 
   if (PTLsimMachine::getcurrent()) {
@@ -463,15 +476,15 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   static bool first_time = true;
 
   if (config.log_filename.set() && (config.log_filename != current_log_filename)) {
-    // Can also use "-logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
+    // Can also use "-ptl_logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
     backup_and_reopen_logfile();
     current_log_filename = config.log_filename;
   }
 
-  logfile.setchain((config.log_on_console) ? &cout : null);
+//  ptl_logfile.setchain((config.log_on_console) ? &cout : null);
 
   if (config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
-    // Can also use "-logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
+    // Can also use "-ptl_logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
     statswriter.open(config.stats_filename, &_binary_ptlsim_dst_start,
                      &_binary_ptlsim_dst_end - &_binary_ptlsim_dst_start,
                      sizeof(PTLsimStats));
@@ -484,7 +497,7 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   }
 
 
-  logfile.setbuf(config.log_buffer_size);
+//  ptl_logfile.setbuf(config.log_buffer_size);
 
   if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.start_log_at_iteration == infinity)) {
     config.start_log_at_iteration = 0;
@@ -510,7 +523,7 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   //  logenable = 1; // Hui
 
   if (config.bbcache_dump_filename.set() && (config.bbcache_dump_filename != current_bbcache_dump_filename)) {
-    // Can also use "-logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
+    // Can also use "-ptl_logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
     bbcache_dump_file.open(config.bbcache_dump_filename);
     current_bbcache_dump_filename = config.bbcache_dump_filename;
   }
@@ -542,18 +555,18 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
         cerr << "PTLsim is now waiting for a command.", endl, flush;
 #endif
     }
-    print_banner(logfile, stats, argc, argv);
-    print_sysinfo(logfile);
+    print_banner(ptl_logfile, stats, argc, argv);
+    print_sysinfo(ptl_logfile);
     cerr << flush;
-    logfile << config;
-    logfile.flush();
+    ptl_logfile << config;
+    ptl_logfile.flush();
     first_time = false;
   }
 
 #ifdef PTLSIM_HYPERVISOR
   int total = config.run + config.stop + config.native + config.kill;
   if (total > 1) {
-    logfile << "Warning: only one action (from -run, -stop, -native, -kill) can be specified at once", endl, flush;
+    ptl_logfile << "Warning: only one action (from -run, -stop, -native, -kill) can be specified at once", endl, flush;
     cerr << "Warning: only one action (from -run, -stop, -native, -kill) can be specified at once", endl, flush;
   }
 #endif
@@ -597,12 +610,261 @@ PTLsimMachine* PTLsimMachine::getcurrent() {
   return current_machine;
 }
 
-W64 last_printed_status_at_ticks;
-W64 last_printed_status_at_user_insn;
-W64 last_printed_status_at_cycle;
-W64 ticks_per_update;
+void ptl_reconfigure(char* config_str) {
+	char* argv[1]; argv[0] = config_str;
+	configparser.parse(config, config_str);
+	handle_config_change(config, 1, argv);
+	ptl_logfile << "Configuration changed: ", config, endl;
 
-W64 last_stats_captured_at_cycle = 0;
+	// set the current_machine to null so it will be automatically changed to
+	// new configured machine
+	current_machine = null;
+}
+
+void ptl_machine_init(char* config_str) {
+
+	// Setup the configuration
+	ptl_reconfigure(config_str);
+}
+
+static int ctx_counter = 0;
+CPUX86State* ptl_create_new_context() {
+
+	assert(ctx_counter < contextcount);
+
+	// Create a new CPU context and add it to contexts array
+	Context* ctx = new Context();
+	ptl_contexts[ctx_counter] = ctx;
+	ctx_counter++;
+
+	return (CPUX86State*)(ctx);
+}
+
+// print selected stats to log for average of all cores
+void print_stats_in_log(){
+  
+
+#ifdef PTLSIM_HYPERVISOR
+  // 1. execution key stats:
+  // uops_in_mode: kernel and user
+  ptl_logfile << " kernel-insns ", (stats.external.total.insns_in_mode.kernel64 * 100.0) / total_user_insns_committed, endl;
+  ptl_logfile << " user-insns ", (stats.external.total.insns_in_mode.user64 * 100.0) / total_user_insns_committed, endl;
+  // cycles_in_mode: kernel and user
+  ptl_logfile << " kernel-cycles ", (stats.external.total.cycles_in_mode.kernel64 * 100.0) / sim_cycle, endl;
+  ptl_logfile << " user-cycles ", (stats.external.total.cycles_in_mode.user64 * 100.0) / sim_cycle, endl;
+#endif
+  //#define OPCLASS_BRANCH                  (OPCLASS_COND_BRANCH|OPCLASS_INDIR_BRANCH|OPCLASS_UNCOND_BRANCH|OPCLASS_ASSIST)
+
+  //#define OPCLASS_LOAD                    (1 << 11)
+  //#define OPCLASS_STORE                   (1 << 12)
+
+  // opclass: load, store, branch,
+  W64 total_uops = stats.ooocore_context_total.commit.uops;
+  ptl_logfile << " total_uop ", total_uops, endl;
+
+  ptl_logfile << " total_load ", stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)], endl;
+  ptl_logfile << " load_percentage ", (stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)] * 100.0 )/ (total_uops * 1.0), endl;
+  ptl_logfile << " total_store ", stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)], endl;
+  ptl_logfile << " store_percentage ", (stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)] * 100.0)/(total_uops * 1.0), endl;
+  ptl_logfile << " total_branch ", stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)], endl;
+  ptl_logfile << " branch_percentage ", (stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)] * 100.0)/(total_uops * 1.0), endl;
+  // branch prediction accuracy
+  ptl_logfile << " branch-accuracy ", double (stats.ooocore_context_total.branchpred.cond[1] * 100.0)/double (stats.ooocore_context_total.branchpred.cond[0] + stats.ooocore_context_total.branchpred.cond[1]), endl;
+
+  // 2. simulation speed: 
+  ptl_logfile << " elapse_seconds ", stats.elapse_seconds, endl;
+  // CPS : number of similated cycle per second
+  ptl_logfile << " CPS ",  W64(double(sim_cycle) / double(stats.elapse_seconds)), endl;
+  // IPS : number of instruction commited per second
+  ptl_logfile << " IPS ", W64(double(total_user_insns_committed) / double(stats.elapse_seconds)), endl;
+
+  // 3. performance:
+  // IPC : number of instruction per second
+  ptl_logfile << " total_cycle ", sim_cycle, endl;
+  ptl_logfile << " per_vcpu_IPC ", stats.ooocore_context_total.commit.ipc, endl;
+  ptl_logfile << " total_IPC ",  double(total_user_insns_committed) / double(sim_cycle), endl;
+
+  // 4. internconnection related 
+  struct CacheStats::cpurequest::count &count_L1I = stats.memory.total.L1I.cpurequest.count;
+  W64 hit_L1I = count_L1I.hit.read.hit.hit + count_L1I.hit.read.hit.forward +  count_L1I.hit.write.hit.hit + count_L1I.hit.write.hit.forward;
+  W64 miss_L1I = count_L1I.miss.read +  count_L1I.miss.write;
+  ptl_logfile << " L1I_hit_rate ", double(hit_L1I * 100.0) / double (hit_L1I + miss_L1I), endl;
+
+  struct CacheStats::cpurequest::count &count_L1D = stats.memory.total.L1D.cpurequest.count;
+  W64 hit_L1D = count_L1D.hit.read.hit.hit + count_L1D.hit.read.hit.forward +  count_L1D.hit.write.hit.hit + count_L1D.hit.write.hit.forward;
+  W64 miss_L1D = count_L1D.miss.read +  count_L1D.miss.write;
+  ptl_logfile << " L1D_hit_rate ", double(hit_L1D * 100.0) / double (hit_L1D + miss_L1D), endl;
+
+  struct CacheStats::cpurequest::count &count_L2 = stats.memory.total.L2.cpurequest.count;
+  W64 hit_L2 = count_L2.hit.read.hit.hit + count_L2.hit.read.hit.forward +  count_L2.hit.write.hit.hit + count_L2.hit.write.hit.forward;
+  W64 miss_L2 = count_L2.miss.read +  count_L2.miss.write;
+  ptl_logfile << " L2_hit_rate ", double(hit_L2 * 100.0) / double (hit_L2 + miss_L2), endl;
+
+  // average load latency
+  ptl_logfile << " L1I_IF_latency ", double (stats.memory.total.L1I.latency.IF) / double (stats.memory.total.L1I.lat_count.IF), endl;
+  ptl_logfile << " L1D_load_latency ", double (stats.memory.total.L1D.latency.load) / double (stats.memory.total.L1D.lat_count.load), endl;
+  ptl_logfile << " L1_read_latency ", double (stats.memory.total.L1I.latency.IF + stats.memory.total.L1D.latency.load) / double (stats.memory.total.L1I.lat_count.IF + stats.memory.total.L1D.lat_count.load), endl;
+  ptl_logfile << " L1D_store_latency ", double (stats.memory.total.L1D.latency.store) / double (stats.memory.total.L1D.lat_count.store), endl;
+
+  ptl_logfile << " L2_IF_latency ", double (stats.memory.total.L2.latency.IF) / double (stats.memory.total.L2.lat_count.IF), endl;
+  ptl_logfile << " L2_load_latency ", double (stats.memory.total.L2.latency.load) / double (stats.memory.total.L2.lat_count.load), endl;
+  ptl_logfile << " L2_read_latency ", double (stats.memory.total.L2.latency.IF + stats.memory.total.L2.latency.load) / double (stats.memory.total.L2.lat_count.IF + stats.memory.total.L2.lat_count.load), endl;
+  ptl_logfile << " L2_store_latency ", double (stats.memory.total.L2.latency.store) / double (stats.memory.total.L2.lat_count.store), endl;
+
+  // average load miss latency
+   ptl_logfile << " L1_read_miss_latency ", double (stats.memory.total.L1I.latency.IF + stats.memory.total.L1D.latency.load) / double (count_L1I.miss.read +  count_L2.miss.read), endl;
+   ptl_logfile << " L1_write_miss_latency ", double (stats.memory.total.L1D.latency.store) / double (count_L1D.miss.write), endl;
+
+  
+#ifndef NEW_CACHE
+  // bus utilization
+   ptl_logfile << " atomic_bus_utilization ", double (stats.memory.bus.atomic_utilization[Memory::BUS_DES_BUSY] * 100.0) / double (  stats.memory.bus.atomic_utilization[Memory::BUS_DES_FREE] +  stats.memory.bus.atomic_utilization[Memory::BUS_DES_BUSY] + 1), endl; 
+   ptl_logfile << " addr_bus_utilization ", double (stats.memory.bus.addr_utilization[Memory::BUS_DES_BUSY] * 100.0) / double (  stats.memory.bus.addr_utilization[Memory::BUS_DES_FREE] +  stats.memory.bus.addr_utilization[Memory::BUS_DES_BUSY] +1), endl; 
+   ptl_logfile << " data_bus_utilization ", double (stats.memory.bus.data_utilization[Memory::BUS_DES_BUSY] * 100.0) / double (  stats.memory.bus.data_utilization[Memory::BUS_DES_FREE] +  stats.memory.bus.data_utilization[Memory::BUS_DES_BUSY] +1), endl; 
+
+   W64 total_bus_command = 0;
+   W64 total_command_grant_latency = 0;
+   W64 total_command_bus_latency = 0;
+
+  // bus activity classification
+//    foreach (i , Memory::NUM_BUS_COMMANDS){
+//      if(!stats.memory.bus.command_count[i]) stats.memory.bus.command_count[i]=1; 
+//      ptl_logfile << Memory::BusCommandName[i], "_count ", stats.memory.bus.command_count[i], endl;
+//      int grant_latency =  double (stats.memory.bus.command_grant_latency[i]) / double (stats.memory.bus.command_count[i]);
+//      // delay wait for bus.
+//      ptl_logfile << Memory::BusCommandName[i], "_grant_latency ", grant_latency, endl;
+//      int bus_latency =  double (stats.memory.bus.command_bus_latency[i]) / double (stats.memory.bus.command_count[i]);
+//      // delay after bus granted.
+//      ptl_logfile << Memory::BusCommandName[i], "_bus_latency ", bus_latency, endl;
+
+//      if(i == Memory::BUS_COMMAND_RD){
+//        ptl_logfile << " L2_read_miss_latency ", grant_latency+bus_latency, endl;
+//      }
+
+//      if(i == Memory::BUS_COMMAND_RDX){
+//        ptl_logfile << " L2_write_miss_latency ", grant_latency+bus_latency, endl;
+//      }
+
+//      if(i == Memory::BUS_COMMAND_WB){
+//        ptl_logfile << " L2_write_back_latency ", grant_latency+bus_latency, endl;
+//      }
+
+//      if(i == Memory::BUS_COMMAND_UPGR){
+//        ptl_logfile << " L2_write_upgrade_latency ", grant_latency+bus_latency, endl;
+//      }
+
+//      total_bus_command += stats.memory.bus.command_count[i];
+//      total_command_bus_latency += stats.memory.bus.command_bus_latency[i];
+//      total_command_grant_latency += stats.memory.bus.command_grant_latency[i];
+//    }
+   
+   foreach (i , Memory::NUM_BUS_COMMANDS){
+     if(!stats.memory.bus.command_count[i]) stats.memory.bus.command_count[i]=1; 
+     ptl_logfile << "total_",Memory::BusCommandName[i], "_count ", stats.memory.bus.command_count[i], endl;
+     int grant_latency =  double (stats.memory.bus.command_grant_latency[i]) / double (stats.memory.bus.command_count[i]);
+     // delay wait for bus.
+     ptl_logfile << "average_",Memory::BusCommandName[i], "_grant_latency ", grant_latency, endl;
+     int bus_latency =  double (stats.memory.bus.command_bus_latency[i]) / double (stats.memory.bus.command_count[i]);
+     // delay after bus granted.
+     ptl_logfile << "average_",Memory::BusCommandName[i], "_bus_latency ", bus_latency, endl;
+
+
+     total_bus_command += stats.memory.bus.command_count[i];
+     total_command_bus_latency += stats.memory.bus.command_bus_latency[i];
+     total_command_grant_latency += stats.memory.bus.command_grant_latency[i];
+   }
+
+   foreach (j , Memory::NUM_BUS_COMMANDS){
+     W64 total_miss_lat = stats.memory.bus.command_grant_latency[j] + stats.memory.bus.command_bus_latency[j];
+     ptl_logfile << " L2_miss", Memory::BusCommandName[j], "_latency ", total_miss_lat, endl;
+     ptl_logfile << " L2_miss", Memory::BusCommandName[j], "_latency_percentage ", (total_miss_lat *100.0) / ((total_command_grant_latency + total_command_bus_latency) * 1.0), endl;
+   }
+
+  // bus command latency average 
+   ptl_logfile << "average_bus_grant_latency ", double(total_command_grant_latency) / double(total_bus_command), endl;
+   ptl_logfile << "average_bus_latency ", double(total_command_bus_latency) / double(total_bus_command), endl;
+   ptl_logfile << "average_bus_total_latency ", double(total_command_grant_latency + total_command_bus_latency) / double(total_bus_command), endl;
+#endif // NEW_CACHE
+}
+
+
+bool ptl_simulate() {
+	PTLsimMachine* machine = null;
+	char* machinename = config.core_name;
+	if likely (current_machine != null) {
+		machine = current_machine;
+	} else {
+		machine = PTLsimMachine::getmachine(machinename);
+	}
+
+	if (!machine) {
+		ptl_logfile << "Cannot find core named '", machinename, "'", endl;
+		cerr << "Cannot find core named '", machinename, "'", endl;
+		return 0;
+	}
+
+	if (!machine->initialized) {
+		ptl_logfile << "Initializing core '", machinename, "'", endl;
+		if (!machine->init(config)) {
+			ptl_logfile << "Cannot initialize core model; check its configuration!", endl;
+			return 0;
+		}
+		machine->initialized = 1;
+
+		ptl_logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
+		cerr <<  "Switching to simulation core '", machinename, "'...", endl, flush;
+		ptl_logfile << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
+		cerr << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
+
+		// Update stats every half second:
+		ticks_per_update = seconds_to_ticks(0.2);
+		//ticks_per_update = seconds_to_ticks(0.1);
+		last_printed_status_at_ticks = 0;
+		last_printed_status_at_user_insn = 0;
+		last_printed_status_at_cycle = 0;
+
+		tsc_at_start = rdtsc();
+		current_machine = machine;
+	}
+
+	machine->run(config);
+
+	if (!machine->stopped) {
+		return 1;  // Tell QEMU that we will come back to simulate
+	}
+
+	W64 tsc_at_end = rdtsc();
+	machine->update_stats(stats);
+	current_machine = null;
+
+	W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
+	stats.elapse_seconds = seconds;
+	stringbuf sb;
+	sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_user_insns_committed, " instructions and ",
+	   seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_user_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_user_insns_committed) / double(sim_cycle), ")", endl;
+
+	ptl_logfile << sb, flush;
+	cerr << sb, flush;
+
+	if (config.dumpcode_filename.set()) {
+		//    byte insnbuf[256];
+		//    PageFaultErrorCode pfec;
+		//    Waddr faultaddr;
+		//    Waddr rip = contextof(0).eip;
+		//    int n = contextof(0).copy_from_user(insnbuf, rip, sizeof(insnbuf), pfec, faultaddr);
+		//    ptl_logfile << "Saving ", n, " bytes from rip ", (void*)rip, " to ", config.dumpcode_filename, endl, flush;
+		//    ostream(config.dumpcode_filename).write(insnbuf, n);
+	}
+
+#ifdef PTLSIM_HYPERVISOR
+	last_printed_status_at_ticks = 0;
+	update_progress();
+	cerr << endl;
+#endif
+	print_stats_in_log();
+
+	return 0;
+}
 
 void update_progress() {
   W64 ticks = rdtsc();
@@ -626,7 +888,7 @@ void update_progress() {
 //        const char* runstate_name = (inrange(ctx.runstate.state, 0, lengthof(runstate_names)-1)) ? runstate_names[ctx.runstate.state] : "???";
 
 		  static const char* runstate_names[] = {"stopped", "running"};
-		  const char* runstate_name = (inrange(ctx.running, 0, CONTEXT_RUNNING)) ? runstate_names[ctx.running] : "???";
+		  const char* runstate_name = runstate_names[ctx.running];
 
 //        sb << " (", runstate_name, ":",ctx.runstate.state, ")";
         sb << " (", runstate_name, ":",ctx.running, ")";
@@ -636,12 +898,12 @@ void update_progress() {
         continue;
       }
 #endif
-      sb << ' ', (void*)contextof(i).commitarf[REG_rip];
+      sb << ' ', (void*)contextof(i).eip;
     }
 
     while (sb.size() < 160) sb << ' ';
 
-    logfile << sb, endl, flush;
+    ptl_logfile << sb, endl, flush;
     //#ifdef PTLSIM_HYPERVISOR
     cerr << "\r  ", sb, flush;
     //#endif
@@ -664,175 +926,27 @@ void update_progress() {
 
 
 
-// print selected stats to log for average of all cores
-void print_stats_in_log(){
-  
-
-#ifdef PTLSIM_HYPERVISOR
-  // 1. execution key stats:
-  // uops_in_mode: kernel and user
-  logfile << " kernel-insns ", (stats.external.insns_in_mode.kernel64 * 100.0) / total_user_insns_committed, endl;
-  logfile << " user-insns ", (stats.external.insns_in_mode.user64 * 100.0) / total_user_insns_committed, endl;
-  // cycles_in_mode: kernel and user
-  logfile << " kernel-cycles ", (stats.external.cycles_in_mode.kernel64 * 100.0) / sim_cycle, endl;
-  logfile << " user-cycles ", (stats.external.cycles_in_mode.user64 * 100.0) / sim_cycle, endl;
-#endif
-  //#define OPCLASS_BRANCH                  (OPCLASS_COND_BRANCH|OPCLASS_INDIR_BRANCH|OPCLASS_UNCOND_BRANCH|OPCLASS_ASSIST)
-
-  //#define OPCLASS_LOAD                    (1 << 11)
-  //#define OPCLASS_STORE                   (1 << 12)
-
-  // opclass: load, store, branch,
-  W64 total_uops = stats.ooocore_context_total.commit.uops;
-  logfile << " total_uop ", total_uops, endl;
-
-  logfile << " total_load ", stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)], endl;
-  logfile << " load_percentage ", (stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)] * 100.0 )/ (total_uops * 1.0), endl;
-  logfile << " total_store ", stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)], endl;
-  logfile << " store_percentage ", (stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)] * 100.0)/(total_uops * 1.0), endl;
-  logfile << " total_branch ", stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)], endl;
-  logfile << " branch_percentage ", (stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)] * 100.0)/(total_uops * 1.0), endl;
-  // branch prediction accuracy
-  logfile << " branch-accuracy ", double (stats.ooocore_context_total.branchpred.cond[1] * 100.0)/double (stats.ooocore_context_total.branchpred.cond[0] + stats.ooocore_context_total.branchpred.cond[1]), endl;
-
-  // 2. simulation speed: 
-  logfile << " elapse_seconds ", stats.elapse_seconds, endl;
-  // CPS : number of similated cycle per second
-  logfile << " CPS ",  W64(double(sim_cycle) / double(stats.elapse_seconds)), endl;
-  // IPS : number of instruction commited per second
-  logfile << " IPS ", W64(double(total_user_insns_committed) / double(stats.elapse_seconds)), endl;
-
-  // 3. performance:
-  // IPC : number of instruction per second
-  logfile << " total_cycle ", sim_cycle, endl;
-  logfile << " per_vcpu_IPC ", stats.ooocore_context_total.commit.ipc, endl;
-  logfile << " total_IPC ",  double(total_user_insns_committed) / double(sim_cycle), endl;
-
-  // 4. internconnection related 
-  struct CacheStats::cpurequest::count &count_L1I = stats.memory.total.L1I.cpurequest.count;
-  W64 hit_L1I = count_L1I.hit.read.hit.hit + count_L1I.hit.read.hit.forward +  count_L1I.hit.write.hit.hit + count_L1I.hit.write.hit.forward;
-  W64 miss_L1I = count_L1I.miss.read +  count_L1I.miss.write;
-  logfile << " L1I_hit_rate ", double(hit_L1I * 100.0) / double (hit_L1I + miss_L1I), endl;
-
-  struct CacheStats::cpurequest::count &count_L1D = stats.memory.total.L1D.cpurequest.count;
-  W64 hit_L1D = count_L1D.hit.read.hit.hit + count_L1D.hit.read.hit.forward +  count_L1D.hit.write.hit.hit + count_L1D.hit.write.hit.forward;
-  W64 miss_L1D = count_L1D.miss.read +  count_L1D.miss.write;
-  logfile << " L1D_hit_rate ", double(hit_L1D * 100.0) / double (hit_L1D + miss_L1D), endl;
-
-  struct CacheStats::cpurequest::count &count_L2 = stats.memory.total.L2.cpurequest.count;
-  W64 hit_L2 = count_L2.hit.read.hit.hit + count_L2.hit.read.hit.forward +  count_L2.hit.write.hit.hit + count_L2.hit.write.hit.forward;
-  W64 miss_L2 = count_L2.miss.read +  count_L2.miss.write;
-  logfile << " L2_hit_rate ", double(hit_L2 * 100.0) / double (hit_L2 + miss_L2), endl;
-
-  // average load latency
-  logfile << " L1I_IF_latency ", double (stats.memory.total.L1I.latency.IF) / double (stats.memory.total.L1I.lat_count.IF), endl;
-  logfile << " L1D_load_latency ", double (stats.memory.total.L1D.latency.load) / double (stats.memory.total.L1D.lat_count.load), endl;
-  logfile << " L1_read_latency ", double (stats.memory.total.L1I.latency.IF + stats.memory.total.L1D.latency.load) / double (stats.memory.total.L1I.lat_count.IF + stats.memory.total.L1D.lat_count.load), endl;
-  logfile << " L1D_store_latency ", double (stats.memory.total.L1D.latency.store) / double (stats.memory.total.L1D.lat_count.store), endl;
-
-  logfile << " L2_IF_latency ", double (stats.memory.total.L2.latency.IF) / double (stats.memory.total.L2.lat_count.IF), endl;
-  logfile << " L2_load_latency ", double (stats.memory.total.L2.latency.load) / double (stats.memory.total.L2.lat_count.load), endl;
-  logfile << " L2_read_latency ", double (stats.memory.total.L2.latency.IF + stats.memory.total.L2.latency.load) / double (stats.memory.total.L2.lat_count.IF + stats.memory.total.L2.lat_count.load), endl;
-  logfile << " L2_store_latency ", double (stats.memory.total.L2.latency.store) / double (stats.memory.total.L2.lat_count.store), endl;
-
-  // average load miss latency
-   logfile << " L1_read_miss_latency ", double (stats.memory.total.L1I.latency.IF + stats.memory.total.L1D.latency.load) / double (count_L1I.miss.read +  count_L2.miss.read), endl;
-   logfile << " L1_write_miss_latency ", double (stats.memory.total.L1D.latency.store) / double (count_L1D.miss.write), endl;
-
-  
-#ifndef NEW_CACHE
-  // bus utilization
-   logfile << " atomic_bus_utilization ", double (stats.memory.bus.atomic_utilization[Memory::BUS_DES_BUSY] * 100.0) / double (  stats.memory.bus.atomic_utilization[Memory::BUS_DES_FREE] +  stats.memory.bus.atomic_utilization[Memory::BUS_DES_BUSY] + 1), endl; 
-   logfile << " addr_bus_utilization ", double (stats.memory.bus.addr_utilization[Memory::BUS_DES_BUSY] * 100.0) / double (  stats.memory.bus.addr_utilization[Memory::BUS_DES_FREE] +  stats.memory.bus.addr_utilization[Memory::BUS_DES_BUSY] +1), endl; 
-   logfile << " data_bus_utilization ", double (stats.memory.bus.data_utilization[Memory::BUS_DES_BUSY] * 100.0) / double (  stats.memory.bus.data_utilization[Memory::BUS_DES_FREE] +  stats.memory.bus.data_utilization[Memory::BUS_DES_BUSY] +1), endl; 
-
-   W64 total_bus_command = 0;
-   W64 total_command_grant_latency = 0;
-   W64 total_command_bus_latency = 0;
-
-  // bus activity classification
-//    foreach (i , Memory::NUM_BUS_COMMANDS){
-//      if(!stats.memory.bus.command_count[i]) stats.memory.bus.command_count[i]=1; 
-//      logfile << Memory::BusCommandName[i], "_count ", stats.memory.bus.command_count[i], endl;
-//      int grant_latency =  double (stats.memory.bus.command_grant_latency[i]) / double (stats.memory.bus.command_count[i]);
-//      // delay wait for bus.
-//      logfile << Memory::BusCommandName[i], "_grant_latency ", grant_latency, endl;
-//      int bus_latency =  double (stats.memory.bus.command_bus_latency[i]) / double (stats.memory.bus.command_count[i]);
-//      // delay after bus granted.
-//      logfile << Memory::BusCommandName[i], "_bus_latency ", bus_latency, endl;
-
-//      if(i == Memory::BUS_COMMAND_RD){
-//        logfile << " L2_read_miss_latency ", grant_latency+bus_latency, endl;
-//      }
-
-//      if(i == Memory::BUS_COMMAND_RDX){
-//        logfile << " L2_write_miss_latency ", grant_latency+bus_latency, endl;
-//      }
-
-//      if(i == Memory::BUS_COMMAND_WB){
-//        logfile << " L2_write_back_latency ", grant_latency+bus_latency, endl;
-//      }
-
-//      if(i == Memory::BUS_COMMAND_UPGR){
-//        logfile << " L2_write_upgrade_latency ", grant_latency+bus_latency, endl;
-//      }
-
-//      total_bus_command += stats.memory.bus.command_count[i];
-//      total_command_bus_latency += stats.memory.bus.command_bus_latency[i];
-//      total_command_grant_latency += stats.memory.bus.command_grant_latency[i];
-//    }
-   
-   foreach (i , Memory::NUM_BUS_COMMANDS){
-     if(!stats.memory.bus.command_count[i]) stats.memory.bus.command_count[i]=1; 
-     logfile << "total_",Memory::BusCommandName[i], "_count ", stats.memory.bus.command_count[i], endl;
-     int grant_latency =  double (stats.memory.bus.command_grant_latency[i]) / double (stats.memory.bus.command_count[i]);
-     // delay wait for bus.
-     logfile << "average_",Memory::BusCommandName[i], "_grant_latency ", grant_latency, endl;
-     int bus_latency =  double (stats.memory.bus.command_bus_latency[i]) / double (stats.memory.bus.command_count[i]);
-     // delay after bus granted.
-     logfile << "average_",Memory::BusCommandName[i], "_bus_latency ", bus_latency, endl;
-
-
-     total_bus_command += stats.memory.bus.command_count[i];
-     total_command_bus_latency += stats.memory.bus.command_bus_latency[i];
-     total_command_grant_latency += stats.memory.bus.command_grant_latency[i];
-   }
-
-   foreach (j , Memory::NUM_BUS_COMMANDS){
-     W64 total_miss_lat = stats.memory.bus.command_grant_latency[j] + stats.memory.bus.command_bus_latency[j];
-     logfile << " L2_miss", Memory::BusCommandName[j], "_latency ", total_miss_lat, endl;
-     logfile << " L2_miss", Memory::BusCommandName[j], "_latency_percentage ", (total_miss_lat *100.0) / ((total_command_grant_latency + total_command_bus_latency) * 1.0), endl;
-   }
-
-  // bus command latency average 
-   logfile << "average_bus_grant_latency ", double(total_command_grant_latency) / double(total_bus_command), endl;
-   logfile << "average_bus_latency ", double(total_command_bus_latency) / double(total_bus_command), endl;
-   logfile << "average_bus_total_latency ", double(total_command_grant_latency + total_command_bus_latency) / double(total_bus_command), endl;
-#endif // NEW_CACHE
-
-}
-
 bool simulate(const char* machinename) {
   PTLsimMachine* machine = PTLsimMachine::getmachine(machinename);
 
   if (!machine) {
-    logfile << "Cannot find core named '", machinename, "'", endl;
+    ptl_logfile << "Cannot find core named '", machinename, "'", endl;
     cerr << "Cannot find core named '", machinename, "'", endl;
     return 0;
   }
 
   if (!machine->initialized) {
-    logfile << "Initializing core '", machinename, "'", endl;
+    ptl_logfile << "Initializing core '", machinename, "'", endl;
     if (!machine->init(config)) {
-      logfile << "Cannot initialize core model; check its configuration!", endl;
+      ptl_logfile << "Cannot initialize core model; check its configuration!", endl;
       return 0;
     }
     machine->initialized = 1;
   }
 
-  logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
+  ptl_logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
   cerr <<  "Switching to simulation core '", machinename, "'...", endl, flush;
-  logfile << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
+  ptl_logfile << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
   cerr << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
 
   // Update stats every half second:
@@ -855,17 +969,17 @@ bool simulate(const char* machinename) {
   sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_user_insns_committed, " instructions and ",
     seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_user_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_user_insns_committed) / double(sim_cycle), ")", endl;
 
-  logfile << sb, flush;
+  ptl_logfile << sb, flush;
   cerr << sb, flush;
 
   if (config.dumpcode_filename.set()) {
-    byte insnbuf[256];
-    PageFaultErrorCode pfec;
-    Waddr faultaddr;
-    Waddr rip = contextof(0).commitarf[REG_rip];
-    int n = contextof(0).copy_from_user(insnbuf, rip, sizeof(insnbuf), pfec, faultaddr);
-    logfile << "Saving ", n, " bytes from rip ", (void*)rip, " to ", config.dumpcode_filename, endl, flush;
-    ostream(config.dumpcode_filename).write(insnbuf, n);
+//    byte insnbuf[256];
+//    PageFaultErrorCode pfec;
+//    Waddr faultaddr;
+//    Waddr rip = contextof(0).eip;
+//    int n = contextof(0).copy_from_user(insnbuf, rip, sizeof(insnbuf), pfec, faultaddr);
+//    ptl_logfile << "Saving ", n, " bytes from rip ", (void*)rip, " to ", config.dumpcode_filename, endl, flush;
+//    ostream(config.dumpcode_filename).write(insnbuf, n);
   }
 
 #ifdef PTLSIM_HYPERVISOR

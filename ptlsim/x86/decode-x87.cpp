@@ -5,11 +5,13 @@
 // Copyright 1999-2008 Matt T. Yourst <yourst@yourst.com>
 //
 
-#include <cpu.h>
-#include <helper.h>
+//#include <cpu.h>
 
 #include <decode.h>
 
+#include <helper.h>
+
+#include <math.h>
 //
 // x87 assists
 //
@@ -25,19 +27,23 @@ void assist_x87_fprem(Context& ctx) {
 
 #define make_two_input_x87_func_with_pop(name, expr) \
 void assist_x87_##name(Context& ctx) { \
-  W64& tos = ctx.fpstt; \
-  W64& st0 = ctx.fpregs[tos >> 3]; \
-  W64& st1 = ctx.fpregs[((tos >> 3) + 1) & 0x7]; \
-  SSEType st0u(st0); SSEType st1u(st1); \
-  (expr); \
-  st1 = st1u.w64; \
-  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus; \
-  sw->c1 = 0; sw->c2 = 0; \
-  ctx.fptags[tos] = 0; \
-  /*clearbit(ctx.commitarf[REG_fptags], tos);*/ \
-  tos = (tos + 8) & FP_STACK_MASK; \
-  ctx.eip = ctx.reg_nextrip; \
+	ctx.setup_qemu_switch(); \
+	helper_##name(); \
+	ctx.eip = ctx.reg_nextrip; \
 }
+//  W64& tos = (W64&)ctx.fpstt; \
+//  W64& st0 = (W64&)ctx.fpregs[tos >> 3]; \
+//  W64& st1 = (W64&)ctx.fpregs[((tos >> 3) + 1) & 0x7]; \
+//  SSEType st0u(st0); SSEType st1u(st1); \
+//  (expr); \
+//  st1 = st1u.w64; \
+//  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus; \
+//  sw->c1 = 0; sw->c2 = 0; \
+//  ctx.fptags[tos] = 0; \
+//  /*clearbit(ctx.commitarf[REG_fptags], tos);*/ \
+//  tos = (tos + 8) & FP_STACK_MASK; \
+//  ctx.eip = ctx.reg_nextrip; \
+//}
 
 // Fix macro problems:
 #define old_log2 log2
@@ -80,11 +86,11 @@ make_two_input_x87_func_with_pop(fyl2xp1, st1u.d = x87_fyl2xp1(st1u.d, st0u.d));
 make_two_input_x87_func_with_pop(fpatan, st1u.d = x87_fpatan(st1u.d, st0u.d));
 
 void assist_x87_fscale(Context& ctx) {
-  W64& tos = ctx.fpstt;
-  W64& st0 = ctx.fpregs[tos >> 3];
-  W64& st1 = ctx.fpregs[((tos >> 3) + 1) & 0x7];
+  W64& tos = (W64&)ctx.fpstt;
+  W64& st0 = (W64&)ctx.fpregs[tos >> 3];
+  W64& st1 = (W64&)ctx.fpregs[((tos >> 3) + 1) & 0x7];
   SSEType st0u(st0); SSEType st1u(st1);
-  st0u.d = st0u.d * math::exp2(math::trunc(st1u.d));
+  st0u.d = st0u.d * exp2(trunc(st1u.d));
   st0 = st0u.w64;
   X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
   sw->c1 = 0; sw->c2 = 0;
@@ -95,104 +101,123 @@ void assist_x87_fscale(Context& ctx) {
 
 #define make_unary_x87_func(name, expr) \
 void assist_x87_##name(Context& ctx) { \
-  W64& r = ctx.fpregs[ctx.fpstt >> 3]; \
-  SSEType ra(r); ra.d = (expr); r = ra.w64; \
-  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus; \
-  sw->c1 = 0; sw->c2 = 0; \
-  ctx.eip = ctx.reg_nextrip; \
+	ctx.setup_qemu_switch(); \
+	helper_##name(); \
+	ctx.eip = ctx.reg_nextrip; \
 }
+//  W64& r = (W64&)ctx.fpregs[ctx.fpstt >> 3]; \
+//  SSEType ra(r); ra.d = (expr); r = ra.w64; \
+//  X87StatusWord* sw = (X87StatusWord*)&(ctx.fpus); \
+//  sw->c1 = 0; sw->c2 = 0; \
+//  ctx.eip = ctx.reg_nextrip; \
+//}
 
-make_unary_x87_func(fsqrt, math::sqrt(ra.d));
-make_unary_x87_func(fsin, math::sin(ra.d));
-make_unary_x87_func(fcos, math::cos(ra.d));
-make_unary_x87_func(f2xm1, math::exp2(ra.d) - 1);
+make_unary_x87_func(fsqrt, sqrt(ra.d));
+make_unary_x87_func(fsin, sin(ra.d));
+make_unary_x87_func(fcos, cos(ra.d));
+make_unary_x87_func(f2xm1, exp2(ra.d) - 1);
 
 void assist_x87_frndint(Context& ctx) {
-  W64& r = ctx.fpregs[ctx.fpstt >> 3];
-  SSEType ra(r);
-  switch (ctx.fpcw.rc) {
-  case 0: // round to nearest (round)
-    ra.d = math::round(ra.d); break;
-  case 1: // round down (floor)
-    ra.d = math::floor(ra.d); break;
-  case 2: // round up (ceil)
-    ra.d = math::ceil(ra.d); break;
-  case 3: // round towards zero (trunc)
-    ra.d = math::trunc(ra.d); break;
-  }
-  r = ra.w64;
-  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
-  sw->c1 = 0; sw->c2 = 0;
-  ctx.eip = ctx.reg_nextrip;
+	ctx.setup_qemu_switch();
+	helper_frndint();
+    ctx.eip = ctx.reg_nextrip;
 }
+//  W64& r = (W64&)ctx.fpregs[ctx.fpstt >> 3];
+//  SSEType ra(r);
+//  ra.d = floatx_round_to_int(ra.d, &ctx.fp_status);
+//  switch (ctx.fpuc.rc) {
+//  case 0: // round to nearest (round)
+//    ra.d = round(ra.d); break;
+//  case 1: // round down (floor)
+//    ra.d = floor(ra.d); break;
+//  case 2: // round up (ceil)
+//    ra.d = ceil(ra.d); break;
+//  case 3: // round towards zero (trunc)
+//    ra.d = trunc(ra.d); break;
+//  }
+//  r = ra.w64;
+//  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
+//  sw->c1 = 0; sw->c2 = 0;
+//  ctx.eip = ctx.reg_nextrip;
+//}
 
 #define make_two_output_x87_func_with_push(name, expr) \
 void assist_x87_##name(Context& ctx) { \
-  W64& tos = ctx.fpstt; \
-  W64& st0 = ctx.fpregs[tos >> 3]; \
-  W64& st1 = ctx.fpregs[((tos >> 3) - 1) & 0x7]; \
-  SSEType st0u(st0); SSEType st1u(st1); \
-  expr; \
-  st0 = st0u.w64; st1 = st1u.w64; \
-  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus; \
-  sw->c1 = 0; sw->c2 = 0; \
-  tos = (tos - 8) & FP_STACK_MASK; \
-  ctx.fptags[tos] = 1; \
-  /*setbit(ctx.commitarf[REG_fptags], tos); */\
-  ctx.eip = ctx.reg_nextrip; \
+	ctx.setup_qemu_switch(); \
+	helper_##name(); \
+	ctx.eip = ctx.reg_nextrip; \
 }
+//  W64& tos = ctx.fpstt; \
+//  W64& st0 = ctx.fpregs[tos >> 3]; \
+//  W64& st1 = ctx.fpregs[((tos >> 3) - 1) & 0x7]; \
+//  SSEType st0u(st0); SSEType st1u(st1); \
+//  expr; \
+//  st0 = st0u.w64; st1 = st1u.w64; \
+//  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus; \
+//  sw->c1 = 0; sw->c2 = 0; \
+//  tos = (tos - 8) & FP_STACK_MASK; \
+//  ctx.fptags[tos] = 1; \
+//  /*setbit(ctx.commitarf[REG_fptags], tos); */\
+//  ctx.eip = ctx.reg_nextrip; \
+//}
 
 // st(0) = sin(st(0)) and push cos(orig st(0))
-make_two_output_x87_func_with_push(fsincos, (st1u.d = math::cos(st0u.d), st0u.d = math::sin(st0u.d)));
+make_two_output_x87_func_with_push(fsincos, (st1u.d = cos(st0u.d), st0u.d = sin(st0u.d)));
 
 // st(0) = tan(st(0)) and push value 1.0
-make_two_output_x87_func_with_push(fptan, (st1u.d = 1.0, st0u.d = math::tan(st0u.d)));
+make_two_output_x87_func_with_push(fptan, (st1u.d = 1.0, st0u.d = tan(st0u.d)));
 
-make_two_output_x87_func_with_push(fxtract, (st1u.d = math::significand(st0u.d), st0u.d = math::ilogb(st0u.d)));
+make_two_output_x87_func_with_push(fxtract, (st1u.d = significand(st0u.d), st0u.d = ilogb(st0u.d)));
 
 void assist_x87_fprem1(Context& ctx) {
-  W64& tos = ctx.fpstt;
-  W64& st0 = ctx.fpregs[tos >> 3];
-  W64& st1 = ctx.fpregs[((tos >> 3) - 1) & 0x7];
-  SSEType st0u(st0); SSEType st1u(st1);
-
-  X87StatusWord fpsw;
-  asm("fldl %[st1]; fldl %[st0]; fprem1; fstsw %%ax; fstpl %[st0]; ffree %%st(0); fincstp;" : [st0] "+m" (st0u.d), "=a" (*(W16*)&fpsw) : [st1] "m" (st1u.d));
-  st0 = st0u.w64;
-
-  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
-  sw->c0 = fpsw.c0;
-  sw->c1 = fpsw.c1;
-  sw->c2 = fpsw.c2;
-  sw->c3 = fpsw.c3;
-  ctx.eip = ctx.reg_nextrip;
+	ctx.setup_qemu_switch();
+	helper_fprem1();
+	ctx.eip = ctx.reg_nextrip;
 }
+//  W64& tos = ctx.fpstt;
+//  W64& st0 = ctx.fpregs[tos >> 3];
+//  W64& st1 = ctx.fpregs[((tos >> 3) - 1) & 0x7];
+//  SSEType st0u(st0); SSEType st1u(st1);
+//
+//  X87StatusWord fpsw;
+//  asm("fldl %[st1]; fldl %[st0]; fprem1; fstsw %%ax; fstpl %[st0]; ffree %%st(0); fincstp;" : [st0] "+m" (st0u.d), "=a" (*(W16*)&fpsw) : [st1] "m" (st1u.d));
+//  st0 = st0u.w64;
+//
+//  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
+//  sw->c0 = fpsw.c0;
+//  sw->c1 = fpsw.c1;
+//  sw->c2 = fpsw.c2;
+//  sw->c3 = fpsw.c3;
+//  ctx.eip = ctx.reg_nextrip;
+//}
 
 void assist_x87_fxam(Context& ctx) {
-  W64& r = ctx.fpregs[ctx.fpstt >> 3];
-  SSEType ra(r);
-
-  X87StatusWord fpsw;
-  asm("fxam; fstsw %%ax" : "=a" (*(W16*)&fpsw) : "t" (ra.d));
-
-  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
-  sw->c0 = fpsw.c0;
-  sw->c1 = fpsw.c1;
-  sw->c2 = fpsw.c2;
-  sw->c3 = fpsw.c3;
-  ctx.eip = ctx.reg_nextrip;
+	ctx.setup_qemu_switch();
+	helper_fxam_ST0();
+	ctx.eip = ctx.reg_nextrip;
 }
+//  W64& r = ctx.fpregs[ctx.fpstt >> 3];
+//  SSEType ra(r);
+//
+//  X87StatusWord fpsw;
+//  asm("fxam; fstsw %%ax" : "=a" (*(W16*)&fpsw) : "t" (ra.d));
+//
+//  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
+//  sw->c0 = fpsw.c0;
+//  sw->c1 = fpsw.c1;
+//  sw->c2 = fpsw.c2;
+//  sw->c3 = fpsw.c3;
+//  ctx.eip = ctx.reg_nextrip;
+//}
 
 // We need a general purpose "copy from user virtual addresses" function
 
 void assist_x87_fld80(Context& ctx) {
   // Virtual address is in sr2
   Waddr addr = ctx.reg_ar1;
-//  X87Reg data;
-  CPU86_LDoubleU data;
 
   ctx.setup_qemu_switch();
-  data = helper_fldt(addr);
+  helper_fldt_ST0(addr);
 
 //  PageFaultErrorCode pfec;
 //  Waddr faultaddr;
@@ -205,27 +230,20 @@ void assist_x87_fld80(Context& ctx) {
 //  }
 //
 
-  // Avadh: Check the conversation from CPU86_LDoubleU to X87Reg
-  // Push on stack
-  W64& tos = ctx.fpstt;
-  tos = (tos - 8) & FP_STACK_MASK;
-  ctx.fpregs[tos >> 3] = x87_fp_80bit_to_64bit((X87Reg*)&data);
-// setbit(ctx.commitarf[REG_fptags], tos);
-  ctx.fptags[tos] = 1; 
   ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_x87_fstp80(Context& ctx) {
   // Store and pop from stack
-  W64& tos = ctx.fpstt;
-  CPU86_LDoubleU data;
-  x87_fp_64bit_to_80bit((X87Reg*)&data, ctx.fpregs[tos >> 3]);
+//  W64& tos = ctx.fpstt;
+//  CPU86_LDoubleU data;
+//  x87_fp_64bit_to_80bit((X87Reg*)&data, ctx.fpregs[tos >> 3]);
 
   // Virtual address is in sr2
   Waddr addr = ctx.reg_ar1;
 
   ctx.setup_qemu_switch();
-  helper_fstt(data, addr);
+  helper_fstt_ST0(addr);
 
 //  PageFaultErrorCode pfec;
 //  Waddr faultaddr;
@@ -238,8 +256,8 @@ void assist_x87_fstp80(Context& ctx) {
 //  }
 
 //  clearbit(ctx.commitarf[REG_fptags], tos);
-  ctx.fptags[tos] = 0; 
-  tos = (tos + 8) & FP_STACK_MASK;
+//  ctx.fptags[tos] = 0; 
+//  tos = (tos + 8) & FP_STACK_MASK;
   ctx.eip = ctx.reg_nextrip;
 }
 
@@ -256,22 +274,26 @@ void assist_x87_frstor(Context& ctx) {
 }
 
 void assist_x87_fclex(Context& ctx) {
-  X87StatusWord fpsw = ctx.fpus;
-  fpsw.pe = 0;
-  fpsw.ue = 0;
-  fpsw.oe = 0;
-  fpsw.ze = 0;
-  fpsw.de = 0;
-  fpsw.ie = 0;
-  fpsw.sf = 0;
-  fpsw.es = 0;
-  fpsw.b = 0;
-  ctx.fpus = fpsw;
-  ctx.eip = ctx.reg_nextrip;
+	ctx.setup_qemu_switch();
+	helper_fclex();
+	ctx.eip = ctx.reg_nextrip;
 }
+//  X87StatusWord fpsw = ctx.fpus;
+//  fpsw.pe = 0;
+//  fpsw.ue = 0;
+//  fpsw.oe = 0;
+//  fpsw.ze = 0;
+//  fpsw.de = 0;
+//  fpsw.ie = 0;
+//  fpsw.sf = 0;
+//  fpsw.es = 0;
+//  fpsw.b = 0;
+//  ctx.fpus = fpsw;
+//  ctx.eip = ctx.reg_nextrip;
+//}
 
 void assist_x87_finit(Context& ctx) {
-  ctx.fpcw = 0x037f;
+  ctx.fpuc = 0x037f;
   ctx.fpus = 0;
 //  ctx.commitarf[REG_fptags] = 0;
   foreach(i, 8) {
@@ -365,7 +387,7 @@ void check_warned_about_x87() {
       "// that you recompile the program with SSE/SSE2 support and/or update", endl,
       "// the standard libraries (libc, libm) to an SSE/SSE2-specific version.", endl, 
       "//", endl, endl;
-    logfile << sb;
+    ptl_logfile << sb;
     cerr << sb;
   }
 }
@@ -669,7 +691,7 @@ bool TraceDecoder::decode_x87() {
       DECODE(eform, ra, w_mode);
       EndOfDecode();
       operand_load(REG_temp1, ra, OP_ld);
-      TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, REG_temp1, 1, offsetof(Context, fpuc)); stp.internal = 1; this << stp;
+      TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, REG_temp1, 1, offsetof_t(Context, fpuc)); stp.internal = 1; this << stp;
     }
     break;
   }
@@ -698,7 +720,7 @@ bool TraceDecoder::decode_x87() {
       // fnstcw
       DECODE(eform, rd, w_mode);
       EndOfDecode();
-      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof(Context, fpuc)); ldp.internal = 1; this << ldp;
+      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof_t(Context, fpuc)); ldp.internal = 1; this << ldp;
       result_store(REG_temp1, REG_temp0, rd);
     }
     break;

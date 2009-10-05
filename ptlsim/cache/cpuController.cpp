@@ -52,9 +52,9 @@ bool CPUController::handle_interconnect_cb(void *arg)
 
 	CPUControllerQueueEntry *queueEntry = find_entry(message->request);
 	if(queueEntry == null) {
-		logfile << "Message received that is not for this queue\n";
-		logfile << "Message: ", *message, endl;
-		logfile << "Controler: ", get_name(), endl;
+		ptl_logfile << "Message received that is not for this queue\n";
+		ptl_logfile << "Message: ", *message, endl;
+		ptl_logfile << "Controler: ", get_name(), endl;
 		return true;
 	}
 	//assert(queueEntry);

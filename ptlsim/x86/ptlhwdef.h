@@ -10,9 +10,16 @@
 #define _PTLHWDEF_H
 
 extern "C" {
-//#include <exec.h>
 #include <cpu.h>
+//#include <exec.h>
+
+extern struct CPUX86State *env;
 }
+
+#define PTLSIM_VIRT_BASE 0x0000000000000000ULL // PML4 entry 0
+
+#define PTLSIM_FIRST_READ_ONLY_PAGE    0x10000ULL // 64KB: entry point rip
+
 
 //
 // NOTE: The first part of this file is included by assembly code,
@@ -371,7 +378,7 @@ struct X87RegPadded {
   byte pad[6];
 } packedstruct;
 
-struct XMMReg {
+struct XMMReg_t {
   W64 lo, hi;
 };
 
@@ -397,7 +404,7 @@ struct FXSAVEStruct {
   W32 mxcsr;
   W32 mxcsr_mask;
   X87RegPadded fpregs[8];
-  XMMReg xmmregs[16];
+  XMMReg_t xmmregs[16];
 };
 
 inline W64 x87_fp_80bit_to_64bit(const X87Reg* x87reg) {
@@ -539,7 +546,7 @@ enum {
   EXCEPTION_x86_debug           = EXCP01_DB,
   EXCEPTION_x86_nmi             = EXCP02_NMI,
   EXCEPTION_x86_breakpoint      = EXCP03_INT3,
-  EXCEPTION_x86_overflow        = EXCP04_INT0,
+  EXCEPTION_x86_overflow        = EXCP04_INTO,
   EXCEPTION_x86_bounds          = EXCP05_BOUND,
   EXCEPTION_x86_invalid_opcode  = EXCP06_ILLOP,
   EXCEPTION_x86_fpu_not_avail   = EXCP07_PREX,
@@ -552,7 +559,7 @@ enum {
   EXCEPTION_x86_page_fault      = EXCP0E_PAGE,
   EXCEPTION_x86_spurious_int    = 15,  // Not supported in QEMU
   EXCEPTION_x86_fpu             = EXCP10_COPR,
-  EXCEPTION_x86_unaligned       = EXCP11_ALIGN,
+  EXCEPTION_x86_unaligned       = EXCP11_ALGN,
   EXCEPTION_x86_machine_check   = EXCP12_MCHK,
   EXCEPTION_x86_sse             = 19,  // Not supported in QEMU
   EXCEPTION_x86_count           = 20,  // Not supported in QEMU
@@ -882,7 +889,7 @@ struct ContextBase {
 
 enum {
 	CONTEXT_STOPPED = 0,
-	CONTEXT_RUNNING
+	CONTEXT_RUNNING = 1,
 };
 
 struct Context: public CPUX86State {
@@ -906,6 +913,10 @@ struct Context: public CPUX86State {
   W64 reg_nextrip;
   W64 reg_ar1;
   W64 reg_ar2;
+  W64 invalid_reg;
+  W64 reg_zero;
+  W64 reg_ctx;
+  W64 reg_fptag;
 
   void change_runstate(int new_state) { running = new_state; }
 
@@ -932,13 +943,13 @@ struct Context: public CPUX86State {
 
   //int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec, Level1PTE& ptelo, Level1PTE& ptehi);
 
-  //int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = false) {
+  int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = false) ;
   //  Level1PTE ptelo;
   //  Level1PTE ptehi;
   //  return copy_from_user(target, source, bytes, pfec, faultaddr, forexec, ptelo, ptehi);
   //}
 
-  //int copy_from_user(void* target, Waddr source, int bytes) {
+  int copy_from_user(void* target, Waddr source, int bytes) ;
   //  PageFaultErrorCode pfec;
   //  Waddr faultaddr;
   //  return copy_from_user(target, source, bytes, pfec, faultaddr, false);
@@ -957,7 +968,7 @@ struct Context: public CPUX86State {
   //void fxsave(FXSAVEStruct& state);
   //void fxrstor(const FXSAVEStruct& state);
 
-  Context() { }
+  Context() : invalid_reg(-1), reg_zero(0), reg_ctx((Waddr)this) { }
 
 #ifdef PTLSIM_HYPERVISOR
   //void restorefrom(const vcpu_guest_context& ctx);
@@ -993,59 +1004,56 @@ struct Context: public CPUX86State {
 
   int page_table_level_count() const { return 4; }
 
-  W64 operator[](int index) {
-	  if unlikely (index < 0) {
-		  return (W64)-1;
-	  }
-	  else if likely (index < 16) {
-		  return (W64)(regs[index]);
+  W64& operator[](int index) {
+	  if likely (index < 16) {
+		  return (W64&)(regs[index]);
 	  }
 	  else if(index < 48) {
+		  int i = (index - 16) / 2;
 		  if(index % 2 == 0) {
-			  return (W64)(xmm_regs._d[0]);
+			  return (W64&)(xmm_regs[i]._d[0]);
 		  } else {
-			  return (W64)(xmm_regs._d[1]);
+			  return (W64&)(xmm_regs[i]._d[1]);
 		  }
 	  }
 	  else if(index == 48) {
-		  return (W64)(fpstt);
+		  return (W64&)fpstt;
 	  } 
 	  else if(index == 49) {
-		  return (W64)(fpus);
+		  return (W64&)fpus;
 	  } 
 	  else if(index == 50) {
-		  W64 ret = 0;
 		  foreach(i, 8) {
-			  ret |= ((W64(fptags[i])) << 8*i);
+			  reg_fptag |= ((W64(fptags[i])) << 8*i);
 		  }
-		  return ret;
+		  return reg_fptag;
 	  } 
 	  else if(index == 51) {
-		  return (W64((Waddr)&fpregs[0]));
+		  return (W64&)(fpregs[0]);
 	  } 
 	  else if(index == 52) {
 		  // Not implemented in Xen or anywhere else..
-		  return -1;
+		  return invalid_reg;
 	  } 
 	  else if(index == 53) {
 		  // Not implemented in Xen or anywhere else..
-		  return -1;
+		  return invalid_reg;
 	  } 
 	  else if(index == 54) {
 		  return reg_trace;
 	  } 
 	  else if(index == 55) {
-		  return (W64((Waddr)&this));
+		  return reg_ctx;
 	  } 
 	  else if(index == 56) {
-		  return (W64(eip));
+		  return (W64&)(eip);
 	  } 
 	  else if(index == 57) {
-		  return (W64(eflags));
+		  return (W64&)(eflags);
 	  } 
 	  else if(index == 58) {
 		  // Not implemented in Xen or anywhere else..
-		  return -1;
+		  return invalid_reg;
 	  } 
 	  else if(index == 59) {
 		  return reg_selfrip;
@@ -1060,14 +1068,14 @@ struct Context: public CPUX86State {
 		  return reg_ar2;
 	  } 
 	  else if(index == 63) {
-		  return 0;
+		  return reg_zero;
 	  } 
 
-	  return -1;
+	  return invalid_reg;
   }
 
   void update_mode(bool is_kernel) {
-	  kernel = is_kernel;
+	  kernel_mode = is_kernel;
   }
 
   void cs_segment_updated(SegmentCache *seg) {
@@ -1084,9 +1092,19 @@ struct Context: public CPUX86State {
 
 ostream& operator <<(ostream& os, const Context& ctx);
 
+static inline ostream& operator <<(ostream& os, const SegmentCache& seg) {
+	os << " selector [", seg.selector, "]";
+	os << " base [", seg.base, "]";
+	os << " limit [", seg.limit, "]";
+	os << " flags [", seg.flags, "]";
+	return os;
+}
+
 #ifndef PTLSIM_HYPERVISOR
 extern Context ctx; 
 #endif
+
+int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) ;
 
 // Other flags not defined above
 enum {
@@ -1699,6 +1717,22 @@ typedef void (*assist_func_t)(Context& ctx);
 
 const char* assist_name(assist_func_t func);
 int assist_index(assist_func_t func);
+
+// Self Modifying code Support with QEMU
+static inline bool smc_isdirty(Waddr page_addr) {
+	return cpu_physical_memory_is_dirty(page_addr);
+}
+
+static inline void smc_setdirty(Waddr page_addr) {
+	cpu_physical_memory_set_dirty(page_addr);
+}
+
+static inline void smc_cleardirty(Waddr page_addr) {
+	// This function will reset the page flags to be
+	// mark as protected for modification so that
+	// next write to code page will be detected
+	tlb_protect_code(page_addr);
+}
 
 
 //

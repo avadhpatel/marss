@@ -9,6 +9,8 @@
 
 using namespace superstl;
 
+#include <math.h>
+
 DataStoreNode* DataStoreNodeLinkManager::objof(selflistlink* link) {
   return baseof(DataStoreNode, hashlink, link);
 }
@@ -498,7 +500,7 @@ ostream& DataStoreNode::print(ostream& os, const DataStoreNodePrintSettings& pri
         }
 
         double average = double(weightedsum) / double(total);
-        W64 thresh = max((W64)math::ceil((double)total * printinfo.histogram_thresh), (W64)1);
+        W64 thresh = max((W64)ceil((double)total * printinfo.histogram_thresh), (W64)1);
         W64 base = histomin;
         int width = digits(max(histomin, histomax));
         int valuewidth = digits(maxvalue);
@@ -599,7 +601,7 @@ ostream& DataStoreNode::print(ostream& os, const DataStoreNodePrintSettings& pri
   }
 
   if (subnodes && (!hide_subnodes)) {
-    bool isint = ((selfsum - math::floor(selfsum)) < 0.0001);
+    bool isint = ((selfsum - floor(selfsum)) < 0.0001);
     if (summable) {
       os << " (total ";
       if (isint) os << (W64s)selfsum; else os << (double)selfsum; os << ")";
@@ -637,6 +639,16 @@ struct DataStoreNodeArrayHeader {
   W64 histostride;
 };
 
+static inline ostream& operator <<(ostream& os, DataStoreNodeArrayHeader& ah) {
+//	os.write(reinterpret_cast<char*>(ah.count), sizeof(ah.count));
+//	os.write(reinterpret_cast<char*>(ah.padding), sizeof(ah.padding));
+//	os.write(reinterpret_cast<char*>(ah.histomin), sizeof(ah.histomin));
+//	os.write(reinterpret_cast<char*>(ah.histomax), sizeof(ah.histomax));
+//	os.write(reinterpret_cast<char*>(ah.histostride), sizeof(ah.histostride));
+	os.write(reinterpret_cast<char*>(&ah), sizeof(ah));
+	return os;
+}
+
 struct DataStoreNodeHeader {
   W32 magic;
   byte type;
@@ -649,15 +661,20 @@ struct DataStoreNodeHeader {
   // (all subnodes)
 };
 
-DataStoreNode::DataStoreNode(idstream& is) {
+DataStoreNode::DataStoreNode(ifstream& is) {
   if (!read(is)) {
     init("INVALID", DS_NODE_TYPE_NULL, 0);
   }
 }
 
+static inline ostream& operator <<(ostream& os, DataStoreNodeHeader& dh) {
+	os.write(reinterpret_cast<char*>(&dh), sizeof(dh));
+	return os;
+}
+
 #define DSN_MAGIC_VER_3 0x334c5450 // 'PTL3'
 
-bool DataStoreNode::read(idstream& is) {
+bool DataStoreNode::read(ifstream& is) {
   DataStoreNodeHeader h;
   is >> h;
 
@@ -667,7 +684,7 @@ bool DataStoreNode::read(idstream& is) {
 
   if (h.magic != DSN_MAGIC_VER_3) {
     cerr << "DataStoreNode::read(): ERROR: stream does not have proper DSN version 2 header (0x", 
-      hexstring(h.magic, 32), ") at offset ", is.where(), endl, flush;
+      hexstring(h.magic, 32), ") at offset ", is.tellg(), endl, flush;
     return false;
   }
 
@@ -714,7 +731,7 @@ bool DataStoreNode::read(idstream& is) {
       is >> value.w;
     } else {
       values = new DataType[count];
-      is.read(values, count * sizeof(DataType));
+      is.read((char*)(values), count * sizeof(DataType));
     }
     break;
   }
@@ -723,7 +740,7 @@ bool DataStoreNode::read(idstream& is) {
       is >> value.f;
     } else {
       values = new DataType[count];
-      is.read(values, count * sizeof(DataType));
+      is.read((char*)values, count * sizeof(DataType));
     }
     break;
   }
@@ -754,7 +771,7 @@ bool DataStoreNode::read(idstream& is) {
   return is;
 }
 
-odstream& DataStoreNode::write(odstream& os) const {
+ostream& DataStoreNode::write(ostream& os) const {
   DataStoreNodeHeader h;
   DataStoreNodeArrayHeader ah;
 
@@ -801,7 +818,7 @@ odstream& DataStoreNode::write(odstream& os) const {
     if (count == 1) {
       os << value.w;
     } else {
-      os.write(values, count * sizeof(DataType));
+      os.write(reinterpret_cast<const char*>(&values), count * sizeof(DataType));
     }
     break;
   }
@@ -809,7 +826,7 @@ odstream& DataStoreNode::write(odstream& os) const {
     if (count == 1) {
       os << value.f;
     } else {
-      os.write(values, count * sizeof(DataType));
+      os.write(reinterpret_cast<const char*>(&values), count * sizeof(DataType));
     }
     break;
   }
@@ -824,7 +841,7 @@ odstream& DataStoreNode::write(odstream& os) const {
         int len = strlen(values[i].s);
         assert(len < 65536);
         os << (W16)len;
-        os.write(values[i].s, len+1);
+        os.write(reinterpret_cast<const char*>(&values[i].s), len+1);
       }
     }
     break;
@@ -977,10 +994,10 @@ ostream& DataStoreNodeTemplate::generate_struct_def(ostream& os, int depth) cons
 //
 // Write structural definition in binary format for use by ptlstats:
 //
-odstream& DataStoreNodeTemplate::write(odstream& os) const {
+ostream& DataStoreNodeTemplate::write(ostream& os) const {
   W16 n;
 
-  os.write((DataStoreNodeTemplateBase*)this, sizeof(DataStoreNodeTemplateBase));
+  os.write(reinterpret_cast<char*>((DataStoreNodeTemplateBase*)this), sizeof(DataStoreNodeTemplateBase));
 
   n = strlen(name); os << n; os.write(name, n);
 
@@ -1002,9 +1019,9 @@ odstream& DataStoreNodeTemplate::write(odstream& os) const {
 //
 // Read structural definition in binary format for use by ptlstats:
 //
-DataStoreNodeTemplate::DataStoreNodeTemplate(idstream& is) {
+DataStoreNodeTemplate::DataStoreNodeTemplate(ifstream& is) {
   // Fill in all static fields:
-  is.read(this, sizeof(DataStoreNodeTemplateBase));
+  is.read(reinterpret_cast<char*>(this), sizeof(DataStoreNodeTemplateBase));
   assert(magic == DataStoreNodeTemplateBase::MAGIC);
   assert(length == sizeof(DataStoreNodeTemplateBase));
 
@@ -1148,7 +1165,7 @@ void DataStoreNodeTemplate::subtract(W64*& p, W64*& psub) const {
 //
 void StatsFileWriter::open(const char* filename, const void* dst, size_t dstsize, int record_size) {
   close();
-  os.open(filename);
+  os.open(filename, std::ofstream::binary);
 
   namelist = null;
 
@@ -1162,14 +1179,14 @@ void StatsFileWriter::open(const char* filename, const void* dst, size_t dstsize
   header.index_count = 0; // filled in later
   os << header;
 
-  os.seek(header.template_offset);
-  os.write(dst, dstsize);
+  os.seekp(header.template_offset);
+  os.write(reinterpret_cast<const char*>(&dst), dstsize);
 
-  os.seek(header.record_offset);
+  os.seekp(header.record_offset);
 }
 
 void StatsFileWriter::write(const void* record, const char* name) {
-  if (!os.ok()) return;
+  if (!os.is_open()) return;
 
   if (name) {
     StatsIndexRecordLink* link = new StatsIndexRecordLink(next_uuid(), name);
@@ -1177,21 +1194,22 @@ void StatsFileWriter::write(const void* record, const char* name) {
     header.index_count++;
   }
 
-  os.write(record, header.record_size);
+  os.write(reinterpret_cast<const char*>(record), header.record_size);
   header.record_count++;
 }
 
 void StatsFileWriter::flush() {
-  if (!os.ok()) return;
+  if (!os.is_open()) return;
 
-  header.index_offset = os.where();
+  header.index_offset = os.tellp();
   assert(header.index_offset == (header.record_offset + (header.record_count * header.record_size)));
 
   StatsIndexRecordLink* namelink = namelist;
   int n = 0;
 
   while (namelink) {
-    os << namelink->uuid;
+//    os << (W64)(namelink->uuid);
+	os.write(reinterpret_cast<char*>(&namelink->uuid), sizeof(W64));
     W16 namelen = strlen(namelink->name) + 1;
     os << namelen;
     os.write(namelink->name, namelen);
@@ -1201,14 +1219,14 @@ void StatsFileWriter::flush() {
 
   assert(n == header.index_count);
 
-  os.seek(0);
+  os.seekp(0);
   os << header;
 
-  os.seek(header.record_offset + (header.record_count * header.record_size));
+  os.seekp(header.record_offset + (header.record_count * header.record_size));
 }
 
 void StatsFileWriter::close() {
-  if (!os.ok()) return;
+  if (!os.is_open()) return;
 
   flush();
 
@@ -1261,7 +1279,7 @@ bool StatsFileReader::open(const char* filename) {
   buf = new byte[header.record_size];
   bufsub = new byte[header.record_size];
 
-  is.seek(header.template_offset);
+  is.seekg(header.template_offset);
   dst = new DataStoreNodeTemplate(is);
 
   if ((!is) | (!dst)) {
@@ -1273,15 +1291,15 @@ bool StatsFileReader::open(const char* filename) {
   //
   // Read in the index
   //
-  is.seek(header.index_offset);
+  is.seekg(header.index_offset);
 
   foreach (i, header.index_count) {
     W64 uuid = 0;
     is >> uuid;
-    assert(is.ok());
+    assert(is.is_open());
     W16 namelen;
     is >> namelen;
-    assert(is.ok());
+    assert(is.is_open());
     if (namelen) {
       char* name = new char[namelen];
       is.read(name, namelen);
@@ -1289,7 +1307,7 @@ bool StatsFileReader::open(const char* filename) {
       delete[] name;
     }
 
-    assert(is.ok());
+    assert(is.is_open());
   }
 
   return true;
@@ -1299,9 +1317,10 @@ DataStoreNode* StatsFileReader::get(W64 uuid) {
   if unlikely (uuid >= header.record_count) return null;
   W64 offset = header.record_offset + (header.record_size * uuid);
 
-  is.seek(offset);
-
-  if unlikely (is.read(buf, header.record_size) != header.record_size) return null;
+  is.seekg(offset);
+  is.read(reinterpret_cast<char*>(buf), header.record_size);
+  int size = strlen(reinterpret_cast<char*>(buf));
+  if unlikely (size != header.record_size) return null;
 
   const W64* p = (const W64*)buf;
   DataStoreNode* dsn = dst->reconstruct(p);
@@ -1315,11 +1334,15 @@ DataStoreNode* StatsFileReader::getdelta(W64 uuid, W64 uuidsub) {
   W64 offset = header.record_offset + (header.record_size * uuid);
   W64 offsetsub = header.record_offset + (header.record_size * uuidsub);
 
-  is.seek(offset);
-  if unlikely (is.read(buf, header.record_size) != header.record_size) return null;
+  is.seekg(offset);
+  is.read(reinterpret_cast<char*>(buf), header.record_size);
+  int size = strlen(reinterpret_cast<char*>(buf));
+  if unlikely (size != header.record_size) return null;
 
-  is.seek(offsetsub);
-  if unlikely (is.read(bufsub, header.record_size) != header.record_size) return null;
+  is.seekg(offsetsub);
+  is.read(reinterpret_cast<char*>(bufsub), header.record_size);
+  size = strlen(reinterpret_cast<char*>(buf));
+  if unlikely (size != header.record_size) return null;
 
   const W64* p = (const W64*)buf;
   W64* porig = (W64*)p;
@@ -1376,7 +1399,7 @@ void StatsFileReader::close() {
 }
 
 ostream& StatsFileReader::print(ostream& os) const {
-  if unlikely (!is.ok()) {
+  if unlikely (!is.is_open()) {
     os << "Data store is not open", endl;
     return os;
   }

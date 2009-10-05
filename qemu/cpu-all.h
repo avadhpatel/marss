@@ -984,6 +984,8 @@ void cpu_physical_sync_dirty_bitmap(target_phys_addr_t start_addr, target_phys_a
 void dump_exec_info(FILE *f,
                     int (*cpu_fprintf)(FILE *f, const char *fmt, ...));
 
+void tlb_protect_code(ram_addr_t ram_addr);
+
 /* Coalesced MMIO regions are areas where write operations can be reordered.
  * This usually implies that write operations are side-effect free.  This allows
  * batching which can make a major impact on performance when using

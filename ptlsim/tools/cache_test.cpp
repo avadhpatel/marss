@@ -37,11 +37,11 @@ Config config;
 
 W64 sim_cycle;
 
-ostream logfile;
+ostream ptl_logfile;
 
 bool test_signal_cb(void *arg)
 {
-	logfile << "Test signal fired with arg: ", *((int*)arg), endl, flush;
+	ptl_logfile << "Test signal fired with arg: ", *((int*)arg), endl, flush;
 	return true;
 }
 
@@ -60,23 +60,23 @@ void test_event_add(MemoryHierarchy* memoryHierarchy)
 	arg[1] = 1;
 	arg[2] = 2;
 
-	logfile << "Before adding events to queue", endl, flush;
+	ptl_logfile << "Before adding events to queue", endl, flush;
 
 	for(int i=0; i < 100; i++) {
 		memoryHierarchy->add_event(sig1, i, (void*)(&arg[i % 3]));
 	}
 
-	logfile << "Added events into queue, now printing", endl, flush;
-	memoryHierarchy->dump_info(logfile);
-	logfile << flush;
+	ptl_logfile << "Added events into queue, now printing", endl, flush;
+	memoryHierarchy->dump_info(ptl_logfile);
+	ptl_logfile << flush;
 
-	logfile << "Reseting the event queue";
+	ptl_logfile << "Reseting the event queue";
 	memoryHierarchy->reset();
 
 	memoryHierarchy->add_event(sig1, 11, (void*)(&arg[0]));
 	memoryHierarchy->add_event(sig1, 10, (void*)(&arg[0]));
 	memoryHierarchy->add_event(sig1, 8, (void*)(&arg[1]));
-	memoryHierarchy->dump_info(logfile);
+	memoryHierarchy->dump_info(ptl_logfile);
 
 	cout << "..Done" << endl;
 }
@@ -101,7 +101,7 @@ void test_clock(MemoryHierarchy* memoryHierarchy)
 		if(sim_cycle == 5)
 			memoryHierarchy->add_event(sig2, 2, (void*)(&arg[1]));
 		memoryHierarchy->clock();
-		logfile << "sim_cycle - ", sim_cycle, endl, flush;
+		ptl_logfile << "sim_cycle - ", sim_cycle, endl, flush;
 	}
 
 	cout << "..Done" << endl;
@@ -115,18 +115,18 @@ void test_access_fast_path(MemoryHierarchy *memoryHierarchy)
 
 	ret_val = memoryHierarchy->access_cache(0, 0, 0, 0, 0, 0x10, true, false);
 
-	logfile << "access ret value ", ret_val, endl;
+	ptl_logfile << "access ret value ", ret_val, endl;
 
 	for(sim_cycle; sim_cycle < 1500; sim_cycle++) {
-		logfile << "Clock: ", sim_cycle, endl;
+		ptl_logfile << "Clock: ", sim_cycle, endl;
 		if(sim_cycle == 3) {
 			ret_val = memoryHierarchy->access_cache(0, 0, 0, 0, 0, 
 					0x86, true, false);
 
-			logfile << "access ret value ", ret_val, endl;
+			ptl_logfile << "access ret value ", ret_val, endl;
 		}
 		memoryHierarchy->clock();
-		memoryHierarchy->dump_info(logfile);
+		memoryHierarchy->dump_info(ptl_logfile);
 	}
 
 	cout << "..Done" << endl;
@@ -173,30 +173,30 @@ void test_fix_queuelink()
 	cout << "Testing FixQueueLink...";
 	TestQueueLink* entryArr[10];
 
-	logfile << "Before allocation: ";
-	testQueue.print_all(logfile);
-	logfile << endl;
+	ptl_logfile << "Before allocation: ";
+	testQueue.print_all(ptl_logfile);
+	ptl_logfile << endl;
 	foreach(i, 10) {
 		TestQueueLink* entry = testQueue.alloc();
 		entryArr[i] = entry;
 	}
-	logfile << "After allocation: ", testQueue, endl;
+	ptl_logfile << "After allocation: ", testQueue, endl;
 
 	foreach(j, 6) {
 		testQueue.free(entryArr[j+2]);
 	}
-	logfile << "After freeing 4 entries: ", testQueue, endl;
-	logfile << "All entries: ";
-	testQueue.print_all(logfile);
-	logfile << endl;
+	ptl_logfile << "After freeing 4 entries: ", testQueue, endl;
+	ptl_logfile << "All entries: ";
+	testQueue.print_all(ptl_logfile);
+	ptl_logfile << endl;
 
 	// Now unlink the entry from tail and add to head + 1
-	logfile << "Before unlinking tail entry: ", testQueue, endl;
+	ptl_logfile << "Before unlinking tail entry: ", testQueue, endl;
 	TestQueueLink* et1 = testQueue.tail->data;
 	testQueue.unlink(et1);
-	logfile << "After unlinking tail entry: ", testQueue, endl;
+	ptl_logfile << "After unlinking tail entry: ", testQueue, endl;
 	testQueue.insert_before(et1, testQueue.head->data);
-	logfile << "After insert tail entry: ", testQueue, endl;
+	ptl_logfile << "After insert tail entry: ", testQueue, endl;
 
 	cout << "Done", endl;
 }
@@ -217,37 +217,37 @@ void test_fix_statelist()
 	FixStateListTester* entryArr[10];
 	
 	cout << "Testing FixStateList\n";
-	logfile << "Testing FixStateList\n";
+	ptl_logfile << "Testing FixStateList\n";
 
-	logfile << "Before Allocation: ";
-	testList.print_all(logfile);
-	logfile << endl;
+	ptl_logfile << "Before Allocation: ";
+	testList.print_all(ptl_logfile);
+	ptl_logfile << endl;
 	foreach(i, 10) {
 		FixStateListTester* entry = testList.alloc();
 		entryArr[i] = entry;
 	}
-	logfile << "After allocation: ", testList, endl;
+	ptl_logfile << "After allocation: ", testList, endl;
 
 	foreach(j, 6) {
 		testList.free(entryArr[j+2]);
 	}
 
-	logfile << "After freeing 6 entries: ", testList, endl;
-	logfile << "All entries: ";
-	testList.print_all(logfile);
-	logfile << endl, flush;
+	ptl_logfile << "After freeing 6 entries: ", testList, endl;
+	ptl_logfile << "All entries: ";
+	testList.print_all(ptl_logfile);
+	ptl_logfile << endl, flush;
 
 	// Now unlink entry from tail and add to head
-	logfile << "Before unlinking the tail entry: ", testList, endl, 
+	ptl_logfile << "Before unlinking the tail entry: ", testList, endl, 
 			flush;
 	FixStateListTester* tail = testList.tail();
 	assert(tail);
 	testList.unlink(tail);
-	logfile << "After unlink: ", testList, endl, flush;
+	ptl_logfile << "After unlink: ", testList, endl, flush;
 	FixStateListTester* head = testList.head();
 	assert(head);
 	testList.insert_after(tail, head);
-	logfile << "After inserting : ", testList, endl;
+	ptl_logfile << "After inserting : ", testList, endl;
 
 	cout << "Done..\n";
 	cout << "Done..\n";
@@ -292,7 +292,7 @@ void test_trace(MemoryHierarchy *memoryHierarchy, char *filename)
 				for(sim_cycle; sim_cycle < clock; sim_cycle++) {
 					cout.seek(0);
 					cout << "Execuing cycle: ", sim_cycle, " \r";
-					logfile << "Executing cycle: ", sim_cycle, "\n";
+					ptl_logfile << "Executing cycle: ", sim_cycle, "\n";
 					memoryHierarchy->clock();
 				}
 
@@ -342,25 +342,25 @@ void test_strip()
 int main(int argc, char *argv[]) 
 {
 
-	logfile.open("mem_test.log");
-	logfile << "Starting mem test log\n", flush;
+	ptl_logfile.open("mem_test.log");
+	ptl_logfile << "Starting mem test log\n", flush;
 
-	logfile << "NUMBER_OF_CORES = ", NUMBER_OF_CORES, endl, flush;
+	ptl_logfile << "NUMBER_OF_CORES = ", NUMBER_OF_CORES, endl, flush;
 
 	config.number_of_cores = 4;
 	config.cores_per_L2 = 4;
 
-	logfile << "config.number_of_cores ", config.number_of_cores, endl, flush;
+	ptl_logfile << "config.number_of_cores ", config.number_of_cores, endl, flush;
 
 	sim_cycle = 0;
 	OutOfOrderMachine machine; 
 	MemoryHierarchy *memory = new MemoryHierarchy(machine);
 
-	memory->print_map(logfile);
+	memory->print_map(ptl_logfile);
 
 	if(argc == 2) {
 		test_trace(memory, argv[1]);
-		memory->dump_info(logfile);
+		memory->dump_info(ptl_logfile);
 		return 0;
 	}
 
@@ -378,9 +378,9 @@ int main(int argc, char *argv[])
 
 	test_strip();
 
-	memory->dump_info(logfile);
+	memory->dump_info(ptl_logfile);
 
-	logfile.close();
+	ptl_logfile.close();
 
 	cout << "Memory Testing done..." << endl;
 

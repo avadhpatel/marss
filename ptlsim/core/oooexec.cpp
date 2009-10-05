@@ -50,7 +50,6 @@ void IssueQueue<size, operandcount>::reset(W8 coreid) {
   valid = 0;
   issued = 0;
   allready = 0;
-  dy_size = size;
   foreach (i, operandcount) {
     tags[i].reset();
   }
@@ -134,14 +133,10 @@ void IssueQueue<size, operandcount>::clock() {
 
 template <int size, int operandcount>
 bool IssueQueue<size, operandcount>::insert(tag_t uopid, const tag_t* operands, const tag_t* preready) {
-//	logfile << "IQ count ", count, " dy_size ", dy_size, endl, flush;
-  OutOfOrderCore& core = getcore();
-  if unlikely (count >= dy_size) {
-	  core.iq_stall_counter++;
-	  return false;
-  }
+  if unlikely (count == size)
+                return false;
 
-  assert(count < dy_size);
+  assert(count < size);
   
   int slot = count++;
 
@@ -842,8 +837,8 @@ bool ReorderBufferEntry::release_mem_lock(bool forced) {
 int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, bool rcready, PTEUpdate& pteupdate) {
   //  msdebug1 << " lsq ", state, " ra ", (void*) ra, " rb ", (void*) rb, " rc ", (void*) rc, " rcread ", rcready,endl;
   ThreadContext& thread = getthread();
-  DyQueue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
-  DyQueue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
+  Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
+  Queue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
   LoadStoreAliasPredictor& lsap = thread.lsap;
 
   time_this_scope(ctissuestore);
@@ -1185,7 +1180,7 @@ W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
   msdebug << " rob ", *this, " data ", (void*) data, endl;
   OutOfOrderCore& core = getcore();
   ThreadContext& thread = getthread();
-  DyQueue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
+  Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
   
   int sizeshift = uop.size;
   int aligntype = uop.cond;
@@ -1249,7 +1244,7 @@ W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
   }
   //if(sfra) msdebug1 << " found a sfra ", *sfra, endl;
 //   if(config.trace_memory_updates)
-//     logfile << "Cycle ", sim_cycle, " final data ", (void*) data,endl;
+//     ptl_logfile << "Cycle ", sim_cycle, " final data ", (void*) data,endl;
   return data;
 #undef USE_MSDEBUG
 #define USE_MSDEBUG logable(5)
@@ -1261,7 +1256,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   OutOfOrderCore& core = getcore();
   ThreadContext& thread = getthread();
-  DyQueue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
+  Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
   LoadStoreAliasPredictor& lsap = thread.lsap;
 
   OutOfOrderCoreEvent* event;
@@ -1506,7 +1501,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     // Issuing more than one ld.acq on the same block is not allowed:
     if (lock) {
-      logfile << "ERROR: thread ", thread.ctx.cpu_index, " uuid ", uop.uuid, " over physaddr ", (void*)physaddr, ": lock was already acquired by vcpuid ", lock->vcpuid, " uuid ", lock->uuid, " rob ", lock->rob, endl;
+      ptl_logfile << "ERROR: thread ", thread.ctx.cpu_index, " uuid ", uop.uuid, " over physaddr ", (void*)physaddr, ": lock was already acquired by vcpuid ", lock->vcpuid, " uuid ", lock->uuid, " rob ", lock->rob, endl;
       assert(false);
     }
  
@@ -1667,7 +1662,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       int cycle_in_flush_cache = core.machine.memoryHierarchyPtr->flush();
       thread.last_commit_at_cycle = sim_cycle; // to avoid long flush latency cause exit
       //      core.machine.memoryHierarchyPtr->reset();
-      logfile << " access uop.internal : flush memoryHierarchy. use cycles: ", cycle_in_flush_cache, endl;
+      ptl_logfile << " access uop.internal : flush memoryHierarchy. use cycles: ", cycle_in_flush_cache, endl;
 
 
       data = (annul) ? 0 : loadphys(physaddr);
@@ -1924,7 +1919,7 @@ void ReorderBufferEntry::tlbwalk() {
       if unlikely (core.caches.lfrq_or_missbuf_full()) {
         if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_LFRQ_FULL, this, null, physaddr);
         per_context_smtcore_stats_update(threadid, dcache.load.issue.replay.missbuf_full++);
-        //        logfile << "  WARNING: Cycle ", sim_cycle, " tlbwalk reaches end but L1 miss and lfrq_or_missbuf_full. rob: ", *this,  endl;
+        //        ptl_logfile << "  WARNING: Cycle ", sim_cycle, " tlbwalk reaches end but L1 miss and lfrq_or_missbuf_full. rob: ", *this,  endl;
         return;
       }
     }
@@ -1966,7 +1961,7 @@ else{
     if unlikely (core.caches.lfrq_or_missbuf_full()) {
       if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_LFRQ_FULL, this, null, pteaddr);
       per_context_smtcore_stats_update(threadid, dcache.load.issue.replay.missbuf_full++);
-      //      logfile << "  WARNING: Cycle ", sim_cycle, " tlbwalk tlb_walk_level: ", tlb_walk_level, " L1 miss and lfrq_or_missbuf_full. rob: ", *this,  endl;
+      //      ptl_logfile << "  WARNING: Cycle ", sim_cycle, " tlbwalk tlb_walk_level: ", tlb_walk_level, " L1 miss and lfrq_or_missbuf_full. rob: ", *this,  endl;
       return;
     }
   }
@@ -2142,17 +2137,17 @@ void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc
 void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr) {
   int idx = lsi.rob;
   ThreadContext* thread = core.threads[lsi.threadid];
-  //thread->print_rob(logfile);
+  //thread->print_rob(ptl_logfile);
   assert(inrange(idx, 0, ROB_SIZE-1));
   ReorderBufferEntry& rob = thread->ROB[idx];
-  if(logable(5)) logfile << " dcache_wakeup ", rob, " lsi ", lsi, endl;
+  if(logable(5)) ptl_logfile << " dcache_wakeup ", rob, " lsi ", lsi, endl;
   if(config.use_new_memory_system){
     if(rob.lsq && lsi.seq == (rob.lsq)->time_stamp){
-      if(logable(5)) logfile << " rob ", rob, endl; 
+      if(logable(5)) ptl_logfile << " rob ", rob, endl; 
       assert(rob.current_state_list == &thread->rob_cache_miss_list);
       rob.loadwakeup();     
     }else{
-      if(logable(5)) logfile << " ignor annulled request because lsi seq ", lsi.seq, " doesn't match  rob.uop.uuid ", rob.uop.uuid, " rob ", rob, endl;
+      if(logable(5)) ptl_logfile << " ignor annulled request because lsi seq ", lsi.seq, " doesn't match  rob.uop.uuid ", rob.uop.uuid, " rob ", rob, endl;
     }
   }else{
      rob.loadwakeup(); 
@@ -2333,7 +2328,7 @@ void ReorderBufferEntry::release() {
 #ifdef MULTI_IQ
   int reserved_iq_entries_per_thread = core.reserved_iq_entries[cluster] / NUMBER_OF_THREAD_PER_CORE;
   if (thread.issueq_count[cluster] > reserved_iq_entries_per_thread) {
-    if(logable(99)) logfile << " free_shared_entry() from release()",endl;
+    if(logable(99)) ptl_logfile << " free_shared_entry() from release()",endl;
     issueq_operation_on_cluster(core, cluster, free_shared_entry());
   }
   /* svn 225
@@ -2348,7 +2343,7 @@ void ReorderBufferEntry::release() {
 #else
   int reserved_iq_entries_per_thread = core.reserved_iq_entries / NUMBER_OF_THREAD_PER_CORE;
   if (thread.issueq_count > reserved_iq_entries_per_thread) {
-    if(logable(99)) logfile << " free_shared_entry() from release()",endl;
+    if(logable(99)) ptl_logfile << " free_shared_entry() from release()",endl;
     issueq_operation_on_cluster(core, cluster, free_shared_entry());
   }
   /* svn 225
@@ -2374,8 +2369,7 @@ int OutOfOrderCore::issue(int cluster) {
   int issuecount = 0;
   ReorderBufferEntry* rob;
 
-//  int maxwidth = clusters[cluster].issue_width;
-  int maxwidth = issue_width;
+  int maxwidth = clusters[cluster].issue_width;
 
   while (issuecount < maxwidth) {
     int iqslot;
@@ -2473,8 +2467,8 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 
   ThreadContext& thread = getthread();
   BranchPredictorInterface& branchpred = thread.branchpred;
-  DyQueue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
-  DyQueue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
+  Queue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
+  Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
   RegisterRenameTable& specrrt = thread.specrrt;
   RegisterRenameTable& commitrrt = thread.commitrrt;
   int& loads_in_flight = thread.loads_in_flight;
@@ -2600,14 +2594,14 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 
   foreach (i, TRANSREG_COUNT) { specrrt[i]->addspecref(i, thread.threadid); }
 
-  // if (logable(6)) logfile << "Restored SpecRRT from CommitRRT; walking forward from:", endl, core.specrrt, endl;
+  // if (logable(6)) ptl_logfile << "Restored SpecRRT from CommitRRT; walking forward from:", endl, core.specrrt, endl;
   idx = ROB.head;
   for (idx = ROB.head; idx != startidx; idx = add_index_modulo(idx, +1, ROB_SIZE)) {
     ReorderBufferEntry& rob = ROB[idx];
     rob.pseudocommit();
   }
 
-  // if (logable(6)) logfile << "Recovered SpecRRT:", endl, core.specrrt, endl;
+  // if (logable(6)) ptl_logfile << "Recovered SpecRRT:", endl, core.specrrt, endl;
 
   //
   // Pass 3: For each speculative ROB, reinitialize and free speculative ROBs
@@ -2848,7 +2842,7 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
 void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
   OutOfOrderCore& core = getcore();
   ThreadContext& thread = getthread();
-  DyQueue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
+  Queue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
 
   bitvec<ROB_SIZE> depmap;
   depmap = 0;

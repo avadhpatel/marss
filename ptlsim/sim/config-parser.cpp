@@ -5,7 +5,7 @@
 // Copyright 2000-2008 Matt T. Yourst <yourst@yourst.com>
 //
 
-#include <config.h>
+#include <config-parser.h>
 
 ostream& ConfigurationParserBase::printusage(const void* baseptr, ostream& os) const {
   os << "Options are:", endl;
@@ -254,7 +254,7 @@ void expand_command_list(dynarray<char*>& list, int argc, char** argv, int depth
 
   foreach (i, includes.length) {
     char* listfile = includes[i];
-    istream is(listfile);
+    ifstream is(listfile);
     if (!is) {
       cerr << "Warning: cannot open command list file '", listfile, "'", endl;
       continue;

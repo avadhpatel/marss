@@ -22,7 +22,7 @@
 //#ifdef memdebug
 //#undef memdebug
 //#define memdebug(...) if(config.loglevel >= 0) { \
-//	logfile << __VA_ARGS__ ; } //logfile.flush(); 
+//	ptl_logfile << __VA_ARGS__ ; } //ptl_logfile.flush(); 
 //#endif
 
 using namespace Memory;
@@ -782,7 +782,7 @@ bool CacheController::clear_entry_cb(void *arg)
 		queueEntry->request->decRefCounter();
 		if(!queueEntry->annuled) {
 			if(pendingRequests_.list().count == 0) {
-				logfile << "Removing from pending request queue ",
+				ptl_logfile << "Removing from pending request queue ",
 						pendingRequests_, " \nQueueEntry: ",
 						queueEntry, endl;
 			}

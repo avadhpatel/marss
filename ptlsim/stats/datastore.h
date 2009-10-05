@@ -227,11 +227,11 @@ struct DataStoreNode {
 
   ostream& print(ostream& os, const DataStoreNodePrintSettings& printinfo = DataStoreNodePrintSettings(), int depth = 0, double supersum = 0) const;
 
-  DataStoreNode(idstream& is);
+  DataStoreNode(ifstream& is);
 
-  bool read(idstream& is);
+  bool read(ifstream& is);
 
-  odstream& write(odstream& os) const;
+  ostream& write(ostream& os) const;
 
   ostream& generate_structural_code(ostream& os, int level = 0) const;
   ostream& generate_reconstruction_code(ostream& os, int level = 0) const;
@@ -460,7 +460,7 @@ struct DataStoreNode {
   }
 };
 
-inline odstream& operator <<(odstream& os, const DataStoreNode& node) {
+inline ostream& operator <<(ostream& os, const DataStoreNode& node) {
   return node.write(os);
 }
 
@@ -568,12 +568,12 @@ struct DataStoreNodeTemplate: public DataStoreNodeTemplateBase {
   //
   // Write structural definition in binary format for use by ptlstats:
   //
-  odstream& write(odstream& os) const;
+  ostream& write(ostream& os) const;
 
   //
   // Read structural definition in binary format for use by ptlstats:
   //
-  DataStoreNodeTemplate(idstream& is);
+  DataStoreNodeTemplate(ifstream& is);
 
   //
   // Reconstruct a stats tree from its template and an array of words
@@ -592,9 +592,9 @@ struct DataStoreNodeTemplate: public DataStoreNodeTemplateBase {
   void subtract(W64*& p, W64*& psub) const;
 };
 
-static inline odstream& operator <<(odstream& os, const DataStoreNodeTemplate& node) {
-  return node.write(os);
-}
+//static inline ofstream& operator <<(ofstream& os, const DataStoreNodeTemplate& node) {
+//  return node.write(os);
+//}
 
 static inline ostream& operator <<(ostream& os, const DataStoreNodeTemplate& node) {
   return node.generate_struct_def(os);
@@ -613,6 +613,10 @@ struct StatsFileHeader {
   static const W64 MAGIC = 0x31307473644c5450ULL; // 'PTLdst01'
 };
 
+static inline ostream& operator <<(ostream& os, StatsFileHeader& sh) {
+	return os.write(reinterpret_cast<char*>(&sh), sizeof(sh));
+}
+
 struct StatsIndexRecordLink: public selflistlink {
   W64 uuid;
   char* name;
@@ -626,7 +630,7 @@ struct StatsIndexRecordLink: public selflistlink {
 };
 
 struct StatsFileWriter {
-  odstream os;
+  ofstream os;
   StatsFileHeader header;
   StatsIndexRecordLink* namelist;
 
@@ -634,7 +638,7 @@ struct StatsFileWriter {
 
   void open(const char* filename, const void* dst, size_t dstsize, int record_size);
 
-  operator bool() const { return os.ok(); }
+  operator bool() const { return os.is_open(); }
   W64 next_uuid() const { return header.record_count; }
 
   void write(const void* record, const char* name = null);
@@ -643,7 +647,7 @@ struct StatsFileWriter {
 };
 
 struct StatsFileReader {
-  idstream is;
+  ifstream is;
   StatsFileHeader header;
   byte* buf;
   byte* bufsub;

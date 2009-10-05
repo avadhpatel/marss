@@ -175,19 +175,19 @@ bool MemoryController::access_completed_cb(void *arg)
 	queueEntry->request->decRefCounter();
 	if(!queueEntry->annuled || !queueEntry->free) {
 		if(pendingRequests_.list().count == 0) {
-			logfile << "Memory queue is 0 and freeing entry!!!\n";
-			logfile << "Freeing: ", *queueEntry, endl;
-			logfile << "Queue:", pendingRequests_, endl;;
+			ptl_logfile << "Memory queue is 0 and freeing entry!!!\n";
+			ptl_logfile << "Freeing: ", *queueEntry, endl;
+			ptl_logfile << "Queue:", pendingRequests_, endl;;
 		}
 		int count_before = pendingRequests_.list().count;
 		pendingRequests_.free(queueEntry);
 		int count_after = pendingRequests_.list().count;
 
 		if(count_before - 1 != count_after) {
-			logfile << "Count not synced: ", count_before, " after: ",
+			ptl_logfile << "Count not synced: ", count_before, " after: ",
 					count_after, endl;
-			logfile << "when freeing entry: ", *queueEntry, endl;
-			logfile << "Qeueu: ", pendingRequests_, endl;
+			ptl_logfile << "when freeing entry: ", *queueEntry, endl;
+			ptl_logfile << "Qeueu: ", pendingRequests_, endl;
 		}
 	}
 
@@ -221,7 +221,7 @@ void MemoryController::annul_request(MemoryRequest *request)
 	foreach_list_mutable(pendingRequests_.list(), queueEntry,
 			entry, nextentry) {
 		if(queueEntry->request == request) {
-			logfile << "Annuling request from main memory\n";
+			ptl_logfile << "Annuling request from main memory\n";
 			queueEntry->annuled = true;
 			pendingRequests_.free(queueEntry);
 		}

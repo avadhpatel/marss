@@ -13,8 +13,8 @@
 #include <statelist.h>
 
 // With these disabled, simulation is faster
-//#define ENABLE_CHECKS
-//#define ENABLE_LOGGING
+#define ENABLE_CHECKS
+#define ENABLE_LOGGING
 //#define ENABLE_CHECKS_IQ
 
 static const int MAX_THREADS_BIT = 4; // up to 16 threads
@@ -30,12 +30,6 @@ static const int MAX_ROB_IDX_BIT = 12; // up to 4096 ROB entries
 // threaded mode.
 //
 
-#ifdef WATTCH
-#include<globals.h>
-#include <wattch.h>
-#endif
-
-#include <power_manager.h>
 
 //#define ENABLE_SIM_TIMING
 #ifdef ENABLE_SIM_TIMING
@@ -292,7 +286,6 @@ namespace OutOfOrderModel {
     {OP_vpack_ss,       2, ANYFPU},
   };
 
-//#ifndef WATTCH
 #undef A
 #undef L
 #undef F
@@ -312,7 +305,6 @@ namespace OutOfOrderModel {
 #undef ANYSTU
 #undef ANYFPU
 #undef ANYINT
-//#endif
   
   //
   // Global limits
@@ -390,22 +382,6 @@ namespace OutOfOrderModel {
   //
   const int MAX_FORWARDING_LATENCY = 2;
 
-#ifdef MULTI_IQ
-#define InitClusteredROBList(name, description, flags) \
-  name[0](description "-int0", rob_states, flags); \
-  name[1](description "-int1", rob_states, flags); \
-  name[2](description "-ld", rob_states, flags); \
-  name[3](description "-fp", rob_states, flags)
-
-  const int ISSUE_QUEUE_SIZE = 16;
-#else
-#define InitClusteredROBList(name, description, flags) \
-  name[0](description "-all", rob_states, flags);
-
-  const int ISSUE_QUEUE_SIZE = 64; 
-//  static const int ISSUE_QUEUE_SIZE = 32;
- #endif
-
 //#define MULTI_IQ
 
 // #ifdef ENABLE_SMT
@@ -457,8 +433,6 @@ namespace OutOfOrderModel {
 
     static const int SIZE = size;
 
-	unsigned int dy_size;
-
     assoc_t uopids;
     assoc_t tags[operandcount];
 
@@ -493,7 +467,7 @@ namespace OutOfOrderModel {
       return true;
     }
     bool free_shared_entry() {
-      if(logable(99)) logfile << "shared_free_entries: ", shared_free_entries, " size: ",  size, " reserved_entries: ",  reserved_entries, endl;
+      if(logable(99)) ptl_logfile << "shared_free_entries: ", shared_free_entries, " size: ",  size, " reserved_entries: ",  reserved_entries, endl;
       assert(shared_free_entries < size - reserved_entries);
       shared_free_entries++;
       return true;
@@ -502,10 +476,7 @@ namespace OutOfOrderModel {
       return (shared_free_entries == 0);
     }
 
-    bool remaining() const { 
-		if (dy_size < count) return 0;
-		return dy_size - count;
-	}
+    bool remaining() const { return (size - count); }
     bool empty() const { return (!count); }
     bool full() const { return (!remaining()); }
 
@@ -969,7 +940,6 @@ namespace OutOfOrderModel {
     byte coreid;
     byte rfid;
     W16 size;
-	W16 dy_size;
     const char* name;
     StateList states[MAX_PHYSREG_STATE];
     W64 allocations;
@@ -986,25 +956,7 @@ namespace OutOfOrderModel {
     }
 
     void init(const char* name, W8 coreid, int rfid, int size);
-	int get_allocated() {
-		int allocated = 0;
-		foreach(i, MAX_PHYSREG_STATE) {
-			if(i == PHYSREG_NONE || i == PHYSREG_FREE)
-				continue;
-			allocated += states[i].count;
-		}
-		return allocated;
-	}
-
-	void set_size(int new_size) {
-		if(new_size > size) new_size = size;
-		dy_size = new_size;
-	}
-
-    bool remaining() { 
-		if (this->get_allocated() >= dy_size) return 0;
-		return (!states[PHYSREG_FREE].empty()); 
-	}
+    bool remaining() const { return (!states[PHYSREG_FREE].empty()); }
    
     PhysicalRegister* alloc(W8 threadid, int r = -1);
     void reset(W8 threadid);
@@ -1058,7 +1010,7 @@ namespace OutOfOrderModel {
   // Lookup tables (LUTs):
   //
   struct Cluster {
-    char* name;
+    const char* name;
     W16 issue_width;
     W32 fu_mask;
   };
@@ -1386,10 +1338,10 @@ namespace OutOfOrderModel {
     OutOfOrderCoreEvent* start;
     OutOfOrderCoreEvent* end;
     OutOfOrderCoreEvent* tail;
-    ostream* logfile;
+    ofstream* ptl_logfile;
     W8 coreid;
 
-    EventLog() { start = null; end = null; tail = null; logfile = null; }
+    EventLog() { start = null; end = null; tail = null; ptl_logfile = null; }
 
     //bool init(size_t bufsize);
     bool init(size_t bufsize, W8 coreid);
@@ -1443,6 +1395,24 @@ namespace OutOfOrderModel {
     ROB_STATE_PRE_READY_TO_DISPATCH = (1 << 2)
   };
 
+#ifdef MULTI_IQ
+#define InitClusteredROBList(name, description, flags) \
+  name[0](description "-int0", rob_states, flags); \
+  name[1](description "-int1", rob_states, flags); \
+  name[2](description "-ld", rob_states, flags); \
+  name[3](description "-fp", rob_states, flags)
+
+  static const int ISSUE_QUEUE_SIZE = 16;
+#else
+#define InitClusteredROBList(name, description, flags) \
+  name[0](description "-all", rob_states, flags);
+
+  static const int ISSUE_QUEUE_SIZE = 64; 
+//  static const int ISSUE_QUEUE_SIZE = 32;
+ #endif
+
+
+
   // How many bytes of x86 code to fetch into decode buffer at once
   static const int ICACHE_FETCH_GRANULARITY = 16;
   // Deadlock timeout: if nothing dispatches for this many cycles, flush the pipeline
@@ -1483,11 +1453,9 @@ namespace OutOfOrderModel {
     StateList rob_memory_fence_list;                     // mf uops only: wait for memory fence to reach head of LSQ before completing
     StateList rob_ready_to_commit_queue;                 // Ready to commit
 
-    //Queue<ReorderBufferEntry, ROB_SIZE> ROB;
-    DyQueue<ReorderBufferEntry, ROB_SIZE> ROB;
+    Queue<ReorderBufferEntry, ROB_SIZE> ROB;
 
-    //Queue<LoadStoreQueueEntry, LSQ_SIZE> LSQ;
-    DyQueue<LoadStoreQueueEntry, LSQ_SIZE> LSQ;
+    Queue<LoadStoreQueueEntry, LSQ_SIZE> LSQ;
     RegisterRenameTable specrrt;
     RegisterRenameTable commitrrt;
 
@@ -1593,14 +1561,6 @@ namespace OutOfOrderModel {
     W8 coreid;
     OutOfOrderCore& getcore() const { return coreof(coreid); }
 
-#ifdef WATTCH
-	OOOCorePower power;
-#endif
-
-	PowerManager power_manager;
-	W64 cycle;
-	int issue_width;
-
     int threadcount;
     ThreadContext* threads[MAX_THREADS_PER_CORE];
 
@@ -1617,36 +1577,8 @@ namespace OutOfOrderModel {
     byte round_robin_tid;
 
     //Power Manager Variables
-	int cycle_counter;
-	int freq_multiplier;
     int freq_divider;
-	int power_state;
-	W64 iq_stall_counter;
-	W64 rob_stall_counter;
-	W64 lsq_stall_counter;
-	W64 phy_rf_stall_counter;
-	W64 cache_miss_stall_counter;
-	W64 iq_util_counter;
-	W64 rob_util_counter;
-	W64 lsq_util_counter;
-	W64 phy_rf_util_counter;
-	W64 iq_size_count;
-	W64 rob_size_count;
-	W64 lsq_size_count;
-	W64 phy_rf_size_count;
-	double iq_util;
-	double rob_util;
-	double lsq_util;
-	double phy_rf_util;
-	int distance;
-	W64 l2_cache_misses;
-	W64 last_l2_cache_misses;
-	W64 retired_uops;
-	W64 last_retired_uops;
-	W64 retired_mmx_fp_inst;
-	W64 last_retired_mmx_fp_inst;
-	W64 dispatch_stalls;
-	double calculated_power;
+
     //
     // Issue Queues (one per cluster)
     //
@@ -1660,6 +1592,7 @@ namespace OutOfOrderModel {
 
     int reserved_iq_entries[4];  /// this is the total number of iq entries reserved per thread. 
     // Instantiate any issueq sizes used above:
+
 
 #define foreach_issueq(expr) { OutOfOrderCore& core = getcore(); core.issueq_int0.expr; core.issueq_int1.expr; core.issueq_ld.expr; core.issueq_fp.expr; }
   
@@ -1768,14 +1701,6 @@ namespace OutOfOrderModel {
     //    MemorySystem::CPUController test_controller;
     OutOfOrderCoreCacheCallbacks cache_callbacks;
 
-#ifdef WATTCH
-	void reset_power_defaults();
-	void update_power_stats();
-	void clear_power_stats();
-#endif
-
-	double get_commit_ipc();
-
     // Unaligned load/store predictor
     bitvec<UNALIGNED_PREDICTOR_SIZE> unaligned_predictor;
     static int hash_unaligned_predictor_slot(const RIPVirtPhysBase& rvp);
@@ -1805,7 +1730,7 @@ namespace OutOfOrderModel {
     void check_rob();
   };
 
-#define MAX_SMT_CORES 16
+#define MAX_SMT_CORES 8
 
   struct OutOfOrderMachine: public PTLsimMachine {
     OutOfOrderCore* cores[MAX_SMT_CORES];
@@ -1825,7 +1750,6 @@ namespace OutOfOrderModel {
     virtual void reset();
     ~OutOfOrderMachine();
 
-	void update_core_offchip_miss_count(int coreid);
   };
 
   extern CycleTimer cttotal;
@@ -2106,7 +2030,6 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
       W64 mfence;
     } fence;
   } dcache;
-
 };
 
 //
@@ -2210,21 +2133,6 @@ struct OutOfOrderCoreStats { // rootnode:
     } cputime;
   } simulator;
 
-  struct power_manager {
-	  double total_power;
-	  W64 state_hist[STATE_MAX_NO+1]; // histo: 0, STATE_MAX_NO, 1
-	  W64 sample_period;
-	  W64 freq_update_period;
-	  W64 resc_update_period;
-	  W64 max_cache_misses;
-	  W64 max_cache_misses_hist[65]; // histo: 0, 64, 1
-	  W64 ipc_hist[20]; // histo: 0, 2, 0.1
-	  W64 lsq_util[10]; // histo: 0, 10, 1
-	  W64 rob_util[10]; // histo: 0, 10, 1
-	  W64 iq_util[10]; // histo: 0, 10, 1
-	  W64 dist_hist[21]; // histo: 0, 20, 1
-	  //W64 dist_hist[HIGH_SAT + LOW_SAT ]; // histo: -3, 3, 1
-  } power_manager;
 
 };
 

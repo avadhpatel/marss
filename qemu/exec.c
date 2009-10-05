@@ -1785,7 +1785,7 @@ void tlb_flush_page(CPUState *env, target_ulong addr)
 
 /* update the TLBs so that writes to code in the virtual page 'addr'
    can be detected */
-static void tlb_protect_code(ram_addr_t ram_addr)
+void tlb_protect_code(ram_addr_t ram_addr)
 {
     cpu_physical_memory_reset_dirty(ram_addr,
                                     ram_addr + TARGET_PAGE_SIZE,

@@ -235,9 +235,9 @@ W64 TransactionalMemory<N, setcount>::loadimpl(W64 physaddr) {
 
 template <int N, int setcount>
 W64 TransactionalMemory<N, setcount>::storeimpl(W64 physaddr, W64 data, byte bytemask) {
-  logfile << "Before storeimpl: physaddr ", (void*)physaddr, " => mfn ", (physaddr >> 12), ", data ", bytemaskstring(data, 8, bytemask), endl;
+  ptl_logfile << "Before storeimpl: physaddr ", (void*)physaddr, " => mfn ", (physaddr >> 12), ", data ", bytemaskstring(data, 8, bytemask), endl;
   W64 rc = storemask(physaddr, data, bytemask);
-  logfile << "After storeimpl: physaddr ", (void*)physaddr, " => mfn ", (physaddr >> 12), ", data ", bytemaskstring(data, 8, bytemask), " => rc ", (void*)rc, endl;
+  ptl_logfile << "After storeimpl: physaddr ", (void*)physaddr, " => mfn ", (physaddr >> 12), ", data ", bytemaskstring(data, 8, bytemask), " => rc ", (void*)rc, endl;
   return rc;
 }
 
@@ -405,9 +405,9 @@ struct SequentialCoreEventLog {
   SequentialCoreEvent* start;
   SequentialCoreEvent* end;
   SequentialCoreEvent* tail;
-  ostream* logfile;
+  ofstream* ptl_logfile;
 
-  SequentialCoreEventLog() { start = null; end = null; tail = null; logfile = null; }
+  SequentialCoreEventLog() { start = null; end = null; tail = null; ptl_logfile = null; }
 
   bool init(size_t bufsize);
   void reset();
@@ -474,9 +474,9 @@ void SequentialCoreEventLog::reset() {
 }
 
 void SequentialCoreEventLog::flush(bool only_to_tail) {
-  if unlikely (!logfile) return;
-  if unlikely (!logfile->ok()) return;
-  print(*logfile, only_to_tail);
+  if unlikely (!ptl_logfile) return;
+  if unlikely (!ptl_logfile->is_open()) return;
+  print(*ptl_logfile, only_to_tail);
   tail = start;
 }
 
@@ -780,9 +780,9 @@ struct SequentialCore {
 
     if unlikely (inrange(W64(addr), config.log_trigger_virt_addr_start, config.log_trigger_virt_addr_end)) {
       W64 mfn = physaddr >> 12;
-      logfile << "Trigger hit for virtual address range: STORE virt ", (void*)addr, ", phys mfn ", mfn, "+0x", hexstring(addr, 12), " <= 0x", hexstring(rc, (1 << sizeshift)*8),
+      ptl_logfile << "Trigger hit for virtual address range: STORE virt ", (void*)addr, ", phys mfn ", mfn, "+0x", hexstring(addr, 12), " <= 0x", hexstring(rc, (1 << sizeshift)*8),
         " (SFR ", state, ") by insn @ rip ", (void*)arf[REG_rip], " at cycle ", sim_cycle, ", uuid ", current_uuid, ", commits ", total_user_insns_committed, endl;
-      eventlog.print_one_basic_block(logfile);
+      eventlog.print_one_basic_block(ptl_logfile);
     }
 
     return ISSUE_COMPLETED;
@@ -826,7 +826,7 @@ struct SequentialCore {
       if unlikely (cmtrec) {
         data = transactmem.load(state.physaddr << 3);
       } else {
-        logfile << "[cycle ", sim_cycle, "] load from physaddr ", (void*)physaddr, " for virtaddr ", (void*)origaddr, endl;
+        ptl_logfile << "[cycle ", sim_cycle, "] load from physaddr ", (void*)physaddr, " for virtaddr ", (void*)origaddr, endl;
         data = loadphys(physaddr);
       }
     }
@@ -902,18 +902,18 @@ struct SequentialCore {
 
     if unlikely (inrange(W64(addr), config.log_trigger_virt_addr_start, config.log_trigger_virt_addr_end)) {
       W64 mfn = physaddr >> 12;
-      logfile << "Trigger hit for virtual address range: LOAD virt ", (void*)addr, ", phys mfn ", mfn, "+0x", hexstring(addr, 12), " => 0x", hexstring(state.data, 64), " (SFR ", state, ") at cycle ",
+      ptl_logfile << "Trigger hit for virtual address range: LOAD virt ", (void*)addr, ", phys mfn ", mfn, "+0x", hexstring(addr, 12), " => 0x", hexstring(state.data, 64), " (SFR ", state, ") at cycle ",
         " by insn @ rip ", (void*)arf[REG_rip], " at cycle ", sim_cycle, ", uuid ", current_uuid, ", commits ", total_user_insns_committed, endl;
-      eventlog.print_one_basic_block(logfile);
+      eventlog.print_one_basic_block(ptl_logfile);
     }
 
 
     return ISSUE_COMPLETED;
   }
 
-  void external_to_core_state(const Context& ctx) {
+  void external_to_core_state(Context& ctx) {
     foreach (i, ARCHREG_COUNT) {
-      arf[i] = ctx[i];
+      arf[i] = ctx[(int)i];
       arflags[i] = 0;
     }
     for (int i = ARCHREG_COUNT; i < TRANSREG_COUNT; i++) {
@@ -937,29 +937,29 @@ struct SequentialCore {
     assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
 
     if (logable(5)) {
-      logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
+      ptl_logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
         (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
         ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
     }
 
-    if (logable(6)) logfile << "Calling assist function at ", (void*)assist, "...", endl, flush; 
+    if (logable(6)) ptl_logfile << "Calling assist function at ", (void*)assist, "...", endl, flush; 
 
     update_assist_stats(assist);
     if (logable(6)) {
-      logfile << "Before assist:", endl, ctx, endl;
+      ptl_logfile << "Before assist:", endl, ctx, endl;
 #ifdef PTLSIM_HYPERVISOR
-      logfile << sshinfo, endl;
+//      ptl_logfile << sshinfo, endl;
 #endif
     }
 
     assist(ctx);
 
     if (logable(6)) {
-      logfile << "Done with assist", endl;
-      logfile << "New state:", endl;
-      logfile << ctx;
+      ptl_logfile << "Done with assist", endl;
+      ptl_logfile << "New state:", endl;
+      ptl_logfile << ctx;
 #ifdef PTLSIM_HYPERVISOR
-      logfile << sshinfo;
+//      ptl_logfile << sshinfo;
 #endif
     }
 
@@ -967,7 +967,7 @@ struct SequentialCore {
     external_to_core_state(ctx);
 #ifndef PTLSIM_HYPERVISOR
     if (requested_switch_to_native) {
-      logfile << "PTL call requested switch to native mode at rip ", (void*)(Waddr)ctx.eip, endl;
+      ptl_logfile << "PTL call requested switch to native mode at rip ", (void*)(Waddr)ctx.eip, endl;
       return false;
     }
 #endif
@@ -979,7 +979,7 @@ struct SequentialCore {
 
 #ifdef PTLSIM_HYPERVISOR
     if (logable(4)) {
-      logfile << "PTL Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip, 
+      ptl_logfile << "PTL Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip, 
         " at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
     }
 
@@ -998,15 +998,15 @@ struct SequentialCore {
     case EXCEPTION_FloatingPoint:
       ctx.exception_index = EXCEPTION_x86_fpu; break;
     default:
-      logfile << "Unsupported internal exception type ", exception_name(ctx.exception), endl, flush;
+      ptl_logfile << "Unsupported internal exception type ", exception_name(ctx.exception), endl, flush;
       assert(false);
     }
 
-    if unlikely ((ctx.exception_index == EXCEPTION_x86_page_fault) && (ctx.cr[2] == 0xffffffff00000018)) eventlog.print(logfile);
+    if unlikely ((ctx.exception_index == EXCEPTION_x86_page_fault) && (ctx.cr[2] == 0xffffffff00000018)) eventlog.print(ptl_logfile);
 
     if (logable(4)) {
-      logfile << ctx;
-      logfile << sshinfo;
+      ptl_logfile << ctx;
+//      ptl_logfile << sshinfo;
     }
 
     ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code, ctx.cr[2]);
@@ -1016,17 +1016,17 @@ struct SequentialCore {
     return true;
 #else
     if (logable(6)) 
-      logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.eip, 
+      ptl_logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.eip, 
         ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
 
     stringbuf sb;
-    logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.eip, " @ ", 
+    ptl_logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.eip, " @ ", 
       total_user_insns_committed, " commits (", total_uops_committed, " uops): genuine user exception (",
       exception_name(ctx.exception), "); aborting", endl;
-    logfile << ctx, endl;
-    logfile << flush;
+    ptl_logfile << ctx, endl;
+    ptl_logfile << flush;
 
-    logfile << "Aborting...", endl, flush;
+    ptl_logfile << "Aborting...", endl, flush;
     cerr << "Aborting...", endl, flush;
 
     assert(false);
@@ -1039,20 +1039,20 @@ struct SequentialCore {
     core_to_external_state(ctx);
 
     if (logable(6)) {
-      logfile << "Interrupts pending at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
-      logfile << "Context at interrupt:", endl;
-      logfile << ctx;
-      logfile << sshinfo;
-      logfile.flush();
+      ptl_logfile << "Interrupts pending at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
+      ptl_logfile << "Context at interrupt:", endl;
+      ptl_logfile << ctx;
+//      ptl_logfile << sshinfo;
+      ptl_logfile.flush();
     }
 
     ctx.event_upcall();
 
     if (logable(6)) {
-      logfile << "After interrupt redirect:", endl;
-      logfile << ctx;
-      logfile << sshinfo;
-      logfile.flush();
+      ptl_logfile << "After interrupt redirect:", endl;
+      ptl_logfile << ctx;
+//      ptl_logfile << sshinfo;
+      ptl_logfile.flush();
     }
 
     reset_fetch(ctx.eip);
@@ -1104,7 +1104,7 @@ struct SequentialCore {
     
     bool barrier = 0;
 
-    if (logable(5)) logfile << "[vcpu ", ctx.cpu_index, "] Sequentially executing basic block ", bb->rip, " (", bb->count, " uops), insn limit ", insnlimit, endl;
+    if (logable(5)) ptl_logfile << "[vcpu ", ctx.cpu_index, "] Sequentially executing basic block ", bb->rip, " (", bb->count, " uops), insn limit ", insnlimit, endl;
 
     if unlikely (config.event_log_enabled) {
       TransOp dummyuop; setzero(dummyuop);
@@ -1156,7 +1156,7 @@ struct SequentialCore {
       assert(uopindex < bb->count);
 
       if unlikely (uop.unaligned) {
-        // if (logable(6)) logfile << padstring("", 20), " fetch  rip 0x", (void*)(Waddr)arf[REG_rip], ": split unaligned load or store ", uop, endl;
+        // if (logable(6)) ptl_logfile << padstring("", 20), " fetch  rip 0x", (void*)(Waddr)arf[REG_rip], ": split unaligned load or store ", uop, endl;
         split_unaligned(uop, unaligned_ldst_buf);
         assert(unaligned_ldst_buf.get(uop, synthop));
       }
@@ -1185,7 +1185,7 @@ struct SequentialCore {
       // becomes visible after the store has committed.
       //
       if unlikely (smc_isdirty(rvp.mfnlo) | (smc_isdirty(rvp.mfnhi))) {
-        logfile << "Self-modifying code at rip ", rvp, " detected: mfn was dirty (invalidate and retry)", endl;
+        ptl_logfile << "Self-modifying code at rip ", rvp, " detected: mfn was dirty (invalidate and retry)", endl;
         bbcache.invalidate_page(rvp.mfnlo, INVALIDATE_REASON_SMC);
         if (rvp.mfnlo != rvp.mfnhi) bbcache.invalidate_page(rvp.mfnhi, INVALIDATE_REASON_SMC);
         return SEQEXEC_SMC;
@@ -1372,9 +1372,9 @@ struct SequentialCore {
       barrier = isclass(uop.opcode, OPCLASS_BARRIER);
 
       if unlikely ((arf[REG_rip] == config.log_backwards_from_trigger_rip) && (config.event_log_enabled)) {
-        logfile << "Hit trigger rip ", (void*)(Waddr)config.log_backwards_from_trigger_rip, "; printing event ring buffer:", endl, flush;
-        eventlog.print(logfile);
-        logfile << "End of triggered event dump", endl;
+        ptl_logfile << "Hit trigger rip ", (void*)(Waddr)config.log_backwards_from_trigger_rip, "; printing event ring buffer:", endl, flush;
+        eventlog.print(ptl_logfile);
+        ptl_logfile << "End of triggered event dump", endl;
       }
 
       if likely (uop.eom) {
@@ -1416,8 +1416,8 @@ struct SequentialCore {
       if (logable(9)) {
         if unlikely (br) {
           core_to_external_state(ctx);
-          logfile << "Core State after branch:", endl;
-          logfile << ctx;
+          ptl_logfile << "Core State after branch:", endl;
+          ptl_logfile << ctx;
         }
       }
     }
@@ -1479,7 +1479,7 @@ struct SequentialCore {
 
     if unlikely (config.event_log_enabled && (!eventlog.start)) {
       eventlog.init(config.event_log_ring_buffer_size);
-      eventlog.logfile = &logfile;
+      eventlog.ptl_logfile = &ptl_logfile;
     }
 
     foreach (i, bbcount) {
@@ -1595,11 +1595,11 @@ struct SequentialMachine: public PTLsimMachine {
   // is hit (as configured elsewhere in config).
   //
   virtual int run(PTLsimConfig& config) {
-    logfile << "Starting sequential core toplevel loop at ", sim_cycle, " cycles and ", total_user_insns_committed, " commits", endl, flush;
+    ptl_logfile << "Starting sequential core toplevel loop at ", sim_cycle, " cycles and ", total_user_insns_committed, " commits", endl, flush;
 
     if unlikely (config.event_log_enabled && (!eventlog.start)) {
       eventlog.init(config.event_log_ring_buffer_size);
-      eventlog.logfile = &logfile;
+      eventlog.ptl_logfile = &ptl_logfile;
     }
 
     foreach (i, contextcount) {
@@ -1608,18 +1608,18 @@ struct SequentialMachine: public PTLsimMachine {
 
       core.external_to_core_state(ctx);
 
-      logfile << "VCPU ", i, " initial state:", endl;
-      logfile << ctx, endl;
+      ptl_logfile << "VCPU ", i, " initial state:", endl;
+      ptl_logfile << ctx, endl;
     }
 
 #ifdef PTLSIM_HYPERVISOR
-    logfile << "Shared info at start:", endl;
-    logfile << sshinfo;
+//    ptl_logfile << "Shared info at start:", endl;
+//    ptl_logfile << sshinfo;
 #endif
 
     bool exiting = false;
 
-    //logfile << "Current logenable = ", logenable, ", start_log_at_iteration = ", config.start_log_at_iteration, ", loglevel ", config.loglevel, endl;
+    //ptl_logfile << "Current logenable = ", logenable, ", start_log_at_iteration = ", config.start_log_at_iteration, ", loglevel ", config.loglevel, endl;
     // assert(logable(1));
 
     for (;;) {
@@ -1635,7 +1635,7 @@ struct SequentialMachine: public PTLsimMachine {
 
 #ifdef PTLSIM_HYPERVISOR
         if unlikely (ctx.dirty) {
-          logfile << "VCPU ", ctx.cpu_index, " context was dirty: update core model internal state", endl;
+          ptl_logfile << "VCPU ", ctx.cpu_index, " context was dirty: update core model internal state", endl;
           core.external_to_core_state(ctx);
           ctx.dirty = 0;
         }
@@ -1662,10 +1662,10 @@ struct SequentialMachine: public PTLsimMachine {
       if unlikely (exiting) break;
     }
 
-    logfile << "Exiting sequential mode at ", total_user_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
+    ptl_logfile << "Exiting sequential mode at ", total_user_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
 
     if (logable(1)) {
-      dump_state(logfile);
+      dump_state(ptl_logfile);
     }
 
     foreach (i, contextcount) {
@@ -1675,8 +1675,8 @@ struct SequentialMachine: public PTLsimMachine {
       core.core_to_external_state(ctx);
 
       if (logable(9)) {
-        logfile << "Core State at end:", endl;
-        logfile << ctx;
+        ptl_logfile << "Core State at end:", endl;
+        ptl_logfile << ctx;
       }
     }
 
@@ -1713,7 +1713,7 @@ SequentialMachine seqmodel("seq");
 int execute_sequential(Context& ctx, CommitRecord* cmtrec, W64 bbcount, W64 insncount) {
   if (config.flush_event_log_every_cycle) {
     assert(config.event_log_enabled);
-    logfile << "execute_sequential(", insncount, " insns): clear event log and flush every cycle", endl;
+    ptl_logfile << "execute_sequential(", insncount, " insns): clear event log and flush every cycle", endl;
     eventlog.clear();
   }
   if unlikely (cmtrec) {

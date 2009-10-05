@@ -53,7 +53,7 @@ void assist_int(Context& ctx) {
   if (intid == 0x80) {
     handle_syscall_32bit(SYSCALL_SEMANTICS_INT80);
   } else {
-    logfile << "Unknown int 0x", hexstring(intid, 8), "; aborting", endl, flush;
+    ptl_logfile << "Unknown int 0x", hexstring(intid, 8), "; aborting", endl, flush;
     assert(false);
   }
 #endif
@@ -76,12 +76,12 @@ void assist_syscall(Context& ctx) {
 //  //
 //
 //  if (ctx.kernel_mode) {
-//    logfile << ctx, endl, flush;
+//    ptl_logfile << ctx, endl, flush;
 //    assert(!ctx.kernel_mode);
 //  }
 //  handle_syscall_assist(ctx);
 	ctx.setup_qemu_switch();
-	handle_syscall(ctx.regs[R_ECX]);
+	helper_syscall(ctx.regs[R_ECX]);
 #else
   if (ctx.use64) {
 #ifdef __x86_64__
@@ -105,7 +105,7 @@ void assist_hypercall(Context& ctx) {
 //  // hypercall into Xen itself.
 //  //
 //  if (!ctx.kernel_mode) {
-//    logfile << ctx, endl, flush;
+//    ptl_logfile << ctx, endl, flush;
 //    assert(ctx.kernel_mode);
 //  }
 //  handle_xen_hypercall_assist(ctx);
@@ -262,7 +262,7 @@ void assist_cpuid(Context& ctx) {
 //
 //  W32 func = rax;
 //  if (logable(4)) {
-//    logfile << "assist_cpuid: func 0x", hexstring(func, 32), " called from ",
+//    ptl_logfile << "assist_cpuid: func 0x", hexstring(func, 32), " called from ",
 //      (void*)(Waddr)ctx.reg_selfrip, ":", endl;
 //  }
 //
@@ -427,46 +427,51 @@ void assist_ldmxcsr(Context& ctx) {
 }
 
 void assist_fxsave(Context& ctx) {
-  FXSAVEStruct state;
-
-  ctx.fxsave(state);
-
+//  FXSAVEStruct state;
+//
+//  ctx.fxsave(state);
+//
+//  Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
+//
+//  PageFaultErrorCode pfec;
+//  Waddr faultaddr;
+//  int bytes = ctx.copy_to_user(target, &state, sizeof(state), pfec, faultaddr);
+//
+//  if (bytes < sizeof(state)) {
+//    ctx.eip = ctx.reg_selfrip;
+//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
+//    return;
+//  }
   Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
-
-  PageFaultErrorCode pfec;
-  Waddr faultaddr;
-  int bytes = ctx.copy_to_user(target, &state, sizeof(state), pfec, faultaddr);
-
-  if (bytes < sizeof(state)) {
-    ctx.eip = ctx.reg_selfrip;
-    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-    return;
-  }
+  ctx.setup_qemu_switch();
+  helper_fxsave(target, 1);
   ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_fxrstor(Context& ctx) {
-  FXSAVEStruct state;
-
+//  FXSAVEStruct state;
+//
+//  Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
+//
+//  PageFaultErrorCode pfec;
+//  Waddr faultaddr;
+//  int bytes = ctx.copy_from_user(&state, target, sizeof(state), pfec, faultaddr);
+//
+//  if (bytes < sizeof(state)) {
+//    ctx.eip = ctx.reg_selfrip;
+//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
+//    return;
+//  }
+//
+//  ctx.fxrstor(state);
+//
+//  // We can't have exceptions going on inside PTLsim: virtualize this feature in uopimpl code
+//  // Everything else will be used by real SSE insns inside uopimpls. 
+//  W32 mxcsr = ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
+//  x86_set_mxcsr(mxcsr);
   Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
-
-  PageFaultErrorCode pfec;
-  Waddr faultaddr;
-  int bytes = ctx.copy_from_user(&state, target, sizeof(state), pfec, faultaddr);
-
-  if (bytes < sizeof(state)) {
-    ctx.eip = ctx.reg_selfrip;
-    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-    return;
-  }
-
-  ctx.fxrstor(state);
-
-  // We can't have exceptions going on inside PTLsim: virtualize this feature in uopimpl code
-  // Everything else will be used by real SSE insns inside uopimpls. 
-  W32 mxcsr = ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
-  x86_set_mxcsr(mxcsr);
-
+  ctx.setup_qemu_switch();
+  helper_fxrstor(target, 1);
   ctx.eip = ctx.reg_nextrip;
 }
 
@@ -491,7 +496,7 @@ void assist_wrmsr(Context& ctx) {
 //      invalid = 1; break;
 //    }
 //    if (invalid) {
-//      logfile << "Warning: wrmsr: invalid MSR write (msr  ", (void*)(Waddr)msr,
+//      ptl_logfile << "Warning: wrmsr: invalid MSR write (msr  ", (void*)(Waddr)msr,
 //        ") with value ", (void*)(Waddr)value, " from rip ",
 //        (void*)(Waddr)ctx.eip, endl;
 //      // Invalid MSR writes are ignored by Xen by default
@@ -585,7 +590,7 @@ void assist_write_cr2(Context& ctx) {
   ctx.eip = ctx.reg_nextrip;
 }
 
-void switch_page_table(mfn_t mfn);
+//void switch_page_table(mfn_t mfn);
 
 void assist_write_cr3(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
@@ -631,6 +636,7 @@ void assist_write_debug_reg(Context& ctx) {
 
   ctx.setup_qemu_switch();
 
+  int i;
   if(regid < 4) {
 	  hw_breakpoint_remove(env, regid);
 	  ctx.dr[regid] = value;
@@ -746,7 +752,7 @@ void assist_iret64(Context& ctx) {
 //  }
 //
 //  if (logable(5)) {
-//    logfile << "IRET64 from rip ", (void*)(Waddr)ctx.eip, ": iretctx @ ",
+//    ptl_logfile << "IRET64 from rip ", (void*)(Waddr)ctx.eip, ": iretctx @ ",
 //      (void*)(Waddr)ctx.regs[R_ESP], " = ", frame, " (", sim_cycle, " cycles, ",
 //      total_user_insns_committed, " commits)", endl;
 //  }
@@ -807,7 +813,7 @@ void assist_ioport_in(Context& ctx) {
 
 //  W64 value = x86_merge(ctx.regs[R_EAX], 0xffffffffffffffffULL, sizeshift);
 //
-//  logfile << "assist_ioport_in from rip ", (void*)(Waddr)ctx.reg_selfrip, "): ",
+//  ptl_logfile << "assist_ioport_in from rip ", (void*)(Waddr)ctx.reg_selfrip, "): ",
 //    "in port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) => 0x",
 //    hexstring(value, 64), endl;
 
@@ -840,7 +846,7 @@ void assist_ioport_out(Context& ctx) {
 	  helper_outl(port, value);
   }
 
-//  logfile << "assist_ioport_out from rip ", (void*)(Waddr)ctx.reg_selfrip, "): ",
+//  ptl_logfile << "assist_ioport_out from rip ", (void*)(Waddr)ctx.reg_selfrip, "): ",
 //    "out port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) <= 0x",
 //    hexstring(value, 64), endl;
 
@@ -1014,7 +1020,7 @@ bool TraceDecoder::decode_complex() {
     if (modrm.reg >= 6) MakeInvalid();
 
     int rdreg = (rd.type == OPTYPE_MEM) ? REG_temp0 : arch_pseudo_reg_to_arch_reg[rd.reg.reg];
-    TransOp ldp(OP_ld, rdreg, REG_ctx, REG_imm, REG_zero, 1, offsetof(Context, segs[modrm.reg].selector)); ldp.internal = 1; this << ldp;
+    TransOp ldp(OP_ld, rdreg, REG_ctx, REG_imm, REG_zero, 1, offsetof_t(Context, segs[modrm.reg].selector)); ldp.internal = 1; this << ldp;
 
     prefixes &= ~PFX_LOCK;
     if (rd.type == OPTYPE_MEM) result_store(rdreg, REG_temp5, rd);
@@ -1120,7 +1126,7 @@ bool TraceDecoder::decode_complex() {
       this << TransOp(OP_movccr, REG_temp0, REG_zero, REG_temp0, REG_zero, 3);
     }
 
-    TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof(Context, internal_eflags)); ldp.internal = 1; this << ldp;
+    TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof_t(Context, internal_eflags)); ldp.internal = 1; this << ldp;
     this << TransOp(OP_or, REG_temp1, REG_temp1, REG_temp0, REG_zero, 2); // merge in standard flags
 
     this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
@@ -1774,7 +1780,7 @@ bool TraceDecoder::decode_complex() {
     //
     if (((valid_byte_count - ((int)(rip - (Waddr)bb.rip))) >= 5) && 
         (fetch(5) == 0xa20f6e6578)) { // 78 65 6e 0f a2 = 'x' 'e' 'n' <cpuid>
-      // logfile << "Decode special intercept cpuid at rip ", (void*)ripstart, "; return to rip ", (void*)rip, endl;
+      // ptl_logfile << "Decode special intercept cpuid at rip ", (void*)ripstart, "; return to rip ", (void*)rip, endl;
       EndOfDecode();
       microcode_assist(ASSIST_CPUID, ripstart, rip);
       end_of_block = 1;
@@ -1799,14 +1805,14 @@ bool TraceDecoder::decode_complex() {
     int offset;
 
     switch (modrm.reg) {
-    case 0: offset = offsetof(Context, cr[0]); break;
-    case 1: offset = offsetof(Context, cr[1]); break;
-    case 2: offset = offsetof(Context, cr[2]); break;
-    case 3: offset = offsetof(Context, cr[3]); break;
-    case 4: offset = offsetof(Context, cr[4]); break;
-    case 5: offset = offsetof(Context, cr[5]); break;
-    case 6: offset = offsetof(Context, cr[6]); break;
-    case 7: offset = offsetof(Context, cr[7]); break;
+    case 0: offset = offsetof_t(Context, cr[0]); break;
+    case 1: offset = offsetof_t(Context, cr[1]); break;
+    case 2: offset = offsetof_t(Context, cr[2]); break;
+    case 3: offset = offsetof_t(Context, cr[3]); break;
+    case 4: offset = offsetof_t(Context, cr[4]); break;
+    case 5: offset = offsetof_t(Context, cr[5]); break;
+    case 6: offset = offsetof_t(Context, cr[6]); break;
+    case 7: offset = offsetof_t(Context, cr[7]); break;
     default: MakeInvalid();
     }
 
@@ -1871,14 +1877,14 @@ bool TraceDecoder::decode_complex() {
     int offset;
 
     switch (modrm.reg) {
-    case 0: offset = offsetof(Context, dr[0]); break;
-    case 1: offset = offsetof(Context, dr[1]); break;
-    case 2: offset = offsetof(Context, dr[2]); break;
-    case 3: offset = offsetof(Context, cr[3]); break;
-    case 4: offset = offsetof(Context, dr[4]); break;
-    case 5: offset = offsetof(Context, dr[5]); break;
-    case 6: offset = offsetof(Context, dr[6]); break;
-    case 7: offset = offsetof(Context, dr[7]); break;
+    case 0: offset = offsetof_t(Context, dr[0]); break;
+    case 1: offset = offsetof_t(Context, dr[1]); break;
+    case 2: offset = offsetof_t(Context, dr[2]); break;
+    case 3: offset = offsetof_t(Context, cr[3]); break;
+    case 4: offset = offsetof_t(Context, dr[4]); break;
+    case 5: offset = offsetof_t(Context, dr[5]); break;
+    case 6: offset = offsetof_t(Context, dr[6]); break;
+    case 7: offset = offsetof_t(Context, dr[7]); break;
     default: MakeInvalid();
     }
 
@@ -2330,7 +2336,7 @@ bool TraceDecoder::decode_complex() {
       EndOfDecode();
       is_sse = 1;
 
-      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof(Context, mxcsr)); ldp.internal = 1; this << ldp;
+      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof_t(Context, mxcsr)); ldp.internal = 1; this << ldp;
       result_store(REG_temp1, REG_temp0, rd);
       break;
     }
@@ -2393,7 +2399,7 @@ bool TraceDecoder::decode_complex() {
     EndOfDecode();
     TransOp ldp1(OP_ld, REG_rdx, REG_zero, REG_imm, REG_zero, 3, (Waddr)&sim_cycle); ldp1.internal = 1; this << ldp1;
 #ifdef PTLSIM_HYPERVISOR
-    TransOp ldp2(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 3, offsetof(Context, tsc_offset)); ldp2.internal = 1; this << ldp2;
+    TransOp ldp2(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 3, offsetof_t(Context, tsc_offset)); ldp2.internal = 1; this << ldp2;
     this << TransOp(OP_add, REG_rdx, REG_rdx, REG_temp0, REG_zero, 3);
 #endif
     this << TransOp(OP_mov, REG_rax, REG_zero, REG_rdx, REG_zero, 2);
