@@ -1639,14 +1639,14 @@ DataStoreNode& ptl_mm_capture_stats(DataStoreNode& root) {
   return root;
 }
 
-asmlinkage void* malloc(size_t size) {
-  return ptl_mm_alloc(size, getcaller());
-}
-
-asmlinkage void free(void* ptr) {
-  ptl_mm_free(ptr, getcaller());
-}
-
+//asmlinkage void* malloc(size_t size) {
+//  return ptl_mm_alloc(size, getcaller());
+//}
+//
+//asmlinkage void free(void* ptr) {
+//  ptl_mm_free(ptr, getcaller());
+//}
+//
 void* operator new(size_t sz) {
   return ptl_mm_alloc(sz, getcaller());
 }

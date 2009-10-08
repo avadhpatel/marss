@@ -38,6 +38,10 @@
 #include "virtio-console.h"
 #include "hpet_emul.h"
 
+#ifdef PTLSIM_QEMU
+#include <ptl-qemu.h>
+#endif
+
 /* output Bochs bios info messages */
 //#define DEBUG_BIOS
 
@@ -1070,6 +1074,9 @@ vga_bios_error:
 
     i8042_init(i8259[1], i8259[12], 0x60);
     DMA_init(0);
+#ifdef PTLSIM_QEMU
+	ptlsim_init();
+#endif
 #ifdef HAS_AUDIO
     audio_init(pci_enabled ? pci_bus : NULL, i8259);
 #endif

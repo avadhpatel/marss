@@ -3,33 +3,31 @@
 import os
 import platform
 
-# Automatically set the -j option to No of available CPUs
-# user can override this by specifying -j option at runtime
-num_cpu = int(os.environ.get('NUM_CPU', 2))
-SetOption('num_jobs', num_cpu)
-print("running with -j%s" % GetOption('num_jobs'))
-
-# Location of QEMU directory (default is '../qemu/')
-qemu_dir = "../qemu"
-
 # List of subdirectories where we have source code
 dirs = ['cache', 'core', 'lib', 'sim', 'stats', 'tools', 'x86']
 
+try:
+	Import('ptl_env')
+	env = ptl_env
+	qemu_dir = env['qemu_dir']
+except:
+	env = Environment()
+	env['CC'] = 'g++'
+	qemu_dir = "%s/../qemu" % os.getcwd()
+
 # Setup the environment
 env = Environment()
-env['CC'] = 'g++'
-env.Append(CCFLAGS = '-O2')
+env.Append(CCFLAGS = '-O2 -g')
 
 # Include all the subdirectories into the CCFLAGS
-incflags_str = ''
+env['CPPPATH'] = []
 for dir in dirs:
-    incflags_str += '-I%s ' % dir
+    env['CPPPATH'].append(os.getcwd() + "/" + dir)
 
-env.Append(CCFLAGS = incflags_str)
-env.Append(CCFLAGS = "-I" + qemu_dir)
-env.Append(CCFLAGS = "-I" + qemu_dir + "/target-i386")
-env.Append(CCFLAGS = "-I" + qemu_dir + "/fpu")
-env.Append(CCFLAGS = "-I" + qemu_dir + "/x86_64-softmmu")
+env['CPPPATH'].append(qemu_dir)
+env['CPPPATH'].append(qemu_dir + "/target-i386")
+env['CPPPATH'].append(qemu_dir + "/fpu")
+env['CPPPATH'].append(qemu_dir + "/x86_64-softmmu")
 
 # Set all the -D flags
 debug = ARGUMENTS.get('debug', 0)
@@ -51,15 +49,52 @@ Export('env')
 print("Build Envrionment:")
 print("\tCC:%s" % env['CC'])
 print("\tCCFLAGS:%s" % env['CCFLAGS'])
+print("\tCPPPATH:%s" % env['CPPPATH'])
 
 # Setup the build directory
-#VariantDir('build', dirs)
 
 # Now call the SConscript in all subdirectories to build object files
 objs = []
+dst_objs = []
 for dir in dirs:
-#    VariantDir('build/%s' % dir , dir)
+	# Skip the Tools directory
+    if dir == "tools":
+        continue
     o = SConscript('%s/SConscript' % dir, variant_dir='build/%s' % dir) 
-    objs.append(o)
+    if type(o) == list:
+        objs.append(o[0])
+        dst_objs.append(o[1])
+    else:
+        objs.append(o)
 
-#env.Library('build/libmptlsim', objs)
+# Build ptlsim.dst.o
+inc_str = ""
+for i_s in env['CPPPATH']:
+    inc_str += " -I%s" % i_s
+env['incstr'] = inc_str
+dst_script = "%s/tools/dstbuild" % os.getcwd()
+st_i = env.Command('build/stats.i', 'stats/stats.h',
+        "$CXX $CCFLAGS $incstr -E -C $SOURCE > $TARGET")
+dst_tmp_cpp = env.Command('build/dstbuild.temp.cpp', st_i,
+        "cat $SOURCE | %s PTLsimStats > $TARGET" % dst_script)
+dst_tmp = env.Program('build/dstbuild.temp', 
+        dst_objs + ["build/dstbuild.temp.cpp"],
+        CCFLAGS = env['CCFLAGS'] + " -DDSTBUILD -include stats.h")
+ptl_dst = env.Command('build/ptlsim.dst', dst_tmp,
+        "./$SOURCE > $TARGET")
+ptl_dst_o = env.Command('build/ptlsim.dst.o', ptl_dst,
+        "objcopy -I binary -O elf64-x86-64 -B i386 --rename-section "+
+        ".data=.dst,alloc,load,readonly,data,contents $SOURCE $TARGET")
+
+Requires(dst_tmp_cpp, st_i)
+Requires(dst_tmp, dst_tmp_cpp)
+Delete(st_i)
+Delete(dst_tmp_cpp)
+Delete(dst_tmp)
+
+
+lib = env.Library('build/libmptlsim', objs + ptl_dst_o)
+
+Requires(lib, ptl_dst)
+
+Return('lib')

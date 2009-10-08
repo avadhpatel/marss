@@ -52,6 +52,9 @@
  * 'i'          32 bit integer
  * 'l'          target long (32 or 64 bit)
  * '/'          optional gdb-like print format (like "/10x")
+#ifdef PTLSIM_QEMU
+ * 'W'			Whole string - pass it to the calling function
+#endif
  *
  * '?'          optional type (for 'F', 's' and 'i')
  *
@@ -494,6 +497,10 @@ static void do_log(const char *items)
 static void do_stop(void)
 {
     vm_stop(EXCP_INTERRUPT);
+}
+
+static void do_ptlsim(char* args)
+{
 }
 
 static void encrypted_bdrv_it(void *opaque, BlockDriverState *bs)
@@ -1575,6 +1582,9 @@ static const term_cmd_t term_cmds[] = {
       "target", "request VM to change it's memory allocation (in MB)" },
     { "set_link", "ss", do_set_link,
       "name [up|down]", "change the link status of a network adapter" },
+#ifdef PTLSIM_QEMU
+	{ "ptlsim", "W", do_ptlsim, "-help for all options", "Set various simulation options" },
+#endif
     { NULL, NULL, },
 };
 
@@ -2359,6 +2369,24 @@ static void monitor_handle_command(const char *cmdline)
             break;
         typestr++;
         switch(c) {
+#ifdef PTLSIM_QEMU
+		case 'W':
+			{
+				char* str;
+				while(qemu_isspace(*p))
+					p++;
+				if(*p == '\0')
+					str = NULL;
+				else {
+					str = p;
+					// Put the *p to the end of the string
+					p += (strlen(str));
+				}
+				str_allocated[nb_args] = str;
+				args[nb_args++] = str;
+			}
+			break;
+#endif
         case 'F':
         case 'B':
         case 's':

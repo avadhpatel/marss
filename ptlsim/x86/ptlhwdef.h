@@ -11,9 +11,9 @@
 
 extern "C" {
 #include <cpu.h>
-//#include <exec.h>
-
-extern struct CPUX86State *env;
+#define CPU_NO_GLOBAL_REGS
+#include <exec.h>
+//register struct CPUX86State *env asm(AREG0);
 }
 
 #define PTLSIM_VIRT_BASE 0x0000000000000000ULL // PML4 entry 0

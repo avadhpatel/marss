@@ -6,9 +6,8 @@
 //
 
 #include <ptlcalls.h>
-#ifdef __cplusplus
+
 extern "C" {
-#endif
   W64 ptlcall_nop__() { return ptlcall_nop(); }
   W64 ptlcall_switch_to_sim__() { return ptlcall_switch_to_sim(); }
   W64 ptlcall_switch_to_native__() { return ptlcall_switch_to_native(); }
@@ -18,6 +17,4 @@ extern "C" {
   W64 ptlcall_switch_to_sim_() { return ptlcall_switch_to_sim(); }
   W64 ptlcall_switch_to_native_() { return ptlcall_switch_to_native(); }
   W64 ptlcall_capture_stats_() { return ptlcall_capture_stats(NULL); }
-#ifdef __cplusplus
 };
-#endif

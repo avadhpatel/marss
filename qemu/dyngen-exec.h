@@ -85,7 +85,9 @@ typedef void * host_reg_t;
 #ifdef _BSD
 typedef struct __sFILE FILE;
 #else
+#ifndef __cplusplus
 typedef struct FILE FILE;
+#endif
 #endif
 extern int fprintf(FILE *, const char *, ...);
 extern int fputs(const char *, FILE *);

@@ -1982,7 +1982,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
     }
 
     update_progress();
-    inject_events();
+//    inject_events();
     // limit the ptl_logfile size
     if unlikely (ptl_logfile.tellp() > config.log_file_size)
        backup_and_reopen_logfile();
@@ -2048,7 +2048,8 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
     exiting |= core.runcycle();
     */
 
-    if unlikely (check_for_async_sim_break() && (!stopping)) {
+//    if unlikely (check_for_async_sim_break() && (!stopping)) {
+    if unlikely (!stopping) {
       ptl_logfile << "Waiting for all VCPUs to reach stopping point, starting at cycle ", sim_cycle, endl;
       // force_logging_enabled();
       /* svn 225

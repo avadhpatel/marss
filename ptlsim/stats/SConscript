@@ -7,4 +7,7 @@ Import('env')
 src_files = Glob('*.cpp')
 
 objs = env.Object(src_files)
-Return('objs')
+dst_objs = env.Object(Split("datastore.cpp"))
+
+ret_objs = [objs, dst_objs]
+Return('ret_objs')

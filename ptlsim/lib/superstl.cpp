@@ -14,6 +14,11 @@
 bool force_synchronous_streams = false;
 
 namespace superstl {
+
+	istream& cin = std::cin;
+	ostream& cout = std::cout;
+	ostream& cerr = std::cerr;
+
 //  //
 //  // odstream
 //  //

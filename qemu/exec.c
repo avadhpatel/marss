@@ -382,7 +382,8 @@ static inline PhysPageDesc *phys_page_find(target_phys_addr_t index)
 }
 
 #if !defined(CONFIG_USER_ONLY)
-static void tlb_protect_code(ram_addr_t ram_addr);
+//static void tlb_protect_code(ram_addr_t ram_addr);
+void tlb_protect_code(ram_addr_t ram_addr);
 static void tlb_unprotect_code_phys(CPUState *env, ram_addr_t ram_addr,
                                     target_ulong vaddr);
 #define mmap_lock() do { } while(0)

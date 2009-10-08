@@ -332,33 +332,6 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 	return INVALID_PHYSADDR;
 }
 
-Waddr Context::virt_to_pte_phys_addr(W64 rawvirt, int level) {
-	ptl_logfile << "call to Context::virt_to_pte_phys_addr, function not implemented\n";
-	assert(0);
-	return INVALID_PHYSADDR;
-}
-
-void Context::update_mode_count() {
-	if likely (!kernel_mode) {
-		W64 prev_cycles = cycles_at_last_mode_switch;
-		W64 prev_insns = insns_at_last_mode_switch;
-		W64 delta_cycles = sim_cycle - cycles_at_last_mode_switch;
-		W64 delta_insns = user_instructions_commited - 
-			insns_at_last_mode_switch;
-
-		cycles_at_last_mode_switch = sim_cycle;
-		insns_at_last_mode_switch = user_instructions_commited;
-
-		if likely (use64) {
-			per_core_event_update(cpu_index, cycles_in_mode.user64 += delta_cycles);
-			per_core_event_update(cpu_index, insns_in_mode.user64 += delta_insns);
-		} else {
-			per_core_event_update(cpu_index, cycles_in_mode.user32 += delta_cycles);
-			per_core_event_update(cpu_index, insns_in_mode.user32 += delta_insns);
-		}
-	}
-}
-
 bool Context::check_events() const {
 	return ((interrupt_request | exception_index) > 0 ? true : false);
 }

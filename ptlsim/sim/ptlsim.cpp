@@ -48,6 +48,7 @@ W64 ticks_per_update;
 
 W64 last_stats_captured_at_cycle = 0;
 W64 tsc_at_start ;
+bool inside_ptlsim = 0;
 
 #endif
 
@@ -438,8 +439,8 @@ void force_logging_enabled() {
   config.flush_event_log_every_cycle = 1;
 }
 
-extern byte _binary_ptlsim_dst_start;
-extern byte _binary_ptlsim_dst_end;
+extern byte _binary_ptlsim_build_ptlsim_dst_start;
+extern byte _binary_ptlsim_build_ptlsim_dst_end;
 StatsFileWriter statswriter;
 
 void capture_stats_snapshot(const char* name) {
@@ -470,7 +471,9 @@ void flush_stats() {
   statswriter.flush();
 }
 
-void print_sysinfo(ostream& os);
+void print_sysinfo(ostream& os) {
+	// TODO: In QEMU based system 
+}
 
 bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   static bool first_time = true;
@@ -485,8 +488,8 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 
   if (config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
     // Can also use "-ptl_logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
-    statswriter.open(config.stats_filename, &_binary_ptlsim_dst_start,
-                     &_binary_ptlsim_dst_end - &_binary_ptlsim_dst_start,
+    statswriter.open(config.stats_filename, &_binary_ptlsim_build_ptlsim_dst_start,
+                     &_binary_ptlsim_build_ptlsim_dst_end - &_binary_ptlsim_build_ptlsim_dst_start,
                      sizeof(PTLsimStats));
     current_stats_filename = config.stats_filename;
   }
@@ -604,10 +607,10 @@ PTLsimMachine* PTLsimMachine::getmachine(const char* name) {
 }
 
 // Currently executing machine model:
-PTLsimMachine* current_machine = null;
+PTLsimMachine* curr_ptl_machine = null;
 
 PTLsimMachine* PTLsimMachine::getcurrent() {
-  return current_machine;
+  return curr_ptl_machine;
 }
 
 void ptl_reconfigure(char* config_str) {
@@ -616,9 +619,9 @@ void ptl_reconfigure(char* config_str) {
 	handle_config_change(config, 1, argv);
 	ptl_logfile << "Configuration changed: ", config, endl;
 
-	// set the current_machine to null so it will be automatically changed to
+	// set the curr_ptl_machine to null so it will be automatically changed to
 	// new configured machine
-	current_machine = null;
+	curr_ptl_machine = null;
 }
 
 void ptl_machine_init(char* config_str) {
@@ -791,8 +794,8 @@ void print_stats_in_log(){
 bool ptl_simulate() {
 	PTLsimMachine* machine = null;
 	char* machinename = config.core_name;
-	if likely (current_machine != null) {
-		machine = current_machine;
+	if likely (curr_ptl_machine != null) {
+		machine = curr_ptl_machine;
 	} else {
 		machine = PTLsimMachine::getmachine(machinename);
 	}
@@ -824,7 +827,7 @@ bool ptl_simulate() {
 		last_printed_status_at_cycle = 0;
 
 		tsc_at_start = rdtsc();
-		current_machine = machine;
+		curr_ptl_machine = machine;
 	}
 
 	machine->run(config);
@@ -835,7 +838,7 @@ bool ptl_simulate() {
 
 	W64 tsc_at_end = rdtsc();
 	machine->update_stats(stats);
-	current_machine = null;
+	curr_ptl_machine = null;
 
 	W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
 	stats.elapse_seconds = seconds;
@@ -957,11 +960,11 @@ bool simulate(const char* machinename) {
   last_printed_status_at_cycle = 0;
 
   W64 tsc_at_start = rdtsc();
-  current_machine = machine;
+  curr_ptl_machine = machine;
   machine->run(config);
   W64 tsc_at_end = rdtsc();
   machine->update_stats(stats);
-  current_machine = null;
+  curr_ptl_machine = null;
 
   W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
   stats.elapse_seconds = seconds;
@@ -1002,6 +1005,72 @@ void shutdown_subsystems() {
   shutdown_uops();
   shutdown_decode();
   ptl_mm_flush_logging();
+}
+
+RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
+  W64 phyaddr;
+  bool invalid;
+
+  use64 = ctx.use64;
+  kernel = ctx.kernel_mode;
+  df = ((ctx.internal_eflags & FLAG_DF) != 0);
+  padlo = 0;
+  padhi = 0;
+
+//  mfnlo = (invalid) ? INVALID : pte.mfn;
+//  mfnhi = mfnlo;
+//  if unlikely (invalid) ctx.flush_tlb_virt(rip);
+
+  int page_crossing = ((lowbits(rip, 12) + (bytes-1)) >> 12);
+
+  //
+  // Since table lookups only know the RIP of the target and not
+  // its size, we don't know if there is a page crossing. Hence,
+  // we always assume there is. BB translation (case above) may
+  // be more optimized, only doing this if the pages are truly
+  // different.
+  //
+  //++MTY TODO:
+  // If BBs are terminated at the first insn to cross a page,
+  // technically we could get away with only checking if the
+  // byte at rip + (15-1) would hit the next page.
+  //
+
+//  if unlikely (page_crossing) {
+//    pte = ctx.virt_to_pte(rip + (bytes-1));
+//    invalid = ((!pte.p) | pte.nx | ((!ctx.kernel_mode) & (!pte.us)));
+//    mfnhi = (invalid) ? INVALID : pte.mfn;
+//    if unlikely (invalid) ctx.flush_tlb_virt(rip + (bytes-1));
+//  }
+
+  return *this;
+}
+
+Waddr Context::virt_to_pte_phys_addr(W64 rawvirt, int level) {
+	ptl_logfile << "call to Context::virt_to_pte_phys_addr, function not implemented\n";
+	assert(0);
+	return INVALID_PHYSADDR;
+}
+
+void Context::update_mode_count() {
+	if likely (!kernel_mode) {
+		W64 prev_cycles = cycles_at_last_mode_switch;
+		W64 prev_insns = insns_at_last_mode_switch;
+		W64 delta_cycles = sim_cycle - cycles_at_last_mode_switch;
+		W64 delta_insns = user_instructions_commited - 
+			insns_at_last_mode_switch;
+
+		cycles_at_last_mode_switch = sim_cycle;
+		insns_at_last_mode_switch = user_instructions_commited;
+
+		if likely (use64) {
+			per_core_event_update(cpu_index, cycles_in_mode.user64 += delta_cycles);
+			per_core_event_update(cpu_index, insns_in_mode.user64 += delta_insns);
+		} else {
+			per_core_event_update(cpu_index, cycles_in_mode.user32 += delta_cycles);
+			per_core_event_update(cpu_index, insns_in_mode.user32 += delta_insns);
+		}
+	}
 }
 
 #endif // CONFIG_ONLY

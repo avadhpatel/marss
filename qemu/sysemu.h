@@ -25,6 +25,10 @@ int64_t cpu_get_ticks(void);
 void cpu_enable_ticks(void);
 void cpu_disable_ticks(void);
 
+#ifdef PTLSIM_QEMU
+void cpu_set_sim_ticks(void);
+#endif
+
 void qemu_system_reset_request(void);
 void qemu_system_shutdown_request(void);
 void qemu_system_powerdown_request(void);

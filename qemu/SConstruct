@@ -1,0 +1,293 @@
+
+# SCons File to compile QEMU
+
+Import('qemu_env')
+Import('qemu_target')
+Import('ptlsim_lib')
+Import('ptlsim_inc_dir')
+env = qemu_env
+target = qemu_target
+
+target_base_arch = "%s" % target['arch']
+if target_base_arch == "x86_64":
+    target_base_arch = "i386"
+
+target_path = "%s/target-%s" % (env['source_path'], target_base_arch)
+hw_path = "%s/hw" % env['source_path']
+env['CPPPATH'] = []
+env['CPPPATH'].append([".", "..", target_path, env['source_path']])
+env['CPPPATH'].append(target['dir'])
+env['CPPPATH'].append(ptlsim_inc_dir)
+env.Append(CCFLAGS = "-MMD -MP -DNEED_CPU_H")
+env.Append(CCFLAGS = "-DPTLSIM_QEMU")
+
+error_str = "failure"
+
+# if compiling with g++ add -x c flag
+if "g++" in env['CC'] :
+    env.Append(CCFLAGS = "-x c")
+
+# Add target directory to search for source files
+print("Repository is : %s" % target_path)
+Repository(target_path)
+
+# If we add user space emulator support then 
+# add user space compilation from QEMU's makefile
+
+qemu_prog_name = "qemu-system-%s" % target['arch']
+
+# Set helper CFLAGS
+HELPER_CFLAGS = ""
+if target['arch'] == "i386":
+    HELPER_CLFAGS += " -fomit-frame-pointer"
+
+env.Append(CPPFLAGS = "-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 \
+        -D_LARGEFILE_SOURCE")
+env.Append(LIBS = "m")
+
+#######################
+# libqemu_common.a
+
+comm_lib_env = env.Clone()
+
+block_files = "cutils.c qemu-malloc.c"
+block_files += " block-cow.c block-qcow.c aes.c block-vmdk.c"
+block_files += " block-cloop.c block-dmg.c block-bochs.c block-vpc.c"
+block_files += " block-vvfat.c block-qcow2.c block-parallels.c"
+block_files += " block-nbd.c nbd.c block.c aio.c"
+
+if env['aio']:
+    block_files += " posix-aio-compat.c"
+block_files += " block-raw-posix.c"
+
+comm_files = "readline.c console.c"
+comm_hw_files = "irq.c i2c.c smbus.c smbus_eeprom.c max7310.c"
+comm_hw_files += " max111x.c wm8750.c ssd0303.c ssd0323.c ads7846.c"
+comm_hw_files += " stellaris_input.c twl92230.c tmp105.c lm832x.c"
+comm_hw_files += " scsi-disk.c cdrom.c scsi-generic.c"
+comm_hw_files += " usb.c usb-hub.c usb-hid.c" 
+comm_hw_files += " usb-msd.c usb-wacom.c usb-serial.c usb-net.c"
+comm_hw_files += " sd.c ssi-sd.c"
+comm_hw_files += " bt.c bt-l2cap.c bt-sdp.c"
+comm_hw_files += " bt-hci.c bt-hid.c usb-bt.c"
+comm_hw_files += " "
+
+comm_files += " buffered_file.c migration.c migration-tcp.c net.c"
+comm_files += " qemu-sockets.c qemu-char.c aio.c net-checksum.c"
+comm_files += " savevm.c cache-utils.c bt-host.c bt-vhci.c "
+comm_files += " usb-%s.c" % env['usb']
+comm_files += " migration-exec.c"
+
+comm_libs = ""
+comm_ldflags = ""
+if env['brlapi']:
+    comm_hw_files += " baum.c"
+    comm_libs += " brlapi"
+
+audio_files = "audio.c noaudio.c wavaudio.c mixeng.c"
+audio_pt = False
+audio_pt_int = False
+if env['sdl']:
+    audio_files += " sdlaudio.c"
+if 'oss' in env and env['oss']:
+    audio_files += " ossaudio.c"
+if 'coreaudio' in env and env['coreaudio']:
+    audio_files += " coreaudio.c"
+if 'alsa' in env and env['alsa']:
+    audio_files += " alsaaudio.c"
+if 'dsound' in env and env['dsound']:
+    audio_files += " dsoundaudio.c"
+if 'fmod' in env and env['fmod']:
+    audio_files += " fmodaudio.c"
+if 'esd' in env and env['esd']:
+    audio_pt = True
+    audio_pt_int = True
+    audio_files += " esdaudio.c"
+if 'pa' in env and env['pa']:
+    audio_pt = True
+    audio_pt_int = True
+    audio_files += " paaudio.c"
+
+if audio_pt:
+    comm_ldflags = "-pthread"
+if audio_pt_int:
+    audio_files += " audio_pt_int.c"
+
+audio_files += " wavcapture.c"
+audio_list = []
+for a_f in Split(audio_files):
+    audio_list.append("audio/%s" % a_f)
+
+if env['sdl']:
+    comm_files += " sdl.c x_keymap.c"
+    comm_lib_env.ParseConfig("sdl-config --cflags")
+if env['curses']:
+    comm_files += " curses.c"
+comm_files += " vnc.c d3des.c"
+
+slirp_list = []
+if env['slirp']:
+    slirp_files = "cksum.c if.c ip_icmp.c ip_input.c ip_output.c \
+slirp.c mbuf.c misc.c sbuf.c socket.c tcp_input.c tcp_output.c \
+tcp_subr.c tcp_timer.c udp.c bootp.c debug.c tftp.c"
+    for s in Split(slirp_files):
+        slirp_list.append("slirp/%s" % s)
+    comm_lib_env['CPPPATH'].append("slirp")
+
+print slirp_list
+
+comm_hw_list = []
+for h in Split(comm_hw_files):
+    comm_hw_list.append("hw/%s" % h)
+
+
+comm_lib_env['CPPPATH'].append("fpu")
+libqemu_comm = comm_lib_env.Library('qemu_common', Split(comm_files) +
+        audio_list + slirp_list + comm_hw_list + Split(block_files))
+
+#######################
+# cpu emulator library
+
+cpu_emu_objs = "exec.c kqemu.c translate-all.c host-utils.c"
+cpu_emu_objs += " %s/translate.c" % target_path
+# TCG code generator
+cpu_emu_objs += " tcg/tcg.c tcg/tcg-runtime.c"
+env['CPPPATH'].append("%s/tcg" % env['source_path'])
+env['CPPPATH'].append("%s/tcg/%s" % (env['source_path'], target['arch']))
+
+if target['softfloat']:
+    cpu_emu_objs += " fpu/softfloat.c"
+else:
+    cpu_emu_objs += " fpu/softfloat-native.c"
+
+env['CPPPATH'].append("%s/fpu" % env['source_path'])
+
+op_helper_obj = env.Object('%s/op_helper.c' % target_path, 
+        CCFLAGS = env['CCFLAGS'] + HELPER_CFLAGS)
+helper_obj = env.Object('%s/helper.c' % target_path,
+        CCFLAGS = env['CCFLAGS'] + HELPER_CFLAGS)
+cpu_exec_obj = env.Object('cpu-exec.c', 
+        CCFLAGS = env['CCFLAGS'] + HELPER_CFLAGS)
+
+cpu_emu_objs += " %s/op_helper.o %s/helper.o" % (target_path, target_path)
+cpu_emu_objs += " cpu-exec.o"
+
+if target['user_only']:
+    cpu_emu_objs += " mmu.c"
+
+# disassembler code needed for debugging only
+cpu_emu_objs += " disas.c"
+# We are compiling for i386 or x86_64 only so set USE_I386_DIS to true
+USE_I386_DIS = True
+cpu_emu_objs += " i386-dis.c"
+
+# libqemu
+libqemu = env.Library('qemu', Split(cpu_emu_objs))
+
+# Make sure that linux_user flag is not set
+if target['linux_user']:
+    print("ERROR: Linux user flag is set.")
+    print("This configuration is not supported in PQRS")
+    Return('error_str')
+
+if target['darwin_user']:
+    print("ERROR: Darwin user flag is set.")
+    print("This configuration is not supported in PQRS")
+    Return('error_str')
+
+if target['user_only']:
+    print("ERROR: user mode flag is set.")
+    print("This configuration is not supported in PQRS")
+    Return('error_str')
+
+obj_files = "osdep.c monitor.c loader.c dma-helpers.c"
+obj_files += " %s/machine.c" % target_path
+hw_files = "pci.c isa_mmio.c"
+# virtio in hw
+hw_files += " virtio.c virtio-blk.c virtio-balloon.c virtio-net.c virtio-console.c"
+hw_files += " fw_cfg.c"
+
+if env['kvm']:
+    obj_files += " kvm.c kvm-all.c"
+
+#if env['aio']:
+#    obj_files += " posix-aio-compat.c"
+#else:
+#    obj_files += " block-raw-posix.c"
+
+env.Append(LIBS = "z")
+
+# Audio configuration - Not converted fully
+if env['aud_lib'] != "":
+    env.Append(LIBS = env['aud_lib'])
+
+sound_hw_files = "sb16.c es1370.c ac97.c"
+
+if 'adlib' in env:
+    sound_hw_files += " fmopl.o adlib.o"
+    adlib_obj = env.Object('hw/adlib.c',
+            CCFLAGS = env['CCFLAGS'] + "-DBUILD_Y8950=0")
+    fpmol_obj = env.Object('hw/fpmol.c',
+            CCFLAGS = env['CCFLAGS'] + "-DBUILD_Y8950=0")
+
+if 'gus' in env:
+    sound_hw_files += " gus.c gusemu_hal.c gusemu_mixer.c"
+
+if 'cs4231a' in env:
+    sound_hw_files += " cs4231a.c"
+
+hw_files += " %s" % sound_hw_files
+# VNC TLS flags are added in configuration
+#if env['vnc_tls']:
+
+# Bluez flags are added in configuration
+
+hw_files += " lsi53c895a.c esp.c"
+hw_files += " usb-ohci.c"
+hw_files += " eeprom93xx.c"
+hw_files += " eepro100.c ne2000.c pcnet.c rtl8139.c e1000.c"
+hw_files += " msmouse.c"
+
+if target_base_arch == "i386":
+    hw_files += " ide.c pckbd.c ps2.c vga.c dma.c"
+    hw_files += " fdc.c mc146818rtc.c serial.c i8259.c i8254.c"
+    hw_files += " pcspk.c pc.c cirrus_vga.c apic.c parallel.c acpi.c"
+    hw_files += " piix_pci.c usb-uhci.c vmmouse.c vmport.c "
+    hw_files += " vmware_vga.c hpet.c device-hotplug.c pci-hotplug.c"
+    env.Append(CPPFLAGS = " -DHAS_AUDIO -DHAS_AUDIO_CHOICE")
+else:
+    print("ERROR: Unsupported arch.")
+    print("PQRS Only supports x86_64 architecture")
+
+if env['gdbstub']:
+    obj_files += " gdbstub.c"
+    # We are not including any gdbstub xml files as 
+    # its not required in arch that we support
+
+# We dont support cocoa yet, if we do in future then add 
+# LIB and CLFAGS for cocoa
+
+if env['slirp']:
+    env['CPPPATH'].append("%s/slirp" % env['source_path'])
+
+if env['static']:
+    env.Append(LINKFLAGS = "-static")
+
+env.Append(LIBS = "util")
+
+if env['gprof']:
+    vl_obj = env.Object('vl.c', CCFLAGS = env['CCFLAGS'] + "-p")
+    obj_files += " vl.o"
+    env.Append(LINKFLAGS = "-p")
+else:
+    obj_files += " vl.c"
+
+hw_files_list = []
+for hw_f in Split(hw_files):
+    hw_files_list.append("hw/%s" % hw_f)
+
+qemu_bin = env.Program(qemu_prog_name, 
+        Split(obj_files) + hw_files_list + 
+        [ptlsim_lib, libqemu_comm, libqemu])
+
+Return('qemu_bin')

@@ -7,4 +7,9 @@ Import('env')
 src_files = Glob('*.cpp')
 
 objs = env.Object(src_files)
-Return('objs')
+
+# dstbuild objects
+dst_objs = env.Object(Split("syscalls.cpp config-parser.cpp"))
+
+ret_objs = [objs, dst_objs]
+Return('ret_objs')

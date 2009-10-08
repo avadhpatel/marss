@@ -80,7 +80,7 @@ namespace OutOfOrderModel {
 
   static const int LOAD_FU_COUNT = 2;
 
-  const char* fu_names[FU_COUNT] = {
+  static const char* fu_names[FU_COUNT] = {
     "ldu0",
     "stu0",
     "ldu1",

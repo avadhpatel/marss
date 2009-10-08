@@ -112,6 +112,10 @@ void assist_hypercall(Context& ctx) {
 //#endif
 }
 
+void assist_ptlcall(Context& ctx) {
+	cerr << "Assist PTLcall from simulator..unsupported..", endl;
+}
+
 void assist_sysenter(Context& ctx) {
 	ctx.setup_qemu_switch();
 	helper_sysenter();

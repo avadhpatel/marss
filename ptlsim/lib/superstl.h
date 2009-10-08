@@ -82,7 +82,6 @@ namespace superstl {
 //	typedef std::cin cin;
 //	typedef std::cout cout;
 //	typedef std::cerr cerr;
-
   //
   // String buffer
   //
@@ -701,9 +700,9 @@ namespace superstl {
 //  //
 //  // Global streams:
 //  //
-  extern istream cin;
-  extern ostream cout;
-  extern ostream cerr;
+  extern istream& cin;
+  extern ostream& cout;
+  extern ostream& cerr;
 
 
   //

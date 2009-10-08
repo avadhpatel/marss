@@ -130,9 +130,10 @@ while (<STDIN>) {
   if (!$enabled) {
     if ($topnode eq $target) {
       print("\n");
-      print("  odstream os(cout.filehandle());\n");
-      print("  os << $target;\n");
-      print("  os.close();\n");
+      print("  cout << $target;\n");
+#      print("  ofstream os(cout.filehandle());\n");
+#      print("  os << $target;\n");
+#      print("  os.close();\n");
       print("}\n");
     }
 

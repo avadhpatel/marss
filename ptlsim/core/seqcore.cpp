@@ -1626,7 +1626,7 @@ struct SequentialMachine: public PTLsimMachine {
       if unlikely (iterations >= config.start_log_at_iteration) logenable = 1;
 
       update_progress();
-      inject_events();
+//      inject_events();
 
       int running_thread_count = 0;
       foreach (i, contextcount) {
@@ -1646,7 +1646,7 @@ struct SequentialMachine: public PTLsimMachine {
         exiting |= core.execute();
       }
 
-      exiting |= check_for_async_sim_break();
+//      exiting |= check_for_async_sim_break();
 
       if unlikely (config.event_log_enabled) {
         if unlikely (config.flush_event_log_every_cycle) {

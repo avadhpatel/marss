@@ -157,6 +157,10 @@ int main(int argc, char **argv)
 
 #include "exec-all.h"
 
+#ifdef PTLSIM_QEMU
+#include <ptl-qemu.h>
+#endif
+
 //#define DEBUG_UNUSED_IOPORT
 //#define DEBUG_IOPORT
 //#define DEBUG_NET
@@ -805,6 +809,9 @@ static int64_t cpu_ticks_prev;
 static int64_t cpu_ticks_offset;
 static int64_t cpu_clock_offset;
 static int cpu_ticks_enabled;
+#ifdef PTLSIM_QEMU
+static int64_t cpu_sim_ticks_offset;
+#endif
 
 /* return the host CPU cycle counter and handle stop/restart */
 int64_t cpu_get_ticks(void)
@@ -859,6 +866,27 @@ void cpu_disable_ticks(void)
         cpu_ticks_enabled = 0;
     }
 }
+
+#ifdef PTLSIM_QEMU
+#define PTLSIM_FREQ 2e9 // 2GHz Frequency of Simulated CPU
+#define freq_to_ns(freq) (1e9/freq)
+
+void cpu_set_sim_ticks(void)
+{
+	if(cpu_ticks_enabled) {
+		cpu_sim_ticks_offset = cpu_get_ticks();
+	} else {
+		cpu_sim_ticks_offset = cpu_ticks_offset;
+	}
+}
+
+static int64_t cpu_get_sim_clock(void)
+{
+	uint64_t sim_clock_t;
+	sim_clock_t = cpu_sim_ticks_offset + (uint64_t)((float)(sim_cycle) * freq_to_ns(PTLSIM_FREQ));
+	return sim_clock_t;
+}
+#endif
 
 /***********************************************************/
 /* timers */
@@ -1221,6 +1249,11 @@ int64_t qemu_get_clock(QEMUClock *clock)
         return get_clock() / 1000000;
     default:
     case QEMU_TIMER_VIRTUAL:
+#ifdef PTLSIM_QEMU
+		if (inside_ptlsim) {
+			return cpu_get_sim_clock();
+		} 
+#endif
         if (use_icount) {
             return cpu_get_icount();
         } else {

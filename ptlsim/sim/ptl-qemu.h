@@ -2,17 +2,52 @@
 #ifndef PTL_QEMU_H
 #define PTL_QEMU_H
 
-#include <cpu.h>
+//#ifdef __cplusplus
+//#include <globals.h>
+//extern "C" {
+//#endif
+//#include <cpu.h>
+//#ifdef __cplusplus
+//}
+//#endif
 
 // This file is included from QEMU to call PTLsim related
 // functions.  So we have to make sure that we don't add
 // any C++ related code.
 
+// sim_cycle
+// type		: W64 (unsigned long long)
+// working	: This variable represents a simulation clock cycle in PTLsim and
+//			  it is used by QEMU to calculate wall clock time in simulation
+//			  mode
+typedef unsigned long long W64;
+extern W64 sim_cycle;
+
+// inside_simulation
+// type		: bool
+// working	: Indicates if we are in simulation mode or not, implemented in
+//			  ptlsim.cpp file
+extern uint8_t inside_ptlsim;
+
+// ptlsim_init
+// returns void
+// working		: This function setup a MMIO region in QEMU which is used by
+//				  process in virtual machine to communicate with PTLsim, for
+//				  example, switch between simulation modes or change any
+//				  configuration option.  It also registers a chunk of memory in
+//				  RAM used by memory manager of PTLsim.
+#ifdef __cplusplus
+extern "C" 
+#endif
+void ptlsim_init(void);
+
 // ptl_machine_init 
 // config_str	: contains the configuration options of PTLsim
 // returns void :
 // working		: Setup the global variable config (type of PTLConfig) from the
-//				  configuration string passed in 'config_str' argument.  
+//				  configuration string passed in 'config_str' argument.  This
+//				  function is called when QEMU gets the ptlsim configuration
+//				  and its about to change to simulation mode 
 void ptl_machine_init(const char* config_str);
 
 // ptl_create_new_context
@@ -20,7 +55,8 @@ void ptl_machine_init(const char* config_str);
 // working					: This function will create a new CPU Context, add
 //							  it to the array of contexts in ptl_machine and 
 //							  returns the CPUX86Context* of that Context
-CPUX86State* ptl_create_new_context();
+struct CPUState;
+CPUState* ptl_create_new_context(void);
 
 // ptl_reconfigure
 // config_str	: string containing new configuration options for PTLsim
@@ -40,6 +76,6 @@ void ptl_reconfigure(char* config_str);
 //				  interrupts/exceptions are handled by QEMU.  It will also
 //				  return when it reaches the no of instructions we specified to
 //				  simulate.
-bool ptl_simulate();
+uint8_t ptl_simulate(void);
 
 #endif  // PTL_QEMU_H

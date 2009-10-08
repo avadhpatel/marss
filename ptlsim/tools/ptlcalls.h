@@ -1,28 +1,32 @@
 // -*- c++ -*-
 //
 // PTLsim: Cycle Accurate x86-64 Simulator
-// Trigger functions 
+// PTLCALL support for user code running inside the virtual machine
 //
-// Copyright 2004-2008 Matt T. Yourst <yourst@yourst.com>
+// Copyright 2004-2009 Matt T. Yourst <yourst@yourst.com>
 //
 
 #ifndef __PTLCALLS_H__
 #define __PTLCALLS_H__
 
-#ifndef __INSIDE_PTLSIM__
+//
+// We exclude some definitions if we're compiling the PTLsim hypervisor itself
+// (i.e. __INSIDE_PTLSIM__ is defined) orQEMU (i.e. __INSIDE_PTLSIM_QEMU__),
+// since these definitions would collide with ptlsim-kvm.h otherwise.
+//
+
+#if (!defined(__INSIDE_PTLSIM__)) && (!defined(__INSIDE_PTLSIM_QEMU__))
+#define PTLCALLS_USERSPACE
+#endif
+
+#ifdef PTLCALLS_USERSPACE
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/fcntl.h>
-#include <signal.h>
 #include <string.h>
 #include <malloc.h>
 #include <stdio.h>
 #include <errno.h>
-#ifndef __USE_GNU
-#define __USE_GNU
-#endif
-#include <sys/ucontext.h>
-#define sys_munlock munlock
 
 typedef unsigned char byte;
 typedef unsigned short W16;
@@ -34,7 +38,6 @@ typedef W64 Waddr;
 #else
 typedef W32 Waddr;
 #endif
-#endif // !__INSIDE_PTLSIM
 
 // Read timestamp counter
 static inline W64 ptlcall_rdtsc() {
@@ -42,133 +45,214 @@ static inline W64 ptlcall_rdtsc() {
   asm volatile("rdtsc" : "=a" (lo), "=d" (hi));
   return ((W64)lo) | (((W64)hi) << 32);
 }
+#endif // PTLCALLS_USERSPACE
 
-#ifdef PTLSIM_HYPERVISOR
-// PTLsim/X
+//
+// CPUID may be executed with the magic value 0x404d5459 ("@MTY")
+// in %rax to detect if we're running under PTLsim. If so, %rax
+// is changed to 0x59455321 ("YES!"), and %rbx/%rcx/%rdx contain
+// information on how to invoke PTLCALLs (see below).
+//
+// If we are NOT running under PTLsim, Intel and AMD chips will
+// return the value for the highest basic information leaf instead
+// of the magic value above.
+//
+// The 0x4xxxxxxx CPUID index range has been architecturally reserved
+// specifically for user defined purposes like this.
+//
+#define PTLSIM_CPUID_MAGIC  0x404d5459
+#define PTLSIM_CPUID_FOUND  0x59455321
 
-#define PTLCALL_VERSION      0
-#define PTLCALL_MARKER       1
-#define PTLCALL_ENQUEUE      2
+//
+// Supported methods of invoking a PTLCALL:
+//
+// These form a bitmap returned in %rbx after successfully executing
+// CPUID with PTLSIM_CPUID_MAGIC and checking %rax == PTLSIM_CPUID_FOUND.
+//
+// If a future version of PTLsim defines a new type of PTLCALL
+// with different calling conventions than these existing methods,
+// a new PTLCALL_METHOD_xxx bit will be defined for it.
+//
+#define PTLCALL_METHOD_OPCODE   0x1  // x86 opcode 0x0f37
+#define PTLCALL_METHOD_MMIO     0x2  // MMIO store to physical address in %rdx[15:0] : %rcx[31:0]
+#define PTLCALL_METHOD_IOPORT   0x4  // OUT to I/O port number in %rdx[31:16]
 
-#define PTLCALL_STATUS_VERSION_MASK      0xff
-#define PTLCALL_STATUS_PTLSIM_ACTIVE     (1 << 8)
+#ifdef PTLCALLS_USERSPACE
+//
+// ptlsim_check_status meanings:
+// -4 = running under PTLsim but but permission denied while adjusting I/O port permissions
+// -3 = running under PTLsim but but unable to map MMIO page
+// -2 = running under PTLsim but but unable to open device for MMIO
+// -1 = not running under PTLsim
+//  0 = currently unknown before first call to is_running_under_ptlsim()
+// +1 = running under PTLsim with least one available invocation method
+//
+static int ptlsim_check_status __attribute__((common)) = 0;
+static W64 supported_ptlcall_methods __attribute__((common)) = 0;
+static int selected_ptlcall_method __attribute__((common)) = -1;
+static W64 ptlcall_mmio_page_physaddr __attribute__((common)) = 0;
+static W64* ptlcall_mmio_page_virtaddr __attribute__((common)) = NULL;
+static W16 ptlcall_io_port __attribute__((common)) = 0;
 
-#define PTLCALL_INTERFACE_VERSION_1      1
+static int ptlsim_ptlcall_init() {
+  W32 rax = PTLSIM_CPUID_MAGIC;
+  W32 rbx = 0;
+  W32 rcx = 0;
+  W32 rdx = 0;
+  int ptlcall_mmio_page_offset;
+  static const char* mmap_filename = "/dev/mem";
 
-struct PTLsimCommandDescriptor {
-  W64 command; // pointer to command string
-  W64 length;       // length of command string
-};
+  // a.k.a. cpuid(PTLSIM_CPUID_MAGIC, rax, rbx, rcx, rdx);
+  asm volatile("cpuid" : "+a" (rax), "+b" (rbx), "+c" (rcx), "+d" (rdx) : : "memory");
 
+  cout << "rax = 0x", hexstring(rax, 32), endl;
+  cout << "rbx = 0x", hexstring(rbx, 32), endl;
+  cout << "rcx = 0x", hexstring(rcx, 32), endl;
+  cout << "rdx = 0x", hexstring(rdx, 32), endl;
+  
+  if (rax != PTLSIM_CPUID_FOUND) {
+    ptlsim_check_status = -1;
+    return 0;
+  }
+  
+  supported_ptlcall_methods = rbx;
+  ptlcall_mmio_page_physaddr = (bits(rdx, 0, 16) << 32) | LO32(rcx);
+  ptlcall_mmio_page_offset = (ptlcall_mmio_page_physaddr & 0xfff);
+  ptlcall_mmio_page_physaddr &= ~0xfff;
+  ptlcall_io_port = bits(rdx, 16, 16);
+
+  if (supported_ptlcall_methods & PTLCALL_METHOD_MMIO) {
+    // We use O_SYNC to guarantee uncached accesses:
+    int fd = open(mmap_filename, O_RDWR|O_LARGEFILE|O_SYNC, 0);
+    
+    if (fd < 0) {
+      fprintf(stderr, "ptlsim_ptlcall_init: cannot open %s for MMIO to physaddr %p (%s)\n",
+              mmap_filename, (void*)ptlcall_mmio_page_physaddr, strerror(errno));
+      supported_ptlcall_methods &= ~PTLCALL_METHOD_MMIO;
+      ptlsim_check_status = -2;
+      return 0;
+    }
+    
+    ptlcall_mmio_page_virtaddr = (W64*)mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_SHARED, fd, ptlcall_mmio_page_physaddr);
+    
+    if (((int)(Waddr)ptlcall_mmio_page_virtaddr) == -1) {
+      fprintf(stderr, "ptlsim_ptlcall_init: cannot mmap %s (fd %d) for MMIO to physaddr %p (%s)\n",
+              mmap_filename, fd, (void*)ptlcall_mmio_page_physaddr, strerror(errno));
+      supported_ptlcall_methods &= ~PTLCALL_METHOD_MMIO;
+      ptlsim_check_status = -3;
+      close(fd);
+      return 0;
+    }
+    
+    // Adjust the pointer to the actual trigger word within the page (usually always offset 0)
+    ptlcall_mmio_page_virtaddr = (W64*)(((Waddr)ptlcall_mmio_page_virtaddr) + ptlcall_mmio_page_offset);
+
+    close(fd);
+
+    selected_ptlcall_method = PTLCALL_METHOD_MMIO;
+    fprintf(stderr, "ptlsim_ptlcall_init: mapped PTLcall MMIO page at phys %p, virt %p\n",
+            (void*)ptlcall_mmio_page_physaddr, (void*)ptlcall_mmio_page_virtaddr);
+  }
+
+  ptlsim_check_status = +1;
+
+  return 1;
+}
+
+static inline int is_running_under_ptlsim() {
+  if (!ptlsim_check_status)
+    ptlsim_ptlcall_init();
+
+  return (ptlsim_check_status > 0);
+}
+
+#ifdef __x86_64__
+static inline W64 do_ptlcall_mmio(W64 callid, W64 arg1, W64 arg2, W64 arg3, W64 arg4, W64 arg5, W64 arg6) {
+  W64 rc;
+  asm volatile ("movq %[arg4],%%r10\n"
+                "movq %[arg5],%%r8\n"
+                "movq %[arg6],%%r9\n"
+                "mfence\n"
+                "smsw %[target]\n"
+                : "=a" (rc),
+                  [target] "=m" (*ptlcall_mmio_page_virtaddr)
+                : [callid] "a" (callid), 
+                  [arg1] "D" ((W64)(arg1)),
+                  [arg2] "S" ((W64)(arg2)),
+                  [arg3] "d" ((W64)(arg3)),
+                  [arg4] "g" ((W64)(arg4)),
+                  [arg5] "g" ((W64)(arg5)),
+                  [arg6] "g" ((W64)(arg6))
+                : "r11","rcx","memory" ,"r8", "r10", "r9");
+  return rc;
+}
 #else
-// Userspace PTLsim
-enum {
-  PTLCALL_NOP = 0,
-  PTLCALL_MARKER = 1,
-  PTLCALL_SWITCH_TO_SIM = 2,
-  PTLCALL_SWITCH_TO_NATIVE = 3,
-  PTLCALL_CAPTURE_STATS = 4,
-  PTLCALL_COUNT,
-};
+static inline W64 do_ptlcall_mmio(W64 callid, W64 arg1, W64 arg2, W64 arg3, W64 arg4, W64 arg5, W64 arg6) {
+#error TODO: Define a 32-bit PTLCALL calling convention so we can use this from 32-bit userspace apps
+}
+#endif
 
-// Put at start of address space where nothing normally goes
-#define PTLSIM_THUNK_PAGE 0x1000
+static inline W64 ptlcall(W64 op, W64 arg1, W64 arg2, W64 arg3, W64 arg4, W64 arg5, W64 arg6) {
+  if (!is_running_under_ptlsim())
+    return (W64)(-ENOSYS);
 
-#define PTLSIM_THUNK_MAGIC 0x34366d69734c5450ULL
+  if (selected_ptlcall_method == PTLCALL_METHOD_MMIO) {
+    return do_ptlcall_mmio(op, arg1, arg2, arg3, arg4, arg5, arg6);
+  } else {
+    assert(false);
+    return (W64)(-ENOSYS);
+  }
+}
 
-static int running_under_ptlsim = -1;
+#endif // PTLCALLS_USERSPACE
 
-typedef W64 (*ptlcall_func_t)(W64 callid, W64 arg1, W64 arg2, W64 arg3, W64 arg4, W64 arg5);
-
-struct PTLsimThunkPage {
-  W64 magic; // "PTLsim64" = 0x34366d69734c5450
-  W64 simulated;
-  W64 call_code_addr; // thunk function to call
-};
-
-#endif // (userspace version)
-
-#ifndef __INSIDE_PTLSIM__
-#ifdef PTLSIM_HYPERVISOR
 //
-// PTLsim/X implements ptlcalls using an actual x86
-// instruction (0x0f37) that's trapped by the hypervisor.
+// Get PTLsim version information (assuming CPUID indicates PTLsim is active)
 //
+// The highest bit (bit 63) is set when running under simulation, and clear
+// when running in native mode.
+//
+#define PTLCALL_VERSION    0
 
-static int ptlcall_insn_supported = -1;
-static int running_under_ptlsim = 0;
+#ifdef PTLCALLS_USERSPACE
+static inline W64 ptlcall_version() {
+  return ptlcall(PTLCALL_VERSION, 0, 0, 0, 0, 0, 0);
+}
+#endif
+
+//
+// Log this call with a marker and attached performance counter data
+//
+#define PTLCALL_MARKER     1
+
+#ifdef PTLCALLS_USERSPACE
+static inline W64 ptlcall_marker(W64 marker) {
+  return ptlcall(PTLCALL_MARKER, marker, 0, 0, 0, 0, 0);
+}
 
 //
 // For utility usage in benchmarks:
 //
 static W64 ptlsim_marker_id = 0;
+#endif // !PTLCALLS_USERSPACE
 
-static inline void handle_invalid_opcode(int sig, siginfo_t* si, void* contextp) {
-  ucontext_t* context = (ucontext_t*)contextp;
-#ifdef __x86_64__
-  context->uc_mcontext.gregs[REG_RIP] += 2;
-#else
-  context->uc_mcontext.gregs[REG_EIP] += 2;
-#endif
-  ptlcall_insn_supported = 0;
-  running_under_ptlsim = 0;
-}
+//
+// Enqueue a command list for the PTLsim hypervisor to process.
+//
+// If the caller is running in native mode, this will force
+// all VCPUs to context switch into the PTLsim simulated model.
+//
+#define PTLCALL_ENQUEUE    2
 
-#ifdef __x86_64__
-static inline W64 ptlcall_op(W64 op, W64 arg1, W64 arg2, W64 arg3, W64 arg4) {
-  asm volatile(".byte 0x0f,0x37"
-               : "+a" (op), "+c" (arg1), "+d" (arg2), "+S" (arg3), "+D" (arg4)
-               :
-               : "memory");
-  return op;
-}
-#else
-static inline W64 ptlcall_op(W32 op, W32 arg1, W32 arg2, W32 arg3, W32 arg4) {
-  asm volatile(".byte 0x0f,0x37"
-               : "+a" (op), "+c" (arg1), "+d" (arg2), "+S" (arg3), "+D" (arg4)
-               :
-               : "memory");
-  return op;
-}
-#endif
+//
+// Descriptor in list of commands passed to PTLCALL_ENQUEUE
+//
+struct PTLsimCommandDescriptor {
+  W64 command; // pointer to command string
+  W64 length;  // length of command string
+};
 
-static inline W64 check_ptlcall_insn() {
-  struct sigaction oldsa;
-  struct sigaction sa;
-  W64 rc;
-
-  if (ptlcall_insn_supported >= 0)
-    return ptlcall_insn_supported;
-
-  memset(&sa, 0, sizeof sa);
-  sa.sa_sigaction = handle_invalid_opcode;
-  sa.sa_flags = SA_SIGINFO;
-
-  sigaction(SIGILL, &sa, &oldsa);
-
-  ptlcall_insn_supported = 1;
-  running_under_ptlsim = 0;
-  // The invalid opcode exception handler will clear ptlcall_insn_supported:
-  rc = ptlcall_op(PTLCALL_VERSION, 0, 0, 0, 0);
-  running_under_ptlsim = ((rc & PTLCALL_STATUS_PTLSIM_ACTIVE) != 0);
-  sigaction(SIGILL, &oldsa, NULL);
-
-  return ptlcall_insn_supported;
-}
-
-static inline int check_running_under_ptlsim() {
-  if (!check_ptlcall_insn()) return 0;
-  W64 rc = ptlcall_op(PTLCALL_VERSION, 0, 0, 0, 0);
-  return (rc & PTLCALL_STATUS_PTLSIM_ACTIVE) ? 1 : 0;
-}
-
-static inline W64 ptlcall(W64 op, W64 arg1, W64 arg2, W64 arg3, W64 arg4) {
-  if (!check_ptlcall_insn())
-    return (W64)(-ENOSYS);
-
-  return ptlcall_op(op, arg1, arg2, arg3, arg4);
-}
-
+#ifdef PTLCALLS_USERSPACE
 //
 // Enqueue a list of commands, to be executed in sequence.
 //
@@ -190,7 +274,7 @@ static inline W64 ptlcall_multi(char* const list[], size_t length, int flush) {
     desc[i].length = strlen(list[i]);
   }
 
-  rc = ptlcall(PTLCALL_ENQUEUE, (W64)desc, length, flush, 0);
+  rc = ptlcall(PTLCALL_ENQUEUE, (W64)desc, length, flush, 0, 0, 0);
   free(desc);
   return rc;
 }
@@ -204,11 +288,11 @@ static inline W64 ptlcall_multi_flush(char* const list[], size_t length) {
 }
 
 static inline W64 ptlcall_single(const char* command, int flush) {
- struct  PTLsimCommandDescriptor desc;
+  struct  PTLsimCommandDescriptor desc;
   desc.command = (W64)command;
   desc.length = strlen(command);
 
-  return ptlcall(PTLCALL_ENQUEUE, (W64)&desc, 1, flush, 0);
+  return ptlcall(PTLCALL_ENQUEUE, (W64)&desc, 1, flush, 0, 0, 0);
 }
 
 static inline W64 ptlcall_single_enqueue(const char* command) {
@@ -234,89 +318,67 @@ static inline W64 ptlcall_switch_to_native() {
   return ptlcall_single_flush("-native");
 }
 
-static inline W64 ptlcall_marker(W64 marker) {
-  if (!check_ptlcall_insn()) {
-    printf("ptlcall_marker: not running under PTLsim hypervisor\n");
-    return 0;
-  }
-
-  return ptlcall(PTLCALL_MARKER, marker, 0, 0, 0);
-}
-
 static inline W64 ptlcall_capture_stats(const char* snapshot) {
   char buf[128];
-  char* commands[2] = {buf, "-run"};
+  char runcmd[] = "-run";
+  char* commands[2] = {buf, runcmd};
 
   if (!snapshot) snapshot = "forced";
   snprintf(buf, sizeof(buf), "-snapshot-now %s", snapshot);
 
   return ptlcall_multi_flush(commands, 2);
 }
+#endif // !PTLCALLS_USERSPACE
 
 //
-// This is not really a PTLcall: it just creates a Xen checkpoint
-// from within the domain by writing to /proc/xen/checkpoint.
+// Create a checkpoint of the entire virtual machine at a precise
+// point in time (i.e. at the instant the PTLCALL is executed),
+// such that the checkpoint can restart execution at the next
+// instruction following the PTLCALL.
 //
-// This feature is added by this Linux 2.6.20 patch:
-// ptlsim/patches/linux-2.6.20-xen-self-checkpointing.diff 
+// This should only be used in native mode; it will be ignored
+// when running in simulation mode.
 //
-static inline W64 ptlcall_checkpoint(const char* name) {
-  static const char command[] = "checkpoint\n";
-  int n;
-  int fd = open("/proc/xen/checkpoint", O_WRONLY);
-  if (fd < 0) return 0;
-  n = write(fd, command, sizeof(command));
-  close(fd);
-  return (n == sizeof(command));
+#define PTLCALL_CHECKPOINT    3
+
+//
+// PTLCALL_CHECKPOINT callers can optionally ask the hypervisor to
+// pause, shut down or reboot (back into native mode) immediately
+// after creating the checkpoint:
+//
+
+#define PTLCALL_CHECKPOINT_AND_CONTINUE  0 
+#define PTLCALL_CHECKPOINT_AND_SHUTDOWN  1
+#define PTLCALL_CHECKPOINT_AND_REBOOT    2
+#define PTLCALL_CHECKPOINT_AND_PAUSE     3
+
+#ifdef PTLCALLS_USERSPACE
+
+static inline W64 ptlcall_checkpoint_generic(const char* name, int action) {
+  return ptlcall(PTLCALL_CHECKPOINT, (W64)name, strlen(name), action, 0, 0, 0);
 }
 
-#else
-//
-// Userspace PTLsim uses the following to implement ptlcalls:
-//
-
-static inline W64 ptlcall(W64 callid, W64 arg1, W64 arg2, W64 arg3, W64 arg4, W64 arg5) {
-  struct PTLsimThunkPage* thunk = (struct PTLsimThunkPage*)PTLSIM_THUNK_PAGE;
-  ptlcall_func_t func;
-
-  if (running_under_ptlsim < 0) {
-    /*
-     * Quick and dirty trick to find out if a given page is mapped:
-     * If the page is valid, munlock() is basically a nop, but if
-     * it isn't, it returns -ENOMEM.
-     */
-
-    int rc = sys_munlock(thunk, 4096);
-    running_under_ptlsim = (rc == 0);
-
-    if (running_under_ptlsim && (thunk->magic != PTLSIM_THUNK_MAGIC))
-      running_under_ptlsim = 0;
-  }
-
-  if (!running_under_ptlsim) return 0;
-#ifdef __x86_64__
-  func = (ptlcall_func_t)thunk->call_code_addr;
-#else
-  func = (ptlcall_func_t)(W32)thunk->call_code_addr;
-#endif
-
-  return func(callid, arg1, arg2, arg3, arg4, arg5);
+static inline W64 ptlcall_checkpoint_and_continue(const char* name) {
+  return ptlcall_checkpoint_generic(name, PTLCALL_CHECKPOINT_AND_CONTINUE);
 }
 
-// Valid in any mode
-static inline W64 ptlcall_nop() { return ptlcall(PTLCALL_MARKER, 0, 0, 0, 0, 0); }
-static inline W64 ptlcall_marker(W64 marker) { return ptlcall(PTLCALL_MARKER, marker, 0, 0, 0, 0); }
-static inline W64 ptlcall_capture_stats(const char* name) { return ptlcall(PTLCALL_CAPTURE_STATS, (W64)(Waddr)name, 0, 0, 0, 0); }
+static inline W64 ptlcall_checkpoint_and_shutdown(const char* name) {
+  return ptlcall_checkpoint_generic(name, PTLCALL_CHECKPOINT_AND_SHUTDOWN);
+}
 
-// Valid in native mode only:
-static inline W64 ptlcall_switch_to_sim() { return ptlcall(PTLCALL_SWITCH_TO_SIM, 0, 0, 0, 0, 0); }
+static inline W64 ptlcall_checkpoint_and_reboot(const char* name) {
+  return ptlcall_checkpoint_generic(name, PTLCALL_CHECKPOINT_AND_REBOOT);
+}
 
-// Valid in simulator mode only:
-static inline W64 ptlcall_switch_to_native() { return ptlcall(PTLCALL_SWITCH_TO_NATIVE, 0, 0, 0, 0, 0); }
+static inline W64 ptlcall_checkpoint_and_pause(const char* name) {
+  return ptlcall_checkpoint_generic(name, PTLCALL_CHECKPOINT_AND_PAUSE);
+}
 
-#endif // !PTLSIM_HYPERVISOR
+static inline W64 ptlcall_checkpoint() {
+  static const char* checkpoint_name = "default";
+  return ptlcall_checkpoint_and_shutdown(checkpoint_name);
+}
 
-#endif // __INSIDE_PTLSIM__
-
+#endif // PTLCALLS_USERSPACE
 
 #endif // __PTLCALLS_H__
