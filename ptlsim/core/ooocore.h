@@ -773,7 +773,7 @@ namespace OutOfOrderModel {
     issueq_tag_t get_tag();
   };
 
-  void decode_tag(issueq_tag_t tag, int& threadid, int& idx) {
+  static void decode_tag(issueq_tag_t tag, int& threadid, int& idx) {
     threadid = tag >> MAX_ROB_IDX_BIT;
     int mask = ((1 << (MAX_ROB_IDX_BIT + MAX_THREADS_BIT)) - 1) >> MAX_THREADS_BIT;
     idx = tag & mask;

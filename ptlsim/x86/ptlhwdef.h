@@ -221,7 +221,7 @@ static inline const char* exception_name(W64 exception) {
 // PTLsim's internal memory related variables
 extern W64 PTLSIM_RAM_PHYSADDR;
 
-#define PTLSIM_RAM_SIZE 2*1024*1024
+#define PTLSIM_RAM_SIZE 128*1024*1024
 
 //
 // Uniquely identifies any translation or basic block, including
@@ -917,6 +917,7 @@ struct Context: public CPUX86State {
   W64 reg_zero;
   W64 reg_ctx;
   W64 reg_fptag;
+  W64 reg_flags;
 
   void change_runstate(int new_state) { running = new_state; }
 
@@ -929,10 +930,12 @@ struct Context: public CPUX86State {
   }
 
   void setup_qemu_switch() {
-	  env = (CPUX86State*)this;
+	  set_cpu_env((CPUX86State*)this);
+//	  env = (CPUX86State*)this;
+//	  env_to_regs();
   }
 
-  Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec); //, PTEUpdate& pteupdate, Level1PTE& pteused);
+  Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code=0); //, PTEUpdate& pteupdate, Level1PTE& pteused);
 
   //Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, PTEUpdate& pteupdate) {
   //  Level1PTE dummy;
@@ -942,6 +945,10 @@ struct Context: public CPUX86State {
   //int copy_to_user(Waddr target, void* source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr);
 
   //int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec, Level1PTE& ptelo, Level1PTE& ptehi);
+
+  W64 get_cs_eip() {
+	  return eip + segs[R_CS].base;
+  }
 
   int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = false) ;
   //  Level1PTE ptelo;
@@ -1049,7 +1056,7 @@ struct Context: public CPUX86State {
 		  return (W64&)(eip);
 	  } 
 	  else if(index == 57) {
-		  return (W64&)(eflags);
+		  return reg_flags; //(W64&)(eflags);
 	  } 
 	  else if(index == 58) {
 		  // Not implemented in Xen or anywhere else..
@@ -1078,7 +1085,8 @@ struct Context: public CPUX86State {
 	  kernel_mode = is_kernel;
   }
 
-  void cs_segment_updated(SegmentCache *seg) {
+  void cs_segment_updated() {
+	  SegmentCache *seg = &(this->segs[R_CS]);
 	  use64 = (seg->flags & DESC_L_MASK) ? true : false;
 	  use32 = (seg->flags & DESC_B_MASK) ? true : false;
 	  virt_addr_mask = (use64 ? 0xffffffffffffffffULL : 0x00000000ffffffffULL);

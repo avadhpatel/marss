@@ -298,14 +298,6 @@ void CPUController::clock()
 	}
 }
 
-void CPUController::print_map(ostream& os)
-{
-	os << "CPU-Controller: ", get_name(), endl;
-	os << "\tconnected to: ", endl;
-	os << "\t\tL1-i: ", int_L1_i_->get_name(), endl;
-	os << "\t\tL1-d: ", int_L1_d_->get_name(), endl;
-}
-
 void CPUController::print(ostream& os) const
 {
 	os << "---CPU-Controller: ", get_name(), endl;

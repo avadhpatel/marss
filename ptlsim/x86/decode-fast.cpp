@@ -23,6 +23,33 @@ bool TraceDecoder::decode_fast() {
     case 3: DECODE(gform, rd, v_mode); DECODE(eform, ra, v_mode); break;
     case 4: rd.type = OPTYPE_REG; rd.reg.reg = APR_al; DECODE(iform, ra, b_mode); break;
     case 5: DECODE(varreg_def32, rd, 0); DECODE(iform, ra, v_mode); break;
+	case 6: {
+		// 0x06 push es
+		// 0x0e push cs
+		// 0x16 push ss
+		// 0x1e push ds
+		// else invalid
+		if(op > 0x1e) {
+			invalid |= true; 
+		} else {
+
+			EndOfDecode();
+
+			int sizeshift = 2; // fix 32 bit shift of stack
+			int size = (1 << sizeshift);
+			int seg_reg = (op >> 3);
+			int r = REG_temp0;
+
+			TransOp ldp(OP_ld, r, REG_ctx, REG_imm, REG_zero, size, 
+					offsetof_t(Context, segs[seg_reg].selector));
+			ldp.internal = 1; 
+			this << ldp;
+
+			this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, r, sizeshift, -size);
+			this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
+		}
+		break;
+	}
     default: invalid |= true; break;
     }
     EndOfDecode();
@@ -830,6 +857,27 @@ bool TraceDecoder::decode_fast() {
     EndOfDecode();
     this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
     break;
+  }
+
+  case 0x1a0:
+  case 0x1a8: {
+	// push fs
+	// push gs
+	EndOfDecode();
+
+	int sizeshift = 2; // fix 32 bit shift of stack
+	int size = (1 << sizeshift);
+	int seg_reg = (op >> 3) & 7;
+	int r = REG_temp0;
+
+    TransOp ldp(OP_ld, r, REG_ctx, REG_imm, REG_zero, size, 
+			offsetof_t(Context, segs[seg_reg].selector));
+	ldp.internal = 1; 
+	this << ldp;
+
+    this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, r, sizeshift, -size);
+    this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
+	break;
   }
 
   case 0x1bc: 

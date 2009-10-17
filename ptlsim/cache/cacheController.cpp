@@ -472,18 +472,6 @@ int CacheController::access_fast_path(Interconnect *interconnect,
 	return -1; 
 }
 
-void CacheController::print_map(ostream& os)
-{
-	os << "Cache-Controller: ", get_name(), endl;
-	os << "\tconnected to: ", endl;
-	if(upperInterconnect_)
-		os << "\t\tupper: ", upperInterconnect_->get_name(), endl;
-	if(upperInterconnect2_)
-		os << "\t\tupper2: ", upperInterconnect2_->get_name(), endl;
-	if(lowerInterconnect_)
-		os << "\t\tlower: ",  lowerInterconnect_->get_name(), endl;
-}
-
 void CacheController::register_upper_interconnect(Interconnect *interconnect)
 {
 	upperInterconnect_ = interconnect;

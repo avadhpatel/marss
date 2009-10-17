@@ -53,7 +53,7 @@ void OutOfOrderCoreCacheCallbacks::icache_wakeup(LoadStoreInfo lsi, W64 physaddr
       thread->waiting_for_icache_fill_physaddr = 0;
     }else{
       if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr, " after floor : ",
-                        (void*) floor(thread->waiting_for_icache_fill_physaddr, Memory::L1D_LINE_SIZE), " delivered ", (void*) physaddr,endl;
+                        (void*) floor(thread->waiting_for_icache_fill_physaddr, Memory::L1I_LINE_SIZE), " delivered ", (void*) physaddr,endl;
       //     assert(0);
     }
   }
@@ -210,7 +210,10 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
     current_basic_block = null;
   }
 
-  fetchrip = realrip;
+//  fetchrip = realrip;
+  ptl_logfile << "realrip:", hexstring(realrip, 48), " csbase:", ctx.segs[R_CS].base,
+			  endl;
+  fetchrip = realrip + ctx.segs[R_CS].base;
   fetchrip.update(ctx);
   stall_frontend = 0;
   waiting_for_icache_fill = 0;
@@ -489,11 +492,11 @@ bool ThreadContext::fetch() {
       //
     }
 
-#ifdef PTLSIM_HYPERVISOR
-    Waddr physaddr = (fetchrip.mfnlo << 12) + lowbits(fetchrip, 12);
-#else
+//#ifdef PTLSIM_HYPERVISOR
+//    Waddr physaddr = (fetchrip.mfnlo << 12) + lowbits(fetchrip, 12);
+//#else
     Waddr physaddr = fetchrip;
-#endif
+//#endif
 
     W64 req_icache_block = floor(physaddr, ICACHE_FETCH_GRANULARITY);
     if ((!current_basic_block->invalidblock) && (req_icache_block != current_icache_block)) {
@@ -1910,7 +1913,8 @@ int ReorderBufferEntry::commit() {
 
     // See notes in handle_exception():
     if likely (isclass(uop.opcode, OPCLASS_CHECK) & (ctx.exception == EXCEPTION_SkipBlock)) {
-      thread.chk_recovery_rip = ctx.eip + uop.bytes;
+//      thread.chk_recovery_rip = ctx.eip + uop.bytes;
+      thread.chk_recovery_rip = ctx.get_cs_eip() + uop.bytes;
       if unlikely (config.event_log_enabled) event->type = EVENT_COMMIT_SKIPBLOCK;
       per_context_ooocore_stats_update(threadid, commit.result.skipblock++);
     } else {
@@ -2047,9 +2051,11 @@ int ReorderBufferEntry::commit() {
 #endif
 #endif
 
-  assert(ctx.eip == uop.rip);
+//  assert(ctx.eip == uop.rip);
+  assert(ctx.get_cs_eip() == uop.rip);
 
-  if likely (uop.som) assert(ctx.eip == uop.rip); 
+//  if likely (uop.som) assert(ctx.eip == uop.rip); 
+  if likely (uop.som) assert(ctx.get_cs_eip() == uop.rip); 
 
   //
   // The commit of all uops in the x86 macro-op is guaranteed to happen after this point
@@ -2078,6 +2084,7 @@ int ReorderBufferEntry::commit() {
     if unlikely (uop.rd == REG_rip) {
       assert(isbranch(uop.opcode));
       ctx.eip = physreg->data;
+//      ctx.eip = (physreg->data - ctx.segs[R_CS].base);
     } else {
       assert(!isbranch(uop.opcode));
       ctx.eip += uop.bytes;
@@ -2087,12 +2094,12 @@ int ReorderBufferEntry::commit() {
 
   if likely ((!ld) & (!st) & (!uop.nouserflags)) {
     W64 flagmask = setflags_to_x86_flags[uop.setflags];
-    ctx.eflags = (ctx.eflags & ~flagmask) | (physreg->flags & flagmask);
+    ctx.reg_flags = (ctx.reg_flags & ~flagmask) | (physreg->flags & flagmask);
 
     per_context_ooocore_stats_update(threadid, commit.setflags.no += (uop.setflags == 0));
     per_context_ooocore_stats_update(threadid, commit.setflags.yes += (uop.setflags != 0));
 
-    if unlikely (config.event_log_enabled) event->commit.state.reg.rdflags = ctx.eflags;
+    if unlikely (config.event_log_enabled) event->commit.state.reg.rdflags = ctx.reg_flags;
 
     if likely (uop.setflags & SETFLAG_ZF) {
       thread.commitrrt[REG_zf]->uncommitref(REG_zf, thread.threadid);
@@ -2222,7 +2229,8 @@ int ReorderBufferEntry::commit() {
     // instruction in sequence from within the branch predictor logic.
     //
     W64 end_of_branch_x86_insn = uop.rip + uop.bytes;
-    bool taken = (ctx.eip != end_of_branch_x86_insn);
+//    bool taken = (ctx.eip != end_of_branch_x86_insn);
+    bool taken = (ctx.get_cs_eip() != end_of_branch_x86_insn);
     bool predtaken = (uop.riptaken != end_of_branch_x86_insn);
 
     if unlikely (config.event_log_enabled) {
@@ -2230,7 +2238,8 @@ int ReorderBufferEntry::commit() {
       event->commit.predtaken = predtaken;
     }
 
-    thread.branchpred.update(uop.predinfo, end_of_branch_x86_insn, ctx.eip);
+//    thread.branchpred.update(uop.predinfo, end_of_branch_x86_insn, ctx.eip);
+    thread.branchpred.update(uop.predinfo, end_of_branch_x86_insn, ctx.get_cs_eip());
     per_context_ooocore_stats_update(threadid, branchpred.updates++);
   }
 
@@ -2258,7 +2267,8 @@ int ReorderBufferEntry::commit() {
   thread.ROB.commit(*this);
 
   if unlikely (uop_is_barrier) {
-    if unlikely (config.event_log_enabled) core.eventlog.add(EVENT_COMMIT_ASSIST, RIPVirtPhys(ctx.eip))->threadid = thread.threadid;
+//    if unlikely (config.event_log_enabled) core.eventlog.add(EVENT_COMMIT_ASSIST, RIPVirtPhys(ctx.eip))->threadid = thread.threadid;
+    if unlikely (config.event_log_enabled) core.eventlog.add(EVENT_COMMIT_ASSIST, RIPVirtPhys(ctx.get_cs_eip()))->threadid = thread.threadid;
     per_context_ooocore_stats_update(threadid, commit.result.barrier++);
     return COMMIT_RESULT_BARRIER;
   }

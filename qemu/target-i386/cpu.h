@@ -673,7 +673,7 @@ typedef struct CPUX86State {
 } CPUX86State;
 
 CPUX86State *cpu_x86_init(const char *cpu_model);
-int cpu_x86_exec(CPUX86State *s);
+int cpu_x86_exec(CPUX86State *s, uint8_t do_simulate);
 void cpu_x86_close(CPUX86State *s);
 void x86_cpu_list (FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt,
                                                  ...));
@@ -844,10 +844,18 @@ static inline int cpu_get_time_fast(void)
 #define MMU_MODE0_SUFFIX _kernel
 #define MMU_MODE1_SUFFIX _user
 #define MMU_USER_IDX 1
-static inline int cpu_mmu_index (CPUState *env)
+static inline int cpu_mmu_index (CPUState* env)
 {
     return (env->hflags & HF_CPL_MASK) == 3 ? 1 : 0;
 }
+
+static inline int cpu_mmu_index_2(target_ulong env_ptr)
+{
+	CPUState *env = (CPUState*)env_ptr;
+    return (env->hflags & HF_CPL_MASK) == 3 ? 1 : 0;
+}
+
+//int cpu_mmu_index (CPUState *env);
 
 /* translate.c */
 void optimize_flags_init(void);
@@ -883,5 +891,9 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
     *pc = *cs_base + env->eip;
     *flags = env->hflags | (env->eflags & (IOPL_MASK | TF_MASK | VM_MASK));
 }
+
+#ifdef PTLSIM_QEMU
+void set_cpu_env(CPUState* env1);
+#endif
 
 #endif /* CPU_I386_H */

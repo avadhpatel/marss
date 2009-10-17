@@ -21,6 +21,9 @@ extern "C" {
 //
 #define PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR    0x00000008fffff000ULL
 
+uint8_t in_simulation = 0;
+uint8_t start_simulation = 0;
+
 static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value, 
 		int length) {
 	int calltype = (int)(cpu->regs[REG_rax]);
@@ -32,9 +35,9 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 	W64 arg6 = cpu->regs[REG_r9];
 
 	cout << "ptlcall_mmio_write: calltype ", calltype, " at rip ", cpu->eip,
-		 " (inside_ptlsim = ", inside_ptlsim, " )", endl;
+		 " (inside_ptlsim = ", in_simulation, " )", endl;
 
-	if(!inside_ptlsim) {
+	if(!in_simulation) {
 		switch(calltype) {
 			case PTLCALL_VERSION: {
 				cout << "PTLCALL type PTLCALL_VERSION\n";

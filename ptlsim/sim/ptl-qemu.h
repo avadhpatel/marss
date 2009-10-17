@@ -11,6 +11,10 @@
 //}
 //#endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // This file is included from QEMU to call PTLsim related
 // functions.  So we have to make sure that we don't add
 // any C++ related code.
@@ -22,6 +26,16 @@
 //			  mode
 typedef unsigned long long W64;
 extern W64 sim_cycle;
+
+// in_simulation
+// type		: bool
+// working	: Indicate if currently execuing in simulation or not
+extern uint8_t in_simulation;
+
+// start_simulation
+// type		: bool
+// working	: Indicates that next loop should be started in simulation
+extern uint8_t start_simulation;
 
 // inside_simulation
 // type		: bool
@@ -36,9 +50,9 @@ extern uint8_t inside_ptlsim;
 //				  example, switch between simulation modes or change any
 //				  configuration option.  It also registers a chunk of memory in
 //				  RAM used by memory manager of PTLsim.
-#ifdef __cplusplus
-extern "C" 
-#endif
+//#ifdef __cplusplus
+//extern "C" 
+//#endif
 void ptlsim_init(void);
 
 // ptl_machine_init 
@@ -48,15 +62,18 @@ void ptlsim_init(void);
 //				  configuration string passed in 'config_str' argument.  This
 //				  function is called when QEMU gets the ptlsim configuration
 //				  and its about to change to simulation mode 
-void ptl_machine_init(const char* config_str);
+//#ifdef __cplusplus
+//extern "C" 
+//#endif
+void ptl_machine_init(char* config_str);
 
 // ptl_create_new_context
 // returns CPUX86Context*	: a pointer to newly created CPU Context
 // working					: This function will create a new CPU Context, add
 //							  it to the array of contexts in ptl_machine and 
 //							  returns the CPUX86Context* of that Context
-struct CPUState;
-CPUState* ptl_create_new_context(void);
+struct CPUX86State;
+CPUX86State* ptl_create_new_context(void);
 
 // ptl_reconfigure
 // config_str	: string containing new configuration options for PTLsim
@@ -77,5 +94,9 @@ void ptl_reconfigure(char* config_str);
 //				  return when it reaches the no of instructions we specified to
 //				  simulate.
 uint8_t ptl_simulate(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // PTL_QEMU_H

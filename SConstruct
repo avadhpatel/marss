@@ -23,6 +23,7 @@ ptl_dir = "%s/ptlsim" % curr_dir
 
 # 1. Configure QEMU
 qemu_env = Environment()
+qemu_env.Decider('MD5-timestamp')
 qemu_env['CC'] = CC
 qemu_configure_script = "%s/SConfigure" % qemu_dir
 Export('qemu_env')
@@ -39,6 +40,7 @@ if config_success != "success":
 # 2. Compile PTLsim
 ptl_compile_script = "%s/SConstruct" % ptl_dir
 ptl_env = Environment()
+ptl_env.Decider('MD5-timestamp')
 ptl_env['CC'] = CC
 ptl_env['qemu_dir'] = qemu_dir
 

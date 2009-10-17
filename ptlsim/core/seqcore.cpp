@@ -351,7 +351,7 @@ ostream& SequentialCoreEvent::print(ostream& os) const {
     os << " rip ", (void*)rip, ":", intstring(uopid, -2), "  ", padstring(sb, -60), " ", loadstore.sfr,
       " (virt 0x", hexstring(loadstore.virtaddr, 48), ")";
     if (loadstore.origaddr != loadstore.virtaddr) os << " (orig 0x", hexstring(loadstore.origaddr, 48), ")";
-    if (loadstore.sfr.invalid) os << " (PFEC ", PageFaultErrorCode(loadstore.pfec), ", PTE ", Level1PTE(loadstore.pteused), ")";
+    if (loadstore.sfr.invalid) os << " (PFEC ", PageFaultErrorCode(loadstore.pfec);// ", PTE ", Level1PTE(loadstore.pteused), ")";
     break;
   }
   case EVENT_LOAD_ANNUL: {
@@ -921,7 +921,7 @@ struct SequentialCore {
       arflags[i] = 0;
     }
 
-    arflags[REG_flags] = ctx.eflags;
+    arflags[REG_flags] = ctx.reg_flags; //ctx.eflags;
   }
 
   void core_to_external_state(Context& ctx) {

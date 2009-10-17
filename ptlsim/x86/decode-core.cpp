@@ -109,6 +109,9 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   // I/O and legacy
   assist_ioport_in,
   assist_ioport_out,
+  // Jumps
+  assist_ljmp,
+  assist_ljmp_prct,
 };
 
 int assist_index(assist_func_t assist) {
@@ -449,6 +452,8 @@ void TraceDecoder::reset() {
   join_with_prev_insn = 0;
   outcome = DECODE_OUTCOME_OK;
   stop_at_rip = limits<W64>::max;
+  pe = 0;
+  vm86 = 0;
 }
 
 TraceDecoder::TraceDecoder(const RIPVirtPhys& rvp) {
@@ -485,6 +490,9 @@ TraceDecoder::TraceDecoder(Context& ctx, Waddr rip) {
   kernel = 0;
 #endif
   dirflag = ((ctx.internal_eflags & FLAG_DF) != 0);
+
+  pe = (ctx.hflags >> HF_PE_SHIFT) & 1;
+  vm86 = (ctx.eflags >> VM_SHIFT) & 1;
 
   bb.reset();
   setzero(bb.rip);
@@ -1905,7 +1913,7 @@ bool TraceDecoder::translate() {
 
   bool rc;
 
-  // ptl_logfile << "Decoding op 0x", hexstring(op, 12), " (class ", (op >> 8), ") @ ", (void*)ripstart, endl;
+  ptl_logfile << "Decoding op 0x", hexstring(op, 12), " (class ", (op >> 8), ") @ ", (void*)ripstart, endl;
 
   is_x87 = 0;
   is_sse = 0;
@@ -1913,6 +1921,8 @@ bool TraceDecoder::translate() {
   invalid |= ((rip - (Waddr)bb.rip) > valid_byte_count);
 
   if (invalid) {
+	  ptl_logfile << "Invalidating translation, valid_byte_count:",
+				  valid_byte_count, endl;
     invalidate();
     user_insn_count++;
     end_of_block = 1;

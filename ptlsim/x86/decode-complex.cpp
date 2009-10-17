@@ -333,6 +333,30 @@ void assist_cpuid(Context& ctx) {
   ctx.eip = ctx.reg_nextrip;
 }
 
+void assist_ljmp_prct(Context& ctx) {
+	W32 new_cs = ctx.reg_ar1;
+	W32 new_eip = ctx.reg_ar2;
+	W32 next_eip_addend = ctx.reg_selfrip + ctx.reg_nextrip;
+	ptl_logfile << "assit_ljmp_prct: csbase: ", ctx.reg_ar1,
+				" eip: ", ctx.reg_ar2, endl;
+	ctx.setup_qemu_switch();
+	helper_ljmp_protected(new_cs, new_eip, next_eip_addend);
+	ctx.cs_segment_updated();
+}
+
+void assist_ljmp(Context& ctx) {
+	W32 new_cs = ctx.reg_ar1;
+	W32 new_eip = ctx.reg_ar2;
+	ptl_logfile << "assit_ljmp: csbase: ", ctx.reg_ar1,
+				" eip: ", ctx.reg_ar2, endl;
+	W32 selector = new_cs & 0xffff;
+	ctx.segs[R_CS].selector = selector;
+	W64 base = selector << 4;
+	ctx.segs[R_CS].base = base;
+	ctx.cs_segment_updated();
+	ctx.eip = new_eip;//new_cs + 
+}
+
 void assist_rdtsc(Context& ctx) {
 	ctx.setup_qemu_switch();
 	helper_rdtsc();
@@ -1561,6 +1585,39 @@ bool TraceDecoder::decode_complex() {
     microcode_assist(ASSIST_IOPORT_OUT, ripstart, rip);
     end_of_block = 1;
     break;
+  }
+
+  case 0xea: {
+	// ljmp imm
+	if(use64) {
+		// mark as invalid op
+	}
+	W32 offset;
+	int sizeshift;
+	if(addrsize_prefix) {
+		DECODE(iform, ra, v_mode);
+		sizeshift = 2;
+	} else {
+		DECODE(iform, ra, w_mode);
+		sizeshift = 1;
+	}
+	DECODE(iform, rd, w_mode);
+	EndOfDecode();
+	this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 
+			2, rd.imm.imm);
+	this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 
+			sizeshift, ra.imm.imm);
+
+	if(pe && !vm86) {
+		// do ljmp protected, we need new CS, new eip and next_eip_addend
+		// new CS is stored in REG_ar1, eip is stored in REG_ar2
+		microcode_assist(ASSIST_LJMP_PRCT, ripstart, rip);
+	} else {
+		// Directly update CS register and change the rip
+		microcode_assist(ASSIST_LJMP, ripstart, rip);
+	}
+	end_of_block = 1;
+	break;
   }
 
   case 0xee ... 0xef: {

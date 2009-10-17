@@ -24,7 +24,9 @@ using namespace Memory::MESICache;
 BusInterconnect::BusInterconnect(const char *name, 
 		MemoryHierarchy *memoryHierarchy) : 
 	Interconnect(name,memoryHierarchy),
-	busBusy_(false)
+	busBusy_(false),
+	dataBusBusy_(false),
+	lastAccessQueue(null)
 {
 	GET_STRINGBUF_PTR(broadcast_name, name, "_broadcast");
 	broadcast_.set_name(broadcast_name->buf);
@@ -381,16 +383,5 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
 
 	dataBusBusy_ = false;
 	return true;
-}
-
-void BusInterconnect::print_map(ostream& os)
-{
-	os << "Bus Interconnect: ", get_name(), endl;
-	os << "\tconnected to: ", endl;
-	
-	foreach(i, controllers.count()) {
-		os << "\t\tcontroller[i]: ", 
-			controllers[i]->controller->get_name(), endl;
-	}
 }
 

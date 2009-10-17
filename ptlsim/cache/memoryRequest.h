@@ -26,9 +26,32 @@ enum OP_TYPE {
 	NO_MEMORY_OP
 };
 
+//extern const char* memory_op_names[NO_MEMORY_OP];
+
+static const char* memory_op_names[NO_MEMORY_OP] = {
+	"memory_op_read",
+	"memory_op_write",
+	"memory_op_update",
+	"memory_op_evict"
+};
+
 class MemoryRequest: public selfqueuelink 
 {
 	public:
+		MemoryRequest() { reset(); }
+
+		void reset() {
+			coreId_ = 0;
+			threadId_ = 0;
+			physicalAddress_ = 0;
+			robId_ = 0;
+			cycles_ = 0;
+			ownerTimestamp_ = 0;
+			refCounter_ = 0; // or maybe 1 	
+			opType_ = MEMORY_OP_READ;
+			isData_ = 0;
+		}
+
 		void incRefCounter(){
 			refCounter_++;
 		}
@@ -81,7 +104,20 @@ class MemoryRequest: public selfqueuelink
 		OP_TYPE get_type() { return opType_; }
 		void set_op_type(OP_TYPE type) { opType_ = type; }
 
-		void print(ostream& os);
+//		ostream& print(ostream& os) const;
+
+		ostream& print(ostream& os) const
+		{
+			os << "Memory Request: core[", coreId_, "] ";
+			os << "thread[", threadId_, "] ";
+			os << "address[0x", hexstring(physicalAddress_, 48), "] ";
+			os << "robid[", robId_, "] ";
+			os << "init-cycle[", cycles_, "] ";
+			os << "ref-counter[", refCounter_, "] ";
+			os << "op-type[", memory_op_names[opType_], "] ";
+			os << "isData[", isData_, "] ";
+			return os;
+		}
 
 	private:
 		W8 coreId_;
@@ -96,8 +132,10 @@ class MemoryRequest: public selfqueuelink
 
 };
 
-ostream& operator <<(ostream& os, MemoryRequest& request);
-ostream& operator , (ostream& os, MemoryRequest& request);
+static inline ostream& operator <<(ostream& os, const MemoryRequest& request)
+{
+	return request.print(os);
+}
 
 class RequestPool: public array<MemoryRequest,REQUEST_POOL_SIZE> 
 {
@@ -113,22 +151,22 @@ class RequestPool: public array<MemoryRequest,REQUEST_POOL_SIZE>
 		void print(ostream& os) {
 			os << "Request pool : size[", size_, "]\n";
 			os << "used requests : count[", usedRequestsList_.count,
-			   "]\n";
+			   "]\n", flush;
 
 			MemoryRequest *usedReq;
 			foreach_list_mutable(usedRequestsList_, usedReq, \
 					entry, nextentry) {
 				assert(usedReq);
-				os << *usedReq , endl;
+				os << *usedReq , endl, flush;
 			}
 
 			os << "free request : count[", freeRequestList_.count,
-			   "]\n";
+			   "]\n", flush;
 
 			MemoryRequest *freeReq;
 			foreach_list_mutable(freeRequestList_, freeReq, \
 					entry_, nextentry_) {
-				os << *freeReq, endl;
+				os << *freeReq, endl, flush;
 			}
 
 			os << "---- End: Request pool\n";

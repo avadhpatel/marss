@@ -46,12 +46,13 @@
 
 #elif ACCESS_TYPE == (NB_MMU_MODES)
 
-#define CPU_MMU_INDEX (cpu_mmu_index(env))
+#define CPU_MMU_INDEX (cpu_mmu_index_2((target_ulong)(env)))
 #define MMUSUFFIX _mmu
 
 #elif ACCESS_TYPE == (NB_MMU_MODES + 1)
 
-#define CPU_MMU_INDEX (cpu_mmu_index(env))
+//#define CPU_MMU_INDEX (cpu_mmu_index_2((target_ulong)(env)))
+#define CPU_MMU_INDEX (env->hflags & HF_CPL_MASK) == 3 ? 1 : 0
 #define MMUSUFFIX _cmmu
 
 #else

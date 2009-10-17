@@ -46,6 +46,8 @@ BusInterconnect::BusInterconnect(const char *name,
 	dataBroadcastCompleted_.set_name(dataBroadcastComplete_name->buf);
 	dataBroadcastCompleted_.connect(signal_mem_ptr(*this,
 				&BusInterconnect::data_broadcast_completed_cb));
+
+	lastAccessQueue = 0;
 }
 
 void BusInterconnect::register_controller(Controller *controller)
@@ -64,6 +66,7 @@ void BusInterconnect::register_controller(Controller *controller)
 
 	busControllerQueue->idx = controllers.count();
 	controllers.push(busControllerQueue);
+	lastAccessQueue = controllers[0];
 }
 
 int BusInterconnect::access_fast_path(Controller *controller,
@@ -127,7 +130,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
 BusQueueEntry* BusInterconnect::arbitrate_round_robin()
 {
 	memdebug("BUS:: doing arbitration.. \n");
-	BusControllerQueue *controllerQueue;
+	BusControllerQueue *controllerQueue = null;
 	int i;
 	if(lastAccessQueue)
 		i = lastAccessQueue->idx;

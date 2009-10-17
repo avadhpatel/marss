@@ -30,6 +30,10 @@
 #include "qemu-common.h"
 #include "kvm.h"
 
+#ifdef PTLSIM_QEMU
+#include <ptl-qemu.h>
+#endif
+
 //#define DEBUG_MMU
 
 /* feature flags taken from "Intel Processor Identification and the CPUID
@@ -1665,7 +1669,11 @@ CPUX86State *cpu_x86_init(const char *cpu_model)
     CPUX86State *env;
     static int inited;
 
+#ifdef PTLSIM_QEMU
+	env = ptl_create_new_context();
+#else
     env = qemu_mallocz(sizeof(CPUX86State));
+#endif
     cpu_exec_init(env);
     env->cpu_model_str = cpu_model;
 

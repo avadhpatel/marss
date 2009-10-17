@@ -40,6 +40,10 @@
 #include "migration.h"
 #include "kvm.h"
 
+#ifdef PTLSIM_QEMU
+#include <ptl-qemu.h>
+#endif
+
 //#define DEBUG
 //#define DEBUG_COMPLETION
 
@@ -499,9 +503,15 @@ static void do_stop(void)
     vm_stop(EXCP_INTERRUPT);
 }
 
+#ifdef PTLSIM_QEMU
 static void do_ptlsim(char* args)
 {
+	term_printf("ptlsim options received:%s\n", args);
+	ptl_machine_init(args);
+    vm_stop(0);
+	start_simulation = 1;
 }
+#endif
 
 static void encrypted_bdrv_it(void *opaque, BlockDriverState *bs)
 {
@@ -2378,12 +2388,13 @@ static void monitor_handle_command(const char *cmdline)
 				if(*p == '\0')
 					str = NULL;
 				else {
-					str = p;
+					str = qemu_malloc(strlen(p) + 1);
+					pstrcpy(str, strlen(p)+1, p);
+					str_allocated[nb_args] = str;
+					args[nb_args++] = str;
 					// Put the *p to the end of the string
 					p += (strlen(str));
 				}
-				str_allocated[nb_args] = str;
-				args[nb_args++] = str;
 			}
 			break;
 #endif

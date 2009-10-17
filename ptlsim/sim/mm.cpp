@@ -19,6 +19,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+// try to disable PTLSIM_HYPERVISOR
+//#ifdef PTLSIM_HYPERVISOR
+//#undef PTLSIM_HYPERVISOR
+//#endif
+
 extern ofstream ptl_logfile;
 
 extern void early_printk(const char* s);
@@ -878,7 +883,8 @@ struct SlabAllocator {
     page->freecount = 0;
     page->allocator = this;
 
-    Waddr pfn = (((Waddr)page) - PTL_PAGE_POOL_BASE) >> 12;
+//    Waddr pfn = (((Waddr)page) - PTL_PAGE_POOL_BASE) >> 12;
+    Waddr pfn = ((((Waddr)page) - ((Waddr)heap_start)) - PTL_PAGE_POOL_BASE) >> 12;
     assert(pfn < PTL_PAGE_POOL_SIZE);
     page_is_slab_bitmap[pfn] = 1;
 
@@ -1228,6 +1234,8 @@ void ptl_mm_zero_private_pages(void* addr, Waddr bytecount) {
 
 void* ptl_mm_try_alloc_private_pages(Waddr bytecount, int prot, Waddr base, void* caller) {
   int flags = MAP_ANONYMOUS|MAP_NORESERVE | (base ? MAP_FIXED : 0);
+  // Avadh: always inside ptlsim
+  bool inside_ptlsim = true;
   flags |= (inside_ptlsim) ? MAP_SHARED : MAP_PRIVATE;
   if (base == 0) base = PTL_PAGE_POOL_BASE;
   void* addr = sys_mmap((void*)base, ceil(bytecount, PAGE_SIZE), prot, flags, 0, 0);
@@ -1647,18 +1655,18 @@ DataStoreNode& ptl_mm_capture_stats(DataStoreNode& root) {
 //  ptl_mm_free(ptr, getcaller());
 //}
 //
-void* operator new(size_t sz) {
-  return ptl_mm_alloc(sz, getcaller());
-}
-
-void operator delete(void* m) {
-  ptl_mm_free(m, getcaller());
-}
-
-void* operator new[](size_t sz) {
-  return ptl_mm_alloc(sz, getcaller());
-}
-
-void operator delete[](void* m) {
-  ptl_mm_free(m, getcaller());
-}
+//void* operator new(size_t sz) {
+//  return ptl_mm_alloc(sz, getcaller());
+//}
+//
+//void operator delete(void* m) {
+//  ptl_mm_free(m, getcaller());
+//}
+//
+//void* operator new[](size_t sz) {
+//  return ptl_mm_alloc(sz, getcaller());
+//}
+//
+//void operator delete[](void* m) {
+//  ptl_mm_free(m, getcaller());
+//}

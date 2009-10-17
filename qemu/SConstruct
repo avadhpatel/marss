@@ -140,10 +140,23 @@ comm_hw_list = []
 for h in Split(comm_hw_files):
     comm_hw_list.append("hw/%s" % h)
 
+block_objs = comm_lib_env.Object(Split(block_files))
 
 comm_lib_env['CPPPATH'].append("fpu")
 libqemu_comm = comm_lib_env.Library('qemu_common', Split(comm_files) +
-        audio_list + slirp_list + comm_hw_list + Split(block_files))
+        audio_list + slirp_list + comm_hw_list + block_objs)
+
+#######################
+# qemu-img :
+osdep_o = env.Object("osdep.c")
+qemu_tool_o = comm_lib_env.Object("qemu-tool.c")
+qemu_img = comm_lib_env.Program('qemu-img', 
+        Split("qemu-img.c") + osdep_o + qemu_tool_o + block_objs,
+        LIBS = comm_lib_env['LIBS'] + ["z"])
+
+qemu_nbd = comm_lib_env.Program('qemu-nbd',
+        Split("qemu-nbd.c") + qemu_tool_o +  osdep_o + block_objs,
+        LIBS = comm_lib_env['LIBS'] + ["z"])
 
 #######################
 # cpu emulator library
@@ -200,7 +213,7 @@ if target['user_only']:
     print("This configuration is not supported in PQRS")
     Return('error_str')
 
-obj_files = "osdep.c monitor.c loader.c dma-helpers.c"
+obj_files = "monitor.c loader.c dma-helpers.c"
 obj_files += " %s/machine.c" % target_path
 hw_files = "pci.c isa_mmio.c"
 # virtio in hw
@@ -287,7 +300,7 @@ for hw_f in Split(hw_files):
     hw_files_list.append("hw/%s" % hw_f)
 
 qemu_bin = env.Program(qemu_prog_name, 
-        Split(obj_files) + hw_files_list + 
+        Split(obj_files) + hw_files_list + osdep_o +
         [ptlsim_lib, libqemu_comm, libqemu])
 
 Return('qemu_bin')

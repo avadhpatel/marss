@@ -44,7 +44,7 @@ struct PTLsimCore{
   virtual PTLsimCore& getcore() const{ return (*((PTLsimCore*)null));}
 };
 
-static Context* ptl_contexts[MAX_CONTEXTS];
+extern Context* ptl_contexts[MAX_CONTEXTS];
 
 struct PTLsimMachine {
   bool initialized;

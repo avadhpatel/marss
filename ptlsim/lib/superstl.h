@@ -369,6 +369,34 @@ namespace superstl {
 //	  return os.write(reinterpret_cast<const char*>(&v), sizeof(v));
 //  }
 
+  static inline ostream& operator <<(ostream& os, const W8& v) {
+	  return os << (unsigned int)(v);
+  }
+
+  static inline ostream& operator <<(ostream& os, const W8s& v) {
+	  return os << (signed int)(v);
+  }
+
+  static inline ostream& operator ,(ostream& os, char* c) {
+	  return os << c;
+  }
+
+//  static inline ostream& operator ,(ostream& os, const W16& v) {
+//	  return os << (int)(v);
+//  }
+//
+//  static inline ostream& operator ,(ostream& os, const W32& v) {
+//	  return os << (unsigned int)(v);
+//  }
+//  
+//  static inline ostream& operator ,(ostream& os, const W64& v) {
+//	  return os << (unsigned long)(v);
+//  }
+//
+//  static inline ostream& operator ,(ostream& os, const Waddr& v) {
+//	  return os << (unsigned long long)(v);
+//  }
+
   template <typename T>
   static inline ostream& operator ,(ostream& os, const T& v) {
     return os << v;
@@ -438,6 +466,10 @@ namespace superstl {
   stringbuf& operator <<(stringbuf& os, const hexstring& hs);
 
   DeclareStringBufToStream(hexstring);
+
+  static inline ostream& operator ,(ostream& os, const byte* v) {
+	  return os << "0x", hexstring((unsigned long)(v), 64);
+  }
 
   struct bytestring {
     const byte* bytes;

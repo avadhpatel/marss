@@ -115,7 +115,6 @@ class CPUController : public Controller
 		bool handle_interconnect_cb(void *arg);
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);
-		void print_map(ostream& os);
 		void clock();
 		void register_interconnect_L1_d(Interconnect *interconnect);
 		void register_interconnect_L1_i(Interconnect *interconnect);
@@ -128,6 +127,15 @@ class CPUController : public Controller
 		}
 		bool is_cache_availabe(bool is_icache);
 		void annul_request(MemoryRequest *request);
+
+		void print_map(ostream& os)
+		{
+			os << "CPU-Controller: ", get_name(), endl;
+			os << "\tconnected to: ", endl;
+			os << "\t\tL1-i: ", int_L1_i_->get_name(), endl;
+			os << "\t\tL1-d: ", int_L1_d_->get_name(), endl;
+		}
+
 };
 
 static inline ostream& operator <<(ostream& os, const CPUController& controller)

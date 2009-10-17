@@ -24,6 +24,10 @@
 #include "tcg.h"
 #include "kvm.h"
 
+#ifdef PTLSIM_QEMU
+#include <ptl-qemu.h>
+#endif
+
 #if !defined(CONFIG_SOFTMMU)
 #undef EAX
 #undef ECX
@@ -206,9 +210,17 @@ static void cpu_handle_debug_exception(CPUState *env)
         debug_excp_handler(env);
 }
 
+#ifdef PTLSIM_QEMU
+void set_cpu_env(CPUState* env1)
+{
+	env = env1;
+	env_to_regs();
+}
+#endif
+
 /* main execution loop */
 
-int cpu_exec(CPUState *env1)
+int cpu_exec(CPUState *env1, uint8_t do_simulate)
 {
 #define DECLARE_HOST_REGS 1
 #include "hostregs_helper.h"
@@ -250,6 +262,14 @@ int cpu_exec(CPUState *env1)
 #error unsupported target CPU
 #endif
     env->exception_index = -1;
+
+#ifdef PTLSIM_QEMU
+	if(in_simulation && do_simulate) {
+//		printf("Going into simulation mode\n");
+		in_simulation = ptl_simulate();
+		return 0;
+	}
+#endif
 
     /* prepare setjmp context for exception handling */
     for(;;) {
@@ -335,7 +355,6 @@ int cpu_exec(CPUState *env1)
                 }
             }
 #endif
-
             if (kvm_enabled()) {
                 kvm_cpu_exec(env);
                 longjmp(env->jmp_env, 1);
@@ -602,6 +621,16 @@ int cpu_exec(CPUState *env1)
                 if (unlikely (env->exit_request))
                     env->current_tb = NULL;
 
+#ifdef PTLSIM_QEMU
+				if (in_simulation) {
+					// Restore PC
+					if(env->current_tb != NULL)
+						cpu_pc_from_tb(env, env->current_tb);
+//					longjmp(env->jmp_env, 1);
+                    cpu_loop_exit();
+				}
+#endif
+
                 while (env->current_tb) {
                     tc_ptr = tb->tc_ptr;
                 /* execute the generated code */
@@ -652,6 +681,10 @@ int cpu_exec(CPUState *env1)
             } /* for(;;) */
         } else {
             env_to_regs();
+#ifdef PTLSIM_QEMU
+			if(in_simulation)
+				break;
+#endif
         }
     } /* for(;;) */
 

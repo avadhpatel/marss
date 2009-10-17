@@ -124,7 +124,6 @@ class BusInterconnect : public Interconnect
 		void register_controller(Controller *controller);
 		int access_fast_path(Controller *controller,
 				MemoryRequest *request);
-		void print_map(ostream& os);
 		void annul_request(MemoryRequest *request);
 
 		// Bus delay in sending message is BUS_BROADCASTS_DELAY
@@ -139,6 +138,17 @@ class BusInterconnect : public Interconnect
 				os << controllers[i]->queue;
 			}
 			os << "Pending Request: ", pendingRequests_, endl;
+		}
+
+		void print_map(ostream& os)
+		{
+			os << "Bus Interconnect: ", get_name(), endl;
+			os << "\tconnected to: ", endl;
+
+			foreach(i, controllers.count()) {
+				os << "\t\tcontroller[", i, "]: ", 
+				   controllers[i]->controller->get_name(), endl;
+			}
 		}
 
 		// Signal callbacks

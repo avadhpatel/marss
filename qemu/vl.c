@@ -1250,7 +1250,7 @@ int64_t qemu_get_clock(QEMUClock *clock)
     default:
     case QEMU_TIMER_VIRTUAL:
 #ifdef PTLSIM_QEMU
-		if (inside_ptlsim) {
+		if (in_simulation) {
 			return cpu_get_sim_clock();
 		} 
 #endif
@@ -3807,7 +3807,20 @@ static int main_loop(void)
     cur_cpu = first_cpu;
     next_cpu = cur_cpu->next_cpu ?: first_cpu;
     for(;;) {
+#ifdef PTLSIM_QEMU
+		if (start_simulation && !vm_running) {
+			in_simulation = 1;
+			if (!vm_running) {
+				vm_start();
+			}
+			start_simulation = 0;
+		}
+#endif
         if (vm_running) {
+
+#ifdef PTLSIM_QEMU
+			uint8_t exception_pending = 0;
+#endif
 
             for(;;) {
                 /* get next cpu */
@@ -3830,9 +3843,13 @@ static int main_loop(void)
                     env->icount_decr.u16.low = decr;
                     env->icount_extra = count;
                 }
-                ret = cpu_exec(env);
+                ret = cpu_exec(env, 0);
 #ifdef CONFIG_PROFILER
                 qemu_time += profile_getclock() - ti;
+#endif
+#ifdef PTLSIM_QEMU
+				exception_pending = env->exception_index > 0 ? 1 : \
+									exception_pending;
 #endif
                 if (use_icount) {
                     /* Fold pending instructions back into the
@@ -3877,7 +3894,7 @@ static int main_loop(void)
             }
             if (powerdown_requested) {
                 powerdown_requested = 0;
-		qemu_system_powerdown();
+				qemu_system_powerdown();
                 ret = EXCP_INTERRUPT;
             }
             if (unlikely(ret == EXCP_DEBUG)) {
@@ -3926,6 +3943,14 @@ static int main_loop(void)
             } else {
                 timeout = 0;
             }
+
+#ifdef PTLSIM_QEMU
+			if(in_simulation && !exception_pending) {
+				cpu_exec(first_cpu, 1);
+//				printf("Going into simulation mode\n");
+//				in_simulation = ptl_simulate();
+			}
+#endif
         } else {
             if (shutdown_requested) {
                 ret = EXCP_INTERRUPT;

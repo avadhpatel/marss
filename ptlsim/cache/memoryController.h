@@ -62,20 +62,26 @@ class MemoryController : public Controller
 		bool handle_interconnect_cb(void *arg);
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);
-		void print_map(ostream& os);
 		void print(ostream& os) const;
 
 		void register_cache_interconnect(Interconnect *interconnect);
 
 		bool access_completed_cb(void *arg);
 
+		void annul_request(MemoryRequest *request);
+
+		int get_no_pending_request(W8 coreid);
+
 		bool is_full(bool fromInterconnect = false) const {
 			return pendingRequests_.isFull();
 		}
 
-		void annul_request(MemoryRequest *request);
-
-		int get_no_pending_request(W8 coreid);
+		void print_map(ostream& os) 
+		{
+			os << "Memory Controller: ", get_name(), endl;
+			os << "\tconnected to:", endl;
+			os << "\t\tinterconnect: ", cacheInterconnect_->get_name(), endl;
+		}
 
 };
 

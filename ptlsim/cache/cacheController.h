@@ -272,12 +272,23 @@ class CacheController : public Controller
 		bool handle_interconnect_cb(void *arg);
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);
-		void print_map(ostream& os);
 		
 		void register_upper_interconnect(Interconnect *interconnect);
 		void register_lower_interconnect(Interconnect *interconnect);
 		void register_second_upper_interconnect(Interconnect 
 				*interconnect);
+
+		void annul_request(MemoryRequest *request);
+
+		// Callback functions for signals of cache
+		bool cache_hit_cb(void *arg);
+		bool cache_miss_cb(void *arg);
+		bool cache_access_cb(void *arg);
+		bool cache_insert_cb(void *arg);
+		bool cache_update_cb(void *arg);
+		bool cache_insert_complete_cb(void *arg);
+		bool wait_interconnect_cb(void *arg);
+		bool clear_entry_cb(void *arg);
 
 		void set_lowest_private(bool flag) {
 			isLowestPrivate_ = flag;
@@ -311,17 +322,17 @@ class CacheController : public Controller
 			return false;
 		}
 
-		void annul_request(MemoryRequest *request);
-
-		// Callback functions for signals of cache
-		bool cache_hit_cb(void *arg);
-		bool cache_miss_cb(void *arg);
-		bool cache_access_cb(void *arg);
-		bool cache_insert_cb(void *arg);
-		bool cache_update_cb(void *arg);
-		bool cache_insert_complete_cb(void *arg);
-		bool wait_interconnect_cb(void *arg);
-		bool clear_entry_cb(void *arg);
+		void print_map(ostream& os)
+		{
+			os << "Cache-Controller: ", get_name(), endl;
+			os << "\tconnected to: ", endl;
+			if(upperInterconnect_)
+				os << "\t\tupper: ", upperInterconnect_->get_name(), endl;
+			if(upperInterconnect2_)
+				os << "\t\tupper2: ", upperInterconnect2_->get_name(), endl;
+			if(lowerInterconnect_)
+				os << "\t\tlower: ",  lowerInterconnect_->get_name(), endl;
+		}
 
 };
 

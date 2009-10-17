@@ -13,6 +13,8 @@
 //Context ctx alignto(4096) insection(".ctx");
 //#endif
 
+Context* ptl_contexts[MAX_CONTEXTS];
+
 const char* opclass_names[OPCLASS_COUNT] = {
   "logic", "addsub", "addsubc", "addshift", "sel", "cmp", "br.cc", "jmp", "bru", 
   "assist", "mf", "ld", "st", "ld.pre", "shiftsimple", "shift", "mul", "bitscan", "flags",  "chk", 
@@ -278,7 +280,7 @@ const char* arch_reg_names[TRANSREG_COUNT] = {
   "zf", "cf", "of", "imm", "mem", "tr8", "tr9", "tr10",
 };
 
-Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec) {
+Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code) {
 
 	exception = 0;
 	pfec = 0;
@@ -309,8 +311,24 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 
 	int mmu_index = cpu_mmu_index((CPUState*)this);
 	int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
-	W64 tlb_addr = tlb_table[mmu_index][index].addr_read;
-	if likely ((virtaddr & TARGET_PAGE_MASK) == (tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
+	W64 tlb_addr;
+	if likely (!store) {
+		if likely (!is_code) {
+			tlb_addr = tlb_table[mmu_index][index].addr_read;
+		} else {
+			tlb_addr = tlb_table[mmu_index][index].addr_code;
+		}
+	} else {
+		tlb_addr = tlb_table[mmu_index][index].addr_write;
+	}
+//	cerr << "mmu_index:", mmu_index, " index:", index,
+//		 " virtaddr:", virtaddr, 
+//				" tlb_addr:", tlb_addr, " virtpage:",
+//				(virtaddr & TARGET_PAGE_MASK), " tlbpage:",
+//				(tlb_addr & TARGET_PAGE_MASK),
+//				(tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK)),
+//				endl;
+	if likely ((virtaddr & TARGET_PAGE_MASK) == tlb_addr) {
 		// we find valid TLB entry, return the physical address for it
 		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
 	}
@@ -411,40 +429,6 @@ bool Context::event_upcall() {
 //    xmm_regs[i]._d[1] = state.xmmregs[i].hi;
 //  }
 //}
-
-int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec) {
-
-	int n = 0 ;
-	pfec = 0;
-
-	//FIXME: We have to check the page permission of both source and
-	//target to make sure that userspace can't copy from kernel mode
-
-	int exception;
-	Waddr source_paddr = check_and_translate(source, 0, false, false, exception, pfec);
-
-	if(exception > 0 || pfec > 0) {
-		faultaddr = source;
-		return 0;
-	}
-	n = min(4096 - lowbits(source, 12), (Waddr)bytes);
-	memcpy(target, (void*)source_paddr, n);
-
-	// Check if all the bytes are read in first page or not
-	if likely (n == bytes) return n;
-
-	source_paddr = check_and_translate(source + n, 0, false, false, exception, pfec);
-	if(exception > 0 || pfec > 0) {
-		faultaddr = source + n;
-		return 0;
-	}
-
-	Waddr next_page_addr = ((source >> TARGET_PAGE_BITS) + 1) << TARGET_PAGE_BITS;
-
-	memcpy((byte*)target + n, (void*)next_page_addr, bytes - n);
-	n = bytes;
-	return n;
-}
 
 int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) {
 

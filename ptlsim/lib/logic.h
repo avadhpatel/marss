@@ -11,6 +11,16 @@
 #include <globals.h>
 #include <superstl.h>
 
+inline vec16b x86_sse_ldvbu(const vec16b* m) { vec16b rd; asm("movdqu %[m],%[rd]" : [rd] "=x" (rd) : [m] "xm" (*m)); return rd; }
+inline void x86_sse_stvbu(vec16b* m, const vec16b ra) { asm("movdqu %[ra],%[m]" : [m] "=xm" (*m) : [ra] "x" (ra) : "memory"); }
+inline vec8w x86_sse_ldvwu(const vec8w* m) { 
+	vec8w rd; 
+	asm("movdqu %[m],%[rd]" : [rd] "=x" (rd) : [m] "xm" (*m)); 
+	return rd; 
+}
+//inline vec8w x86_sse_ldvwu(const vec8w* m) { vec8w rd; asm("movdqu %[rd], %[m]" : [rd] "=x" (rd) : [m] "xm" (*m)); return rd; }
+inline void x86_sse_stvwu(vec8w* m, const vec8w ra) { asm("movdqu %[ra],%[m]" : [m] "=xm" (*m) : [ra] "x" (ra) : "memory"); }
+
 extern ofstream ptl_logfile;
 
 template <typename T> 
@@ -1819,7 +1829,7 @@ struct FullyAssociativeTags16bit {
     base_t* tagbase = (base_t*)&tags;
     base_t* base = tagbase + index;
     vec_t* dp = (vec_t*)base;
-    vec_t* sp = (vec_t*)(base + 1);
+    vec_t* sp = (vec_t*)(base + 1);//dp + 1;//((vec_t*)(base)) + 1;
 
     foreach (i, chunkcount) {
       x86_sse_stvwu(dp++, x86_sse_ldvwu(sp++));

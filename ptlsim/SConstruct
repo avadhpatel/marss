@@ -17,7 +17,6 @@ except:
 
 # Setup the environment
 env = Environment()
-env.Append(CCFLAGS = '-O2 -g')
 
 # Include all the subdirectories into the CCFLAGS
 env['CPPPATH'] = []
@@ -25,17 +24,23 @@ for dir in dirs:
     env['CPPPATH'].append(os.getcwd() + "/" + dir)
 
 env['CPPPATH'].append(qemu_dir)
-env['CPPPATH'].append(qemu_dir + "/target-i386")
-env['CPPPATH'].append(qemu_dir + "/fpu")
-env['CPPPATH'].append(qemu_dir + "/x86_64-softmmu")
+env['CPPPATH'].append("%s/%s" % (qemu_dir, "target-i386"))
+env['CPPPATH'].append("%s/%s" % (qemu_dir, "fpu"))
+env['CPPPATH'].append("%s/%s" % (qemu_dir, "x86_64-softmmu"))
 
-# Set all the -D flags
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
     env.Append(CCFLAGS = '-g')
+    env.Append(CCFLAGS = '-O')
+else:
+    env.Append(CCFLAGS = '-g3')
+    env.Append(CCFLAGS = '-O2')
+
+# Set all the -D flags
 # enable PTLSIM_HYPERVISOR
 env.Append(CCFLAGS = '-DPTLSIM_HYPERVISOR -DNEED_CPU_H')
 env.Append(CCFLAGS = '-D__STDC_FORMAT_MACROS')
+env.Append(CCFLAGS = '-DPTLSIM_QEMU')
 
 # enable new cache code (TODO: Make this default when we release)
 env.Append(CCFLAGS = '-DNEW_CACHE')
@@ -93,8 +98,9 @@ Delete(dst_tmp_cpp)
 Delete(dst_tmp)
 
 
-lib = env.Library('build/libmptlsim', objs + ptl_dst_o)
+#lib = env.Library('build/libmptlsim', objs + ptl_dst_o)
+lib = objs + ptl_dst_o
 
-Requires(lib, ptl_dst)
+#Requires(lib, ptl_dst)
 
 Return('lib')

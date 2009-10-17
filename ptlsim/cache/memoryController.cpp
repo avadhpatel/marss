@@ -128,13 +128,6 @@ int MemoryController::access_fast_path(Interconnect *interconnect,
 	return -1;
 }
 
-void MemoryController::print_map(ostream& os) 
-{
-	os << "Memory Controller: ", get_name(), endl;
-	os << "\tconnected to:", endl;
-	os << "\t\tinterconnect: ", cacheInterconnect_->get_name(), endl;
-}
-
 void MemoryController::print(ostream& os) const
 {
 	os << "---Memory-Controller: ", get_name(), endl;

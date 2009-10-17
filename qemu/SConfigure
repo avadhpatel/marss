@@ -9,7 +9,7 @@ except:
     env['CC'] = "g++"
     env['LDFLAGS'] = ""
 
-env.Append(CCFLAGS = "-O2 -g")
+env.Append(CCFLAGS = "-g")
 
 # Set default parameters
 prefix = ""
@@ -183,7 +183,7 @@ audio_possible_drivers = "oss sdl esd pa"
 usb = "linux"
 linux_user = True
 
-CFLAGS = "%s -O2 -g -fno-strict-aliasing" % (env['CCFLAGS'])
+CFLAGS = "%s -fno-strict-aliasing" % (env['CCFLAGS'])
 CFLAGS += " -Wall -Wundef -Wendif-labels -Wwrite-strings -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls"
 LDFLAGS = "-g" 
 LDFLAGS += " -Wl,--warn-common"

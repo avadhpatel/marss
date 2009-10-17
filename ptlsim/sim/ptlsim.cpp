@@ -48,7 +48,6 @@ W64 ticks_per_update;
 
 W64 last_stats_captured_at_cycle = 0;
 W64 tsc_at_start ;
-bool inside_ptlsim = 0;
 
 #endif
 
@@ -124,7 +123,7 @@ void PTLsimConfig::reset() {
 
   // memory model
   use_memory_model = 0;
-  use_new_memory_system = 0;
+  use_new_memory_system = 1;
   kill_after_run = 1;
   stop_at_user_insns = infinity;
   stop_at_cycle = infinity;
@@ -307,7 +306,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
  add(perfect_L2,                   "perfect-L2",             " L2 always hit");
 
  add(prefetch_own_line,           "prefetch-own-line",              "the prefetch data only write to the cache line of same thread");
- add(use_new_memory_system,      "use-new-memory-system",          "use more detailed memory simulation");
+ add(use_new_memory_system,      "use-new-memory-system",          "use more detailed memory simulation(set by default)");
  add(verify_cache,               "verify-cache",                   "run simulation with storing actual data in cache");
  add(comparing_cache,               "comparing-cache",                   "run simulation with storing actual data in cache");
  add(trace_memory_updates,               "trace-memory-updates",                   "log memory updates");
@@ -593,6 +592,7 @@ void PTLsimMachine::addmachine(const char* name, PTLsimMachine* machine) {
   if unlikely (!machinetable) {
     machinetable = new Hashtable<const char*, PTLsimMachine*, 1>();
   }
+  cerr << "Adding machine ", name, endl;
   machinetable->add(name, machine);
 }
 void PTLsimMachine::removemachine(const char* name, PTLsimMachine* machine) {
@@ -624,13 +624,23 @@ void ptl_reconfigure(char* config_str) {
 	curr_ptl_machine = null;
 }
 
-void ptl_machine_init(char* config_str) {
+extern "C" void ptl_machine_init(char* config_str) {
+	configparser.setup();
+	config.reset();
 
+//OutOfOrderMachine ooomodel("ooo");
 	// Setup the configuration
 	ptl_reconfigure(config_str);
 }
 
+//Context* ptl_contexts[MAX_CONTEXTS];
+//
+//inline Context& contextof(W8 i) {
+//	return *ptl_contexts[i];
+//}
+
 static int ctx_counter = 0;
+extern "C"
 CPUX86State* ptl_create_new_context() {
 
 	assert(ctx_counter < contextcount);
@@ -638,6 +648,8 @@ CPUX86State* ptl_create_new_context() {
 	// Create a new CPU context and add it to contexts array
 	Context* ctx = new Context();
 	ptl_contexts[ctx_counter] = ctx;
+	cerr << "Created new context(", ctx_counter, "):",
+		contextof(ctx_counter), endl;
 	ctx_counter++;
 
 	return (CPUX86State*)(ctx);
@@ -791,7 +803,7 @@ void print_stats_in_log(){
 }
 
 
-bool ptl_simulate() {
+extern "C" uint8_t ptl_simulate() {
 	PTLsimMachine* machine = null;
 	char* machinename = config.core_name;
 	if likely (curr_ptl_machine != null) {
@@ -830,11 +842,22 @@ bool ptl_simulate() {
 		curr_ptl_machine = machine;
 	}
 
+	foreach(ctx_no, contextcount) {
+//		ptl_logfile << "Context[", ctx_no, "]:", endl, 
+//					contextof(ctx_no), endl;
+		contextof(ctx_no).cs_segment_updated();
+	}
+
 	machine->run(config);
+
+	if (config.stop_at_user_insns <= total_user_insns_committed) {
+		machine->stopped = 1;
+	}
 
 	if (!machine->stopped) {
 		return 1;  // Tell QEMU that we will come back to simulate
 	}
+
 
 	W64 tsc_at_end = rdtsc();
 	machine->update_stats(stats);
@@ -1050,6 +1073,58 @@ Waddr Context::virt_to_pte_phys_addr(W64 rawvirt, int level) {
 	ptl_logfile << "call to Context::virt_to_pte_phys_addr, function not implemented\n";
 	assert(0);
 	return INVALID_PHYSADDR;
+}
+
+int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec) {
+
+	int n = 0 ;
+	pfec = 0;
+
+	// Avadh: We use QEMU's ldub_code function to copy all the bytes
+	// from the simulating domain, this is slow but it works
+	// FIXME : Try to make it like memcpy to copy faster if this gets slower
+	this->setup_qemu_switch();
+	
+//	byte* source_b = (byte*)(source);
+	target_ulong source_b = source;
+	byte* target_b = (byte*)(target);
+	while(n < bytes) {
+		W8 data = ldub_code(source_b);
+		target_b[n] = data;
+		source_b++;
+		n++;
+	}
+
+	return n;
+	//FIXME: We have to check the page permission of both source and
+	//target to make sure that userspace can't copy from kernel mode
+
+//	int exception = 0;
+//	Waddr source_paddr = check_and_translate(source, 0, false, false, exception, pfec, 1);
+//
+//	if(exception > 0 || pfec > 0) {
+//		this->exception = exception;
+//		faultaddr = source;
+//		return 0;
+//	}
+//	n = min(4096 - lowbits(source, 12), (Waddr)bytes);
+//	memcpy(target, (void*)source_paddr, n);
+//
+//	// Check if all the bytes are read in first page or not
+//	if likely (n == bytes) return n;
+//
+//	source_paddr = check_and_translate(source + n, 0, false, false, exception, pfec, 1);
+//	if(exception > 0 || pfec > 0) {
+//		this->exception = exception;
+//		faultaddr = source + n;
+//		return 0;
+//	}
+//
+//	Waddr next_page_addr = ((source >> TARGET_PAGE_BITS) + 1) << TARGET_PAGE_BITS;
+//
+//	memcpy((byte*)target + n, (void*)next_page_addr, bytes - n);
+//	n = bytes;
+//	return n;
 }
 
 void Context::update_mode_count() {

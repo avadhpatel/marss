@@ -1814,6 +1814,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
 
 OutOfOrderMachine::OutOfOrderMachine(const char* name) {
   // Add to the list of available core types
+  cerr << "initing the ooomachine", endl;
   machine_name = name;
   addmachine(machine_name, this);
 }
@@ -1858,8 +1859,11 @@ bool OutOfOrderMachine::init(PTLsimConfig& config) {
     //    memoryHierarchyPtr->addCore(cur_core);
 #endif
     OutOfOrderCore& core = *cores[cur_core];    
+	ptl_logfile << "Core created: ", (int)(cores[cur_core]->coreid), endl;
     foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) {
       core.threadcount++;
+	  cout << "context ", context_idx, " is : ", 
+		   contextof(context_idx), endl;
       ThreadContext* thread = new ThreadContext(core, cur_thread, contextof(context_idx++));
       core.threads[cur_thread] = thread;
       thread->init();

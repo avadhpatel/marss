@@ -181,6 +181,8 @@ struct TraceDecoder {
   bool first_uop_in_insn;
   bool join_with_prev_insn;
   int outcome;
+  bool pe;
+  bool vm86;
 
   Level1PTE ptelo;
   Level1PTE ptehi;
@@ -331,6 +333,9 @@ enum {
   // Interrupts and I/O
   ASSIST_IOPORT_IN,
   ASSIST_IOPORT_OUT,
+  // Jumps
+  ASSIST_LJMP,
+  ASSIST_LJMP_PRCT,
   ASSIST_COUNT,
 };
 
@@ -409,6 +414,9 @@ static const char* assist_names[ASSIST_COUNT] = {
   // I/O and legacy
   "ioport_in",
   "ioport_out",
+  // Jumps
+  "ljmp",
+  "ljmp_prct",
 };
 
 int propagate_exception_during_assist(Context& ctx, byte exception, W32 errorcode, Waddr virtaddr = 0, bool intN = 0);
@@ -479,6 +487,9 @@ void assist_write_debug_reg(Context& ctx);
 // I/O and legacy
 void assist_ioport_in(Context& ctx);
 void assist_ioport_out(Context& ctx);
+// Jumps
+void assist_ljmp(Context& ctx);
+void assist_ljmp_prct(Context& ctx);
 
 //
 // Global functions

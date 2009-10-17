@@ -10,6 +10,7 @@
 #ifdef MEM_TEST
 #include <test.h>
 #else
+#include <globals.h>
 #include <ptlsim.h>
 #define PTLSIM_PUBLIC_ONLY
 #include <ptlhwdef.h>
@@ -21,13 +22,6 @@
 
 
 using namespace Memory;
-
-const char* memory_op_names[NO_MEMORY_OP] = {
-	"memory_op_read",
-	"memory_op_write",
-	"memory_op_update",
-	"memory_op_evict"
-};
 
 
 void MemoryRequest::init(W8 coreId,
@@ -89,33 +83,6 @@ bool MemoryRequest::is_same(W8 coreid,
 	return false;
 }
 
-void MemoryRequest::print(ostream& os)
-{
-	os << "Memory Request: core[", coreId_, "] ";
-	os << "thread[", threadId_, "] ";
-	os << "address[0x", hexstring(physicalAddress_, 48), "] ";
-	os << "robid[", robId_, "] ";
-	os << "init-cycle[", cycles_, "] ";
-	os << "ref-counter[", refCounter_, "] ";
-	os << "op-type[", memory_op_names[opType_], "] ";
-	os << "isData[", isData_, "] ";
-}
-
-namespace Memory {
-
-ostream& operator <<(ostream& os, MemoryRequest& request)
-{
-	request.print(os);
-	return os;
-}
-
-ostream& operator , (ostream& os, MemoryRequest& request)
-{
-	request.print(os);
-	return os;
-}
-
-}
 RequestPool::RequestPool()
 {
 	size_ = REQUEST_POOL_SIZE;
