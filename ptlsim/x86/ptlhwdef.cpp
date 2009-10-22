@@ -280,47 +280,47 @@ const char* arch_reg_names[TRANSREG_COUNT] = {
   "zf", "cf", "of", "imm", "mem", "tr8", "tr9", "tr10",
 };
 
-Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code) {
-
-	exception = 0;
-	pfec = 0;
-
-	if unlikely (lowbits(virtaddr, sizeshift)) {
-		exception = EXCEPTION_UnalignedAccess;
-		return INVALID_PHYSADDR;
-	}
-
-	if unlikely (internal) {
-		//
-		// Directly mapped to PTL space (microcode load/store)
-		// We need to patch in PTLSIM_VIRT_BASE since in 32-bit
-		// mode, ctx.virt_addr_mask will chop off these bits.
-		//
-		// Now in QEMU we dont have any special mapping of this 
-		// memory region, so virtualaddress is where we
-		// will store the internal data
-		//
-		return virtaddr;
-	}
-
-	// TODO : We are currently looking directly at the TLB of QEMU
-	// we don't simulate multilevel page entries right now.
-	bool page_not_present;
-	bool page_read_only;
-	bool page_kernel_only;
-
-	int mmu_index = cpu_mmu_index((CPUState*)this);
-	int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
-	W64 tlb_addr;
-	if likely (!store) {
-		if likely (!is_code) {
-			tlb_addr = tlb_table[mmu_index][index].addr_read;
-		} else {
-			tlb_addr = tlb_table[mmu_index][index].addr_code;
-		}
-	} else {
-		tlb_addr = tlb_table[mmu_index][index].addr_write;
-	}
+//Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code) {
+//
+//	exception = 0;
+//	pfec = 0;
+//
+//	if unlikely (lowbits(virtaddr, sizeshift)) {
+//		exception = EXCEPTION_UnalignedAccess;
+//		return INVALID_PHYSADDR;
+//	}
+//
+//	if unlikely (internal) {
+//		//
+//		// Directly mapped to PTL space (microcode load/store)
+//		// We need to patch in PTLSIM_VIRT_BASE since in 32-bit
+//		// mode, ctx.virt_addr_mask will chop off these bits.
+//		//
+//		// Now in QEMU we dont have any special mapping of this 
+//		// memory region, so virtualaddress is where we
+//		// will store the internal data
+//		//
+//		return virtaddr;
+//	}
+//
+//	// TODO : We are currently looking directly at the TLB of QEMU
+//	// we don't simulate multilevel page entries right now.
+//	bool page_not_present;
+//	bool page_read_only;
+//	bool page_kernel_only;
+//
+//	int mmu_index = cpu_mmu_index((CPUState*)this);
+//	int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+//	W64 tlb_addr;
+//	if likely (!store) {
+//		if likely (!is_code) {
+//			tlb_addr = tlb_table[mmu_index][index].addr_read;
+//		} else {
+//			tlb_addr = tlb_table[mmu_index][index].addr_code;
+//		}
+//	} else {
+//		tlb_addr = tlb_table[mmu_index][index].addr_write;
+//	}
 //	cerr << "mmu_index:", mmu_index, " index:", index,
 //		 " virtaddr:", virtaddr, 
 //				" tlb_addr:", tlb_addr, " virtpage:",
@@ -328,30 +328,31 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 //				(tlb_addr & TARGET_PAGE_MASK),
 //				(tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK)),
 //				endl;
-	if likely ((virtaddr & TARGET_PAGE_MASK) == tlb_addr) {
-		// we find valid TLB entry, return the physical address for it
-		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
-	}
-	// Can't find valid TLB entry, its an exception
-	exception = (store) ? EXCEPTION_PageFaultOnWrite : EXCEPTION_PageFaultOnRead;
-	pfec.rw = store;
-	pfec.us = (!kernel_mode);
-
-	//
-	// Flush out the bogus TLB entry to avoid an infinite loop after the
-	// kernel updates the page tables. Technically only valid PTEs should
-	// be cached in the TLB, but we don't know what "valid" means until
-	// we do the full protection checks. Hence we just invalidate it here:
-	//
-	//flush_tlb_virt(virtaddr);
-	//
-	// Avadh: TODO and also needs to check that in QEMU do we need to flush
-	// the TLB?
-	return INVALID_PHYSADDR;
-}
+//	if likely ((virtaddr & TARGET_PAGE_MASK) == tlb_addr) {
+//		// we find valid TLB entry, return the physical address for it
+//		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
+//	}
+//	// Can't find valid TLB entry, its an exception
+//	exception = (store) ? EXCEPTION_PageFaultOnWrite : EXCEPTION_PageFaultOnRead;
+//	pfec.rw = store;
+//	pfec.us = (!kernel_mode);
+//
+//	//
+//	// Flush out the bogus TLB entry to avoid an infinite loop after the
+//	// kernel updates the page tables. Technically only valid PTEs should
+//	// be cached in the TLB, but we don't know what "valid" means until
+//	// we do the full protection checks. Hence we just invalidate it here:
+//	//
+//	//flush_tlb_virt(virtaddr);
+//	//
+//	// Avadh: TODO and also needs to check that in QEMU do we need to flush
+//	// the TLB?
+//	return INVALID_PHYSADDR;
+//}
 
 bool Context::check_events() const {
-	return ((interrupt_request | exception_index) > 0 ? true : false);
+	return (exception_index >= 0);
+//	return ((interrupt_request | exception_index) > 0 ? true : false);
 }
 
 bool Context::event_upcall() {
@@ -429,40 +430,6 @@ bool Context::event_upcall() {
 //    xmm_regs[i]._d[1] = state.xmmregs[i].hi;
 //  }
 //}
-
-int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) {
-
-	int n = 0 ;
-
-	//FIXME: We have to check the page permission of both source and
-	//target to make sure that userspace can't copy from kernel mode
-
-	int exception;
-	PageFaultErrorCode pfec;
-	Waddr source_paddr = contextof(0).check_and_translate(source, 0, false, false, exception, pfec);
-
-	if(exception > 0 || pfec > 0) {
-		faultaddr = source;
-		return 0;
-	}
-	n = min(4096 - lowbits(source, 12), (Waddr)bytes);
-	memcpy(target, (void*)source_paddr, n);
-
-	// Check if all the bytes are read in first page or not
-	if likely (n == bytes) return n;
-
-	source_paddr = contextof(0).check_and_translate(source + n, 0, false, false, exception, pfec);
-	if(exception > 0 || pfec > 0) {
-		faultaddr = source + n;
-		return 0;
-	}
-
-	Waddr next_page_addr = ((source >> TARGET_PAGE_BITS) + 1) << TARGET_PAGE_BITS;
-
-	memcpy((byte*)target + n, (void*)next_page_addr, bytes - n);
-	n = bytes;
-	return n;
-}
 
 const char* datatype_names[DATATYPE_COUNT] = {
   "int", "float", "vec-float",

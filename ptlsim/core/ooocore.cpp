@@ -661,6 +661,7 @@ bool OutOfOrderCore::runcycle() {
       break;
     }
     case COMMIT_RESULT_INTERRUPT: {
+      exiting = 1;
       thread->handle_interrupt();
       break;
     }
@@ -1170,6 +1171,8 @@ bool ThreadContext::handle_exception() {
 //    ptl_logfile << sshinfo;
   }
 
+  // We are not coming back from this call so flush the pipeline
+  // and all other things.
   ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code, ctx.cr[2]);
 
   // Flush again, but restart at modified rip
@@ -1922,19 +1925,24 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
     logenable = 1;
   }
   // reset all cores for fresh start:
-  foreach (cur_core, NUMBER_OF_CORES){
-    OutOfOrderCore& core =* cores[cur_core];
-    cores[cur_core]->reset();
-    cores[cur_core]->flush_pipeline_all();
+//  if(first_run) {
+	  foreach (cur_core, NUMBER_OF_CORES){
+		  OutOfOrderCore& core =* cores[cur_core];
+		  if(first_run) {
+			  cores[cur_core]->reset();
+		  }
+		  cores[cur_core]->flush_pipeline_all();
 
-    //ptl_logfile << "IssueQueue states:", endl;
+		  //ptl_logfile << "IssueQueue states:", endl;
 
-    if unlikely (config.event_log_enabled && (!cores[cur_core]->eventlog.start)) {
-      //      cores[cur_core]->eventlog.init(config.event_log_ring_buffer_size);
-      cores[cur_core]->eventlog.init(config.event_log_ring_buffer_size, cur_core);
-      cores[cur_core]->eventlog.ptl_logfile = &ptl_logfile;
-    }
-  }
+		  if unlikely (config.event_log_enabled && (!cores[cur_core]->eventlog.start)) {
+			  //      cores[cur_core]->eventlog.init(config.event_log_ring_buffer_size);
+			  cores[cur_core]->eventlog.init(config.event_log_ring_buffer_size, cur_core);
+			  cores[cur_core]->eventlog.ptl_logfile = &ptl_logfile;
+		  }
+	  }
+	  first_run = 0;
+//  }
 
 #ifdef NEW_MEMORY
 #ifndef NEW_CACHE
@@ -1980,93 +1988,93 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
   // loop only break if all cores' threads are stopped at eom:
   for (;;) {
-    if unlikely ((!logenable) && iterations >= config.start_log_at_iteration) {
-      ptl_logfile << "Start logging at level ", config.loglevel, " in cycle ", iterations, endl, flush;
-      logenable = 1;
-    }
+	  if unlikely ((!logenable) && iterations >= config.start_log_at_iteration) {
+		  ptl_logfile << "Start logging at level ", config.loglevel, " in cycle ", iterations, endl, flush;
+		  logenable = 1;
+	  }
 
-    update_progress();
-//    inject_events();
-    // limit the ptl_logfile size
-    if unlikely (ptl_logfile.tellp() > config.log_file_size)
-       backup_and_reopen_logfile();
+	  update_progress();
+	  //    inject_events();
+	  // limit the ptl_logfile size
+	  if unlikely (ptl_logfile.tellp() > config.log_file_size)
+		  backup_and_reopen_logfile();
 
-    int running_thread_count = 0;
+	  int running_thread_count = 0;
 
 #ifdef NEW_MEMORY
-    memoryHierarchyPtr->clock();
+	  memoryHierarchyPtr->clock();
 #endif
 
-    foreach (cur_core, NUMBER_OF_CORES){
-      OutOfOrderCore& core =* cores[cur_core];
+	  foreach (cur_core, NUMBER_OF_CORES){
+		  OutOfOrderCore& core =* cores[cur_core];
 
-      if (sim_cycle % core.freq_divider == 0) {
-	foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) {
-	  ThreadContext* thread = core.threads[cur_thread];
+		  if (sim_cycle % core.freq_divider == 0) {
+			  foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) {
+				  ThreadContext* thread = core.threads[cur_thread];
 #ifdef PTLSIM_HYPERVISOR
-	  running_thread_count += thread->ctx.running;
-	  if unlikely (!thread->ctx.running) {
-	    if unlikely (stopping) {
-	      // Thread is already waiting for an event: stop it now
-	      ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] Already stopped at cycle ", sim_cycle, endl;
-	      stopped[thread->ctx.cpu_index] = 1;
-	    } else {
-	      if (thread->ctx.check_events()) thread->handle_interrupt();
-	    }
-	    continue;
+				  running_thread_count += thread->ctx.running;
+				  if unlikely (!thread->ctx.running) {
+					  if unlikely (stopping) {
+						  // Thread is already waiting for an event: stop it now
+						  ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] Already stopped at cycle ", sim_cycle, endl;
+						  stopped[thread->ctx.cpu_index] = 1;
+					  } else {
+						  if (thread->ctx.check_events()) thread->handle_interrupt();
+					  }
+					  continue;
+				  }
+				  //	  MYDEBUG << "[vcpu ", thread->ctx.cpu_index, "] is running by [core ", core.coreid, "] [thread ", thread->threadid, "]", endl;
+				  //        ptl_logfile << " thread->total_insns_committed ", thread->total_insns_committed, "  config.stop_at_user_insns ",  config.stop_at_user_insns,
+				  "finished[", cur_core,"][",cur_thread,"]", finished[cur_core][cur_thread], endl, flush;
+				  if unlikely ( thread->total_insns_committed >= config.stop_at_user_insns && !finished[cur_core][cur_thread]) {
+					  ptl_logfile << "TH ", thread->threadid, " reaches ",  config.stop_at_user_insns, 
+								  " total_insns_committed (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl, flush;
+					  finished[cur_core][cur_thread] = 1;          
+					  running_thread --;
+				  }
+#endif
+			  }
+		  }
+		  MYDEBUG << "cur_core: ", cur_core, " running [core ", core.coreid, "]", endl;
+		  exiting |= core.runcycle();
 	  }
-	  MYDEBUG << "[vcpu ", thread->ctx.cpu_index, "] is running by [core ", core.coreid, "] [thread ", thread->threadid, "]", endl;
-	  //        ptl_logfile << " thread->total_insns_committed ", thread->total_insns_committed, "  config.stop_at_user_insns ",  config.stop_at_user_insns,
-	    "finished[", cur_core,"][",cur_thread,"]", finished[cur_core][cur_thread], endl, flush;
-	  if unlikely ( thread->total_insns_committed >= config.stop_at_user_insns && !finished[cur_core][cur_thread]) {
-	    ptl_logfile << "TH ", thread->threadid, " reaches ",  config.stop_at_user_insns, 
-	      " total_insns_committed (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl, flush;
-	    finished[cur_core][cur_thread] = 1;          
-	    running_thread --;
+	  /* svn 225
+		 OutOfOrderCore& core =* cores[0]; // only one core for now
+		 int running_thread_count = 0;
+		 foreach (i, core.threadcount) {
+		 ThreadContext* thread = core.threads[i];
+#ifdef PTLSIM_HYPERVISOR
+running_thread_count += thread->ctx.running;
+if unlikely (!thread->ctx.running) {
+if unlikely (stopping) {
+	  // Thread is already waiting for an event: stop it now
+	  ptl_logfile << "[vcpu ", thread->ctx.vcpuid, "] Already stopped at cycle ", sim_cycle, endl;
+	  stopped[thread->ctx.vcpuid] = 1;
+	  } else {
+	  if (thread->ctx.check_events()) thread->handle_interrupt();
+	  }
+	  continue;
 	  }
 #endif
-	}
-      }
-      MYDEBUG << "cur_core: ", cur_core, " running [core ", core.coreid, "]", endl;
-      exiting |= core.runcycle();
-    }
-    /* svn 225
-    OutOfOrderCore& core =* cores[0]; // only one core for now
-    int running_thread_count = 0;
-    foreach (i, core.threadcount) {
-      ThreadContext* thread = core.threads[i];
-#ifdef PTLSIM_HYPERVISOR
-      running_thread_count += thread->ctx.running;
-      if unlikely (!thread->ctx.running) {
-        if unlikely (stopping) {
-          // Thread is already waiting for an event: stop it now
-          ptl_logfile << "[vcpu ", thread->ctx.vcpuid, "] Already stopped at cycle ", sim_cycle, endl;
-          stopped[thread->ctx.vcpuid] = 1;
-        } else {
-          if (thread->ctx.check_events()) thread->handle_interrupt();
-        }
-        continue;
-      }
-#endif
-    }
+}
     exiting |= core.runcycle();
     */
 
 //    if unlikely (check_for_async_sim_break() && (!stopping)) {
     if unlikely (!stopping) {
-      ptl_logfile << "Waiting for all VCPUs to reach stopping point, starting at cycle ", sim_cycle, endl;
+//      ptl_logfile << "Waiting for all VCPUs to reach stopping point, starting at cycle ", sim_cycle, endl;
       // force_logging_enabled();
       /* svn 225
       OutOfOrderCore& core =* cores[0];
       foreach (i, core.threadcount) core.threads[i]->stop_at_next_eom = 1;
       */
       // set the need to stop for all threads:
-      foreach (cur_core, NUMBER_OF_CORES){
-        OutOfOrderCore& core =* cores[cur_core];
-        foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) { 
-          core.threads[cur_thread]->stop_at_next_eom = 1;
-        }
-      }
+//      foreach (cur_core, NUMBER_OF_CORES){
+//        OutOfOrderCore& core =* cores[cur_core];
+//        foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) { 
+//          core.threads[cur_thread]->stop_at_next_eom = 1;
+//        }
+//      }
 
       if (config.abort_at_end) {
         config.abort_at_end = 0;
@@ -2074,7 +2082,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
         stopped = 1;
         exiting = 1;
       }
-      stopping = 1;
+//      stopping = 1;
     }
 
     stats.summary.cycles++;
@@ -2107,8 +2115,9 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
     thread->core_to_external_state();
 
     if (logable(6) | ((sim_cycle - thread->last_commit_at_cycle) > 1024) | config.dump_state_now) {
-      ptl_logfile << "Core [", core.coreid, "] State at end for thread [", thread->threadid, "]: ", endl;
-      ptl_logfile << thread->ctx;
+//      ptl_logfile << "Core [", core.coreid, "] State at end for thread [", thread->threadid, "]: ", endl;
+//      ptl_logfile << thread->ctx;
+		ptl_logfile << "Core [", core.coreid, "] Thread [", thread->threadid, "]: last_commit_cycle: ", thread->last_commit_at_cycle, " sim_cyclee: ", sim_cycle, endl;
     }
   }
  }
@@ -2129,10 +2138,12 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
   config.dump_state_now = 0;
 
-  dump_state(ptl_logfile);
   
-  // Flush everything to remove any remaining refs to basic blocks
-  flush_all_pipelines();
+//  if(stopped) {
+//	  dump_state(ptl_logfile);
+	  // Flush everything to remove any remaining refs to basic blocks
+//	  flush_all_pipelines();
+//  }
 
   return exiting;
 }

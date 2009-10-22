@@ -921,18 +921,30 @@ struct Context: public CPUX86State {
 
   void change_runstate(int new_state) { running = new_state; }
 
-  void propagate_x86_exception(byte exception, W32 errorcode = 0, Waddr virtaddr = 0) {
-	  if(errorcode) {
-		  raise_exception_err((int)exception, (int)errorcode);
-	  } else {
-		  raise_exception((int)exception);
-	  }
+  void propagate_x86_exception(byte exception, W32 errorcode = 0, Waddr virtaddr = 0) ;
+//	  setup_qemu_switch();
+//	  if(errorcode) {
+//		  raise_exception_err((int)exception, (int)errorcode);
+//	  } else {
+//		  raise_exception((int)exception);
+//	  }
+//  }
+
+  void set_eip_ptlsim() {
+	  eip = eip + segs[R_CS].base;
+  }
+
+  void set_eip_qemu() {
+	  eip = eip - segs[R_CS].base;
   }
 
   void setup_qemu_switch() {
+	  set_eip_qemu();
 	  set_cpu_env((CPUX86State*)this);
-//	  env = (CPUX86State*)this;
-//	  env_to_regs();
+  }
+
+  void setup_ptlsim_switch() {
+	  eip = eip + segs[R_CS].base;
   }
 
   Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code=0); //, PTEUpdate& pteupdate, Level1PTE& pteused);
@@ -947,7 +959,8 @@ struct Context: public CPUX86State {
   //int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec, Level1PTE& ptelo, Level1PTE& ptehi);
 
   W64 get_cs_eip() {
-	  return eip + segs[R_CS].base;
+	  return eip;
+//	  return eip + segs[R_CS].base;
   }
 
   int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = false) ;

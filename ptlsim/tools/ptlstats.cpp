@@ -10,6 +10,8 @@
 #define PTLSIM_PUBLIC_ONLY
 #include <ptlhwdef.h>
 
+#include <config-parser.h>
+
 struct PTLstatsConfig {
   stringbuf mode_subtree;
   stringbuf mode_histogram;
@@ -197,7 +199,8 @@ struct RGBA: public RGBAColor {
 };
 
 ostream& operator <<(ostream& os, const RGBA& rgba) {
-  os << '#', hexstring((byte)math::round(rgba.r), 8), hexstring((byte)math::round(rgba.g), 8), hexstring((byte)math::round(rgba.b), 8);
+//  os << '#', hexstring((byte)math::round(rgba.r), 8), hexstring((byte)math::round(rgba.g), 8), hexstring((byte)math::round(rgba.b), 8);
+  os << '#', hexstring((byte)round(rgba.r), 8), hexstring((byte)round(rgba.g), 8), hexstring((byte)round(rgba.b), 8);
   return os;
 }
 
@@ -744,7 +747,7 @@ public:
   }
 
   virtual void print_data(double value, int row, int column) {
-    bool isint = ((value - math::floor(value)) < 0.0000001);
+    bool isint = ((value - floor(value)) < 0.0000001);
     int width = max((int)strlen(colnames[column]), 8) + 2;
     if (isint) os << intstring((W64s)value, width); else os << floatstring(value, width, 3);
   }
@@ -796,7 +799,7 @@ public:
 
   virtual void print_data(double value, int row, int column) {
     os << "&";
-    bool isint = ((value - math::floor(value)) < 0.0000001);
+    bool isint = ((value - floor(value)) < 0.0000001);
     if (isint) os << (W64s)value; else os << floatstring(value, 0, 1);
   }
 

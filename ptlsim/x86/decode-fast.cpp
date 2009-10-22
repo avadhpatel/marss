@@ -14,6 +14,14 @@ bool TraceDecoder::decode_fast() {
   switch (op) {
   case 0x00 ... 0x0e:
   case 0x10 ... 0x3f: {
+	if (op == 0x3f) {
+		// 0x3f aas
+		EndOfDecode();
+		microcode_assist(ASSIST_BCD_AAS, ripstart, rip);
+		end_of_block = 1;
+		break;
+	}
+	bool push_op = false;
     // Arithmetic: add, or, adc, sbb, and, sub, xor, cmp
     // Low 3 bits of opcode determine the format:
     switch (bits(op, 0, 3)) {
@@ -48,10 +56,16 @@ bool TraceDecoder::decode_fast() {
 			this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, r, sizeshift, -size);
 			this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
 		}
+		push_op = true;
 		break;
 	}
     default: invalid |= true; break;
     }
+
+	// If its one of the push then break
+	if (push_op)
+		break;
+
     EndOfDecode();
 
     // add and sub always add carry from rc iff rc is not REG_zero

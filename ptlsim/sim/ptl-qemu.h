@@ -95,6 +95,11 @@ void ptl_reconfigure(char* config_str);
 //				  simulate.
 uint8_t ptl_simulate(void);
 
+// update_progress
+// returns void
+// working		: Print the progress of PTLSim to stdout
+void update_progress(void);
+
 #ifdef __cplusplus
 }
 #endif

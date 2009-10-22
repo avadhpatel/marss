@@ -49,6 +49,7 @@ extern Context* ptl_contexts[MAX_CONTEXTS];
 struct PTLsimMachine {
   bool initialized;
   bool stopped;
+  bool first_run;
   PTLsimMachine() { initialized = 0; stopped = 0;}
   virtual bool init(PTLsimConfig& config);
   virtual int run(PTLsimConfig& config);  
@@ -119,9 +120,7 @@ void shutdown_subsystems();
 bool simulate(const char* machinename);
 int inject_events();
 bool check_for_async_sim_break();
-void update_progress();
-
-extern "C" void switch_to_sim();
+extern "C" void update_progress();
 
 //
 // uop implementations

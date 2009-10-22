@@ -72,6 +72,10 @@ for dir in dirs:
     else:
         objs.append(o)
 
+# Build Tools
+Export('dst_objs')
+SConscript('tools/SConscript', variant_dir='build/tools')
+
 # Build ptlsim.dst.o
 inc_str = ""
 for i_s in env['CPPPATH']:

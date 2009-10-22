@@ -13,6 +13,17 @@
 #include <ptlsim.h>
 #include <datastore.h>
 
+// This macro is used to call helper functions in QEMU
+// It calls the context setup function before and after
+// the switch for correct operations.
+// If you don't use macro and directly call the helper
+// function in QEMU please add both setup functions as
+// written in the macro.
+#define ASSIST_IN_QEMU(func_name, ...) \
+	ctx.setup_qemu_switch();	\
+	func_name(__VA_ARGS__);		\
+	ctx.setup_ptlsim_switch();
+
 struct RexByte { 
   // a.k.a., b, x, r, w
   byte extbase:1, extindex:1, extreg:1, mode64:1, insnbits:4; 
@@ -336,6 +347,8 @@ enum {
   // Jumps
   ASSIST_LJMP,
   ASSIST_LJMP_PRCT,
+  // BCD Assist
+  ASSIST_BCD_AAS,
   ASSIST_COUNT,
 };
 
@@ -417,6 +430,8 @@ static const char* assist_names[ASSIST_COUNT] = {
   // Jumps
   "ljmp",
   "ljmp_prct",
+  // BCD
+  "bcd_aas",
 };
 
 int propagate_exception_during_assist(Context& ctx, byte exception, W32 errorcode, Waddr virtaddr = 0, bool intN = 0);
@@ -490,6 +505,8 @@ void assist_ioport_out(Context& ctx);
 // Jumps
 void assist_ljmp(Context& ctx);
 void assist_ljmp_prct(Context& ctx);
+// BCD
+void assist_bcd_aas(Context& ctx);
 
 //
 // Global functions

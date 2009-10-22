@@ -755,8 +755,8 @@ static inline void cpu_x86_set_cpl(CPUX86State *s, int cpl)
 void cpu_get_fp80(uint64_t *pmant, uint16_t *pexp, CPU86_LDouble f);
 CPU86_LDouble cpu_set_fp80(uint64_t mant, uint16_t upper);
 
-void __attribute__ ((__noreturn__)) raise_exception_err(int exception_index, int error_code);
-void __attribute__ ((__noreturn__)) raise_exception(int exception_index);
+//void __attribute__ ((__noreturn__)) raise_exception_err(int exception_index, int error_code);
+//void __attribute__ ((__noreturn__)) raise_exception(int exception_index);
 
 /* cpu-exec.c */
 /* the following helpers are only usable in user mode simulation as

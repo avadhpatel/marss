@@ -261,15 +261,25 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 #else
 #error unsupported target CPU
 #endif
-    env->exception_index = -1;
 
 #ifdef PTLSIM_QEMU
-	if(in_simulation && do_simulate) {
-//		printf("Going into simulation mode\n");
-		in_simulation = ptl_simulate();
-		return 0;
-	}
+//	if(in_simulation && do_simulate) {
+//		env->exception_index = -1;
+//		printf("Going into simulation mode eip: %ld\n", env->eip);
+//		in_simulation = ptl_simulate();
+//		printf("Back from simulation mode eip: %ld\n", env->eip);
+//		return 0;
+//	}
+//	if(!in_simulation){
+		// We dont clear exception_index in PTLQEMU mode
+		// because we might have pending exception from 
+		// simulation mode
+		env->exception_index = -1;
+//	}
+#else
+    env->exception_index = -1;
 #endif
+
 
     /* prepare setjmp context for exception handling */
     for(;;) {
@@ -359,6 +369,23 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
                 kvm_cpu_exec(env);
                 longjmp(env->jmp_env, 1);
             }
+
+#ifdef PTLSIM_QEMU
+				if (in_simulation) {
+					// Restore PC
+//					if(env->current_tb != NULL)
+//						cpu_pc_from_tb(env, env->current_tb);
+//					longjmp(env->jmp_env, 1);
+					if(do_simulate) {
+//						printf("Going into simulation mode eip: %ld\n", env->eip);
+						regs_to_env();
+						in_simulation = ptl_simulate();
+//						printf("Back from simulation mode eip: %ld\n", env->eip);
+//						return 0;
+					} 
+                    cpu_loop_exit();
+				}
+#endif
 
             next_tb = 0; /* force lookup of first TB */
             for(;;) {
@@ -621,16 +648,6 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
                 if (unlikely (env->exit_request))
                     env->current_tb = NULL;
 
-#ifdef PTLSIM_QEMU
-				if (in_simulation) {
-					// Restore PC
-					if(env->current_tb != NULL)
-						cpu_pc_from_tb(env, env->current_tb);
-//					longjmp(env->jmp_env, 1);
-                    cpu_loop_exit();
-				}
-#endif
-
                 while (env->current_tb) {
                     tc_ptr = tb->tc_ptr;
                 /* execute the generated code */
@@ -682,7 +699,7 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
         } else {
             env_to_regs();
 #ifdef PTLSIM_QEMU
-			if(in_simulation)
+			if(in_simulation) 
 				break;
 #endif
         }

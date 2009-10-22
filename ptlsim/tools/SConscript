@@ -2,5 +2,11 @@
 
 # Import envrionment
 Import('env')
+Import('dst_objs')
 
-print("TODO: Build tools")
+tool_env = env.Clone()
+tool_env.Append(CCFLAGS = '-g -O2')
+
+ptlstats = tool_env.Program('ptlstats', dst_objs + ['ptlstats.cpp'])
+#tool_env.Command("ptlstats", ptlstats, Copy("$TARGET", "$SOURCE"))
+

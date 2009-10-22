@@ -80,8 +80,9 @@ void assist_syscall(Context& ctx) {
 //    assert(!ctx.kernel_mode);
 //  }
 //  handle_syscall_assist(ctx);
-	ctx.setup_qemu_switch();
-	helper_syscall(ctx.regs[R_ECX]);
+//	ctx.setup_qemu_switch();
+//	helper_syscall(ctx.regs[R_ECX]);
+	ASSIST_IN_QEMU(helper_syscall, ctx.regs[R_ECX]);
 #else
   if (ctx.use64) {
 #ifdef __x86_64__
@@ -117,8 +118,9 @@ void assist_ptlcall(Context& ctx) {
 }
 
 void assist_sysenter(Context& ctx) {
-	ctx.setup_qemu_switch();
-	helper_sysenter();
+	ASSIST_IN_QEMU(helper_sysenter);
+//	ctx.setup_qemu_switch();
+//	helper_sysenter();
 //#ifdef PTLSIM_HYPERVISOR
 //  //++MTY TODO
 //  cerr << "assist_sysenter()", endl, flush;
@@ -257,8 +259,9 @@ union ProcessorMiscInfo {
   (0 << 24)) /* APIC ID (must be patched later!) */
 
 void assist_cpuid(Context& ctx) {
-	ctx.setup_qemu_switch();
-	helper_cpuid();
+	ASSIST_IN_QEMU(helper_cpuid);
+//	ctx.setup_qemu_switch();
+//	helper_cpuid();
 //  W64& rax = ctx.regs[R_EAX];
 //  W64& rbx = ctx.regs[R_EBX];
 //  W64& rcx = ctx.regs[R_ECX];
@@ -339,8 +342,10 @@ void assist_ljmp_prct(Context& ctx) {
 	W32 next_eip_addend = ctx.reg_selfrip + ctx.reg_nextrip;
 	ptl_logfile << "assit_ljmp_prct: csbase: ", ctx.reg_ar1,
 				" eip: ", ctx.reg_ar2, endl;
-	ctx.setup_qemu_switch();
-	helper_ljmp_protected(new_cs, new_eip, next_eip_addend);
+//	ctx.setup_qemu_switch();
+//	helper_ljmp_protected(new_cs, new_eip, next_eip_addend);
+	ASSIST_IN_QEMU(helper_ljmp_protected, new_cs, new_eip,
+			next_eip_addend);
 	ctx.cs_segment_updated();
 }
 
@@ -354,12 +359,21 @@ void assist_ljmp(Context& ctx) {
 	W64 base = selector << 4;
 	ctx.segs[R_CS].base = base;
 	ctx.cs_segment_updated();
-	ctx.eip = new_eip;//new_cs + 
+	ctx.eip = base + new_eip;//new_cs + 
+}
+
+// BCD Assist
+void assist_bcd_aas(Context& ctx) {
+//	ctx.setup_qemu_switch();
+//	helper_aas();
+	ASSIST_IN_QEMU(helper_aas);
+	ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_rdtsc(Context& ctx) {
-	ctx.setup_qemu_switch();
-	helper_rdtsc();
+	ASSIST_IN_QEMU(helper_rdtsc);
+//	ctx.setup_qemu_switch();
+//	helper_rdtsc();
 //  W64& rax = ctx.regs[R_EAX];
 //  W64& rdx = ctx.regs[R_EDX];
 //#ifdef PTLSIM_HYPERVISOR
@@ -377,8 +391,9 @@ void assist_rdtsc(Context& ctx) {
 // Pop from stack into flags register, with checking for reserved bits
 //
 void assist_popf(Context& ctx) {
-	ctx.setup_qemu_switch();
-	helper_fpop();
+	ASSIST_IN_QEMU(helper_fpop);
+//	ctx.setup_qemu_switch();
+//	helper_fpop();
 //  W32 flags = ctx.reg_ar1;
 //  // bit 1 is always '1', and bits {3, 5, 15} are always '0':
 //  flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
@@ -416,8 +431,16 @@ void assist_write_segreg(Context& ctx) {
   W16 selector = ctx.reg_ar1;
   byte segid = ctx.reg_ar2;
 
+//  ASSIST_IN_QEMU(helper_load_seg, segid , selector);
   ctx.setup_qemu_switch();
-  helper_load_seg(segid >> 3, selector);
+
+  // Before calling helper_load_seg we have to set the 
+  // correct eip because in case of fault this function
+  // will not return so we have to make sure that our
+  //
+  ctx.eip = ctx.reg_selfrip - ctx.segs[R_CS].base;
+  helper_load_seg(segid , selector);
+  ctx.setup_ptlsim_switch();
 
 //  int exception = ctx.write_segreg(segid, selector);
 //
@@ -471,8 +494,9 @@ void assist_fxsave(Context& ctx) {
 //    return;
 //  }
   Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
-  ctx.setup_qemu_switch();
-  helper_fxsave(target, 1);
+  ASSIST_IN_QEMU(helper_fxsave, target, 1);
+//  ctx.setup_qemu_switch();
+//  helper_fxsave(target, 1);
   ctx.eip = ctx.reg_nextrip;
 }
 
@@ -498,15 +522,17 @@ void assist_fxrstor(Context& ctx) {
 //  W32 mxcsr = ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
 //  x86_set_mxcsr(mxcsr);
   Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
-  ctx.setup_qemu_switch();
-  helper_fxrstor(target, 1);
+  ASSIST_IN_QEMU(helper_fxrstor, target, 1);
+//  ctx.setup_qemu_switch();
+//  helper_fxrstor(target, 1);
   ctx.eip = ctx.reg_nextrip;
 }
 
 void assist_wrmsr(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
-  ctx.setup_qemu_switch();
-  helper_wrmsr();
+  ASSIST_IN_QEMU(helper_wrmsr);
+//  ctx.setup_qemu_switch();
+//  helper_wrmsr();
 //
 //#ifdef PTLSIM_HYPERVISOR
 //  if (ctx.kernel_mode) {
@@ -543,8 +569,9 @@ void assist_wrmsr(Context& ctx) {
 
 void assist_rdmsr(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
-  ctx.setup_qemu_switch();
-  helper_rdmsr();
+//  ctx.setup_qemu_switch();
+//  helper_rdmsr();
+	ASSIST_IN_QEMU(helper_rdmsr);
 
 //#ifdef PTLSIM_HYPERVISOR
 //  if (ctx.kernel_mode) {
@@ -581,9 +608,10 @@ void assist_rdmsr(Context& ctx) {
 #ifdef PTLSIM_HYPERVISOR
 void assist_write_cr0(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
-  ctx.setup_qemu_switch();
-  helper_write_crN(0, ctx.reg_ar1);
+//  ctx.setup_qemu_switch();
+//  helper_write_crN(0, ctx.reg_ar1);
 
+  ASSIST_IN_QEMU(helper_write_crN, 0, ctx.reg_ar1);
 //  if (!ctx.kernel_mode) {
 //    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
 //    return;
@@ -604,8 +632,9 @@ void assist_write_cr0(Context& ctx) {
 
 void assist_write_cr2(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
-  ctx.setup_qemu_switch();
-  helper_write_crN(2, ctx.reg_ar1);
+  ASSIST_IN_QEMU(helper_write_crN, 2, ctx.reg_ar1);
+//  ctx.setup_qemu_switch();
+//  helper_write_crN(2, ctx.reg_ar1);
 
 //  if (!ctx.kernel_mode) {
 //    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
@@ -622,8 +651,9 @@ void assist_write_cr2(Context& ctx) {
 
 void assist_write_cr3(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
-  ctx.setup_qemu_switch();
-  helper_write_crN(3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
+  ASSIST_IN_QEMU(helper_write_crN, 3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
+//  ctx.setup_qemu_switch();
+//  helper_write_crN(3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
 
 //  if (!ctx.kernel_mode) {
 //    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
@@ -638,8 +668,9 @@ void assist_write_cr3(Context& ctx) {
 
 void assist_write_cr4(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
-  ctx.setup_qemu_switch();
-  helper_write_crN(4, ctx.reg_ar1);
+  ASSIST_IN_QEMU(helper_write_crN, 4, ctx.reg_ar1);
+//  ctx.setup_qemu_switch();
+//  helper_write_crN(4, ctx.reg_ar1);
 
 //  if (!ctx.kernel_mode) {
 //    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
@@ -751,7 +782,8 @@ void assist_iret64(Context& ctx) {
 	// Avadh: Here we are calling interrupt return from real mode
 	// in QEMU wit shift type as 32 bit, Not sure this is correct
 	// or not.
-	helper_iret_real(1);
+	ASSIST_IN_QEMU(helper_iret_real, 1);
+//	helper_iret_real(1);
 
 //#ifdef PTLSIM_HYPERVISOR
 //  IRETStackFrame frame;
@@ -821,10 +853,10 @@ void assist_ioport_in(Context& ctx) {
 
   ctx.eip = ctx.reg_selfrip;
 
-  if (!ctx.kernel_mode) {
-    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    return;
-  }
+//  if (!ctx.kernel_mode) {
+//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//    return;
+//  }
 
   W64 port = ctx.reg_ar1;
   W64 sizeshift = ctx.reg_ar2;
@@ -838,6 +870,7 @@ void assist_ioport_in(Context& ctx) {
   } else {
 	  value = helper_inl(port);
   }
+  ctx.setup_ptlsim_switch();
 
 //  W64 value = x86_merge(ctx.regs[R_EAX], 0xffffffffffffffffULL, sizeshift);
 //
@@ -856,10 +889,10 @@ void assist_ioport_out(Context& ctx) {
 
   ctx.eip = ctx.reg_selfrip;
 
-  if (!ctx.kernel_mode) {
-    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    return;
-  }
+//  if (!ctx.kernel_mode) {
+//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
+//    return;
+//  }
 
   W64 port = ctx.reg_ar1;
   W64 sizeshift = ctx.reg_ar2;
@@ -873,6 +906,7 @@ void assist_ioport_out(Context& ctx) {
   } else {
 	  helper_outl(port, value);
   }
+  ctx.setup_ptlsim_switch();
 
 //  ptl_logfile << "assist_ioport_out from rip ", (void*)(Waddr)ctx.reg_selfrip, "): ",
 //    "out port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) <= 0x",

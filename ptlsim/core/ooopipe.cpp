@@ -213,7 +213,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
 //  fetchrip = realrip;
   ptl_logfile << "realrip:", hexstring(realrip, 48), " csbase:", ctx.segs[R_CS].base,
 			  endl;
-  fetchrip = realrip + ctx.segs[R_CS].base;
+  fetchrip = realrip ;//+ ctx.segs[R_CS].base;
   fetchrip.update(ctx);
   stall_frontend = 0;
   waiting_for_icache_fill = 0;

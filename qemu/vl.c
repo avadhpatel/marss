@@ -1359,9 +1359,12 @@ static void host_alarm_handler(int host_signum)
     if (alarm_has_dynticks(alarm_timer) ||
         (!use_icount &&
             qemu_timer_expired(active_timers[QEMU_TIMER_VIRTUAL],
-                               qemu_get_clock(vm_clock))) ||
-        qemu_timer_expired(active_timers[QEMU_TIMER_REALTIME],
-                           qemu_get_clock(rt_clock))) {
+                               qemu_get_clock(vm_clock))) 
+#ifndef PTLSIM_QEMU
+        || qemu_timer_expired(active_timers[QEMU_TIMER_REALTIME],
+                           qemu_get_clock(rt_clock)) 
+#endif
+	   ){
         CPUState *env = next_cpu;
 
 #ifdef _WIN32
@@ -1373,7 +1376,13 @@ static void host_alarm_handler(int host_signum)
 #endif
         if (alarm_timer) alarm_timer->flags |= ALARM_FLAG_EXPIRED;
 
+#ifdef PTLSIM_QEMU
+//		if (in_simulation)
+//			update_progress();
+		if (env && !in_simulation) {
+#else
         if (env) {
+#endif
             /* stop the currently executing cpu because a timer occured */
             cpu_interrupt(env, CPU_INTERRUPT_EXIT);
 #ifdef USE_KQEMU
@@ -3947,6 +3956,7 @@ static int main_loop(void)
 #ifdef PTLSIM_QEMU
 			if(in_simulation && !exception_pending) {
 				cpu_exec(first_cpu, 1);
+				timeout = 0;
 //				printf("Going into simulation mode\n");
 //				in_simulation = ptl_simulate();
 			}

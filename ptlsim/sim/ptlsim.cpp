@@ -592,8 +592,9 @@ void PTLsimMachine::addmachine(const char* name, PTLsimMachine* machine) {
   if unlikely (!machinetable) {
     machinetable = new Hashtable<const char*, PTLsimMachine*, 1>();
   }
-  cerr << "Adding machine ", name, endl;
+//  cerr << "Adding machine ", name, endl;
   machinetable->add(name, machine);
+  machine->first_run = 0;
 }
 void PTLsimMachine::removemachine(const char* name, PTLsimMachine* machine) {
   machinetable->remove(name, machine);
@@ -825,6 +826,7 @@ extern "C" uint8_t ptl_simulate() {
 			return 0;
 		}
 		machine->initialized = 1;
+		machine->first_run = 1;
 
 		ptl_logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
 		cerr <<  "Switching to simulation core '", machinename, "'...", endl, flush;
@@ -845,8 +847,15 @@ extern "C" uint8_t ptl_simulate() {
 	foreach(ctx_no, contextcount) {
 //		ptl_logfile << "Context[", ctx_no, "]:", endl, 
 //					contextof(ctx_no), endl;
-		contextof(ctx_no).cs_segment_updated();
+		Context& ctx = contextof(ctx_no);
+		ctx.cs_segment_updated();
+		ctx.set_eip_ptlsim();
+		ctx.update_mode(
+				(((CPUX86State*)(&ctx))->hflags & HF_CPL_MASK) == 0);
+		ctx.running = 1;
 	}
+
+	ptl_logfile << "Starting simulation at rip: ", (void*)contextof(0).get_cs_eip(), " kernel_mode: ", contextof(0).kernel_mode, endl;
 
 	machine->run(config);
 
@@ -855,6 +864,13 @@ extern "C" uint8_t ptl_simulate() {
 	}
 
 	if (!machine->stopped) {
+		ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).exception_index,
+			" ex: ", contextof(0).exception, " running: ",
+			contextof(0).running, endl;
+		foreach(c, contextcount) {
+			Context& ctx = contextof(c);
+			ctx.setup_qemu_switch();
+		}
 		return 1;  // Tell QEMU that we will come back to simulate
 	}
 
@@ -884,7 +900,7 @@ extern "C" uint8_t ptl_simulate() {
 
 #ifdef PTLSIM_HYPERVISOR
 	last_printed_status_at_ticks = 0;
-	update_progress();
+//	update_progress();
 	cerr << endl;
 #endif
 	print_stats_in_log();
@@ -892,7 +908,7 @@ extern "C" uint8_t ptl_simulate() {
 	return 0;
 }
 
-void update_progress() {
+extern "C" void update_progress() {
   W64 ticks = rdtsc();
   W64s delta = (ticks - last_printed_status_at_ticks);
   if unlikely (delta < 0) delta = 0;
@@ -924,7 +940,7 @@ void update_progress() {
         continue;
       }
 #endif
-      sb << ' ', (void*)contextof(i).eip;
+      sb << ' ', hexstring(contextof(i).get_cs_eip(), 64);
     }
 
     while (sb.size() < 160) sb << ' ';
@@ -1094,6 +1110,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 		source_b++;
 		n++;
 	}
+	setup_ptlsim_switch();
 
 	return n;
 	//FIXME: We have to check the page permission of both source and
@@ -1146,6 +1163,123 @@ void Context::update_mode_count() {
 			per_core_event_update(cpu_index, insns_in_mode.user32 += delta_insns);
 		}
 	}
+}
+
+Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code) {
+
+	exception = 0;
+	pfec = 0;
+
+	assert(virtaddr != 0);
+
+	if unlikely (lowbits(virtaddr, sizeshift)) {
+		exception = EXCEPTION_UnalignedAccess;
+		return INVALID_PHYSADDR;
+	}
+
+	if unlikely (internal) {
+		//
+		// Directly mapped to PTL space (microcode load/store)
+		// We need to patch in PTLSIM_VIRT_BASE since in 32-bit
+		// mode, ctx.virt_addr_mask will chop off these bits.
+		//
+		// Now in QEMU we dont have any special mapping of this 
+		// memory region, so virtualaddress is where we
+		// will store the internal data
+		//
+		return virtaddr;
+	}
+
+	// TODO : We are currently looking directly at the TLB of QEMU
+	// we don't simulate multilevel page entries right now.
+	bool page_not_present;
+	bool page_read_only;
+	bool page_kernel_only;
+
+	int mmu_index = cpu_mmu_index((CPUState*)this);
+	int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+	W64 tlb_addr;
+	if likely (!store) {
+		if likely (!is_code) {
+			tlb_addr = tlb_table[mmu_index][index].addr_read;
+		} else {
+			tlb_addr = tlb_table[mmu_index][index].addr_code;
+		}
+	} else {
+		tlb_addr = tlb_table[mmu_index][index].addr_write;
+	}
+	ptl_logfile << "mmu_index:", mmu_index, " index:", index,
+		 " virtaddr:", virtaddr, 
+				" tlb_addr:", tlb_addr, " virtpage:",
+				(virtaddr & TARGET_PAGE_MASK), " tlbpage:",
+				(tlb_addr & TARGET_PAGE_MASK),
+				endl;
+	if likely ((virtaddr & TARGET_PAGE_MASK) == tlb_addr) {
+		// we find valid TLB entry, return the physical address for it
+		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
+	}
+	// Can't find valid TLB entry, its an exception
+	exception = (store) ? EXCEPTION_PageFaultOnWrite : EXCEPTION_PageFaultOnRead;
+	pfec.rw = store;
+	pfec.us = (!kernel_mode);
+
+	//
+	// Flush out the bogus TLB entry to avoid an infinite loop after the
+	// kernel updates the page tables. Technically only valid PTEs should
+	// be cached in the TLB, but we don't know what "valid" means until
+	// we do the full protection checks. Hence we just invalidate it here:
+	//
+	//flush_tlb_virt(virtaddr);
+	//
+	// Avadh: TODO and also needs to check that in QEMU do we need to flush
+	// the TLB?
+	return INVALID_PHYSADDR;
+}
+
+int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) {
+
+	int n = 0 ;
+
+	//FIXME: We have to check the page permission of both source and
+	//target to make sure that userspace can't copy from kernel mode
+
+	int exception;
+	PageFaultErrorCode pfec;
+	Waddr source_paddr = contextof(0).check_and_translate(source, 0, false, false, exception, pfec);
+
+	if(exception > 0 || pfec > 0) {
+		faultaddr = source;
+		return 0;
+	}
+	n = min(4096 - lowbits(source, 12), (Waddr)bytes);
+	memcpy(target, (void*)source_paddr, n);
+
+	// Check if all the bytes are read in first page or not
+	if likely (n == bytes) return n;
+
+	source_paddr = contextof(0).check_and_translate(source + n, 0, false, false, exception, pfec);
+	if(exception > 0 || pfec > 0) {
+		faultaddr = source + n;
+		return 0;
+	}
+
+	Waddr next_page_addr = ((source >> TARGET_PAGE_BITS) + 1) << TARGET_PAGE_BITS;
+
+	memcpy((byte*)target + n, (void*)next_page_addr, bytes - n);
+	n = bytes;
+	return n;
+}
+
+void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virtaddr ) {
+	ptl_logfile << "Propagating exception from simulation at eip: ",
+				this->eip, " cycle: ", sim_cycle, endl;
+	setup_qemu_switch();
+	if(errorcode) {
+		raise_exception_err((int)exception, (int)errorcode);
+	} else {
+		raise_exception((int)exception);
+	}
+	setup_ptlsim_switch();
 }
 
 #endif // CONFIG_ONLY

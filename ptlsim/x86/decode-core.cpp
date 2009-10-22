@@ -2048,6 +2048,11 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
 
   if (logable(5) | log_code_page_ops) {
     ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;
+	ptl_logfile << "Instruction Buffer:\n";
+	foreach(i, sizeof(insnbuf)) {
+		ptl_logfile << hexstring(insnbuf[i], 8), " ";
+	}
+	ptl_logfile << endl << superstl::flush;
   }
 
   if (rvp.mfnlo == RIPVirtPhys::INVALID) {

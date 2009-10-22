@@ -19,16 +19,18 @@
 #define FP_STACK_MASK 0x3f
 
 void assist_x87_fprem(Context& ctx) {
-	ctx.setup_qemu_switch();
-	helper_fprem();
+	ASSIST_IN_QEMU(helper_fprem);
+//	ctx.setup_qemu_switch();
+//	helper_fprem();
 //  assert(false);
   ctx.eip = ctx.reg_nextrip;
 }
 
 #define make_two_input_x87_func_with_pop(name, expr) \
 void assist_x87_##name(Context& ctx) { \
-	ctx.setup_qemu_switch(); \
-	helper_##name(); \
+	ASSIST_IN_QEMU(helper_##name); \
+	/*ctx.setup_qemu_switch();*/ \
+	/*helper_##name(); */\
 	ctx.eip = ctx.reg_nextrip; \
 }
 //  W64& tos = (W64&)ctx.fpstt; \
@@ -101,8 +103,9 @@ void assist_x87_fscale(Context& ctx) {
 
 #define make_unary_x87_func(name, expr) \
 void assist_x87_##name(Context& ctx) { \
-	ctx.setup_qemu_switch(); \
-	helper_##name(); \
+	ASSIST_IN_QEMU(helper_##name); \
+	/* ctx.setup_qemu_switch(); */ \
+	/* helper_##name(); */ \
 	ctx.eip = ctx.reg_nextrip; \
 }
 //  W64& r = (W64&)ctx.fpregs[ctx.fpstt >> 3]; \
@@ -118,8 +121,9 @@ make_unary_x87_func(fcos, cos(ra.d));
 make_unary_x87_func(f2xm1, exp2(ra.d) - 1);
 
 void assist_x87_frndint(Context& ctx) {
-	ctx.setup_qemu_switch();
-	helper_frndint();
+	ASSIST_IN_QEMU(helper_frndint);
+//	ctx.setup_qemu_switch();
+//	helper_frndint();
     ctx.eip = ctx.reg_nextrip;
 }
 //  W64& r = (W64&)ctx.fpregs[ctx.fpstt >> 3];
@@ -143,8 +147,9 @@ void assist_x87_frndint(Context& ctx) {
 
 #define make_two_output_x87_func_with_push(name, expr) \
 void assist_x87_##name(Context& ctx) { \
-	ctx.setup_qemu_switch(); \
-	helper_##name(); \
+	ASSIST_IN_QEMU(helper_##name); \
+	/* ctx.setup_qemu_switch();*/ \
+	/* helper_##name();*/ \
 	ctx.eip = ctx.reg_nextrip; \
 }
 //  W64& tos = ctx.fpstt; \
@@ -170,8 +175,9 @@ make_two_output_x87_func_with_push(fptan, (st1u.d = 1.0, st0u.d = tan(st0u.d)));
 make_two_output_x87_func_with_push(fxtract, (st1u.d = significand(st0u.d), st0u.d = ilogb(st0u.d)));
 
 void assist_x87_fprem1(Context& ctx) {
-	ctx.setup_qemu_switch();
-	helper_fprem1();
+	ASSIST_IN_QEMU(helper_fprem1);
+//	ctx.setup_qemu_switch();
+//	helper_fprem1();
 	ctx.eip = ctx.reg_nextrip;
 }
 //  W64& tos = ctx.fpstt;
@@ -192,8 +198,9 @@ void assist_x87_fprem1(Context& ctx) {
 //}
 
 void assist_x87_fxam(Context& ctx) {
-	ctx.setup_qemu_switch();
-	helper_fxam_ST0();
+	ASSIST_IN_QEMU(helper_fxam_ST0);
+//	ctx.setup_qemu_switch();
+//	helper_fxam_ST0();
 	ctx.eip = ctx.reg_nextrip;
 }
 //  W64& r = ctx.fpregs[ctx.fpstt >> 3];
@@ -216,8 +223,9 @@ void assist_x87_fld80(Context& ctx) {
   // Virtual address is in sr2
   Waddr addr = ctx.reg_ar1;
 
-  ctx.setup_qemu_switch();
-  helper_fldt_ST0(addr);
+  ASSIST_IN_QEMU(helper_fldt_ST0, addr);
+//  ctx.setup_qemu_switch();
+//  helper_fldt_ST0(addr);
 
 //  PageFaultErrorCode pfec;
 //  Waddr faultaddr;
@@ -242,8 +250,9 @@ void assist_x87_fstp80(Context& ctx) {
   // Virtual address is in sr2
   Waddr addr = ctx.reg_ar1;
 
-  ctx.setup_qemu_switch();
-  helper_fstt_ST0(addr);
+  ASSIST_IN_QEMU(helper_fstt_ST0, addr);
+//  ctx.setup_qemu_switch();
+//  helper_fstt_ST0(addr);
 
 //  PageFaultErrorCode pfec;
 //  Waddr faultaddr;
@@ -274,8 +283,9 @@ void assist_x87_frstor(Context& ctx) {
 }
 
 void assist_x87_fclex(Context& ctx) {
-	ctx.setup_qemu_switch();
-	helper_fclex();
+	ASSIST_IN_QEMU(helper_fclex);
+//	ctx.setup_qemu_switch();
+//	helper_fclex();
 	ctx.eip = ctx.reg_nextrip;
 }
 //  X87StatusWord fpsw = ctx.fpus;
