@@ -141,6 +141,7 @@ struct DecodedOperand {
   bool iform(TraceDecoder& state, int bytemode);
   bool iform64(TraceDecoder& state, int bytemode);
   bool eform(TraceDecoder& state, int bytemode);
+  bool eform_16(TraceDecoder& state, int bytemode);
   bool varreg(TraceDecoder& state, int bytemode, bool def64);
   bool varreg_def32(TraceDecoder& state, int bytemode);
   bool varreg_def64(TraceDecoder& state, int bytemode);
@@ -165,6 +166,7 @@ struct TraceDecoder {
   TransOp transbuf[MAX_TRANSOPS_PER_USER_INSN];
   int transbufcount;
   byte use64;
+  byte use32;
   byte kernel;
   byte dirflag;
   byte* insnbytes;

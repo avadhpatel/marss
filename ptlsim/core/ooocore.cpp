@@ -653,14 +653,23 @@ bool OutOfOrderCore::runcycle() {
       break;
     }
     case COMMIT_RESULT_EXCEPTION: {
+	  if (logable(3)) {
+		  ptl_logfile << " [vcpu ", i, "] in exception handling at rip ", thread->current_basic_block->rip, endl, flush;
+	  }
       exiting = !thread->handle_exception();
       break;
     }
     case COMMIT_RESULT_BARRIER: {
+	  if (logable(3)) {
+		  ptl_logfile << " [vcpu ", i, "] in barrier handling at rip ", thread->current_basic_block->rip, endl, flush;
+	  }
       exiting = !thread->handle_barrier();
       break;
     }
     case COMMIT_RESULT_INTERRUPT: {
+	  if (logable(3)) {
+		  ptl_logfile << " [vcpu ", i, "] in interrupt handling at rip ", thread->current_basic_block->rip, endl, flush;
+	  }
       exiting = 1;
       thread->handle_interrupt();
       break;

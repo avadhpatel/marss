@@ -1051,6 +1051,7 @@ RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
   bool invalid;
 
   use64 = ctx.use64;
+  use32 = ctx.use32;
   kernel = ctx.kernel_mode;
   df = ((ctx.internal_eflags & FLAG_DF) != 0);
   padlo = 0;
@@ -1199,6 +1200,7 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 	int mmu_index = cpu_mmu_index((CPUState*)this);
 	int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
 	W64 tlb_addr;
+redo:
 	if likely (!store) {
 		if likely (!is_code) {
 			tlb_addr = tlb_table[mmu_index][index].addr_read;
@@ -1218,6 +1220,13 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 		// we find valid TLB entry, return the physical address for it
 		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
 	}
+	// In QEMU we have to call helper function to handle Page faults
+	// FIXME : Currently we are simply calling QEMU functions to 
+	// handle the faults but we should implement a way to simulate
+	// the dealys for page faults
+	tlb_fill(virtaddr, store, mmu_index, (void*)(this->eip));
+	goto redo;
+
 	// Can't find valid TLB entry, its an exception
 	exception = (store) ? EXCEPTION_PageFaultOnWrite : EXCEPTION_PageFaultOnRead;
 	pfec.rw = store;

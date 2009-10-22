@@ -452,6 +452,7 @@ void TraceDecoder::reset() {
   join_with_prev_insn = 0;
   outcome = DECODE_OUTCOME_OK;
   stop_at_rip = limits<W64>::max;
+  use32 = 1;
   pe = 0;
   vm86 = 0;
 }
@@ -462,6 +463,7 @@ TraceDecoder::TraceDecoder(const RIPVirtPhys& rvp) {
   rip = rvp;
   ripstart = rvp;
   use64 = rvp.use64;
+  use32 = rvp.use32;
   kernel = rvp.kernel;
   dirflag = rvp.df;
 }
@@ -472,6 +474,7 @@ TraceDecoder::TraceDecoder(Waddr rip, bool use64, bool kernel, bool df) {
   setzero(bb.rip);
   bb.rip.rip = rip;
   bb.rip.use64 = use64;
+  bb.rip.use32 = use32;
   bb.rip.kernel = kernel;
   bb.rip.df = df;
   this->rip = rip;
@@ -484,6 +487,7 @@ TraceDecoder::TraceDecoder(Waddr rip, bool use64, bool kernel, bool df) {
 TraceDecoder::TraceDecoder(Context& ctx, Waddr rip) {
   reset();
   use64 = ctx.use64;
+  use32 = ctx.use32;
 #ifdef PTLSIM_HYPERVISOR
   kernel = ctx.kernel_mode;
 #else
@@ -748,6 +752,47 @@ bool DecodedOperand::iform64(TraceDecoder& state, int bytemode) {
   return true;
 }
 
+bool DecodedOperand::eform_16(TraceDecoder& state, int bytemode) {
+	const int mod_and_rm_to_basereg_x86_16bit[4][8] = {
+		{APR_bx, APR_bx, APR_bp, APR_bp, APR_si, APR_di, APR_zero, APR_bx},
+		{APR_bx, APR_bx, APR_bp, APR_bp, APR_si, APR_di, APR_bp, APR_bx},
+		{APR_bx, APR_bx, APR_bp, APR_bp, APR_si, APR_di, APR_bp, APR_bx},
+		{-1, -1, -1, -1, -1, -1, -1, -1},
+	};
+
+	const int mod_and_rm_to_indexreg_x86_16bit[8] = {
+		APR_si, APR_di, APR_si, APR_di, APR_zero, APR_zero, APR_zero, APR_zero
+	};
+
+	const byte mod_and_rm_to_immsize_16bit[4][8] = {
+		{0, 0, 0, 0, 0, 0, 2, 0},
+		{1, 1, 1, 1, 1, 1, 1, 1},
+		{2, 2, 2, 2, 2, 2, 2, 2},
+		{0, 0, 0, 0, 0, 0, 0, 0},
+	};
+
+	byte immsize = mod_and_rm_to_immsize_16bit[state.modrm.mod][state.modrm.rm];
+
+	mem.offset = (immsize) ? signext32((W32s)state.fetch(immsize), immsize*8) : 0;
+	mem.riprel = 0;
+
+	mem.basereg = mod_and_rm_to_basereg_x86_16bit[state.modrm.mod][state.modrm.rm];
+	mem.indexreg = mod_and_rm_to_indexreg_x86_16bit[state.modrm.rm];
+	
+	switch (bytemode) {
+		case b_mode: mem.size = 0; break;
+		case w_mode: mem.size = 1; break;
+		case d_mode: mem.size = 2; break;
+		case q_mode: mem.size = 3; break;
+					 // case m_mode: mem.size = (state.use64) ? 3 : 2; break;
+		case v_mode: case dq_mode: mem.size = (state.rex.mode64) ? 3 : ((!state.opsize_prefix) | (bytemode == dq_mode)) ? 2 : 1; break; // See table 1.2 (p35) of AMD64 ISA manual
+		case x_mode: mem.size = 3; break;
+		default: return false;
+	}
+
+	return true;
+}
+
 bool DecodedOperand::eform(TraceDecoder& state, int bytemode) {
   if (state.modrm.mod == 3) {
     return gform_ext(state, bytemode, state.modrm.rm, false, true);
@@ -760,6 +805,10 @@ bool DecodedOperand::eform(TraceDecoder& state, int bytemode) {
   mem.scale = 0;
   mem.riprel = 0;
   mem.size = 0;
+
+  if (state.use32) {
+	  return eform_16(state, bytemode);
+  }
 
   const int mod_and_rexextbase_and_rm_to_basereg_x86_64[4][2][8] = {
     {
@@ -972,6 +1021,23 @@ void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, c
   W64s offset = memref.mem.offset;
 
   bool locked = ((prefixes & PFX_LOCK) != 0);
+
+  // check if we are in 16 bit addressing mode or not
+  if (use32 | use64 == 0) {
+	  // 16 bit addressing mode
+	  // [basereg + indexreg] + offset 
+	  this << TransOp(OP_add, REG_temp8, basereg, REG_imm, indexreg, 3, offset);
+	  TransOp ldst(opcode, destreg, REG_temp8, REG_zero, REG_zero, memref.mem.size);
+	  if (memop) {
+		  ldst.datatype = datatype;
+		  ldst.cachelevel = cachelevel;
+		  ldst.locked = locked;
+		  ldst.extshift = 0; // rmw;
+	  }
+
+	  this << ldst;
+	  return;
+  }
 
   if (basereg == REG_rip) {
     // [rip + imm32]: index always is zero and scale is 1
