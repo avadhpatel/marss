@@ -464,6 +464,7 @@ TraceDecoder::TraceDecoder(const RIPVirtPhys& rvp) {
   ripstart = rvp;
   use64 = rvp.use64;
   use32 = rvp.use32;
+  ss32 = rvp.ss32;
   kernel = rvp.kernel;
   dirflag = rvp.df;
 }
@@ -475,6 +476,7 @@ TraceDecoder::TraceDecoder(Waddr rip, bool use64, bool kernel, bool df) {
   bb.rip.rip = rip;
   bb.rip.use64 = use64;
   bb.rip.use32 = use32;
+  bb.rip.ss32 = ss32;
   bb.rip.kernel = kernel;
   bb.rip.df = df;
   this->rip = rip;
@@ -488,6 +490,7 @@ TraceDecoder::TraceDecoder(Context& ctx, Waddr rip) {
   reset();
   use64 = ctx.use64;
   use32 = ctx.use32;
+  ss32 = (ctx.hflags >> HF_SS32_SHIFT) & 1;
 #ifdef PTLSIM_HYPERVISOR
   kernel = ctx.kernel_mode;
 #else
@@ -806,7 +809,7 @@ bool DecodedOperand::eform(TraceDecoder& state, int bytemode) {
   mem.riprel = 0;
   mem.size = 0;
 
-  if (state.use32) {
+  if (!state.use32 && !state.use64) {
 	  return eform_16(state, bytemode);
   }
 
@@ -1046,6 +1049,7 @@ void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, c
     if (force_seg_bias) basereg = bias_by_segreg(basereg);
 
     if (memop) {
+		ptl_logfile << "abs code_addr rip: ", rip, " Waddr(rip) ", Waddr(rip), " offset ", offset, endl;
       abs_code_addr_immediate(REG_temp8, 3, Waddr(rip) + offset);
       TransOp ldst(opcode, destreg, REG_temp8, REG_imm, srcreg, memref.mem.size, 0);
       ldst.datatype = datatype;
@@ -1536,8 +1540,8 @@ bool BasicBlockCache::invalidate_page(Waddr mfn, int reason) {
     n++;
   }
 
-  assert(n == oldcount);
-  assert(pagelist->count() == 0);
+//  assert(n == oldcount);
+//  assert(pagelist->count() == 0);
 
   pagelist->clear();
   stats.decoder.pagecache.count = bbpages.count;

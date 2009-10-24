@@ -1052,6 +1052,7 @@ RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
 
   use64 = ctx.use64;
   use32 = ctx.use32;
+  ss32 = (ctx.hflags >> HF_SS32_SHIFT) & 1;
   kernel = ctx.kernel_mode;
   df = ((ctx.internal_eflags & FLAG_DF) != 0);
   padlo = 0;
@@ -1094,6 +1095,10 @@ Waddr Context::virt_to_pte_phys_addr(W64 rawvirt, int level) {
 
 int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec) {
 
+	if (source == 0) {
+		return 0;
+	}
+
 	int n = 0 ;
 	pfec = 0;
 
@@ -1101,6 +1106,9 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	// from the simulating domain, this is slow but it works
 	// FIXME : Try to make it like memcpy to copy faster if this gets slower
 	this->setup_qemu_switch();
+
+	ptl_logfile << "Copying from userspace ", bytes, " bytes from ",
+				source, endl;
 	
 //	byte* source_b = (byte*)(source);
 	target_ulong source_b = source;
@@ -1112,6 +1120,8 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 		n++;
 	}
 	setup_ptlsim_switch();
+
+	ptl_logfile << "Copy done..\n";
 
 	return n;
 	//FIXME: We have to check the page permission of both source and
@@ -1171,12 +1181,10 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 	exception = 0;
 	pfec = 0;
 
-	assert(virtaddr != 0);
-
-	if unlikely (lowbits(virtaddr, sizeshift)) {
-		exception = EXCEPTION_UnalignedAccess;
-		return INVALID_PHYSADDR;
-	}
+//	if unlikely (lowbits(virtaddr, sizeshift)) {
+//		exception = EXCEPTION_UnalignedAccess;
+//		return INVALID_PHYSADDR;
+//	}
 
 	if unlikely (internal) {
 		//
@@ -1224,8 +1232,8 @@ redo:
 	// FIXME : Currently we are simply calling QEMU functions to 
 	// handle the faults but we should implement a way to simulate
 	// the dealys for page faults
-	tlb_fill(virtaddr, store, mmu_index, (void*)(this->eip));
-	goto redo;
+//	tlb_fill(virtaddr, store, mmu_index, null);
+//	goto redo;
 
 	// Can't find valid TLB entry, its an exception
 	exception = (store) ? EXCEPTION_PageFaultOnWrite : EXCEPTION_PageFaultOnRead;
@@ -1289,6 +1297,35 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
 		raise_exception((int)exception);
 	}
 	setup_ptlsim_switch();
+}
+
+W64 Context::loadphys(Waddr addr) {
+	W64 data = 0;
+	setup_qemu_switch();
+	data = ldq_raw(addr);
+	ptl_logfile << "Context::loadphys addr[", hexstring(addr, 64),
+				"] data[", hexstring(data, 64), "]\n";
+	setup_ptlsim_switch();
+	return data;
+}
+
+W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
+	W64 old_data = 0;
+	setup_qemu_switch();
+	old_data = ldq_raw(paddr);
+	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
+	stq_raw(paddr, data);
+	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
+				"] data[", hexstring(data, 64), "]\n";
+	return data;
+}
+
+void Context::handle_page_fault(Waddr virtaddr, int is_write) {
+	setup_qemu_switch();
+	int mmu_index = cpu_mmu_index((CPUState*)this);
+	tlb_fill(virtaddr, is_write, mmu_index, null);
+	setup_ptlsim_switch();
+	return;
 }
 
 #endif // CONFIG_ONLY

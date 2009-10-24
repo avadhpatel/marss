@@ -786,7 +786,9 @@ W64 CacheHierarchy::commitstore(const SFR& sfr, W8 threadid, bool perform_actual
 
   L2CacheLine* L2line = L2.select(addr);
 
-  if likely (perform_actual_write) storemask(addr, sfr.data, sfr.bytemask);
+//  if likely (perform_actual_write) storemask(addr, sfr.data, sfr.bytemask);
+  if likely (perform_actual_write) 
+	  contextof(0).storemask(addr, sfr.data, sfr.bytemask);
 
   L1CacheLine* L1line = L1.select(addr);
 

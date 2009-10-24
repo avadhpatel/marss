@@ -552,10 +552,12 @@ bool TraceDecoder::decode_fast() {
 
     EndOfDecode();
 
-    // Make idempotent by checking new rsp (aka rbp) alignment first:
-    this << TransOp(OP_ld, REG_temp0, REG_rbp, REG_imm, REG_zero, sizeshift, 0);
+	int stack_sizeshift = (use64) ? 3 : ((ss32) ? 2 : 1);
 
-    this << TransOp(OP_mov, REG_rsp, REG_zero, REG_rbp, REG_zero, sizeshift);
+    // Make idempotent by checking new rsp (aka rbp) alignment first:
+    this << TransOp(OP_ld, REG_temp0, REG_rbp, REG_imm, REG_zero, stack_sizeshift, 0);
+
+    this << TransOp(OP_mov, REG_rsp, REG_zero, REG_rbp, REG_zero, stack_sizeshift);
     this << TransOp(OP_ld, REG_rbp, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
     this << TransOp(OP_add, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, (1 << sizeshift));
 

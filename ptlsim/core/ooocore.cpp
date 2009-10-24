@@ -485,6 +485,10 @@ bool OutOfOrderCore::runcycle() {
   commitcount = 0;
   writecount = 0;
 
+  if (logable(6)) {
+	  ptl_logfile << "OutOfOrderCore::run():thread-commit\n";
+  }
+
   foreach (permute, threadcount) {
     int tid = add_index_modulo(round_robin_tid, +permute, threadcount);
     ThreadContext* thread = threads[tid];
@@ -493,6 +497,13 @@ bool OutOfOrderCore::runcycle() {
     commitrc[tid] = thread->commit();
     for_each_cluster(j) thread->writeback(j);
     for_each_cluster(j) thread->transfer(j);
+  }
+
+  if (logable(8)) {
+	  ptl_logfile << "OutOfOrderCore::run():context after commit\n";
+	  foreach(x, threadcount) {
+		  ptl_logfile << threads[x]->ctx, endl;
+	  }
   }
 
   //
@@ -519,11 +530,19 @@ bool OutOfOrderCore::runcycle() {
   //
   // Issue whatever is ready
   //
+  if (logable(6)) {
+	  ptl_logfile << "OutOfOrderCore::run():issue\n";
+  }
+
   for_each_cluster(i) { issue(i); }
 
   //
   // Most of the frontend (except fetch!) also works with round robin priority
   //
+  if (logable(6)) {
+	  ptl_logfile << "OutOfOrderCore::run():dispatch\n";
+  }
+
   int dispatchrc[MAX_THREADS_PER_CORE];
   dispatchcount = 0;
   foreach (permute, threadcount) {
@@ -547,6 +566,9 @@ bool OutOfOrderCore::runcycle() {
   // This means we sort in ascending order, with any unused threads
   // (if any) given the lowest priority.
   //
+  if (logable(6)) {
+	  ptl_logfile << "OutOfOrderCore::run():fetch\n";
+  }
 
   int priority_value[MAX_THREADS_PER_CORE];
   int priority_index[MAX_THREADS_PER_CORE];
@@ -586,6 +608,8 @@ bool OutOfOrderCore::runcycle() {
     }
   }
 
+  ptl_logfile << "Fetch done...\n";
+
   //
   // Always clock the issue queues: they're independent of all threads
   //
@@ -616,6 +640,11 @@ bool OutOfOrderCore::runcycle() {
     ThreadContext* thread = threads[i];
     if unlikely (!thread->ctx.running) continue;
     int rc = commitrc[i];
+	if (logable(6)) {
+		ptl_logfile << "OutOfOrderCore::run():result check thread[",
+		i, "] rc[", rc, "]\n";
+	}
+
     if likely ((rc == COMMIT_RESULT_OK) | (rc == COMMIT_RESULT_NONE)) continue;
 
     switch (rc) {
@@ -711,6 +740,17 @@ bool OutOfOrderCore::runcycle() {
 //    }
 //  }
 #endif
+
+  foreach (i, threadcount) {
+    ThreadContext* thread = threads[i];
+	if (logable(6)) {
+		stringbuf sb;
+		sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
+		   sim_cycle, ", ", total_user_insns_committed,  " user commits: no instructions have committed for ",
+		   (sim_cycle - thread->last_commit_at_cycle), " cycles; the pipeline could be deadlocked", endl;
+		ptl_logfile << sb, flush;
+	}
+  }
 
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
@@ -1161,11 +1201,26 @@ bool ThreadContext::handle_exception() {
   // Exceptions not listed here are propagated by microcode
   // rather than the processor itself.
   //
+  bool write_exception = false;
+  Waddr exception_address = ROB[ROB.head].virtpage;
   switch (ctx.exception) {
   case EXCEPTION_PageFaultOnRead:
+	  write_exception = false;
+	  goto handle_page_fault;
   case EXCEPTION_PageFaultOnWrite:
   case EXCEPTION_PageFaultOnExec:
-    ctx.exception_index = EXCEPTION_x86_page_fault; break;
+	  write_exception = true;
+	  goto handle_page_fault;
+handle_page_fault:
+	  ctx.handle_page_fault(exception_address, write_exception);
+	  // If we return here means the QEMU has fix the page fault
+	  // witout causing any CPU faults so we can clear the pipeline
+	  // and continue from current eip
+	  flush_pipeline();
+	  ctx.exception = 0;
+	  return true;
+	  break;
+//    ctx.exception_index = EXCEPTION_x86_page_fault; break;
   case EXCEPTION_FloatingPointNotAvailable:
     ctx.exception_index= EXCEPTION_x86_fpu_not_avail; break;
   case EXCEPTION_FloatingPoint:

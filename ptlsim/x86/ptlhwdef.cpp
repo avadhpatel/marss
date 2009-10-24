@@ -571,7 +571,8 @@ ostream& operator <<(ostream& os, const TransOpBase& op) {
 ostream& RIPVirtPhysBase::print(ostream& os) const {
 #ifdef PTLSIM_HYPERVISOR
   os << "[", (void*)(Waddr)rip;
-  os << (use64 ? " 64b" : " 32b");
+  os << (use64 ? " 64b" : (use32 ? " 32b" : " 16b"));
+  os << (use64 ? " ss64" : (ss32 ? " ss32" : " ss16"));
   os << (kernel ? " krn" : "");
   os << (df ? " df" : "");
   os << " mfn ";
@@ -870,6 +871,7 @@ ostream& operator <<(ostream& os, const Context& ctx) {
 //  os << "    x87 state: ", ((ctx.i387_valid) ? "valid" : "invalid"), endl;
 //  os << "    Event dis: ", ((ctx.syscall_disables_events) ? " syscall" : ""), ((ctx.failsafe_disables_events) ? " failsafe" : ""), endl;
   os << "    IntEFLAGS: ", hexstring(ctx.internal_eflags, 32), " (df ", ((ctx.internal_eflags & FLAG_DF) != 0), ")", endl;
+  os << "    hflags: ", hexstring(ctx.hflags, 32), " (QEMU internal flags)", endl;
 #endif
   os << "  Segment Registers:", endl;
   os << "    cs ", ctx.segs[SEGID_CS], endl;

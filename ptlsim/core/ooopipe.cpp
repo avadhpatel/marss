@@ -477,6 +477,8 @@ bool ThreadContext::fetch() {
     if unlikely ((!current_basic_block) || (current_basic_block_transop_index >= current_basic_block->count)) {
       fetch_bb_address_ringbuf[fetch_bb_address_ringbuf_head] = fetchrip;
       fetch_bb_address_ringbuf_head = add_index_modulo(fetch_bb_address_ringbuf_head, +1, lengthof(fetch_bb_address_ringbuf));
+	  assert((W64)(fetchrip) != 0);
+	  ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
       fetch_or_translate_basic_block(fetchrip);
     }
 
@@ -659,7 +661,8 @@ bool ThreadContext::fetch() {
       transop.predinfo.ctxid = 0;
       transop.predinfo.ripafter = fetchrip + transop.bytes;
       predrip = branchpred.predict(transop.predinfo, transop.predinfo.bptype, transop.predinfo.ripafter, transop.riptaken);
-      redirectrip = 1;
+	  if (predrip)
+		  redirectrip = 1;
       per_context_ooocore_stats_update(threadid, branchpred.predictions++);
     }
 
@@ -695,7 +698,7 @@ bool ThreadContext::fetch() {
       if unlikely (isbranch(transop.opcode) && (transop.predinfo.bptype & (BRANCH_HINT_CALL|BRANCH_HINT_RET)))
                     branchpred.updateras(transop.predinfo, transop.predinfo.ripafter);
 
-      if unlikely (redirectrip) {
+      if unlikely (redirectrip && predrip) {
         // follow to target, then end fetching for this cycle if predicted taken
         bool taken = (predrip != fetchrip);
         taken_branch_count += taken;
@@ -1913,8 +1916,8 @@ int ReorderBufferEntry::commit() {
 
     // See notes in handle_exception():
     if likely (isclass(uop.opcode, OPCLASS_CHECK) & (ctx.exception == EXCEPTION_SkipBlock)) {
-//      thread.chk_recovery_rip = ctx.eip + uop.bytes;
-      thread.chk_recovery_rip = ctx.get_cs_eip() + uop.bytes;
+      thread.chk_recovery_rip = ctx.eip + uop.bytes;
+//      thread.chk_recovery_rip = ctx.get_cs_eip() + uop.bytes;
       if unlikely (config.event_log_enabled) event->type = EVENT_COMMIT_SKIPBLOCK;
       per_context_ooocore_stats_update(threadid, commit.result.skipblock++);
     } else {
@@ -2157,7 +2160,7 @@ int ReorderBufferEntry::commit() {
                                                  false/* icache */, 
                                                  true/* is write*/));
         // update memory img:
-        storemask(lsq->physaddr << 3, lsq->data, lsq->bytemask);
+        thread.ctx.storemask(lsq->physaddr << 3, lsq->data, lsq->bytemask);
       }
 #endif
     }

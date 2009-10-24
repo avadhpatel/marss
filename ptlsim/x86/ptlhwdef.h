@@ -236,7 +236,7 @@ struct Context;
 struct RIPVirtPhysBase {
   W64 rip;
   W64 mfnlo:28, use64:1, kernel:1, padlo:2, mfnhi:28, df:1, padhi:3;
-  bool use32;
+  W32 use32:1, ss32:1;
 
   // 28 bits + 12 page offset bits = 40 bit physical addresses
   static const Waddr INVALID = 0xfffffff;
@@ -950,6 +950,7 @@ struct Context: public CPUX86State {
 
   Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code=0); //, PTEUpdate& pteupdate, Level1PTE& pteused);
 
+  void handle_page_fault(Waddr virtaddr, int is_write) ;
   //Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, PTEUpdate& pteupdate) {
   //  Level1PTE dummy;
   //  return check_and_translate(virtaddr, sizeshift, store, internal, exception, pfec, pteupdate, dummy);
@@ -971,6 +972,24 @@ struct Context: public CPUX86State {
   //}
 
   int copy_from_user(void* target, Waddr source, int bytes) ;
+
+  W64 loadphys(Waddr addr) ;//{
+//	  W64 data = 0;
+//	  setup_qemu_switch();
+//	  data = ldq_phys(addr);
+//	  setup_ptlsim_switch();
+//	  return data;
+//  }
+
+  W64 storemask(Waddr paddr, W64 data, byte bytemask) ;//{
+//	  W64 old_data = 0;
+//	  setup_qemu_switch();
+//	  old_data = ldq_phys(paddr);
+//	  W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
+//	  stq_phys(paddr, data);
+//	  return data;
+//  }
+
   //  PageFaultErrorCode pfec;
   //  Waddr faultaddr;
   //  return copy_from_user(target, source, bytes, pfec, faultaddr, false);

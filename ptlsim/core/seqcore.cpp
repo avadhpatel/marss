@@ -230,13 +230,13 @@ ostream& operator <<(ostream& os, const TransactionalMemory<N, setcount>& tm) {
 
 template <int N, int setcount>
 W64 TransactionalMemory<N, setcount>::loadimpl(W64 physaddr) {
-  return loadphys(physaddr);
+  return contextof(0).loadphys(physaddr);
 }
 
 template <int N, int setcount>
 W64 TransactionalMemory<N, setcount>::storeimpl(W64 physaddr, W64 data, byte bytemask) {
   ptl_logfile << "Before storeimpl: physaddr ", (void*)physaddr, " => mfn ", (physaddr >> 12), ", data ", bytemaskstring(data, 8, bytemask), endl;
-  W64 rc = storemask(physaddr, data, bytemask);
+  W64 rc = contextof(0).storemask(physaddr, data, bytemask);
   ptl_logfile << "After storeimpl: physaddr ", (void*)physaddr, " => mfn ", (physaddr >> 12), ", data ", bytemaskstring(data, 8, bytemask), " => rc ", (void*)rc, endl;
   return rc;
 }
@@ -827,7 +827,7 @@ struct SequentialCore {
         data = transactmem.load(state.physaddr << 3);
       } else {
         ptl_logfile << "[cycle ", sim_cycle, "] load from physaddr ", (void*)physaddr, " for virtaddr ", (void*)origaddr, endl;
-        data = loadphys(physaddr);
+        data = ctx.loadphys(physaddr);
       }
     }
 
@@ -1333,7 +1333,7 @@ struct SequentialCore {
           if unlikely (cmtrec) {
             transactmem.store(sfr.physaddr << 3, sfr.data, sfr.bytemask);
           } else {
-            storemask(sfr.physaddr << 3, sfr.data, sfr.bytemask);
+            ctx.storemask(sfr.physaddr << 3, sfr.data, sfr.bytemask);
           }
 
           Waddr mfn = (sfr.physaddr << 3) >> 12;

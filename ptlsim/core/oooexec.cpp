@@ -1292,7 +1292,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 //   W64 data = (annul) ? 0 : loadphys(physaddr);
   W64 data;
   if(!config.verify_cache){
-    data = (annul) ? 0 : loadphys(physaddr);
+    data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
   }
 
   LoadStoreQueueEntry* sfra = null;
@@ -1665,7 +1665,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       ptl_logfile << " access uop.internal : flush memoryHierarchy. use cycles: ", cycle_in_flush_cache, endl;
 
 
-      data = (annul) ? 0 : loadphys(physaddr);
+      data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
       data = get_load_data(state, data);
       
       state.data = data;
@@ -1782,7 +1782,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
           state.data = get_load_data(state, state.data);        
 
           if(config.comparing_cache){
-            W64 data = (annul) ? 0 : loadphys(physaddr);
+            W64 data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
             data = get_load_data(state, data);
             
             assert(data == state.data);
@@ -2372,6 +2372,7 @@ int OutOfOrderCore::issue(int cluster) {
 
   int maxwidth = clusters[cluster].issue_width;
 
+  int prev_robid = -1;
   while (issuecount < maxwidth) {
     int iqslot;
     issueq_operation_on_cluster_with_result(getcore(), cluster, iqslot, issue());
@@ -2392,7 +2393,9 @@ int OutOfOrderCore::issue(int cluster) {
     ReorderBufferEntry& rob = thread->ROB[idx];
 
     rob.iqslot = iqslot;
+	assert(idx != prev_robid);
     int rc = rob.issue();
+	prev_robid = idx;
     // Stop issuing from this cluster once something replays or has a mis-speculation
     issuecount++;
     if unlikely (rc <= 0) break;

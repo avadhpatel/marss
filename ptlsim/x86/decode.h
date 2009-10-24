@@ -167,6 +167,7 @@ struct TraceDecoder {
   int transbufcount;
   byte use64;
   byte use32;
+  bool ss32;
   byte kernel;
   byte dirflag;
   byte* insnbytes;
