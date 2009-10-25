@@ -370,6 +370,95 @@ void assist_bcd_aas(Context& ctx) {
 	ctx.eip = ctx.reg_nextrip;
 }
 
+// SVM Assist
+void assist_svm_check(Context& ctx) {
+	W64 type = ctx.reg_ar1;
+	W64 param = ctx.reg_ar2;
+	ASSIST_IN_QEMU(helper_svm_check_intercept_param, type, param);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// MWait Assist
+void assist_mwait(Context& ctx) {
+	W64 next_eip = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_mwait, next_eip);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// Monitor assist
+void assist_monitor(Context& ctx) {
+	W64 ptr = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_monitor, ptr);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// VMRun
+void assist_vmrun(Context& ctx) {
+	W64 aflag = ctx.reg_ar1;
+	W64 next_eip = ctx.reg_ar2;
+	ASSIST_IN_QEMU(helper_vmrun, aflag, next_eip);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// VMCall
+void assist_vmcall(Context& ctx) {
+	ASSIST_IN_QEMU(helper_vmmcall);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// VMLoad
+void assist_vmload(Context& ctx) {
+	W64 aflag = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_vmload, aflag);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// VMSave
+void assist_vmsave(Context& ctx) {
+	W64 aflag = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_vmsave, aflag);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// STGI
+void assist_stgi(Context& ctx) {
+	ASSIST_IN_QEMU(helper_stgi);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// CLGI
+void assist_clgi(Context& ctx) {
+	ASSIST_IN_QEMU(helper_clgi);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// SKINIT
+void assist_skinit(Context& ctx) {
+	ASSIST_IN_QEMU(helper_skinit);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// INVLPGA
+void assist_invlpga(Context& ctx) {
+	W64 aflag = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_invlpga, aflag);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// INVLPG
+void assist_invlpg(Context& ctx) {
+	W64 addr = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_invlpg, addr);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// LMSW
+void assist_lmsw(Context& ctx) {
+	W64 t0 = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_lmsw, t0);
+	ctx.eip = ctx.reg_nextrip;
+}
+
 void assist_rdtsc(Context& ctx) {
 	ASSIST_IN_QEMU(helper_rdtsc);
 //	ctx.setup_qemu_switch();
@@ -925,6 +1014,39 @@ void assist_ioport_out(Context& ctx) {
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 }
 #endif
+
+static inline void svm_check_intercept(TraceDecoder& dec, W64 type, W64 param=0) {
+	// No SVM activated, do nothing
+	if likely(dec.hflags & HF_SVMI_MASK)
+		return;
+    dec << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
+	dec << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 3, type);
+	dec << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, param);
+	dec.microcode_assist(ASSIST_SVM_CHECK, dec.ripstart, dec.rip);
+}
+
+static inline bool check_privilege(TraceDecoder& dec) {
+	if (dec.kernel) {
+		return true;
+	}
+	dec << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero,
+			3, dec.ripstart - dec.cs_base);
+	dec.microcode_assist(ASSIST_GP_FAULT, dec.ripstart, dec.rip);
+	dec.end_of_block = 1;
+	return false;
+}
+
+static inline void vm_func(TraceDecoder& dec, int assist) {
+	if (check_privilege(dec)) {
+		dec << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero,
+			   3, dec.use32);
+		if (assist == ASSIST_VMRUN) 
+			dec << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, 
+					REG_zero, 3, dec.ripstart - dec.cs_base);
+
+		dec.microcode_assist(assist, dec.ripstart, dec.rip);
+	}
+}
 
 bool TraceDecoder::decode_complex() {
   DecodedOperand rd;
@@ -1863,6 +1985,328 @@ bool TraceDecoder::decode_complex() {
     EndOfDecode();
     this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
     break;
+  }
+
+  case 0x101: {
+	TransOp* ldp;
+	TransOp* ldp2;
+	int sizeshift;
+	TransOp* st1;
+	TransOp* st2;
+	switch(modrm.reg) {
+		case 0: // sgdt
+			// Get the address in ra 
+			DECODE(eform, ra, v_mode);
+			EndOfDecode();
+
+			if (modrm.mod == 3) {
+				goto invalid_opcode;
+			}
+			svm_check_intercept(*this, SVM_EXIT_GDTR_READ);
+			ldp = new TransOp(OP_ld, REG_temp6, REG_ctx, REG_imm, 
+					REG_zero, 3, offsetof_t(Context, gdt.limit));
+			ldp->internal = 1;
+			this << *ldp;
+			delete ldp;
+
+			this << TransOp(OP_st, REG_mem, REG_zero, REG_imm, 
+					REG_temp6, 3, ra.imm.imm);
+			ra.imm.imm += 2;
+			
+			ldp2 = new TransOp(OP_ld, REG_temp6, REG_ctx, REG_imm, 
+					REG_zero, 3, offsetof_t(Context, gdt.base));
+			ldp2->internal = 1;
+			this << *ldp2;
+			delete ldp2;
+
+			if (!use64)
+				this << TransOp(OP_and, REG_temp6, REG_temp6, REG_imm,
+						REG_zero, 3, 0xffffff);
+
+			this << TransOp(OP_st, REG_mem, REG_zero, REG_imm,
+					REG_temp6, 3, ra.imm.imm);
+			break;
+		case 1: 
+			if (modrm.mod == 3) {
+				switch(modrm.rm) {
+					case 0: // monitor
+						// Add one more check if MONITOR feature
+						// is available or not
+						EndOfDecode();
+						if(!kernel)
+							goto invalid_opcode;
+						this << TransOp(OP_collcc, REG_temp0, REG_zf, 
+								REG_cf, REG_of, 3, 0, 0, 
+								FLAGS_DEFAULT_ALU);
+						this << TransOp(OP_jmp, REG_rip, REG_zero,
+								REG_imm, REG_zero, 3, 
+								ripstart - cs_base);
+
+						sizeshift = (use64) ? 3 : 2;
+						this << TransOp(OP_mov, REG_ar1, REG_rax,
+								REG_zero, REG_zero, sizeshift);
+						if(!use32) {
+							this << TransOp(OP_and, REG_ar1, REG_ar1,
+									REG_imm, REG_zero, 2, 0xffff);
+						}
+
+						// Add DS segment base to reg_ar1
+						ldp = new TransOp(OP_ld, REG_temp6, REG_ctx, 
+								REG_imm, REG_zero, sizeshift, 
+								offsetof_t(Context, 
+									segs[R_DS].base));
+						ldp->internal = 1;
+						this << *ldp;
+						delete ldp;
+						this << TransOp(OP_add, REG_ar1, REG_ar1,
+								REG_temp6, REG_zero, sizeshift);
+						microcode_assist(ASSIST_MONITOR,
+								ripstart, rip);
+						break;
+					case 1: // mwait
+						// Add more check if MWait feature is 
+						// available or not
+						EndOfDecode();
+						if(!kernel)
+							goto invalid_opcode;
+						this << TransOp(OP_collcc, REG_temp0, REG_zf, 
+								REG_cf, REG_of, 3, 0, 0, 
+								FLAGS_DEFAULT_ALU);
+
+						this << TransOp(OP_jmp, REG_rip, REG_zero,
+								REG_imm, REG_zero, 3, 
+								ripstart - cs_base);
+
+						this << TransOp(OP_mov, REG_ar1, REG_zero,
+								REG_imm, REG_zero, 3, rip - ripstart);
+						microcode_assist(ASSIST_MWAIT,
+								ripstart, rip);
+						break;
+					default:
+						goto invalid_opcode;
+				}
+			} else { // sidt
+				// Get the address in ra 
+				DECODE(eform, ra, v_mode);
+				EndOfDecode();
+
+				svm_check_intercept(*this, SVM_EXIT_IDTR_READ);
+
+				ldp = new TransOp(OP_ld, REG_temp6, REG_ctx, REG_imm, 
+						REG_zero, 2, offsetof_t(Context, idt.limit));
+				ldp->internal = 1;
+				this << *ldp;
+				delete ldp;
+				this << TransOp(OP_st, REG_mem, REG_zero, REG_imm, 
+						REG_temp6, 3, ra.imm.imm);
+				ra.imm.imm += 2;
+
+				ldp2 = new TransOp(OP_ld, REG_temp6, REG_ctx, REG_imm, 
+						REG_zero, 3, offsetof_t(Context, idt.base));
+				ldp2->internal = 1;
+				this << *ldp2;
+				delete ldp2;
+
+				if (!use64)
+					this << TransOp(OP_and, REG_temp6, REG_temp6, 
+							REG_imm, REG_zero, 3, 0xffffff);
+
+				this << TransOp(OP_st, REG_mem, REG_zero, REG_imm,
+						REG_temp6, 3, ra.imm.imm);
+			}
+			break;
+		case 2: // lgdt
+		case 3: // lidt
+			if (modrm.mod == 3) {
+				EndOfDecode();
+				this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, 
+						REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
+				this << TransOp(OP_jmp, REG_rip, REG_zero,
+						REG_imm, REG_zero, 3, ripstart - cs_base);
+				switch(modrm.rm) {
+					case 0: // VMRUN
+						if (!(hflags & HF_SVME_MASK) || !pe)
+							goto invalid_opcode;
+						vm_func(*this, ASSIST_VMRUN);
+						break;
+					case 1: // VMCALL
+						if (!(hflags & HF_SVME_MASK))
+							goto invalid_opcode;
+						microcode_assist(ASSIST_VMCALL,
+								ripstart, rip);
+						break;
+					case 2: // VMLOAD
+						if (!(hflags & HF_SVME_MASK) || !pe)
+							goto invalid_opcode;
+						vm_func(*this, ASSIST_VMLOAD);
+						break;
+					case 3: // VMSAVE
+						if (!(hflags & HF_SVME_MASK) || !pe)
+							goto invalid_opcode;
+						vm_func(*this, ASSIST_VMSAVE);
+						break;
+					case 4: // STGI
+						if (!(hflags & HF_SVME_MASK) || !pe)
+							goto invalid_opcode;
+						if(check_privilege(*this)) {
+							microcode_assist(ASSIST_STGI,
+									ripstart, rip);
+						}
+						break;
+					case 5: // CLGI
+						if (!(hflags & HF_SVME_MASK) || !pe)
+							goto invalid_opcode;
+						microcode_assist(ASSIST_CLGI,
+								ripstart, rip);
+						break;
+					case 6: // INVLPGA
+						if (!(hflags & HF_SVME_MASK) || !pe)
+							goto invalid_opcode;
+						if(check_privilege(*this)) {
+							this << TransOp(OP_mov, REG_ar1, REG_zero,
+									REG_imm, REG_zero, 3, use32);
+							microcode_assist(ASSIST_INVLPGA,
+									ripstart, rip);
+						}
+						break;
+					default:
+						goto invalid_opcode;
+				}
+
+			} else {
+				if (check_privilege(*this)) {
+					DECODE(eform, ra, v_mode);
+					EndOfDecode();
+
+					svm_check_intercept(*this, 
+							modrm.reg == 2 ? SVM_EXIT_GDTR_WRITE : \
+							SVM_EXIT_IDTR_WRITE);
+					ldp = new TransOp(OP_ld, REG_temp6, REG_zero, 
+							REG_imm, REG_zero, 2, ra.imm.imm);
+					ldp->internal = 1;
+					this << *ldp;
+					delete ldp;
+					ra.imm.imm += 2;
+					ldp2 = new TransOp(OP_ld, REG_temp7, REG_zero, 
+							REG_imm, REG_zero, 3, ra.imm.imm);
+					ldp2->internal = 1;
+					this << *ldp2;
+					delete ldp2;
+
+					if(!use64) 
+						this << TransOp(OP_and, REG_temp7, REG_temp7,
+								REG_imm, REG_zero, 3, 0xffffff);
+
+					int offset_val1 = 0;
+					int offset_val2 = 0;
+					if(modrm.reg == 2) {
+						offset_val1 = offsetof_t(Context, gdt.base);
+						offset_val2 = offsetof_t(Context, gdt.limit);
+					} else {
+						offset_val1 = offsetof_t(Context, idt.base);
+						offset_val2 = offsetof_t(Context, idt.limit);
+					}
+					st1 = new TransOp(OP_st, REG_mem, REG_temp7, 
+							REG_zero, REG_imm, 2, offset_val1);
+					st1->internal = 1;
+					this << *st1;
+					st2 = new TransOp(OP_st, REG_mem, REG_temp6, 
+							REG_zero, REG_imm, 2, offset_val2);
+					st2->internal = 1;
+					this << *st2;
+					delete st1;
+					delete st2;
+				}
+
+			}
+			break;
+		case 4: // SMSW
+			DECODE(eform, rd, v_mode);
+			EndOfDecode();
+
+			svm_check_intercept(*this, SVM_EXIT_READ_CR0);
+
+#ifdef __x86_64__
+			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
+					REG_zero, 3, offsetof_t(Context, cr[0]) + 4);
+#else
+			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
+					REG_zero, 3, offsetof_t(Context, cr[0]));
+#endif
+			ldp->internal = 1;
+			this << *ldp;
+			delete ldp;
+
+			result_store(REG_temp0, REG_zero, rd);
+			break;
+		case 6: // LMSW
+			if (check_privilege(*this)) {
+				DECODE(eform, ra, v_mode);
+				EndOfDecode();
+
+				svm_check_intercept(*this, SVM_EXIT_WRITE_CR0);
+				operand_load(REG_ar1, ra);
+				microcode_assist(ASSIST_LMSW,
+						ripstart, rip);
+			}
+			end_of_block = 1;
+			break;
+		case 7: // INVLPG
+			if (check_privilege(*this)) {
+				if(modrm.mod == 3) {
+					if(use64 && modrm.rm == 0) {
+						// Swapgs
+						TransOp ld1(OP_ld, REG_temp0, REG_ctx, REG_imm,
+								REG_zero, 3, 
+								offsetof_t(Context, segs[R_GS].base));
+						TransOp ld2(OP_ld, REG_temp1, REG_ctx, REG_imm,
+								REG_zero, 3,
+								offsetof_t(Context, kernelgsbase));
+						ld1.internal = 1;
+						ld2.internal = 1;
+						this << ld1;
+						this << ld2;
+
+						st1 = new TransOp(OP_st, REG_mem, REG_ctx, 
+								REG_imm, REG_temp1, 3,
+								offsetof_t(Context, segs[R_GS].base));
+						st2 = new TransOp(OP_st, REG_mem, REG_ctx, 
+								REG_imm, REG_temp0, 3,
+								offsetof_t(Context, kernelgsbase));
+						st1->internal = 1;
+						st2->internal = 1;
+						this << *st1;
+						this << *st2;
+						delete st1;
+						delete st2;
+					} else {
+						goto invalid_opcode;
+					}	
+				} else {
+					DECODE(eform, ra, v_mode);
+					EndOfDecode();
+
+					this << TransOp(OP_collcc, REG_temp0, REG_zf, 
+							REG_cf, REG_of, 3, 0, 0, 
+							FLAGS_DEFAULT_ALU);
+					this << TransOp(OP_jmp, REG_rip, REG_zero,
+							REG_imm, REG_zero, 3, ripstart - cs_base);
+					operand_load(REG_ar1, ra);
+					microcode_assist(ASSIST_INVLPG,
+							ripstart, rip);
+					this << TransOp(OP_jmp, REG_rip, REG_zero,
+							REG_imm, REG_zero, 3, rip - cs_base);
+					end_of_block = 1;
+				}
+			}
+			break;
+		default:
+			goto invalid_opcode;
+	}
+	break;
+invalid_opcode:
+	MakeInvalid();
+	break;
   }
 
   case 0x10b: { // ud2a

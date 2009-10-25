@@ -237,6 +237,8 @@ struct RIPVirtPhysBase {
   W64 rip;
   W64 mfnlo:28, use64:1, kernel:1, padlo:2, mfnhi:28, df:1, padhi:3;
   W32 use32:1, ss32:1;
+  W64 hflags;
+  W64 cs_base;
 
   // 28 bits + 12 page offset bits = 40 bit physical addresses
   static const Waddr INVALID = 0xfffffff;

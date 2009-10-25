@@ -1053,6 +1053,8 @@ RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
   use64 = ctx.use64;
   use32 = ctx.use32;
   ss32 = (ctx.hflags >> HF_SS32_SHIFT) & 1;
+  hflags = ctx.hflags;
+  cs_base = ctx.segs[R_CS].base;
   kernel = ctx.kernel_mode;
   df = ((ctx.internal_eflags & FLAG_DF) != 0);
   padlo = 0;
@@ -1109,6 +1111,21 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 
 	ptl_logfile << "Copying from userspace ", bytes, " bytes from ",
 				source, endl;
+
+	int exception = 0;
+	Waddr physaddr = check_and_translate(source, 0, 0, 0, exception,
+			pfec, 1);
+	if (exception) {
+		int mmu_index = cpu_mmu_index((CPUState*)this);
+		ptl_logfile << "page fault while reading code", endl;
+		int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
+				source, 0, mmu_index, 1);
+		if (fail) {
+			ptl_logfile << "Unable to read code from ", 
+						hexstring(source, 64), endl;
+			return -1;
+		}
+	}
 	
 //	byte* source_b = (byte*)(source);
 	target_ulong source_b = source;
@@ -1218,12 +1235,17 @@ redo:
 	} else {
 		tlb_addr = tlb_table[mmu_index][index].addr_write;
 	}
-	ptl_logfile << "mmu_index:", mmu_index, " index:", index,
-		 " virtaddr:", virtaddr, 
-				" tlb_addr:", tlb_addr, " virtpage:",
-				(virtaddr & TARGET_PAGE_MASK), " tlbpage:",
-				(tlb_addr & TARGET_PAGE_MASK),
-				endl;
+
+	if(logable(10)) {
+		ptl_logfile << "mmu_index:", mmu_index, " index:", index,
+					" virtaddr:", hexstring(virtaddr, 64), 
+					" tlb_addr:", hexstring(tlb_addr, 64), 
+					" virtpage:", hexstring(
+							(virtaddr & TARGET_PAGE_MASK), 64), 
+					" tlbpage:", hexstring(
+							(tlb_addr & TARGET_PAGE_MASK), 64),
+					endl;
+	}
 	if likely ((virtaddr & TARGET_PAGE_MASK) == tlb_addr) {
 		// we find valid TLB entry, return the physical address for it
 		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
@@ -1312,11 +1334,13 @@ W64 Context::loadphys(Waddr addr) {
 W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
 	W64 old_data = 0;
 	setup_qemu_switch();
+	ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
+				endl;
 	old_data = ldq_raw(paddr);
 	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
-	stq_raw(paddr, data);
 	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
 				"] data[", hexstring(data, 64), "]\n";
+	stq_raw(paddr, data);
 	return data;
 }
 

@@ -136,6 +136,11 @@ struct DecodedOperand {
     } mem;
   };
 
+  DecodedOperand() {
+	  imm.imm = 0;
+	  reg.reg = -1;
+  }
+
   bool gform_ext(TraceDecoder& state, int bytemode, int regfield, bool def64 = false, bool in_rex_base = false);
   bool gform(TraceDecoder& state, int bytemode);
   bool iform(TraceDecoder& state, int bytemode);
@@ -168,6 +173,8 @@ struct TraceDecoder {
   byte use64;
   byte use32;
   bool ss32;
+  W64 hflags;
+  W64 cs_base;
   byte kernel;
   byte dirflag;
   byte* insnbytes;
@@ -352,6 +359,28 @@ enum {
   ASSIST_LJMP_PRCT,
   // BCD Assist
   ASSIST_BCD_AAS,
+  // SVM
+  ASSIST_SVM_CHECK,
+  // MONITOR
+  ASSIST_MONITOR,
+  // MWAIT
+  ASSIST_MWAIT,
+  // VM
+  ASSIST_VMRUN,
+  ASSIST_VMCALL,
+  ASSIST_VMLOAD,
+  ASSIST_VMSAVE,
+  // STGI
+  ASSIST_STGI,
+  // CLGI
+  ASSIST_CLGI,
+  // SKINIT
+  ASSIST_SKINIT,
+  // INVLPGA
+  ASSIST_INVLPGA,
+  ASSIST_INVLPG,
+  // LMSW
+  ASSIST_LMSW,
   ASSIST_COUNT,
 };
 
@@ -435,6 +464,28 @@ static const char* assist_names[ASSIST_COUNT] = {
   "ljmp_prct",
   // BCD
   "bcd_aas",
+  // SVM
+  "svm_check",
+  // MONITOR
+  "monitor",
+  // MWAIT
+  "mwait",
+  // VM
+  "vmrun",
+  "vmcall",
+  "vmload",
+  "vmsave",
+  // STGI
+  "stgi",
+  // CLGI
+  "clgi",
+  // SKINIT
+  "skinit",
+  //INVLPGA
+  "invlpga",
+  "invlpg",
+  // LMSW
+  "lmsw",
 };
 
 int propagate_exception_during_assist(Context& ctx, byte exception, W32 errorcode, Waddr virtaddr = 0, bool intN = 0);
@@ -510,6 +561,28 @@ void assist_ljmp(Context& ctx);
 void assist_ljmp_prct(Context& ctx);
 // BCD
 void assist_bcd_aas(Context& ctx);
+// SVM
+void assist_svm_check(Context& ctx);
+// MONITOR
+void assist_monitor(Context& ctx);
+// MWAIT
+void assist_mwait(Context& ctx);
+// VM
+void assist_vmrun(Context& ctx);
+void assist_vmcall(Context& ctx);
+void assist_vmload(Context& ctx);
+void assist_vmsave(Context& ctx);
+// STGI
+void assist_stgi(Context& ctx);
+// CLGI
+void assist_clgi(Context& ctx);
+// SKINIT
+void assist_skinit(Context& ctx);
+// INVLPGA
+void assist_invlpga(Context& ctx);
+void assist_invlpg(Context& ctx);
+// LMSW
+void assist_lmsw(Context& ctx);
 
 //
 // Global functions

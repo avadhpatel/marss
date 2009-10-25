@@ -453,6 +453,8 @@ void TraceDecoder::reset() {
   outcome = DECODE_OUTCOME_OK;
   stop_at_rip = limits<W64>::max;
   use32 = 1;
+  cs_base = 0;
+  hflags = 0;
   pe = 0;
   vm86 = 0;
 }
@@ -467,6 +469,8 @@ TraceDecoder::TraceDecoder(const RIPVirtPhys& rvp) {
   ss32 = rvp.ss32;
   kernel = rvp.kernel;
   dirflag = rvp.df;
+  hflags = rvp.hflags;
+  cs_base = rvp.cs_base;
 }
 
 TraceDecoder::TraceDecoder(Waddr rip, bool use64, bool kernel, bool df) {
@@ -491,6 +495,8 @@ TraceDecoder::TraceDecoder(Context& ctx, Waddr rip) {
   use64 = ctx.use64;
   use32 = ctx.use32;
   ss32 = (ctx.hflags >> HF_SS32_SHIFT) & 1;
+  hflags = ctx.hflags;
+  cs_base = ctx.segs[R_CS].base;
 #ifdef PTLSIM_HYPERVISOR
   kernel = ctx.kernel_mode;
 #else

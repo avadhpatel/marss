@@ -409,6 +409,10 @@ int ReorderBufferEntry::issue() {
     state.reg.rdflags = FLAG_INV;
     state.reg.rddata = EXCEPTION_Propagate;
     propagated_exception = 1;
+	if (logable(6)) {
+		ptl_logfile << "Invalid operands: ra[", ra, "] rb[", 
+					rb, "] rc[", rc, "] ", endl;
+	}
   } else {
     per_context_ooocore_stats_update(threadid, issue.opclass[opclassof(uop.opcode)]++);
 

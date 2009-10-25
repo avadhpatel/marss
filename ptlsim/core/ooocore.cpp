@@ -1202,7 +1202,7 @@ bool ThreadContext::handle_exception() {
   // rather than the processor itself.
   //
   bool write_exception = false;
-  Waddr exception_address = ROB[ROB.head].virtpage;
+  Waddr exception_address = ctx.cr[2];
   switch (ctx.exception) {
   case EXCEPTION_PageFaultOnRead:
 	  write_exception = false;
@@ -1212,6 +1212,10 @@ bool ThreadContext::handle_exception() {
 	  write_exception = true;
 	  goto handle_page_fault;
 handle_page_fault:
+	  if (logable(10)) 
+		  ptl_logfile << "Page fault exception address: ",
+					  hexstring(exception_address, 64), 
+					  " is_write: ", write_exception, endl;
 	  ctx.handle_page_fault(exception_address, write_exception);
 	  // If we return here means the QEMU has fix the page fault
 	  // witout causing any CPU faults so we can clear the pipeline
