@@ -5,13 +5,14 @@
 // Copyright of those functions by Matt Yourst
 
 #include <globals.h>
-#include <ptl-qemu.h>
 #include <ptlhwdef.h>
 #include <mm.h>
 
 extern "C" {
 #include <sysemu.h>
 }
+
+#include <ptl-qemu.h>
 
 #define __INSIDE_PTLSIM_QEMU__
 #include <ptlcalls.h>

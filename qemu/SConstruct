@@ -27,10 +27,6 @@ error_str = "failure"
 if "g++" in env['CC'] :
     env.Append(CCFLAGS = "-x c")
 
-# Add target directory to search for source files
-print("Repository is : %s" % target_path)
-Repository(target_path)
-
 # If we add user space emulator support then 
 # add user space compilation from QEMU's makefile
 

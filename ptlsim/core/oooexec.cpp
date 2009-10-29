@@ -2434,7 +2434,7 @@ int OutOfOrderCore::issue(int cluster) {
 
   int maxwidth = clusters[cluster].issue_width;
 
-  int prev_robid = -1;
+//  int prev_robid = -1;
   while (issuecount < maxwidth) {
     int iqslot;
     issueq_operation_on_cluster_with_result(getcore(), cluster, iqslot, issue());
@@ -2455,9 +2455,9 @@ int OutOfOrderCore::issue(int cluster) {
     ReorderBufferEntry& rob = thread->ROB[idx];
 
     rob.iqslot = iqslot;
-	assert(idx != prev_robid);
+//	assert(idx != prev_robid);
     int rc = rob.issue();
-	prev_robid = idx;
+//	prev_robid = idx;
     // Stop issuing from this cluster once something replays or has a mis-speculation
     issuecount++;
     if unlikely (rc <= 0) break;

@@ -178,7 +178,7 @@ extern "C" {
 //
 
 #include <globals.h>
-extern W64 sim_cycle;
+extern "C" W64 sim_cycle;
 #include <logic.h>
 #include <config.h>
 
