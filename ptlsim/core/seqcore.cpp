@@ -1184,7 +1184,7 @@ struct SequentialCore {
       // store to overwrite its own instruction bytes, but this update only
       // becomes visible after the store has committed.
       //
-      if unlikely (smc_isdirty(rvp.mfnlo) | (smc_isdirty(rvp.mfnhi))) {
+      if unlikely (ctx.smc_isdirty(rvp.rip)) {
         ptl_logfile << "Self-modifying code at rip ", rvp, " detected: mfn was dirty (invalidate and retry)", endl;
         bbcache.invalidate_page(rvp.mfnlo, INVALIDATE_REASON_SMC);
         if (rvp.mfnlo != rvp.mfnhi) bbcache.invalidate_page(rvp.mfnhi, INVALIDATE_REASON_SMC);
@@ -1337,7 +1337,7 @@ struct SequentialCore {
           }
 
           Waddr mfn = (sfr.physaddr << 3) >> 12;
-          smc_setdirty(mfn); // why is this being passed zero?
+          ctx.smc_setdirty(sfr.physaddr << 3); // why is this being passed zero?
         }
       } else if likely (uop.rd != REG_zero) {
         arf[uop.rd] = state.reg.rddata;

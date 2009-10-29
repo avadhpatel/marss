@@ -312,6 +312,14 @@ void assist_x87_finit(Context& ctx) {
   ctx.eip = ctx.reg_nextrip;
 }
 
+void assist_x87_fxch(Context& ctx) {
+	int reg = ctx.reg_ar1;
+
+	ASSIST_IN_QEMU(helper_fxchg_ST0_STN, reg);
+
+	ctx.eip = ctx.reg_nextrip;
+}
+
 //
 // FCOM and FCOMP (with pop) need to transform SSE-style flags
 // into x87 flags and write those flags to fpsw:
@@ -674,12 +682,16 @@ bool TraceDecoder::decode_x87() {
   case 0x611: { // fxch
     if (modrm.mod == 0x3) {
       EndOfDecode();
+	  // Call fxch assist
+	  this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero,
+			  3, modrm.rm);
+	  microcode_assist(ASSIST_X87_FXCH, ripstart, rip);
       // load from FP stack register
-      this << TransOp(OP_addm, REG_temp2, REG_fptos, REG_imm, REG_imm, 3, 8*modrm.rm, FP_STACK_MASK);
-      x87_load_stack(REG_temp0, REG_fptos);
-      x87_load_stack(REG_temp1, REG_temp2);
-      x87_store_stack(REG_fptos, REG_temp1);
-      x87_store_stack(REG_temp2, REG_temp0);
+//      this << TransOp(OP_addm, REG_temp2, REG_fptos, REG_imm, REG_imm, 3, 8*modrm.rm, FP_STACK_MASK);
+//      x87_load_stack(REG_temp0, REG_fptos);
+//      x87_load_stack(REG_temp1, REG_temp2);
+//      x87_store_stack(REG_fptos, REG_temp1);
+//      x87_store_stack(REG_temp2, REG_temp0);
     } else {
       MakeInvalid();
     }

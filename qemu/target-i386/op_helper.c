@@ -885,6 +885,8 @@ static void do_interrupt64(int intno, int is_int, int error_code,
     uint32_t e1, e2, e3, ss;
     target_ulong old_eip, esp, offset;
 
+//	printf("AAAAAAA-Handling interrupt %d\n", intno);
+
     has_error_code = 0;
     if (!is_int && !is_hw) {
         switch(intno) {

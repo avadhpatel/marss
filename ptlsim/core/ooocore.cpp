@@ -499,8 +499,9 @@ bool OutOfOrderCore::runcycle() {
     for_each_cluster(j) thread->transfer(j);
   }
 
-  if (logable(8)) {
+  if (logable(100)) {
 	  ptl_logfile << "OutOfOrderCore::run():context after commit\n";
+	  ptl_logfile << flush;
 	  foreach(x, threadcount) {
 		  ptl_logfile << threads[x]->ctx, endl;
 	  }
@@ -1119,6 +1120,9 @@ bool ThreadContext::handle_barrier() {
     ptl_logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
       (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
       ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
+//    cerr << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
+//      (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
+//      ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
   }
   
   if (logable(6)) ptl_logfile << "Calling assist function at ", (void*)assist, "...", endl, flush; 
@@ -1201,28 +1205,34 @@ bool ThreadContext::handle_exception() {
   // Exceptions not listed here are propagated by microcode
   // rather than the processor itself.
   //
-  bool write_exception = false;
-  Waddr exception_address = ctx.cr[2];
+  int write_exception = 0;
+  Waddr exception_address = ctx.page_fault_addr;
   switch (ctx.exception) {
   case EXCEPTION_PageFaultOnRead:
-	  write_exception = false;
+	  write_exception = 0;
 	  goto handle_page_fault;
   case EXCEPTION_PageFaultOnWrite:
-  case EXCEPTION_PageFaultOnExec:
-	  write_exception = true;
+	  write_exception = 1;
 	  goto handle_page_fault;
-handle_page_fault:
+  case EXCEPTION_PageFaultOnExec:
+	  write_exception = 2;
+	  goto handle_page_fault;
+handle_page_fault: {
 	  if (logable(10)) 
 		  ptl_logfile << "Page fault exception address: ",
 					  hexstring(exception_address, 64), 
 					  " is_write: ", write_exception, endl;
+	  int old_exception = ctx.exception_index;
 	  ctx.handle_page_fault(exception_address, write_exception);
 	  // If we return here means the QEMU has fix the page fault
 	  // witout causing any CPU faults so we can clear the pipeline
 	  // and continue from current eip
 	  flush_pipeline();
 	  ctx.exception = 0;
+	  ctx.exception_index = old_exception;
+	  ctx.exception_is_int = 0;
 	  return true;
+				   }
 	  break;
 //    ctx.exception_index = EXCEPTION_x86_page_fault; break;
   case EXCEPTION_FloatingPointNotAvailable:
@@ -1241,7 +1251,7 @@ handle_page_fault:
 
   // We are not coming back from this call so flush the pipeline
   // and all other things.
-  ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code, ctx.cr[2]);
+  ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code, ctx.page_fault_addr);
 
   // Flush again, but restart at modified rip
   if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline again.",endl;
@@ -2087,7 +2097,9 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 						  ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] Already stopped at cycle ", sim_cycle, endl;
 						  stopped[thread->ctx.cpu_index] = 1;
 					  } else {
-						  if (thread->ctx.check_events()) thread->handle_interrupt();
+//						  if (thread->ctx.check_events()) thread->handle_interrupt();
+						  if (thread->ctx.check_events()) 
+							  exiting = 1;
 					  }
 					  continue;
 				  }
@@ -2166,9 +2178,11 @@ if unlikely (stopping) {
       // ptl_logfile << "Waiting for all VCPUs to stop at ", sim_cycle, ": mask = ", stopped, " (need ", contextcount, " VCPUs)", endl;
       exiting |= (stopped.integer() == bitmask(contextcount));
     }
-   if unlikely (config.wait_all_finished && !running_thread){
+   if unlikely (config.wait_all_finished && !running_thread ||
+		   config.stop_at_user_insns <= total_user_insns_committed){
       ptl_logfile << "Stopping simulation loop at specified limits (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl;
       exiting = 1;
+	  stopping = 1;
       break;
     }
     if unlikely (exiting) break;

@@ -149,6 +149,11 @@ extern W64 total_uops_committed;
 extern W64 total_user_insns_committed;
 extern W64 total_basic_blocks_committed;
 
+#define TRACE_RIP
+#ifdef TRACE_RIP
+extern ofstream ptl_rip_trace;
+#endif
+
 #define INVALIDRIP 0xffffffffffffffffULL
 
 // 

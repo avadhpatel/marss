@@ -45,9 +45,11 @@ void OutOfOrderCoreCacheCallbacks::icache_wakeup(LoadStoreInfo lsi, W64 physaddr
     ThreadContext* thread = core.threads[i];
     if unlikely (thread 
                  && thread->waiting_for_icache_fill 
-                 && (floor(thread->waiting_for_icache_fill_physaddr,
-                           Memory::L1I_LINE_SIZE) == 
-					 floor(physaddr, Memory::L1I_LINE_SIZE))) {
+				 && thread->waiting_for_icache_fill_physaddr ==
+					floor(physaddr, ICACHE_FETCH_GRANULARITY)) {
+//                 && (floor(thread->waiting_for_icache_fill_physaddr,
+//                           Memory::L1I_LINE_SIZE) == 
+//					 floor(physaddr, Memory::L1I_LINE_SIZE))) {
       if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
       thread->waiting_for_icache_fill = 0;
       thread->waiting_for_icache_fill_physaddr = 0;
@@ -479,7 +481,8 @@ bool ThreadContext::fetch() {
       fetch_bb_address_ringbuf_head = add_index_modulo(fetch_bb_address_ringbuf_head, +1, lengthof(fetch_bb_address_ringbuf));
 	  assert((W64)(fetchrip) != 0);
 	  ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
-      fetch_or_translate_basic_block(fetchrip);
+      if(fetch_or_translate_basic_block(fetchrip) == null)
+		  break;
     }
 
     if unlikely (current_basic_block->invalidblock) {
@@ -679,10 +682,11 @@ bool ThreadContext::fetch() {
         transop.synthop = get_synthcode_for_cond_branch(transop.opcode, transop.cond, transop.size, 0);
         swap(transop.riptaken, transop.ripseq);
       }
-    } else if unlikely (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)) {
-      transop.riptaken = predrip;
-      transop.ripseq = predrip;
-    }
+    } 
+//	else if unlikely (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)) {
+//      transop.riptaken = predrip;
+//      transop.ripseq = predrip;
+//    }
 
     per_context_ooocore_stats_update(threadid, fetch.opclass[opclassof(transop.opcode)]++);
 
@@ -736,6 +740,7 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
     current_basic_block = bb;
   } else {
     current_basic_block = bbcache.translate(ctx, rvp);
+	if (current_basic_block == null) return null;
     assert(current_basic_block);
     if unlikely (config.event_log_enabled) {
       OutOfOrderCoreEvent* event = core.eventlog.add(EVENT_FETCH_TRANSLATE, rvp);
@@ -1702,6 +1707,12 @@ int ThreadContext::commit() {
       core.commitcount++;
       last_commit_at_cycle = sim_cycle;
 
+#ifdef TRACE_RIP
+	  ptl_rip_trace << "Commit rip: ", 
+					hexstring(rob.uop.rip.rip, 64), " \tkernel: ",
+					rob.uop.rip.kernel, endl, flush;
+#endif
+
 #ifdef WATTCH //read from spec_rename and write to rename(commit)
 	power_ooo_core_stats_update(core.coreid, spec_rename.read)++;
 	power_ooo_core_stats_update(core.coreid, rename.write)++;
@@ -1737,6 +1748,10 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
       assert(false);
     }
 
+	if(logable(8)) {
+		ptl_logfile << "Releasing mem lock of addr: ", lockaddr, 
+					" from cpu: ", ctx.cpu_index, endl;
+	}
     if unlikely (config.event_log_enabled) {
       OutOfOrderCoreEvent* event = core.eventlog.add(EVENT_RELEASE_MEM_LOCK);
       event->threadid = ctx.cpu_index;
@@ -1865,7 +1880,8 @@ int ReorderBufferEntry::commit() {
       // Capture the faulting virtual address for page faults
       if ((ctx.exception == EXCEPTION_PageFaultOnRead) |
           (ctx.exception == EXCEPTION_PageFaultOnWrite)) {
-        ctx.cr[2] = subrob.origvirt;
+		  ctx.page_fault_addr = subrob.origvirt;
+//        ctx.cr[2] = subrob.origvirt;
       }
 #endif
 
@@ -1891,6 +1907,12 @@ int ReorderBufferEntry::commit() {
   if unlikely (!all_ready_to_commit) {
     per_context_ooocore_stats_update(threadid, commit.result.none++);
     return COMMIT_RESULT_NONE;
+  }
+
+  if(logable(10)) {
+	  ptl_logfile << "Committing ROB entry: ", *this, 
+				  " destreg_value:", hexstring(physreg->data, 64),
+				  endl, superstl::flush;
   }
 
   PhysicalRegister* oldphysreg = thread.commitrrt[uop.rd];
@@ -1935,7 +1957,7 @@ int ReorderBufferEntry::commit() {
   // becomes visible after the store has committed.
   //
   bool page_crossing = ((lowbits(uop.rip.rip, 12) + (uop.bytes-1)) >> 12);
-  if unlikely (smc_isdirty(uop.rip.mfnlo) | (page_crossing && smc_isdirty(uop.rip.mfnhi))) {
+  if unlikely (thread.ctx.smc_isdirty(uop.rip.physaddr)) {
     if unlikely (config.event_log_enabled) core.eventlog.add_commit(EVENT_COMMIT_SMC_DETECTED, this);
 
     //
@@ -1977,6 +1999,8 @@ int ReorderBufferEntry::commit() {
     MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
 
     if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
+		ptl_logfile << "Can't commit because of memory lock\n";
+		cerr << "Can't commit because of memory lock\n";
       if unlikely (config.event_log_enabled) core.eventlog.add_commit(EVENT_COMMIT_MEM_LOCKED, this);
 
       per_context_ooocore_stats_update(threadid, commit.result.memlocked++);
@@ -2043,6 +2067,8 @@ int ReorderBufferEntry::commit() {
 
   if (st) assert(lsq->addrvalid && lsq->datavalid);
 
+  if (ld) physreg->data = lsq->data;
+
   W64 result = physreg->data;
 
 #ifdef WATTCH
@@ -2054,11 +2080,24 @@ int ReorderBufferEntry::commit() {
 #endif
 #endif
 
+  if (logable(10)) {
+	  ptl_logfile << "ROB Commit RIP check...\n", flush;
+  }
+
 //  assert(ctx.eip == uop.rip);
+	if(ctx.get_cs_eip() != uop.rip.rip) {
+		ptl_logfile << "RIP dont match at commit time:\n";
+		thread.dump_smt_state(ptl_logfile);
+		ptl_logfile << flush;
+	}
   assert(ctx.get_cs_eip() == uop.rip);
 
 //  if likely (uop.som) assert(ctx.eip == uop.rip); 
   if likely (uop.som) assert(ctx.get_cs_eip() == uop.rip); 
+
+  if (logable(10)) {
+	  ptl_logfile << "ROB Commit RIP check Done...\n", flush;
+  }
 
   //
   // The commit of all uops in the x86 macro-op is guaranteed to happen after this point
@@ -2086,6 +2125,19 @@ int ReorderBufferEntry::commit() {
   if likely (uop.eom) {
     if unlikely (uop.rd == REG_rip) {
       assert(isbranch(uop.opcode));
+	  ptl_logfile << "destination is REG_rip : ", physreg->data, endl, flush;
+	  if(uop.riptaken != physreg->data) {
+		  if(logable(6)) {
+			  ptl_logfile << "branch misprediction: assumed-rip: ",
+						  uop.riptaken, " actual-rip: ", physreg->data,
+						  endl;
+		  }
+		  // Annul the remaining ROB entries and fetch new code
+		  thread.annul_fetchq();
+		  annul_after();
+		  thread.reset_fetch_unit(physreg->data);
+		  per_context_ooocore_stats_update(threadid, issue.result.branch_mispredict++);
+	  }
       ctx.eip = physreg->data;
 //      ctx.eip = (physreg->data - ctx.segs[R_CS].base);
     } else {
@@ -2123,7 +2175,7 @@ int ReorderBufferEntry::commit() {
 
   if unlikely (uop.opcode == OP_st) {
     Waddr mfn = (lsq->physaddr << 3) >> 12;
-    smc_setdirty(mfn);
+    thread.ctx.smc_setdirty(lsq->physaddr << 3);
 
     if(!config.use_new_memory_system){
       if (lsq->bytemask) {
@@ -2149,7 +2201,11 @@ int ReorderBufferEntry::commit() {
       
 #ifdef NEW_MEMORY      
       //      if (lsq->bytemask) assert(core.memoryHierarchy.access_dcache_write(core.coreid, 0, &lsi, lsq));
-      if (lsq->bytemask) {
+		if(uop.internal) {
+			thread.ctx.store_internal(lsq->virtaddr, lsq->data,
+					lsq->bytemask);
+		} else if(lsq->bytemask){
+//      if (lsq->bytemask) {
         assert(lsq->physaddr);
         assert(core.memoryHierarchy.access_cache(core.coreid, 
                                                  threadid,
@@ -2160,7 +2216,10 @@ int ReorderBufferEntry::commit() {
                                                  false/* icache */, 
                                                  true/* is write*/));
         // update memory img:
-        thread.ctx.storemask(lsq->physaddr << 3, lsq->data, lsq->bytemask);
+//        thread.ctx.storemask(lsq->physaddr << 3, lsq->data, lsq->bytemask);
+//        thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
+		assert(lsq->virtaddr > 0xfff);
+		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
       }
 #endif
     }
@@ -2255,6 +2314,10 @@ int ReorderBufferEntry::commit() {
 #ifdef WATTCH
 	power_ooo_core_stats_update(core.coreid, committed)++;
 #endif
+  }
+
+  if (logable(10)) {
+	  ptl_logfile << "ROB Commit Done...\n", flush;
   }
 
   stats.summary.uops++;

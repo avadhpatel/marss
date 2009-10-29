@@ -270,7 +270,7 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 //		printf("Back from simulation mode eip: %ld\n", env->eip);
 //		return 0;
 //	}
-//	if(!in_simulation){
+//	if(!do_simulate){
 		// We dont clear exception_index in PTLQEMU mode
 		// because we might have pending exception from 
 		// simulation mode
@@ -376,13 +376,14 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 //					if(env->current_tb != NULL)
 //						cpu_pc_from_tb(env, env->current_tb);
 //					longjmp(env->jmp_env, 1);
-					if(do_simulate) {
+//					if(do_simulate) {
 //						printf("Going into simulation mode eip: %ld\n", env->eip);
-						regs_to_env();
+//						regs_to_env();
+//						env->exception_index = -1;
 						in_simulation = ptl_simulate();
-//						printf("Back from simulation mode eip: %ld\n", env->eip);
+						printf("Back from simulation mode eip: %ld\n", env->eip);
 //						return 0;
-					} 
+//					} 
                     cpu_loop_exit();
 				}
 #endif
@@ -698,10 +699,10 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
             } /* for(;;) */
         } else {
             env_to_regs();
-#ifdef PTLSIM_QEMU
-			if(in_simulation) 
-				break;
-#endif
+//#ifdef PTLSIM_QEMU
+//			if(in_simulation) 
+//				break;
+//#endif
         }
     } /* for(;;) */
 

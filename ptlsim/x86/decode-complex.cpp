@@ -95,6 +95,10 @@ void assist_syscall(Context& ctx) {
   // REG_rip is filled out for us
 }
 
+void assist_sysret(Context& ctx) {
+	ASSIST_IN_QEMU(helper_sysret, ctx.use64);
+}
+
 void assist_hypercall(Context& ctx) {
 	cerr << "assist_hypercall is called, ", \
 		 "this function should not be called in QEMU\n";
@@ -480,14 +484,11 @@ void assist_rdtsc(Context& ctx) {
 // Pop from stack into flags register, with checking for reserved bits
 //
 void assist_popf(Context& ctx) {
-	ASSIST_IN_QEMU(helper_fpop);
-//	ctx.setup_qemu_switch();
-//	helper_fpop();
-//  W32 flags = ctx.reg_ar1;
-//  // bit 1 is always '1', and bits {3, 5, 15} are always '0':
-//  flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
-//  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
-//  ctx.eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
+  W32 flags = ctx.reg_ar1;
+  // bit 1 is always '1', and bits {3, 5, 15} are always '0':
+  flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
+  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
+  ctx.eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
   ctx.eip = ctx.reg_nextrip;
 
   // Update internal flags too (only update non-standard flags in internal_flags_bits):
@@ -620,6 +621,7 @@ void assist_fxrstor(Context& ctx) {
 void assist_wrmsr(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_wrmsr);
+  ctx.eip = ctx.reg_nextrip;
 //  ctx.setup_qemu_switch();
 //  helper_wrmsr();
 //
@@ -661,6 +663,7 @@ void assist_rdmsr(Context& ctx) {
 //  ctx.setup_qemu_switch();
 //  helper_rdmsr();
 	ASSIST_IN_QEMU(helper_rdmsr);
+	ctx.eip = ctx.reg_nextrip;
 
 //#ifdef PTLSIM_HYPERVISOR
 //  if (ctx.kernel_mode) {
@@ -867,12 +870,29 @@ static inline ostream& operator <<(ostream& os, const IRETStackFrame& iretctx) {
 }
 
 void assist_iret64(Context& ctx) {
-	ctx.setup_qemu_switch();
-	// Avadh: Here we are calling interrupt return from real mode
-	// in QEMU wit shift type as 32 bit, Not sure this is correct
-	// or not.
-	ASSIST_IN_QEMU(helper_iret_real, 1);
-//	helper_iret_real(1);
+	bool pe;
+	bool vm86;
+
+	pe = (ctx.hflags >> HF_PE_SHIFT) & 1;
+	vm86 = (ctx.eflags >> VM_SHIFT) & 1;
+
+	cerr << "Iret called: Context: ", ctx, endl;
+
+	if(!pe) {
+		// Real mode interrupt
+		ASSIST_IN_QEMU(helper_iret_real, 1);
+	} else if(vm86) {
+		if(!ctx.kernel_mode) {
+			assist_gp_fault(ctx);
+		} else {
+			ASSIST_IN_QEMU(helper_iret_real, 1);
+		}
+	} else {
+		W64 eip = ctx.eip - ctx.segs[R_CS].base;
+		ASSIST_IN_QEMU(helper_iret_protected, 1, eip);
+	}
+
+	cerr << "Iret completed: Context: ", ctx, endl;
 
 //#ifdef PTLSIM_HYPERVISOR
 //  IRETStackFrame frame;
@@ -1639,8 +1659,9 @@ bool TraceDecoder::decode_complex() {
   case 0xcf: {
     // IRET
     EndOfDecode();
-    int assistid = (use64) ? (opsize_prefix ? ASSIST_IRET32 : ASSIST_IRET64) : (opsize_prefix ? ASSIST_IRET16 : ASSIST_IRET32);
-    microcode_assist(assistid, ripstart, rip);
+//    int assistid = (use64) ? (opsize_prefix ? ASSIST_IRET32 : ASSIST_IRET64) : (opsize_prefix ? ASSIST_IRET16 : ASSIST_IRET32);
+//    microcode_assist(assistid, ripstart, rip);
+	microcode_assist(ASSIST_IRET64, ripstart, rip);
     end_of_block = 1;
     break;
   }
@@ -1993,6 +2014,8 @@ bool TraceDecoder::decode_complex() {
 	int sizeshift;
 	TransOp* st1;
 	TransOp* st2;
+	cerr << "0x101 opcode is called...", endl, superstl::flush;
+	ptl_logfile << "0x101 opcode is called...", endl, superstl::flush;
 	switch(modrm.reg) {
 		case 0: // sgdt
 			// Get the address in ra 
@@ -2040,7 +2063,7 @@ bool TraceDecoder::decode_complex() {
 								FLAGS_DEFAULT_ALU);
 						this << TransOp(OP_jmp, REG_rip, REG_zero,
 								REG_imm, REG_zero, 3, 
-								ripstart - cs_base);
+								ripstart);
 
 						sizeshift = (use64) ? 3 : 2;
 						this << TransOp(OP_mov, REG_ar1, REG_rax,
@@ -2075,7 +2098,7 @@ bool TraceDecoder::decode_complex() {
 
 						this << TransOp(OP_jmp, REG_rip, REG_zero,
 								REG_imm, REG_zero, 3, 
-								ripstart - cs_base);
+								ripstart);
 
 						this << TransOp(OP_mov, REG_ar1, REG_zero,
 								REG_imm, REG_zero, 3, rip - ripstart);
@@ -2122,7 +2145,7 @@ bool TraceDecoder::decode_complex() {
 				this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, 
 						REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
 				this << TransOp(OP_jmp, REG_rip, REG_zero,
-						REG_imm, REG_zero, 3, ripstart - cs_base);
+						REG_imm, REG_zero, 3, ripstart);
 				switch(modrm.rm) {
 					case 0: // VMRUN
 						if (!(hflags & HF_SVME_MASK) || !pe)
@@ -2290,12 +2313,12 @@ bool TraceDecoder::decode_complex() {
 							REG_cf, REG_of, 3, 0, 0, 
 							FLAGS_DEFAULT_ALU);
 					this << TransOp(OP_jmp, REG_rip, REG_zero,
-							REG_imm, REG_zero, 3, ripstart - cs_base);
+							REG_imm, REG_zero, 3, ripstart);
 					operand_load(REG_ar1, ra);
 					microcode_assist(ASSIST_INVLPG,
 							ripstart, rip);
 					this << TransOp(OP_jmp, REG_rip, REG_zero,
-							REG_imm, REG_zero, 3, rip - cs_base);
+							REG_imm, REG_zero, 3, rip);
 					end_of_block = 1;
 				}
 			}
@@ -2311,21 +2334,27 @@ invalid_opcode:
 
   case 0x10b: { // ud2a
 #ifdef PTLSIM_HYPERVISOR
+	// Simply generate NOP
+	// TODO: In actual execution we have to generate invalid opcode
+	// exception
+	EndOfDecode();
+    this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
+	
     //
     // ud2a is special under Xen: if the {0x0f, 0x0b} opcode is followed by
     // the bytes {0x78, 0x65, 0x6e} ("xen"), we check the next instruction
     // in sequence and modify its behavior in a Xen-specific manner. The
     // only supported instruction is CPUID {0x0f, 0xa2}, which Xen extends.
     //
-    if (((valid_byte_count - ((int)(rip - (Waddr)bb.rip))) >= 5) && 
-        (fetch(5) == 0xa20f6e6578)) { // 78 65 6e 0f a2 = 'x' 'e' 'n' <cpuid>
-      // ptl_logfile << "Decode special intercept cpuid at rip ", (void*)ripstart, "; return to rip ", (void*)rip, endl;
-      EndOfDecode();
-      microcode_assist(ASSIST_CPUID, ripstart, rip);
-      end_of_block = 1;
-    } else {
-      MakeInvalid();
-    }
+//    if (((valid_byte_count - ((int)(rip - (Waddr)bb.rip))) >= 5) && 
+//        (fetch(5) == 0xa20f6e6578)) { // 78 65 6e 0f a2 = 'x' 'e' 'n' <cpuid>
+//      // ptl_logfile << "Decode special intercept cpuid at rip ", (void*)ripstart, "; return to rip ", (void*)rip, endl;
+//      EndOfDecode();
+//      microcode_assist(ASSIST_CPUID, ripstart, rip);
+//      end_of_block = 1;
+//    } else {
+//      MakeInvalid();
+//    }
 #else
     MakeInvalid();
 #endif
@@ -2915,9 +2944,18 @@ invalid_opcode:
     // Saves return address into %rcx and jumps to MSR_LSTAR
     EndOfDecode();
     abs_code_addr_immediate(REG_rcx, 3, (Waddr)rip);
-    microcode_assist((kernel) ? ASSIST_HYPERCALL : ASSIST_SYSCALL, ripstart, rip);
+//    microcode_assist((kernel) ? ASSIST_HYPERCALL : ASSIST_SYSCALL, ripstart, rip);
+    microcode_assist(ASSIST_SYSCALL, ripstart, rip);
     end_of_block = 1;
     break;
+  }
+
+  case 0x107: {
+	// sysret
+	EndOfDecode();
+	microcode_assist(ASSIST_SYSRET, ripstart, rip);
+	end_of_block = 1;
+	break;
   }
 
   case 0x134: {

@@ -469,7 +469,7 @@ void exp_op_mask(IssueState& state, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbf
   W64 M = x86_ror<T>(bitmask(mc), ms);
   W64 rd = (ra & ~M) | (x86_ror<T>(rb, ds) & M);
 
-#if 0
+//#if 0
   // For debugging purposes:
   if unlikely (logable(5)) {
     ptl_logfile << "mask [", sizeof(T), ", ", ZEROEXT, ", ", SIGNEXT, ", ss = ", sizeshift, ", mcms ", mcms, " [shmask ", bitstring(shmask, 18), " (ms=", ms, " mc=", mc, " ds=", ds, " (mcms ", mcms, "))]:", endl;
@@ -480,7 +480,7 @@ void exp_op_mask(IssueState& state, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbf
     ptl_logfile << "  rc     = ", hexstring(rc, 64), endl;
     ptl_logfile << "  initrd = ", hexstring(rd, 64), endl;
   }
-#endif
+//#endif
 
   if (ZEROEXT) {
     // rd = rd & 1'[(ms+mc-1):0]

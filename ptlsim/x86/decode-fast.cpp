@@ -498,6 +498,8 @@ bool TraceDecoder::decode_fast() {
     addend = size + addend;
 
     this << TransOp(OP_ld, REG_temp7, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
+	this << TransOp(OP_add, REG_temp7, REG_temp7, REG_imm, REG_zero,
+			sizeshift, cs_base);
     this << TransOp(OP_add, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, addend);
     if (!last_flags_update_was_atomic)
       this << TransOp(OP_collcc, REG_temp5, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
@@ -582,6 +584,9 @@ bool TraceDecoder::decode_fast() {
 
     if (iscall) {
       abs_code_addr_immediate(REG_temp0, 3, (Waddr)rip);
+	  // Remove the CS base address from rip
+	  this << TransOp(OP_sub, REG_temp0, REG_temp0, REG_imm, REG_zero,
+			  sizeshift, cs_base);
       this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_temp0, sizeshift, -(1 << sizeshift));
       this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, sizeshift, (1 << sizeshift));
     }
@@ -589,6 +594,10 @@ bool TraceDecoder::decode_fast() {
     if (!last_flags_update_was_atomic)
       this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
     TransOp transop(OP_bru, REG_rip, REG_zero, REG_zero, REG_zero, 3);
+
+	ptl_logfile << "branch call or jmp: rip: ", hexstring(rip, 64),
+				" ra.imm.imm: ", hexstring((W64s)ra.imm.imm, 64),
+				endl;
     transop.extshift = (iscall) ? BRANCH_HINT_PUSH_RAS : 0;
     transop.riptaken = (Waddr)rip + (W64s)ra.imm.imm;
     transop.ripseq = (Waddr)rip + (W64s)ra.imm.imm;
@@ -690,6 +699,8 @@ bool TraceDecoder::decode_fast() {
         if (use64 && (rashift == 2)) rashift = 3;
         if (iscall) {
           abs_code_addr_immediate(REG_temp6, 3, (Waddr)rip);
+		  this << TransOp(OP_sub, REG_temp6, REG_temp6, REG_imm,
+				  REG_zero, sizeshift, cs_base);
           this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_temp6, sizeshift, -(1 << sizeshift));
           this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, sizeshift, 1 << sizeshift);
         }
@@ -704,6 +715,8 @@ bool TraceDecoder::decode_fast() {
         operand_load(REG_temp0, ra);
         if (iscall) {
           abs_code_addr_immediate(REG_temp6, 3, (Waddr)rip);
+		  this << TransOp(OP_sub, REG_temp6, REG_temp6, REG_imm,
+				  REG_zero, sizeshift, cs_base);
           this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_temp6, sizeshift, -(1 << sizeshift));
           this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, sizeshift, 1 << sizeshift);
         }

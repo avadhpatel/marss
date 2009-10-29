@@ -239,6 +239,7 @@ struct RIPVirtPhysBase {
   W32 use32:1, ss32:1;
   W64 hflags;
   W64 cs_base;
+  W64 physaddr;
 
   // 28 bits + 12 page offset bits = 40 bit physical addresses
   static const Waddr INVALID = 0xfffffff;
@@ -285,6 +286,7 @@ static inline ostream& operator <<(ostream& os, const RIPVirtPhys& rvp) { return
 struct SFR {
   W64 data;
   W64 addrvalid:1, invalid:1, datavalid:1, physaddr:45, bytemask:8, tag:8;
+  W64 virtaddr;
 };
 
 stringbuf& operator <<(stringbuf& sb, const SFR& sfr);
@@ -921,6 +923,8 @@ struct Context: public CPUX86State {
   W64 reg_ctx;
   W64 reg_fptag;
   W64 reg_flags;
+  W64 reg_fptos;
+  W64 page_fault_addr;
 
   void change_runstate(int new_state) { running = new_state; }
 
@@ -948,6 +952,9 @@ struct Context: public CPUX86State {
 
   void setup_ptlsim_switch() {
 	  eip = eip + segs[R_CS].base;
+	  cs_segment_updated();
+	  update_mode((hflags & HF_CPL_MASK) == 0);
+	  reg_fptos = fpstt << 3;
   }
 
   Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code=0); //, PTEUpdate& pteupdate, Level1PTE& pteused);
@@ -973,25 +980,69 @@ struct Context: public CPUX86State {
   //  return copy_from_user(target, source, bytes, pfec, faultaddr, forexec, ptelo, ptehi);
   //}
 
+  CPUTLBEntry* get_tlb_entry(Waddr virtaddr) {
+	  int mmu_idx = cpu_mmu_index((CPUX86State*)this);
+	  int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+
+	  return &tlb_table[mmu_idx][index];
+  }
+
   int copy_from_user(void* target, Waddr source, int bytes) ;
 
-  W64 loadphys(Waddr addr) ;//{
-//	  W64 data = 0;
-//	  setup_qemu_switch();
-//	  data = ldq_phys(addr);
-//	  setup_ptlsim_switch();
-//	  return data;
-//  }
+  W64 loadvirt(Waddr virtaddr, int sizeshift=3);
+  W64 loadphys(Waddr addr, bool internal=0, int sizeshift=3);
 
-  W64 storemask(Waddr paddr, W64 data, byte bytemask) ;//{
-//	  W64 old_data = 0;
-//	  setup_qemu_switch();
-//	  old_data = ldq_phys(paddr);
-//	  W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
-//	  stq_phys(paddr, data);
-//	  return data;
-//  }
+  W64 storemask_virt(Waddr paddr, W64 data, byte bytemask);
+  W64 storemask(Waddr paddr, W64 data, byte bytemask) ;
+  W64 store_internal(Waddr addr, W64 data, byte bytemask);
 
+  // SMC code support
+  bool smc_isdirty(Waddr virtaddr) {
+
+	  CPUTLBEntry *tlb_entry = get_tlb_entry(virtaddr);;
+	  W64 tlb_addr = tlb_entry->addr_code;
+
+	  if((virtaddr & TARGET_PAGE_MASK) != tlb_addr) {
+		  // if not tlb entry found assume we are not modifying
+		  // and code
+		  return false;
+	  }
+
+	  ram_addr_t ram_addr;
+	  ram_addr = (tlb_addr & TARGET_PAGE_MASK) + tlb_entry->addend -
+		  (unsigned long)(phys_ram_base);
+
+	  bool dirty = false;
+	  setup_qemu_switch();
+	  dirty = cpu_physical_memory_is_dirty(ram_addr);
+	  setup_ptlsim_switch();
+
+	  return dirty;
+  }
+
+  void smc_setdirty(Waddr virtaddr) {
+
+	  CPUTLBEntry *tlb_entry = get_tlb_entry(virtaddr);;
+	  W64 tlb_addr = tlb_entry->addr_code;
+
+	  if((virtaddr & TARGET_PAGE_MASK) != tlb_addr) {
+		  // if not tlb entry found assume we are not modifying
+		  // and code
+		  return ;
+	  }
+
+	  ram_addr_t ram_addr;
+	  ram_addr = (tlb_addr & TARGET_PAGE_MASK) + tlb_entry->addend -
+		  (unsigned long)(phys_ram_base);
+
+	  setup_qemu_switch();
+	  cpu_physical_memory_set_dirty(ram_addr);
+	  setup_ptlsim_switch();
+  }
+
+  void smc_cleardirty(Waddr virtaddr) {
+	  //TODO
+  }
   //  PageFaultErrorCode pfec;
   //  Waddr faultaddr;
   //  return copy_from_user(target, source, bytes, pfec, faultaddr, false);
@@ -1058,19 +1109,19 @@ struct Context: public CPUX86State {
 			  return (W64&)(xmm_regs[i]._d[1]);
 		  }
 	  }
-	  else if(index == 48) {
-		  return (W64&)fpstt;
+	  else if(index == REG_fptos) {
+		  return reg_fptos;
 	  } 
-	  else if(index == 49) {
+	  else if(index == REG_fpsw) {
 		  return (W64&)fpus;
 	  } 
-	  else if(index == 50) {
+	  else if(index == REG_fptags) {
 		  foreach(i, 8) {
 			  reg_fptag |= ((W64(fptags[i])) << 8*i);
 		  }
 		  return reg_fptag;
 	  } 
-	  else if(index == 51) {
+	  else if(index == REG_fpstack) {
 		  return (W64&)(fpregs[0]);
 	  } 
 	  else if(index == 52) {

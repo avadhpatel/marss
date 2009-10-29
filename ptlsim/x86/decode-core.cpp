@@ -79,6 +79,7 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   assist_x87_frstor,
   assist_x87_finit,
   assist_x87_fclex,
+  assist_x87_fxch,
   // SSE save/restore
   assist_ldmxcsr,
   assist_fxsave,
@@ -86,6 +87,7 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   // Interrupts, system calls, etc.
   assist_int,
   assist_syscall,
+  assist_sysret,
   assist_hypercall,
   assist_ptlcall,
   assist_sysenter,
@@ -112,6 +114,30 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   // Jumps
   assist_ljmp,
   assist_ljmp_prct,
+  // BCD
+  assist_bcd_aas,
+  // SVM
+  assist_svm_check,
+  // Monitor
+  assist_monitor,
+  // MWait
+  assist_mwait,
+  // VM
+  assist_vmrun,
+  assist_vmcall,
+  assist_vmload,
+  assist_vmsave,
+  // STGI
+  assist_stgi,
+  // CLGI
+  assist_clgi,
+  // SKIntT
+  assist_skinit,
+  // INVLPGA
+  assist_invlpga,
+  assist_invlpg,
+  // LMSW
+  assist_lmsw,
 };
 
 int assist_index(assist_func_t assist) {
@@ -1526,7 +1552,7 @@ bool BasicBlockCache::invalidate_page(Waddr mfn, int reason) {
 
   BasicBlockChunkList* pagelist = bbpages.get(mfn);
 
-  if (logable(3) | log_code_page_ops) ptl_logfile << "Invalidate page mfn ", mfn, ": pagelist ", pagelist, " has ", (pagelist ? pagelist->count() : 0), " entries (dirty? ", smc_isdirty(mfn), ")", endl;
+  if (logable(3) | log_code_page_ops) ptl_logfile << "Invalidate page mfn ", mfn, ": pagelist ", pagelist, " has ", (pagelist ? pagelist->count() : 0), " entries", endl; // (dirty? ", smc_isdirty(mfn), ")", endl;
 
   smc_cleardirty(mfn);
 
@@ -1804,7 +1830,11 @@ bool TraceDecoder::invalidate() {
     if (outcome == DECODE_OUTCOME_OK) outcome = DECODE_OUTCOME_INVALID_OPCODE;
 
     ptl_logfile << "Invalid opcode at ", (void*)ripstart, ": split_invalid_basic_blocks ", split_invalid_basic_blocks, ", first_insn_in_bb? ", first_insn_in_bb(), endl;
+    cerr << "Invalid opcode at ", (void*)ripstart, ": split_invalid_basic_blocks ", split_invalid_basic_blocks, ", first_insn_in_bb? ", first_insn_in_bb(), endl;
     print_invalid_insns(op, (const byte*)ripstart, (const byte*)rip, valid_byte_count, 0, faultaddr);
+	ptl_logfile << superstl::flush;
+
+	assert(0);
 
     if likely (split_invalid_basic_blocks && (!first_insn_in_bb())) {
       //
@@ -2120,7 +2150,10 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
   byte insnbuf[MAX_BB_BYTES];
 
   TraceDecoder trans(rvp);
-  trans.fillbuf(ctx, insnbuf, sizeof(insnbuf));
+//  trans.fillbuf(ctx, insnbuf, sizeof(insnbuf));
+  if(trans.fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
+	  return null;
+  }
 
   if (logable(5) | log_code_page_ops) {
     ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;

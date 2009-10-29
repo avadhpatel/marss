@@ -1250,9 +1250,9 @@ int64_t qemu_get_clock(QEMUClock *clock)
     default:
     case QEMU_TIMER_VIRTUAL:
 #ifdef PTLSIM_QEMU
-		if (in_simulation) {
-			return cpu_get_sim_clock();
-		} 
+//		if (in_simulation) {
+//			return cpu_get_sim_clock();
+//		} 
 #endif
         if (use_icount) {
             return cpu_get_icount();
@@ -1379,7 +1379,7 @@ static void host_alarm_handler(int host_signum)
 #ifdef PTLSIM_QEMU
 //		if (in_simulation)
 //			update_progress();
-		if (env && !in_simulation) {
+		if (env ) { //&& !in_simulation) {
 #else
         if (env) {
 #endif
@@ -3955,7 +3955,7 @@ static int main_loop(void)
 
 #ifdef PTLSIM_QEMU
 			if(in_simulation && !exception_pending) {
-				cpu_exec(first_cpu, 1);
+//				cpu_exec(first_cpu, 1);
 				timeout = 0;
 //				printf("Going into simulation mode\n");
 //				in_simulation = ptl_simulate();

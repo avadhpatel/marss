@@ -31,6 +31,9 @@ PTLsimStats stats;
 PTLsimMachine ptl_machine;
 
 ofstream ptl_logfile;
+#ifdef TRACE_RIP
+ofstream ptl_rip_trace;
+#endif
 ofstream trace_mem_logfile;
 bool logenable = 0;
 W64 sim_cycle = 0;
@@ -417,6 +420,9 @@ void backup_and_reopen_logfile() {
     sys_unlink(oldname);
     sys_rename(config.log_filename, oldname);
     ptl_logfile.open(config.log_filename);
+#ifdef TRACE_RIP
+	ptl_rip_trace.open("ptl_rip_trace");
+#endif
   }
 }
 
@@ -848,10 +854,11 @@ extern "C" uint8_t ptl_simulate() {
 //		ptl_logfile << "Context[", ctx_no, "]:", endl, 
 //					contextof(ctx_no), endl;
 		Context& ctx = contextof(ctx_no);
-		ctx.cs_segment_updated();
-		ctx.set_eip_ptlsim();
-		ctx.update_mode(
-				(((CPUX86State*)(&ctx))->hflags & HF_CPL_MASK) == 0);
+		ctx.setup_ptlsim_switch();
+//		ctx.cs_segment_updated();
+//		ctx.set_eip_ptlsim();
+//		ctx.update_mode(
+//				(((CPUX86State*)(&ctx))->hflags & HF_CPL_MASK) == 0);
 		ctx.running = 1;
 	}
 
@@ -1047,8 +1054,6 @@ void shutdown_subsystems() {
 }
 
 RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
-  W64 phyaddr;
-  bool invalid;
 
   use64 = ctx.use64;
   use32 = ctx.use32;
@@ -1060,11 +1065,20 @@ RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
   padlo = 0;
   padhi = 0;
 
+  int exception = 0;
+  PageFaultErrorCode pfec = 0;
+  physaddr = ctx.check_and_translate(rip, 0, 0, 0, exception,
+		  pfec, true);
+
+  if(exception > 0) {
+	  physaddr = INVALID;
+  }
+
 //  mfnlo = (invalid) ? INVALID : pte.mfn;
 //  mfnhi = mfnlo;
 //  if unlikely (invalid) ctx.flush_tlb_virt(rip);
 
-  int page_crossing = ((lowbits(rip, 12) + (bytes-1)) >> 12);
+//  int page_crossing = ((lowbits(rip, 12) + (bytes-1)) >> 12);
 
   //
   // Since table lookups only know the RIP of the target and not
@@ -1116,13 +1130,22 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	Waddr physaddr = check_and_translate(source, 0, 0, 0, exception,
 			pfec, 1);
 	if (exception) {
+		int old_exception = exception_index;
 		int mmu_index = cpu_mmu_index((CPUState*)this);
 		ptl_logfile << "page fault while reading code", endl;
 		int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
 				source, 0, mmu_index, 1);
+		if (fail && source == (Waddr)(eip)) {
+			// We will not return from this call
+			raise_exception_err(exception_index, error_code);
+		}
 		if (fail) {
 			ptl_logfile << "Unable to read code from ", 
 						hexstring(source, 64), endl;
+			setup_ptlsim_switch();
+			// restore the exception index as it will be 
+			// restore when we try to commit this entry from ROB
+			exception_index = old_exception;
 			return -1;
 		}
 	}
@@ -1244,12 +1267,20 @@ redo:
 							(virtaddr & TARGET_PAGE_MASK), 64), 
 					" tlbpage:", hexstring(
 							(tlb_addr & TARGET_PAGE_MASK), 64),
+					" addend:", hexstring(
+							tlb_table[mmu_index][index].addend, 64),
 					endl;
 	}
 	if likely ((virtaddr & TARGET_PAGE_MASK) == tlb_addr) {
 		// we find valid TLB entry, return the physical address for it
 		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
 	}
+
+	// Check if its an IO address
+	if(tlb_addr & ~TARGET_PAGE_MASK) {
+		return (Waddr)(virtaddr + iotlb[mmu_index][index]);
+	}
+
 	// In QEMU we have to call helper function to handle Page faults
 	// FIXME : Currently we are simply calling QEMU functions to 
 	// handle the faults but we should implement a way to simulate
@@ -1321,33 +1352,151 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
 	setup_ptlsim_switch();
 }
 
-W64 Context::loadphys(Waddr addr) {
-	W64 data = 0;
+W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
+	Waddr addr = floor(virtaddr, 8);
 	setup_qemu_switch();
-	data = ldq_raw(addr);
-	ptl_logfile << "Context::loadphys addr[", hexstring(addr, 64),
-				"] data[", hexstring(data, 64), "]\n";
+	W64 data = 0;
+	if(kernel_mode) {
+		data = ldq_kernel(addr);
+	} else {
+		data = ldq_user(addr);
+	}
+	ptl_logfile << "Context::loadvirt addr[", hexstring(addr, 64),
+				"] data[", hexstring(data, 64), "] origaddr[",
+				hexstring(virtaddr, 64), "]\n";
 	setup_ptlsim_switch();
 	return data;
+}
+
+W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
+	// Currently we check sizeshift only for internal data
+	// for data on RAM or IO we load data at 64 bit boundry
+	if(internal) {
+		W64 data = 0;
+		switch(sizeshift) {
+			case 0: { // load one byte
+				byte b = byte(*(byte*)(addr));
+				data = b;
+				break;
+					}
+			case 1: { // load a word
+				W16 w = W16(*(W16*)(addr));
+				data = w;
+				break;
+					}
+			case 2: { // load double word
+				W32 dw = W32(*(W32*)(addr));
+				data = dw;
+				break;
+					}
+			case 3: // load quad word
+			default: {
+				data = W64(*(W64*)(addr));
+					 }
+		}
+		ptl_logfile << "Context::internal_loadphys addr[", 
+					hexstring(addr, 64), "] data[", 
+					hexstring(data, 64), "] sizeshift[", sizeshift,
+					"] ", endl;
+		return data;
+	}
+
+	W64 data = 0;
+	Waddr orig_addr = addr;
+	addr = floor(addr, 8);
+	setup_qemu_switch();
+	data = ldq_raw((uint8_t*)addr);
+	ptl_logfile << "Context::loadphys addr[", hexstring(addr, 64),
+				"] data[", hexstring(data, 64), "] origaddr[",
+				hexstring(orig_addr, 64), "]\n";
+	setup_ptlsim_switch();
+	return data;
+}
+
+W64 Context::storemask_virt(Waddr paddr, W64 data, byte bytemask) {
+	W64 old_data = 0;
+	setup_qemu_switch();
+	ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
+				" with bytemask ", bytemask, " data: ", hexstring(
+						data, 64), endl;
+	if(kernel_mode) {
+		old_data = ldq_kernel(paddr);
+	} else {
+		old_data = ldq_user(paddr);
+	}
+	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
+	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
+				"] data[", hexstring(merged_data, 64), "]\n";
+	if(kernel_mode) {
+		stq_kernel(paddr, merged_data);
+	} else {
+		stq_user(paddr, merged_data);
+	}
+#define CHECK_STORE
+#ifdef CHECK_STORE
+	W64 new_data = 0;
+	if(kernel_mode) {
+		new_data = ldq_kernel(paddr);
+	} else {
+		new_data = ldq_user(paddr);
+	}
+	ptl_logfile << "Context::storemask store-check: addr[",
+				hexstring(paddr, 64), "] data[", hexstring(new_data,
+						64), "]\n";
+	assert(new_data == merged_data);
+#endif
+	return merged_data;
+}
+
+W64 Context::store_internal(Waddr addr, W64 data, byte bytemask) {
+	W64 old_data = W64(*(W64*)(addr));
+	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], 
+			old_data, data);
+	ptl_logfile << "Context::store_internal addr[", 
+				hexstring(addr, 64), "] old_data[", 
+				hexstring(old_data, 64), "] new_data[",
+				hexstring(merged_data, 64), "]\n";
+	*(W64*)(addr) = merged_data;
+	return merged_data;
 }
 
 W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
 	W64 old_data = 0;
 	setup_qemu_switch();
 	ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
-				endl;
-	old_data = ldq_raw(paddr);
+				" with bytemask ", bytemask, " data: ", hexstring(
+						data, 64), endl;
+	old_data = ldq_raw((uint8_t*)paddr);
 	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
 	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
-				"] data[", hexstring(data, 64), "]\n";
-	stq_raw(paddr, data);
+				"] data[", hexstring(merged_data, 64), "]\n";
+	stq_raw((uint8_t*)paddr, merged_data);
+#define CHECK_STORE
+#ifdef CHECK_STORE
+	W64 new_data = 0;
+	new_data = ldq_raw((uint8_t*)paddr);
+	ptl_logfile << "Context::storemask store-check: addr[",
+				hexstring(paddr, 64), "] data[", hexstring(new_data,
+						64), "]\n";
+	assert(new_data == merged_data);
+#endif
 	return data;
 }
 
 void Context::handle_page_fault(Waddr virtaddr, int is_write) {
 	setup_qemu_switch();
+	if(kernel_mode) {
+//		cerr << "Page fault in kernel mode...", endl, flush;
+		ptl_logfile << "Page fault in kernel mode...", endl, flush;
+	}
+	exception_is_int = 0;
 	int mmu_index = cpu_mmu_index((CPUState*)this);
 	tlb_fill(virtaddr, is_write, mmu_index, null);
+	if(kernel_mode) {
+//		cerr << "Page fault in kernel mode...handled", endl, flush;
+		ptl_logfile << "Page fault in kernel mode...handled", endl, 
+					flush;
+	}
 	setup_ptlsim_switch();
 	return;
 }

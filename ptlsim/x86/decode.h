@@ -324,6 +324,7 @@ enum {
   ASSIST_X87_FRSTOR,
   ASSIST_X87_FINIT,
   ASSIST_X87_FCLEX,
+  ASSIST_X87_FXCH,
   // SSE save/restore
   ASSIST_LDMXCSR,
   ASSIST_FXSAVE,
@@ -331,6 +332,7 @@ enum {
   // Interrupts, system calls, etc.
   ASSIST_INT,
   ASSIST_SYSCALL,
+  ASSIST_SYSRET,
   ASSIST_HYPERCALL,
   ASSIST_PTLCALL,
   ASSIST_SYSENTER,
@@ -429,6 +431,7 @@ static const char* assist_names[ASSIST_COUNT] = {
   "x87_frstor",
   "x87_finit",
   "x87_fclex",
+  "x87_fxch",
   // SSE save/restore
   "ldmxcsr",
   "fxsave",
@@ -436,6 +439,7 @@ static const char* assist_names[ASSIST_COUNT] = {
   // Interrupts", system calls", etc.
   "int",
   "syscall",
+  "sysret",
   "hypercall",
   "ptlcall",
   "sysenter",
@@ -526,6 +530,7 @@ void assist_x87_fsave(Context& ctx);
 void assist_x87_frstor(Context& ctx);
 void assist_x87_finit(Context& ctx);
 void assist_x87_fclex(Context& ctx);
+void assist_x87_fxch(Context& ctx);
 // SSE save/restore
 void assist_ldmxcsr(Context& ctx);
 void assist_fxsave(Context& ctx);
@@ -533,6 +538,7 @@ void assist_fxrstor(Context& ctx);
 // Interrupts, system calls, etc.
 void assist_int(Context& ctx);
 void assist_syscall(Context& ctx);
+void assist_sysret(Context& ctx);
 void assist_hypercall(Context& ctx);
 void assist_ptlcall(Context& ctx);
 void assist_sysenter(Context& ctx);

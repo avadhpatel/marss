@@ -485,7 +485,8 @@ int ReorderBufferEntry::issue() {
     changestate(thread.rob_ready_to_commit_queue);
   }
 
-  bool mispredicted = (physreg->data != uop.riptaken);
+//  bool mispredicted = (physreg->data != uop.riptaken);
+  bool mispredicted = (physreg->valid()) ? (physreg->data != uop.riptaken) : false;
 
   if unlikely (config.event_log_enabled && (propagated_exception | (!(ld|st)))) {
     event = core.eventlog.add(EVENT_ISSUE_OK, this);
@@ -548,8 +549,9 @@ int ReorderBufferEntry::issue() {
           uop.synthop = get_synthcode_for_cond_branch(uop.opcode, uop.cond, uop.size, 0);
           swap(uop.riptaken, uop.ripseq);
         } else if unlikely (isclass(uop.opcode, OPCLASS_INDIR_BRANCH)) {
-          uop.riptaken = realrip;
-          uop.ripseq = realrip;
+			return -1;
+//          uop.riptaken = realrip;
+//          uop.ripseq = realrip;
         } else if unlikely (isclass(uop.opcode, OPCLASS_UNCOND_BRANCH)) { // unconditional branches need no special handling
           assert(realrip == uop.riptaken);
         }
@@ -650,6 +652,14 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
   bool signext = (uop.opcode == OP_ldx);
 
   addr = (st) ? (ra + rb) : ((aligntype == LDST_ALIGN_NORMAL) ? (ra + rb) : ra);
+  if(logable(6)) {
+	  ptl_logfile << "ROB::addrgen: st:", st, " ra:", ra, " rb:", rb,
+				  " rc:", rc, " addr:", hexstring(addr, 64), endl;
+	  ptl_logfile << " at uop: ", uop, " at rip: ",
+				 hexstring(uop.rip.rip, 64), endl;
+  }
+  state.virtaddr = addr;
+
   //
   // x86-64 requires virtual addresses to be canonical: if bit 47 is set, 
   // all upper 16 bits must be set. If this is not true, we need to signal
@@ -857,6 +867,8 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   int exception = 0;
   PageFaultErrorCode pfec;
   bool annul;
+
+//  state.virtaddr = origaddr;
   
   Waddr physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
@@ -1087,6 +1099,14 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     //
 
     if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
+
+		if(logable(8)) {
+			cerr << "Memory addr ", hexstring(physaddr, 64),
+						" is locked by ", thread.ctx.cpu_index, endl;
+			ptl_logfile << "Memory addr ", hexstring(physaddr, 64),
+						" is locked by ", thread.ctx.cpu_index, endl;
+		}
+
       //
       // Non-interlocked store intersected with a previously
       // locked block. We must replay the store until the block
@@ -1274,9 +1294,16 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   PageFaultErrorCode pfec;
   bool annul;
 
+//  state.virtaddr = origaddr;
+
   Waddr physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
   if unlikely (exception) {
+	  if(logable(10)) {
+		  ptl_logfile << "Exception: ", exception, " caused by uop ",
+					  uop, " at rip: ", hexstring(uop.rip.rip, 64),
+					  endl;
+	  }
     return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
   }
 
@@ -1295,9 +1322,9 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   //
 //   W64 data = (annul) ? 0 : loadphys(physaddr);
   W64 data;
-  if(!config.verify_cache){
-    data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
-  }
+//  if(!config.verify_cache){
+//    data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
+//  }
 
   LoadStoreQueueEntry* sfra = null;
 
@@ -1482,6 +1509,12 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     // *unlocked* ADD [mem],1 on the high 4 bytes of the chunk.
     //
     if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
+		if(logable(8)) {
+			cerr << "Memory addr ", hexstring(physaddr, 64),
+						" is locked by ", thread.ctx.cpu_index, endl;
+			ptl_logfile << "Memory addr ", hexstring(physaddr, 64),
+						" is locked by ", thread.ctx.cpu_index, endl;
+		}
       //
       // Some other thread or core has locked up this word: replay
       // the uop until it becomes unlocked.
@@ -1639,10 +1672,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   per_context_ooocore_stats_update(threadid, dcache.load.forward.sfr_and_cache += ((sfra != null) & (!covered)));
   per_context_ooocore_stats_update(threadid, dcache.load.datatype[uop.datatype]++);
 
-  //
-  // NOTE: Technically the data is valid right now for simulation purposes
-  // only; in reality it may still be arriving from the cache.
-  //
   if(!config.verify_cache){
     state.data = data;
     state.invalid = 0;
@@ -1659,6 +1688,10 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_HIT, this, sfra, addr);
 
     load_store_second_phase = 1;
+//	data = (annul) ? 0 : W64(*(W64*)(physaddr));
+	data = (annul) ? 0 : thread.ctx.loadphys(physaddr, true, 
+			sizeshift);
+	state.data = data;
     state.datavalid = 1;
 
 #ifdef NEW_MEMORY
@@ -1669,9 +1702,12 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       ptl_logfile << " access uop.internal : flush memoryHierarchy. use cycles: ", cycle_in_flush_cache, endl;
 
 
-      data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
-      data = get_load_data(state, data);
+//      data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
+//      data = get_load_data(state, data);
       
+//	  data = (annul) ? 0 : W64(*(W64*)(physaddr));
+	  data = (annul) ? 0 : thread.ctx.loadphys(physaddr, true, 
+			  sizeshift);
       state.data = data;
       //msdebug1 << " uop.internal data ", (void*) data, endl;
       state.invalid = 0;
@@ -1781,21 +1817,29 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         
         load_store_second_phase = 1;
         state.datavalid = 1;
-        if(config.verify_cache){
-          // recompute data:
-          state.data = get_load_data(state, state.data);        
-
-          if(config.comparing_cache){
-            W64 data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
-            data = get_load_data(state, data);
-            
-            assert(data == state.data);
-          }else{
-            
-            ///        msdebug1 << " after hit, flat data ", (void*) data, " from cache ", (void*) state.data,endl;
-          }
-          //msdebug1 << " after hit, data ", (void*) state.data, endl;
-        }
+		W64 offset = lowbits(state.virtaddr, 3);
+		W64 tmp_data = thread.ctx.loadvirt(state.virtaddr);
+		state.data = (annul) ? 0 : extract_bytes(((byte*)&tmp_data) + 
+				offset, sizeshift, signext);
+//		  rob.lsq->data = extract_bytes(((byte*)&data) + 
+//				  offset, sizeshift, signext);
+//		  rob.physreg->data = rob.lsq->data;
+//		state.data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
+//        if(config.verify_cache){
+//          // recompute data:
+//          state.data = get_load_data(state, state.data);        
+//
+//          if(config.comparing_cache){
+//            W64 data = (annul) ? 0 : thread.ctx.loadphys(physaddr);
+//            data = get_load_data(state, data);
+//            
+//            assert(data == state.data);
+//          }else{
+//            
+//            ///        msdebug1 << " after hit, flat data ", (void*) data, " from cache ", (void*) state.data,endl;
+//          }
+//          //msdebug1 << " after hit, data ", (void*) state.data, endl;
+//        }
         physreg->flags &= ~FLAG_WAIT;
         physreg->complete();
         changestate(thread.rob_issued_list[cluster]);
@@ -2102,6 +2146,7 @@ void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc
 
   LoadStoreQueueEntry dummy;
   setzero(dummy);
+  dummy.virtaddr = origaddr;
   Waddr physaddr = addrgen(dummy, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
   // Ignore bogus prefetches:
@@ -2150,7 +2195,20 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 			rob.lsq->physaddr == physaddr >> 3){
       if(logable(5)) ptl_logfile << " rob ", rob, endl; 
       assert(rob.current_state_list == &thread->rob_cache_miss_list);
+	  rob.tlb_walk_level = 0;
       rob.loadwakeup();     
+	  // load the data now
+	  if (isload(rob.uop.opcode)) {
+		  int sizeshift = rob.uop.size;
+		  bool signext = (rob.uop.opcode == OP_ldx);
+		  W64 offset = lowbits(rob.lsq->virtaddr, 3);
+		  W64 data = thread->ctx.loadvirt(rob.lsq->virtaddr);
+//		  W64 data = thread->ctx.loadphys(physaddr);
+		  rob.lsq->data = extract_bytes(((byte*)&data) + 
+				  offset, sizeshift, signext);
+		  rob.physreg->data = rob.lsq->data;
+	  }
+    
     }else{
       if(logable(5)) ptl_logfile << " ignor annulled request because lsi seq ", lsi.seq, " doesn't match  rob.uop.uuid ", rob.uop.uuid, " rob ", rob, endl;
     }
@@ -2173,7 +2231,7 @@ void ReorderBufferEntry::loadwakeup() {
     physreg->complete();
     
     lsq->datavalid = 1;
-    
+
     changestate(getthread().rob_completed_list[cluster]);
     cycles_left = 0;
     lfrqslot = -1;
@@ -2811,11 +2869,11 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
 
   if unlikely (lsq) {
     lsq->physaddr = 0;
+	lsq->virtaddr = 0;
     lsq->addrvalid = 0;
     lsq->datavalid = 0;
     lsq->mbtag = -1;
     lsq->data = 0;
-    lsq->physaddr = 0;
     lsq->invalid = 0;
     lsq->time_stamp = -1;
 
