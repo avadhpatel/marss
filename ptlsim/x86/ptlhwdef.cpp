@@ -351,7 +351,7 @@ const char* arch_reg_names[TRANSREG_COUNT] = {
 //}
 
 bool Context::check_events() const {
-	return ((exception_index >= 0) || (interrupt_request >= 0));
+	return ((exception_index >= 0) || (interrupt_request > 0));
 //	return ((interrupt_request | exception_index) > 0 ? true : false);
 }
 

@@ -924,7 +924,9 @@ struct Context: public CPUX86State {
   W64 reg_fptag;
   W64 reg_flags;
   W64 reg_fptos;
+  W64 reg_fpstack;
   W64 page_fault_addr;
+//  W64 fpstack[8];
 
   void change_runstate(int new_state) { running = new_state; }
 
@@ -955,6 +957,7 @@ struct Context: public CPUX86State {
 	  cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
 	  reg_fptos = fpstt << 3;
+	  reg_fpstack = ((Waddr)&fpregs[0]);
   }
 
   Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code=0); //, PTEUpdate& pteupdate, Level1PTE& pteused);
@@ -1122,7 +1125,8 @@ struct Context: public CPUX86State {
 		  return reg_fptag;
 	  } 
 	  else if(index == REG_fpstack) {
-		  return (W64&)(fpregs[0]);
+//		  return (W64&)(fpregs[0]);
+		  return reg_fpstack;
 	  } 
 	  else if(index == 52) {
 		  // Not implemented in Xen or anywhere else..

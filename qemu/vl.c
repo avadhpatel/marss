@@ -868,7 +868,7 @@ void cpu_disable_ticks(void)
 }
 
 #ifdef PTLSIM_QEMU
-#define PTLSIM_FREQ 2e9 // 2GHz Frequency of Simulated CPU
+#define PTLSIM_FREQ 20e9 // 2GHz Frequency of Simulated CPU
 #define freq_to_ns(freq) (1e9/freq)
 
 void cpu_set_sim_ticks(void)
@@ -1250,9 +1250,9 @@ int64_t qemu_get_clock(QEMUClock *clock)
     default:
     case QEMU_TIMER_VIRTUAL:
 #ifdef PTLSIM_QEMU
-//		if (in_simulation) {
-//			return cpu_get_sim_clock();
-//		} 
+		if (in_simulation) {
+			return cpu_get_sim_clock();
+		} 
 #endif
         if (use_icount) {
             return cpu_get_icount();
@@ -1357,13 +1357,11 @@ static void host_alarm_handler(int host_signum)
     }
 #endif
     if (alarm_has_dynticks(alarm_timer) ||
-        (!use_icount &&
+        (!use_icount && 
             qemu_timer_expired(active_timers[QEMU_TIMER_VIRTUAL],
                                qemu_get_clock(vm_clock))) 
-#ifndef PTLSIM_QEMU
         || qemu_timer_expired(active_timers[QEMU_TIMER_REALTIME],
                            qemu_get_clock(rt_clock)) 
-#endif
 	   ){
         CPUState *env = next_cpu;
 
@@ -1376,13 +1374,13 @@ static void host_alarm_handler(int host_signum)
 #endif
         if (alarm_timer) alarm_timer->flags |= ALARM_FLAG_EXPIRED;
 
-#ifdef PTLSIM_QEMU
+//#ifdef PTLSIM_QEMU
 //		if (in_simulation)
 //			update_progress();
-		if (env ) { //&& !in_simulation) {
-#else
+//		if (env && !in_simulation) {
+//#else
         if (env) {
-#endif
+//#endif
             /* stop the currently executing cpu because a timer occured */
             cpu_interrupt(env, CPU_INTERRUPT_EXIT);
 #ifdef USE_KQEMU

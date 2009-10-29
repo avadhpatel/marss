@@ -768,7 +768,13 @@ bool OutOfOrderCore::runcycle() {
       cerr << sb, flush;
       exiting = 1;
     }
+	if(thread->ctx.check_events()) {
+		cerr << "\nInterrupt: ", thread->ctx.interrupt_request,
+			 " exception: ", thread->ctx.exception_index, endl;
+		exiting = 1;
+	}
   }
+
 
   return exiting;
 }
