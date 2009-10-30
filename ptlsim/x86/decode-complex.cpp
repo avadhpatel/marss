@@ -872,27 +872,32 @@ static inline ostream& operator <<(ostream& os, const IRETStackFrame& iretctx) {
 void assist_iret64(Context& ctx) {
 	bool pe;
 	bool vm86;
+	W32 prefixes;
+	int shift = 1;
 
 	pe = (ctx.hflags >> HF_PE_SHIFT) & 1;
 	vm86 = (ctx.eflags >> VM_SHIFT) & 1;
 
-	cerr << "Iret called: Context: ", ctx, endl;
+	prefixes = ctx.reg_ar1;
+	if(prefixes & PFX_REX) {
+		shift = 2;
+	} else if(prefixes & PFX_DATA) {
+		shift ^= 1;
+	}
 
 	if(!pe) {
 		// Real mode interrupt
-		ASSIST_IN_QEMU(helper_iret_real, 1);
+		ASSIST_IN_QEMU(helper_iret_real, shift);
 	} else if(vm86) {
 		if(!ctx.kernel_mode) {
 			assist_gp_fault(ctx);
 		} else {
-			ASSIST_IN_QEMU(helper_iret_real, 1);
+			ASSIST_IN_QEMU(helper_iret_real, shift);
 		}
 	} else {
 		W64 eip = ctx.eip - ctx.segs[R_CS].base;
-		ASSIST_IN_QEMU(helper_iret_protected, 1, eip);
+		ASSIST_IN_QEMU(helper_iret_protected, shift, eip);
 	}
-
-	cerr << "Iret completed: Context: ", ctx, endl;
 
 //#ifdef PTLSIM_HYPERVISOR
 //  IRETStackFrame frame;
@@ -1661,6 +1666,9 @@ bool TraceDecoder::decode_complex() {
     EndOfDecode();
 //    int assistid = (use64) ? (opsize_prefix ? ASSIST_IRET32 : ASSIST_IRET64) : (opsize_prefix ? ASSIST_IRET16 : ASSIST_IRET32);
 //    microcode_assist(assistid, ripstart, rip);
+	// push the current value of prefix to reg ar1
+	this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 2, 
+			prefixes);
 	microcode_assist(ASSIST_IRET64, ripstart, rip);
     end_of_block = 1;
     break;

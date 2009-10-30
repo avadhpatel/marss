@@ -1946,6 +1946,11 @@ int ReorderBufferEntry::commit() {
       per_context_ooocore_stats_update(threadid, commit.result.exception++);
     }
 
+	if(logable(10)) {
+		ptl_logfile << "ROB Commit failed because Exception ", 
+					ctx.exception, endl, flush;
+	}
+
     return COMMIT_RESULT_EXCEPTION;
   }
 

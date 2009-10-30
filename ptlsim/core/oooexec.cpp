@@ -1819,8 +1819,10 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         state.datavalid = 1;
 		W64 offset = lowbits(state.virtaddr, 3);
 		W64 tmp_data = thread.ctx.loadvirt(state.virtaddr);
-		state.data = (annul) ? 0 : extract_bytes(((byte*)&tmp_data) + 
-				offset, sizeshift, signext);
+		state.data = (annul) ? 0 : extract_bytes(((byte*)&tmp_data),
+				sizeshift, signext);
+//		state.data = (annul) ? 0 : extract_bytes(((byte*)&tmp_data) + 
+//				offset, sizeshift, signext);
 //		  rob.lsq->data = extract_bytes(((byte*)&data) + 
 //				  offset, sizeshift, signext);
 //		  rob.physreg->data = rob.lsq->data;
@@ -2204,8 +2206,10 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 		  W64 offset = lowbits(rob.lsq->virtaddr, 3);
 		  W64 data = thread->ctx.loadvirt(rob.lsq->virtaddr);
 //		  W64 data = thread->ctx.loadphys(physaddr);
-		  rob.lsq->data = extract_bytes(((byte*)&data) + 
-				  offset, sizeshift, signext);
+//		  rob.lsq->data = extract_bytes(((byte*)&data) + 
+//				  offset, sizeshift, signext);
+		  rob.lsq->data = extract_bytes(((byte*)&data) , 
+				  sizeshift, signext);
 		  rob.physreg->data = rob.lsq->data;
 	  }
     

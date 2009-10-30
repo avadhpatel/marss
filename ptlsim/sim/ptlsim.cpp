@@ -1353,7 +1353,7 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
 }
 
 W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
-	Waddr addr = floor(virtaddr, 8);
+	Waddr addr = virtaddr; //floor(virtaddr, 8);
 	setup_qemu_switch();
 	W64 data = 0;
 	if(kernel_mode) {
@@ -1413,9 +1413,14 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
 	return data;
 }
 
-W64 Context::storemask_virt(Waddr paddr, W64 data, byte bytemask) {
+W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask) {
 	W64 old_data = 0;
 	setup_qemu_switch();
+//	if(virtaddr & 0x7) {
+//		ptl_logfile << "Unaligned store to memory...\n";
+//		assert(0);
+//	}
+	Waddr paddr = floor(virtaddr, 8);
 	ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
 				" with bytemask ", bytemask, " data: ", hexstring(
 						data, 64), endl;
