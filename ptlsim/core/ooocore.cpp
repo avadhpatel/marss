@@ -760,16 +760,18 @@ bool OutOfOrderCore::runcycle() {
     ThreadContext* thread = threads[i];
     if unlikely (!thread->ctx.running) break;
 
-    //    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  8192 ) {
+//    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  8192 ) {
 //    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  2048 ) {
-    if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 10*4096) {
+    if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 1*4096) {
       stringbuf sb;
       sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
         sim_cycle, ", ", total_user_insns_committed,  " user commits: no instructions have committed for ",
         (sim_cycle - thread->last_commit_at_cycle), " cycles; the pipeline could be deadlocked", endl;
       ptl_logfile << sb, flush;
       cerr << sb, flush;
+	  dump_smt_state(ptl_logfile);
       exiting = 1;
+	  assert(0);
     }
 	if(thread->ctx.check_events()) {
 		cerr << "\nInterrupt: ", thread->ctx.interrupt_request,
@@ -2105,6 +2107,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 						  // Thread is already waiting for an event: stop it now
 						  ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] Already stopped at cycle ", sim_cycle, endl;
 						  stopped[thread->ctx.cpu_index] = 1;
+						  exiting = 1;
 					  } else {
 //						  if (thread->ctx.check_events()) thread->handle_interrupt();
 						  if (thread->ctx.check_events()) 

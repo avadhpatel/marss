@@ -2143,6 +2143,15 @@ int ReorderBufferEntry::commit() {
 		  thread.reset_fetch_unit(physreg->data);
 		  per_context_ooocore_stats_update(threadid, issue.result.branch_mispredict++);
 	  }
+	  if(uop.rip.rip == physreg->data) {
+		  ptl_logfile << "Infinite loop because of jump to same location.",
+					  " Current rip:", hexstring(ctx.eip, 64), 
+					  " branch rip: ", hexstring(physreg->data, 64),
+					  "\nAborting simulation.\n", ctx, endl, flush;
+		  ptl_logfile << "Thread Context: \n";
+		  thread.core.dump_smt_state(ptl_logfile);
+		  assert(0);
+	  }
       ctx.eip = physreg->data;
 //      ctx.eip = (physreg->data - ctx.segs[R_CS].base);
     } else {

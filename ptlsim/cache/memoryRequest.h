@@ -67,6 +67,7 @@ class MemoryRequest: public selfqueuelink
 				int cycles,
 				bool isInstruction,
 				W64 ownerTimestamp,
+				W64 ownerUUID,
 				OP_TYPE opType);
 
 		bool is_same(W8 coreid,
@@ -100,6 +101,8 @@ class MemoryRequest: public selfqueuelink
 		int get_robid() { return robId_; }
 
 		W64 get_owner_timestamp() { return ownerTimestamp_; }
+		
+		W64 get_owner_uuid() { return ownerUUID_; }
 
 		OP_TYPE get_type() { return opType_; }
 		void set_op_type(OP_TYPE type) { opType_ = type; }
@@ -127,6 +130,7 @@ class MemoryRequest: public selfqueuelink
 		int robId_;
 		int cycles_;
 		W64 ownerTimestamp_;
+		W64 ownerUUID_;
 		int refCounter_;
 		OP_TYPE opType_;
 

@@ -266,7 +266,7 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 	} else {
 		memoryHierarchy_->dcache_wakeup_wrapper(request->get_coreid(),
 				request->get_threadid(), request->get_robid(),
-				request->get_owner_timestamp(), 
+				request->get_owner_uuid(), 
 				request->get_physical_address());
 	}
 

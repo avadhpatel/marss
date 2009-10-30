@@ -31,6 +31,7 @@ void MemoryRequest::init(W8 coreId,
 		int cycles,
 		bool isInstruction,
 		W64 ownerTimestamp,
+		W64 ownerUUID,
 		OP_TYPE opType)
 {
 	coreId_ = coreId;
@@ -39,6 +40,7 @@ void MemoryRequest::init(W8 coreId,
 	robId_ = robId;
 	cycles_ = cycles;
 	ownerTimestamp_ = ownerTimestamp;
+	ownerUUID_ = ownerUUID;
 	refCounter_ = 0; // or maybe 1 	
 	opType_ = opType;
 	isData_ = !isInstruction;
@@ -54,6 +56,7 @@ void MemoryRequest::init(MemoryRequest *request)
 	robId_ = request->robId_;
 	cycles_ = request->cycles_;
 	ownerTimestamp_ = request->ownerTimestamp_;
+	ownerUUID_ = request->ownerUUID_;
 	refCounter_ = 0; // or maybe 1 	
 	opType_ = request->opType_;
 	isData_ = request->isData_;

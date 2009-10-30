@@ -1271,14 +1271,15 @@ redo:
 							tlb_table[mmu_index][index].addend, 64),
 					endl;
 	}
-	if likely ((virtaddr & TARGET_PAGE_MASK) == tlb_addr) {
+	if likely ((virtaddr & TARGET_PAGE_MASK) == 
+			(tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
+		// Check if its not MMIO address
+		if(tlb_addr & ~TARGET_PAGE_MASK) {
+			return (Waddr)(virtaddr + iotlb[mmu_index][index]);
+		}
+
 		// we find valid TLB entry, return the physical address for it
 		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
-	}
-
-	// Check if its an IO address
-	if(tlb_addr & ~TARGET_PAGE_MASK) {
-		return (Waddr)(virtaddr + iotlb[mmu_index][index]);
 	}
 
 	// In QEMU we have to call helper function to handle Page faults

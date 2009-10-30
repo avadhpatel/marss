@@ -319,7 +319,7 @@ bool MemoryHierarchy::access_cache(W8 coreid, W8 threadid, int robid,
 		type = MEMORY_OP_READ;
 
 	request->init(coreid, threadid, physaddr, robid, sim_cycle, 
-			is_icache, owner_timestamp, type);
+			is_icache, owner_timestamp, owner_uuid, type);
 
 	CPUController *cpuController = (CPUController*)cpuControllers_[coreid];
 	assert(cpuController != null);

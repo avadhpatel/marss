@@ -2193,7 +2193,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
   ReorderBufferEntry& rob = thread->ROB[idx];
   if(logable(5)) ptl_logfile << " dcache_wakeup ", rob, " lsi ", lsi, endl;
   if(config.use_new_memory_system){
-    if(rob.lsq && lsi.seq == (rob.lsq)->time_stamp &&
+    if(rob.lsq && lsi.seq == rob.uop.uuid &&
 			rob.lsq->physaddr == physaddr >> 3){
       if(logable(5)) ptl_logfile << " rob ", rob, endl; 
       assert(rob.current_state_list == &thread->rob_cache_miss_list);
