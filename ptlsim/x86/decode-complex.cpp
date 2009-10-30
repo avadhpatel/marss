@@ -463,6 +463,41 @@ void assist_lmsw(Context& ctx) {
 	ctx.eip = ctx.reg_nextrip;
 }
 
+// LLDT
+void assist_lldt(Context& ctx) {
+	W32 ldt = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_lldt, ldt);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// LTR
+void assist_ltr(Context& ctx) {
+	W32 ltr = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_ltr, ltr);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// VERR
+void assist_verr(Context& ctx) {
+	W32 v = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_verr, v);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// VERW
+void assist_verw(Context& ctx) {
+	W32 v = ctx.reg_ar1;
+	ASSIST_IN_QEMU(helper_verw, v);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// CLTS
+void assist_clts(Context& ctx) {
+	ASSIST_IN_QEMU(helper_clts);
+	// abort block because static cpu state changed
+	ctx.eip = ctx.reg_nextrip;
+}
+
 void assist_rdtsc(Context& ctx) {
 	ASSIST_IN_QEMU(helper_rdtsc);
 //	ctx.setup_qemu_switch();
@@ -1042,12 +1077,13 @@ void assist_ioport_out(Context& ctx) {
 
 static inline void svm_check_intercept(TraceDecoder& dec, W64 type, W64 param=0) {
 	// No SVM activated, do nothing
-	if likely(dec.hflags & HF_SVMI_MASK)
+	if likely(!(dec.hflags & HF_SVMI_MASK))
 		return;
     dec << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
 	dec << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 3, type);
 	dec << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, param);
 	dec.microcode_assist(ASSIST_SVM_CHECK, dec.ripstart, dec.rip);
+	dec.end_of_block = 1;
 }
 
 static inline bool check_privilege(TraceDecoder& dec) {
@@ -2016,6 +2052,99 @@ bool TraceDecoder::decode_complex() {
     break;
   }
 
+  case 0x100: {
+	switch(modrm.reg) {
+		case 0: { // sldt
+
+			if(!pe || vm86)
+				goto invalid_opcode;
+
+			int sizeshift = (modrm.mod == 3) ? 3 : 2;
+			DECODE(eform, rd, v_mode);
+			EndOfDecode();
+
+			svm_check_intercept(*this, SVM_EXIT_LDTR_READ);
+
+			TransOp ldp(OP_ld, REG_temp6, REG_ctx, REG_imm, REG_zero, 2,
+					offsetof_t(Context, ldt.selector));
+			ldp.internal = 1;
+			this << ldp;
+
+			result_store(REG_temp6, REG_zero, rd);
+			break;
+		}
+		case 2: { // lldt
+
+			if(!pe || vm86)
+				goto invalid_opcode;
+
+			DECODE(eform, ra, w_mode);
+			EndOfDecode();
+
+			if(check_privilege(*this)) {
+				svm_check_intercept(*this, SVM_EXIT_LDTR_WRITE);
+
+				if(modrm.mod == 3) {
+					this << TransOp(OP_mov, REG_ar1, ra.reg.reg, REG_zero, 
+							REG_zero, 2);
+				} else {
+					operand_load(REG_ar1, ra);
+				}
+
+				microcode_assist(ASSIST_LLDT, ripstart, rip);
+			}
+			break;
+		}
+		case 3: { // ltr
+			if(!pe || vm86)
+				goto invalid_opcode;
+
+			DECODE(eform, ra, w_mode);
+			EndOfDecode();
+
+			if(check_privilege(*this)) {
+				svm_check_intercept(*this, SVM_EXIT_LDTR_WRITE);
+
+				if(modrm.mod == 3) {
+					this << TransOp(OP_mov, REG_ar1, ra.reg.reg, REG_zero, 
+							REG_zero, 2);
+				} else {
+					operand_load(REG_ar1, ra);
+				}
+
+				microcode_assist(ASSIST_LTR, ripstart, rip);
+			}
+			break;
+		}
+		case 4: // verr
+		case 5: // verw
+			{
+			if(!pe || vm86)
+				goto invalid_opcode;
+
+			DECODE(eform, ra, w_mode);
+			EndOfDecode();
+
+			this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 
+					3, 0, 0, FLAGS_DEFAULT_ALU);
+			
+			if(modrm.mod == 3) {
+				this << TransOp(OP_mov, REG_ar1, ra.reg.reg, REG_zero, 
+						REG_zero, 2);
+			} else {
+				operand_load(REG_ar1, ra);
+			}
+
+			if(use64)
+				microcode_assist(ASSIST_VERR, ripstart, rip);
+			else
+				microcode_assist(ASSIST_VERW, ripstart, rip);
+		}
+	}
+	end_of_block = 1;
+	break;
+	}
+
   case 0x101: {
 	TransOp* ldp;
 	TransOp* ldp2;
@@ -2335,9 +2464,20 @@ bool TraceDecoder::decode_complex() {
 			goto invalid_opcode;
 	}
 	break;
-invalid_opcode:
-	MakeInvalid();
-	break;
+  }
+
+  case 0x106: { // clts
+
+		EndOfDecode();
+
+		if(check_privilege(*this)) {
+			svm_check_intercept(*this, SVM_EXIT_WRITE_CR0);
+			microcode_assist(ASSIST_CLTS, ripstart, rip);
+		}
+
+		end_of_block = 1;
+
+		break;
   }
 
   case 0x10b: { // ud2a
@@ -3006,6 +3146,10 @@ invalid_opcode:
     end_of_block = 1;
     break;
   }
+
+invalid_opcode:
+	MakeInvalid();
+	break;
 
   default: {
     MakeInvalid();

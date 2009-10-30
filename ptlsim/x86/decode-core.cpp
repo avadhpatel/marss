@@ -138,6 +138,15 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   assist_invlpg,
   // LMSW
   assist_lmsw,
+  // LLDT
+  assist_lldt,
+  // LTR
+  assist_ltr,
+  // VERR / VERW
+  assist_verr,
+  assist_verw,
+  // CLTS
+  assist_clts,
 };
 
 int assist_index(assist_func_t assist) {
@@ -1943,6 +1952,11 @@ bool TraceDecoder::memory_fence_if_locked(bool end_of_x86_insn, int type) {
 int TraceDecoder::fillbuf(Context& ctx, byte* insnbytes, int insnbytes_bufsize) {
   this->insnbytes = insnbytes;
   this->insnbytes_bufsize = insnbytes_bufsize;
+
+  pe = (ctx.hflags >> HF_PE_SHIFT) & 1;
+  vm86 = (ctx.eflags >> VM_SHIFT) & 1;
+  hflags = ctx.hflags;
+
   byteoffset = 0;
   faultaddr = 0;
   pfec = 0;

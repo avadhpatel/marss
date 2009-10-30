@@ -2196,21 +2196,25 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
     if(rob.lsq && lsi.seq == rob.uop.uuid &&
 			rob.lsq->physaddr == physaddr >> 3){
       if(logable(5)) ptl_logfile << " rob ", rob, endl; 
-      assert(rob.current_state_list == &thread->rob_cache_miss_list);
-	  rob.tlb_walk_level = 0;
-      rob.loadwakeup();     
-	  // load the data now
-	  if (isload(rob.uop.opcode)) {
-		  int sizeshift = rob.uop.size;
-		  bool signext = (rob.uop.opcode == OP_ldx);
-		  W64 offset = lowbits(rob.lsq->virtaddr, 3);
-		  W64 data = thread->ctx.loadvirt(rob.lsq->virtaddr);
-//		  W64 data = thread->ctx.loadphys(physaddr);
-//		  rob.lsq->data = extract_bytes(((byte*)&data) + 
-//				  offset, sizeshift, signext);
-		  rob.lsq->data = extract_bytes(((byte*)&data) , 
-				  sizeshift, signext);
-		  rob.physreg->data = rob.lsq->data;
+
+	  // If the ROB cache miss is serviced already by other request
+	  // then just ignore this response
+	  if(rob.current_state_list == &thread->rob_cache_miss_list) {
+		  rob.tlb_walk_level = 0;
+		  rob.loadwakeup();     
+		  // load the data now
+		  if (isload(rob.uop.opcode)) {
+			  int sizeshift = rob.uop.size;
+			  bool signext = (rob.uop.opcode == OP_ldx);
+			  W64 offset = lowbits(rob.lsq->virtaddr, 3);
+			  W64 data = thread->ctx.loadvirt(rob.lsq->virtaddr);
+			  //		  W64 data = thread->ctx.loadphys(physaddr);
+			  //		  rob.lsq->data = extract_bytes(((byte*)&data) + 
+			  //				  offset, sizeshift, signext);
+			  rob.lsq->data = extract_bytes(((byte*)&data) , 
+					  sizeshift, signext);
+			  rob.physreg->data = rob.lsq->data;
+		  }
 	  }
     
     }else{

@@ -383,6 +383,15 @@ enum {
   ASSIST_INVLPG,
   // LMSW
   ASSIST_LMSW,
+  // LLDT
+  ASSIST_LLDT,
+  // LTR
+  ASSIST_LTR,
+  // VERR VERW
+  ASSIST_VERR,
+  ASSIST_VERW,
+  // CLTS
+  ASSIST_CLTS,
   ASSIST_COUNT,
 };
 
@@ -490,6 +499,15 @@ static const char* assist_names[ASSIST_COUNT] = {
   "invlpg",
   // LMSW
   "lmsw",
+  // LLDT
+  "lldt",
+  // LTR
+  "ltr",
+  // VERR / VERW
+  "verr",
+  "verw",
+  // CLTS
+  "clts",
 };
 
 int propagate_exception_during_assist(Context& ctx, byte exception, W32 errorcode, Waddr virtaddr = 0, bool intN = 0);
@@ -589,6 +607,15 @@ void assist_invlpga(Context& ctx);
 void assist_invlpg(Context& ctx);
 // LMSW
 void assist_lmsw(Context& ctx);
+// LLDT
+void assist_lldt(Context& ctx);
+// LTR
+void assist_ltr(Context& ctx);
+// VERR / VERW
+void assist_verr(Context& ctx);
+void assist_verw(Context& ctx);
+// CLTS
+void assist_clts(Context& ctx);
 
 //
 // Global functions

@@ -995,7 +995,8 @@ struct Context: public CPUX86State {
   W64 loadvirt(Waddr virtaddr, int sizeshift=3);
   W64 loadphys(Waddr addr, bool internal=0, int sizeshift=3);
 
-  W64 storemask_virt(Waddr paddr, W64 data, byte bytemask);
+//  W64 storemask_virt(Waddr paddr, W64 data, byte bytemask);
+  W64 storemask_virt(Waddr paddr, W64 data, int sizeshift);
   W64 storemask(Waddr paddr, W64 data, byte bytemask) ;
   W64 store_internal(Waddr addr, W64 data, byte bytemask);
 

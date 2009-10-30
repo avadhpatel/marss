@@ -2150,7 +2150,7 @@ int ReorderBufferEntry::commit() {
 					  "\nAborting simulation.\n", ctx, endl, flush;
 		  ptl_logfile << "Thread Context: \n";
 		  thread.core.dump_smt_state(ptl_logfile);
-		  assert(0);
+//		  assert(0);
 	  }
       ctx.eip = physreg->data;
 //      ctx.eip = (physreg->data - ctx.segs[R_CS].base);
@@ -2233,7 +2233,7 @@ int ReorderBufferEntry::commit() {
 //        thread.ctx.storemask(lsq->physaddr << 3, lsq->data, lsq->bytemask);
 //        thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
 		assert(lsq->virtaddr > 0xfff);
-		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
+		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, uop.size);
       }
 #endif
     }
