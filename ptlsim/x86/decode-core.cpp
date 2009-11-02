@@ -48,6 +48,7 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   assist_invalid_opcode,
   assist_exec_page_fault,
   assist_gp_fault,
+  assist_ud2a,
   // Integer arithmetic
   assist_div<byte>,
   assist_div<W16>,
@@ -99,6 +100,7 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   assist_rdtsc,
   assist_cld,
   assist_std,
+  assist_pushf,
   assist_popf,
   assist_write_segreg,
   assist_wrmsr,

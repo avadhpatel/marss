@@ -950,9 +950,24 @@ struct Context: public CPUX86State {
   void setup_qemu_switch() {
 	  set_eip_qemu();
 	  set_cpu_env((CPUX86State*)this);
+//	  load_eflags(internal_eflags , (TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK));
+	  W64 flags = reg_flags;
+	  // Set the 2nd bit to 1 for compatibility
+	  flags = (flags | FLAG_INV); 
+//	  load_eflags(flags, (TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK));
+	  load_eflags(flags, -1);
   }
 
   void setup_ptlsim_switch() {
+	  // before calling this function update the global env register
+	  set_cpu_env((CPUX86State*)this);
+	  W64 flags = compute_eflags();
+
+	  // Clear the 2nd bit as its used by PTLSim to indicate if 
+	  // uop is executed correctly or not
+	  flags = (flags & ~(W64)(FLAG_INV));
+	  reg_flags = flags;
+	  internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
 	  eip = eip + segs[R_CS].base;
 	  cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
@@ -995,8 +1010,8 @@ struct Context: public CPUX86State {
   W64 loadvirt(Waddr virtaddr, int sizeshift=3);
   W64 loadphys(Waddr addr, bool internal=0, int sizeshift=3);
 
-//  W64 storemask_virt(Waddr paddr, W64 data, byte bytemask);
-  W64 storemask_virt(Waddr paddr, W64 data, int sizeshift);
+  W64 storemask_virt(Waddr paddr, W64 data, byte bytemask);
+//  W64 storemask_virt(Waddr paddr, W64 data, int sizeshift);
   W64 storemask(Waddr paddr, W64 data, byte bytemask) ;
   W64 store_internal(Waddr addr, W64 data, byte bytemask);
 
@@ -1146,7 +1161,7 @@ struct Context: public CPUX86State {
 	  else if(index == 56) {
 		  return (W64&)(eip);
 	  } 
-	  else if(index == 57) {
+	  else if(index == REG_flags) {
 		  return reg_flags; //(W64&)(eflags);
 	  } 
 	  else if(index == 58) {

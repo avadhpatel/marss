@@ -786,6 +786,8 @@ bool TraceDecoder::decode_sse() {
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     int rareg;
 
+	cerr << "cvtps2dq found...............\n";
+
     if (ra.type == OPTYPE_MEM) {
       operand_load(REG_temp0, ra, OP_ld, DATATYPE_FLOAT);
       rareg = REG_temp0;
@@ -793,6 +795,11 @@ bool TraceDecoder::decode_sse() {
       operand_load(REG_temp1, ra, OP_ld, DATATYPE_FLOAT);
     } else {
       rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
+	  // Patch from Adnan Khaleel
+	  if(unlikely(rareg == rdreg)) {
+		  this << TransOp(OP_mov, REG_temp0, REG_zero, rareg, REG_zero, 3);
+		  rareg = REG_temp0;
+	  }
     }
 
     TransOp uoplo(OP_fcvt_s2d_lo, rdreg+0, REG_zero, rareg, REG_zero, 3); uoplo.datatype = DATATYPE_VEC_DOUBLE; this << uoplo;

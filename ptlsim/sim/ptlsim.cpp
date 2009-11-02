@@ -1275,6 +1275,8 @@ redo:
 			(tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
 		// Check if its not MMIO address
 		if(tlb_addr & ~TARGET_PAGE_MASK) {
+//			cerr << "Doing MMIO Access at address : ", 
+//				hexstring(virtaddr, 64), endl;
 			return (Waddr)(virtaddr + iotlb[mmu_index][index]);
 		}
 
@@ -1414,64 +1416,64 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
 	return data;
 }
 
-W64 Context::storemask_virt(Waddr virtaddr, W64 data, int size) {
-	switch(size) {
-		case 0: // byte write
-			(kernel_mode) ? stb_kernel(virtaddr, data) : 
-				stb_user(virtaddr, data);
-			break;
-		case 1: // word write
-			(kernel_mode) ? stw_kernel(virtaddr, data) :
-				stw_user(virtaddr, data);
-			break;
-		case 2: // double word write
-			(kernel_mode) ? stl_kernel(virtaddr, data) :
-				stl_user(virtaddr, data);
-			break;
-		case 3: // quad word write
-		default:
-			(kernel_mode) ? stq_kernel(virtaddr, data) :
-				stq_user(virtaddr, data);
-			break;
-	}
-	return data;
-}
-
-//W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask) {
-//	W64 old_data = 0;
-//	setup_qemu_switch();
-//	Waddr paddr = floor(virtaddr, 8);
-//	ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
-//				" with bytemask ", bytemask, " data: ", hexstring(
-//						data, 64), endl;
-//	if(kernel_mode) {
-//		old_data = ldq_kernel(paddr);
-//	} else {
-//		old_data = ldq_user(paddr);
+//W64 Context::storemask_virt(Waddr virtaddr, W64 data, int size) {
+//	switch(size) {
+//		case 0: // byte write
+//			(kernel_mode) ? stb_kernel(virtaddr, data) : 
+//				stb_user(virtaddr, data);
+//			break;
+//		case 1: // word write
+//			(kernel_mode) ? stw_kernel(virtaddr, data) :
+//				stw_user(virtaddr, data);
+//			break;
+//		case 2: // double word write
+//			(kernel_mode) ? stl_kernel(virtaddr, data) :
+//				stl_user(virtaddr, data);
+//			break;
+//		case 3: // quad word write
+//		default:
+//			(kernel_mode) ? stq_kernel(virtaddr, data) :
+//				stq_user(virtaddr, data);
+//			break;
 //	}
-//	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
-//	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
-//				"] data[", hexstring(merged_data, 64), "]\n";
-//	if(kernel_mode) {
-//		stq_kernel(paddr, merged_data);
-//	} else {
-//		stq_user(paddr, merged_data);
-//	}
-//#define CHECK_STORE
-//#ifdef CHECK_STORE
-//	W64 new_data = 0;
-//	if(kernel_mode) {
-//		new_data = ldq_kernel(paddr);
-//	} else {
-//		new_data = ldq_user(paddr);
-//	}
-//	ptl_logfile << "Context::storemask store-check: addr[",
-//				hexstring(paddr, 64), "] data[", hexstring(new_data,
-//						64), "]\n";
-//	assert(new_data == merged_data);
-//#endif
-//	return merged_data;
+//	return data;
 //}
+
+W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask) {
+	W64 old_data = 0;
+	setup_qemu_switch();
+	Waddr paddr = floor(virtaddr, 8);
+	ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
+				" with bytemask ", bytemask, " data: ", hexstring(
+						data, 64), endl;
+	if(kernel_mode) {
+		old_data = ldq_kernel(paddr);
+	} else {
+		old_data = ldq_user(paddr);
+	}
+	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
+	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
+				"] data[", hexstring(merged_data, 64), "]\n";
+	if(kernel_mode) {
+		stq_kernel(paddr, merged_data);
+	} else {
+		stq_user(paddr, merged_data);
+	}
+//#define CHECK_STORE
+#ifdef CHECK_STORE
+	W64 new_data = 0;
+	if(kernel_mode) {
+		new_data = ldq_kernel(paddr);
+	} else {
+		new_data = ldq_user(paddr);
+	}
+	ptl_logfile << "Context::storemask store-check: addr[",
+				hexstring(paddr, 64), "] data[", hexstring(new_data,
+						64), "]\n";
+	assert(new_data == merged_data);
+#endif
+	return merged_data;
+}
 
 W64 Context::store_internal(Waddr addr, W64 data, byte bytemask) {
 	W64 old_data = W64(*(W64*)(addr));

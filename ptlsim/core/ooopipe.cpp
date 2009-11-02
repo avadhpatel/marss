@@ -2233,7 +2233,8 @@ int ReorderBufferEntry::commit() {
 //        thread.ctx.storemask(lsq->physaddr << 3, lsq->data, lsq->bytemask);
 //        thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
 		assert(lsq->virtaddr > 0xfff);
-		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, uop.size);
+//		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, uop.size);
+		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
       }
 #endif
     }

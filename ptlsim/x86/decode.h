@@ -293,6 +293,7 @@ enum {
   ASSIST_INVALID_OPCODE,
   ASSIST_EXEC_PAGE_FAULT,
   ASSIST_GP_FAULT,
+  ASSIST_UD2A,
   // Integer arithmetic
   ASSIST_DIV8,
   ASSIST_DIV16,
@@ -344,6 +345,7 @@ enum {
   ASSIST_RDTSC,
   ASSIST_CLD,
   ASSIST_STD,
+  ASSIST_PUSHF,
   ASSIST_POPF,
   ASSIST_WRITE_SEGREG,
   ASSIST_WRMSR,
@@ -409,6 +411,7 @@ static const char* assist_names[ASSIST_COUNT] = {
   "invalid_opcode",
   "exec_page_fault",
   "gp_fault",
+  "ud2a",
   // Integer arithmetic
   "div<byte>",
   "div<W16>",
@@ -460,6 +463,7 @@ static const char* assist_names[ASSIST_COUNT] = {
   "rdtsc",
   "cld",
   "std",
+  "pushf",
   "popf",
   "write_segreg",
   "wrmsr",
@@ -523,6 +527,7 @@ void update_assist_stats(assist_func_t assist);
 void assist_invalid_opcode(Context& ctx);
 void assist_exec_page_fault(Context& ctx);
 void assist_gp_fault(Context& ctx);
+void assist_ud2a(Context& ctx);
 // Integer arithmetic
 template <typename T> void assist_div(Context& ctx);
 template <typename T> void assist_idiv(Context& ctx);
@@ -568,6 +573,7 @@ void assist_cpuid(Context& ctx);
 void assist_rdtsc(Context& ctx);
 void assist_cld(Context& ctx);
 void assist_std(Context& ctx);
+void assist_pushf(Context& ctx);
 void assist_popf(Context& ctx);
 void assist_write_segreg(Context& ctx);
 void assist_wrmsr(Context& ctx);

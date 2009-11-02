@@ -340,6 +340,16 @@ void assist_cpuid(Context& ctx) {
   ctx.eip = ctx.reg_nextrip;
 }
 
+void assist_ud2a(Context& ctx) {
+	// This instruction should never occur in simulation.
+	// Linux Kernel uses ud2a to trigger Bug in the code or
+	// hardware so we use it to generate an assert(0) and 
+	// print as detail as possible in logfile
+	ptl_logfile << "*****Got UD2A*****\n";
+	ptl_logfile << "Context:\n", ctx, endl;
+	assert(0);
+}
+
 void assist_ljmp_prct(Context& ctx) {
 	W32 new_cs = ctx.reg_ar1;
 	W32 new_eip = ctx.reg_ar2;
@@ -515,15 +525,28 @@ void assist_rdtsc(Context& ctx) {
   ctx.eip = ctx.reg_nextrip;
 }
 
+void assist_pushf(Context& ctx) {
+	ctx.setup_qemu_switch();
+	W64 flags = helper_read_eflags();
+	ctx.setup_ptlsim_switch();
+	// now push the flags on the stack
+	ctx.regs[R_ESP] -= 8;
+	ctx.storemask_virt(ctx.regs[R_ESP], flags, 0xff);
+	ctx.eip = ctx.reg_nextrip;
+}
+
 //
 // Pop from stack into flags register, with checking for reserved bits
 //
 void assist_popf(Context& ctx) {
   W32 flags = ctx.reg_ar1;
   // bit 1 is always '1', and bits {3, 5, 15} are always '0':
-  flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
-  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
-  ctx.eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
+//  flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
+//  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
+//  ctx.eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
+  ASSIST_IN_QEMU(helper_write_eflags, flags , (uint32_t)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK));
+//  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
+//  ctx.reg_flags = flags;
   ctx.eip = ctx.reg_nextrip;
 
   // Update internal flags too (only update non-standard flags in internal_flags_bits):
@@ -1079,6 +1102,7 @@ static inline void svm_check_intercept(TraceDecoder& dec, W64 type, W64 param=0)
 	// No SVM activated, do nothing
 	if likely(!(dec.hflags & HF_SVMI_MASK))
 		return;
+	cerr << "SVM Check failed..\n";
     dec << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
 	dec << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 3, type);
 	dec << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, param);
@@ -1090,6 +1114,7 @@ static inline bool check_privilege(TraceDecoder& dec) {
 	if (dec.kernel) {
 		return true;
 	}
+	cerr << "Check privilege failed...\n";
 	dec << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero,
 			3, dec.ripstart - dec.cs_base);
 	dec.microcode_assist(ASSIST_GP_FAULT, dec.ripstart, dec.rip);
@@ -1374,8 +1399,17 @@ bool TraceDecoder::decode_complex() {
     TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof_t(Context, internal_eflags)); ldp.internal = 1; this << ldp;
     this << TransOp(OP_or, REG_temp1, REG_temp1, REG_temp0, REG_zero, 2); // merge in standard flags
 
-    this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
-    this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_temp1, sizeshift, 0);
+	// store in standard internal_flags
+	TransOp stp(OP_st, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, 
+			offsetof_t(Context, internal_eflags));
+	stp.internal = 1;
+	this << stp;
+
+	microcode_assist(ASSIST_PUSHF, ripstart, rip);
+	end_of_block = 1;
+
+//    this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
+//    this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_temp1, sizeshift, 0);
 
     break;
   }
@@ -2486,7 +2520,9 @@ bool TraceDecoder::decode_complex() {
 	// TODO: In actual execution we have to generate invalid opcode
 	// exception
 	EndOfDecode();
-    this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
+//    this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
+	microcode_assist(ASSIST_UD2A, ripstart, rip);
+	end_of_block = 1;
 	
     //
     // ud2a is special under Xen: if the {0x0f, 0x0b} opcode is followed by
