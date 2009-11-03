@@ -1710,7 +1710,7 @@ int ThreadContext::commit() {
 #ifdef TRACE_RIP
 	  ptl_rip_trace << "Commit rip: ", 
 					hexstring(rob.uop.rip.rip, 64), " \tkernel: ",
-					rob.uop.rip.kernel, endl, flush;
+					rob.uop.rip.kernel, endl;
 #endif
 
 #ifdef WATTCH //read from spec_rename and write to rename(commit)

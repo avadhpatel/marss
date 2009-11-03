@@ -95,6 +95,8 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   assist_iret16,
   assist_iret32,
   assist_iret64,
+  assist_sti,
+  assist_cli,
   // Control register updates
   assist_cpuid,
   assist_rdtsc,
@@ -149,6 +151,12 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   assist_verw,
   // CLTS
   assist_clts,
+  // SWAPGS
+  assist_swapgs,
+  // Barrier
+  assist_barrier,
+  // Halt
+  assist_halt,
 };
 
 int assist_index(assist_func_t assist) {
@@ -1169,11 +1177,11 @@ void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, c
 }
 
 void TraceDecoder::operand_load(int destreg, const DecodedOperand& memref, int opcode, int datatype, int cachelevel, bool rmw) {
-  address_generate_and_load_or_store(destreg, REG_zero, memref, opcode, datatype, cachelevel, false, rmw);
+	address_generate_and_load_or_store(destreg, REG_zero, memref, opcode, datatype, cachelevel, false, rmw);
 }
 
 void TraceDecoder::result_store(int srcreg, int tempreg, const DecodedOperand& memref, int datatype, bool rmw) {
-  address_generate_and_load_or_store(REG_mem, srcreg, memref, OP_st, datatype, 0, 0, rmw);
+	address_generate_and_load_or_store(REG_mem, srcreg, memref, OP_st, datatype, 0, 0, rmw);
 }
 
 void TraceDecoder::alu_reg_or_mem(int opcode, const DecodedOperand& rd, const DecodedOperand& ra, W32 setflags, int rcreg, 
@@ -1845,7 +1853,7 @@ bool TraceDecoder::invalidate() {
     print_invalid_insns(op, (const byte*)ripstart, (const byte*)rip, valid_byte_count, 0, faultaddr);
 	ptl_logfile << superstl::flush;
 
-	assert(0);
+//	assert(0);
 
     if likely (split_invalid_basic_blocks && (!first_insn_in_bb())) {
       //

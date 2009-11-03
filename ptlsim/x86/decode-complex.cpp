@@ -82,7 +82,9 @@ void assist_syscall(Context& ctx) {
 //  handle_syscall_assist(ctx);
 //	ctx.setup_qemu_switch();
 //	helper_syscall(ctx.regs[R_ECX]);
-	ASSIST_IN_QEMU(helper_syscall, ctx.regs[R_ECX]);
+	ctx.eip = ctx.reg_selfrip;
+	ASSIST_IN_QEMU(helper_syscall, ctx.reg_nextrip - ctx.reg_selfrip);
+//	ASSIST_IN_QEMU(helper_syscall, ctx.regs[R_ECX]);
 #else
   if (ctx.use64) {
 #ifdef __x86_64__
@@ -96,7 +98,9 @@ void assist_syscall(Context& ctx) {
 }
 
 void assist_sysret(Context& ctx) {
-	ASSIST_IN_QEMU(helper_sysret, ctx.use64);
+	ctx.eip = ctx.reg_selfrip;
+	int dflag = (ctx.use64 | ctx.use32 ) ? 2 : 1;
+	ASSIST_IN_QEMU(helper_sysret, dflag);
 }
 
 void assist_hypercall(Context& ctx) {
@@ -340,6 +344,16 @@ void assist_cpuid(Context& ctx) {
   ctx.eip = ctx.reg_nextrip;
 }
 
+void assist_sti(Context& ctx) {
+	ASSIST_IN_QEMU(helper_sti);
+	ctx.eip = ctx.reg_nextrip;
+}
+
+void assist_cli(Context& ctx) {
+	ASSIST_IN_QEMU(helper_cli);
+	ctx.eip = ctx.reg_nextrip;
+}
+
 void assist_ud2a(Context& ctx) {
 	// This instruction should never occur in simulation.
 	// Linux Kernel uses ud2a to trigger Bug in the code or
@@ -353,7 +367,7 @@ void assist_ud2a(Context& ctx) {
 void assist_ljmp_prct(Context& ctx) {
 	W32 new_cs = ctx.reg_ar1;
 	W32 new_eip = ctx.reg_ar2;
-	W32 next_eip_addend = ctx.reg_selfrip + ctx.reg_nextrip;
+	W32 next_eip_addend = ctx.reg_nextrip - ctx.reg_selfrip;
 	ptl_logfile << "assit_ljmp_prct: csbase: ", ctx.reg_ar1,
 				" eip: ", ctx.reg_ar2, endl;
 //	ctx.setup_qemu_switch();
@@ -506,6 +520,30 @@ void assist_clts(Context& ctx) {
 	ASSIST_IN_QEMU(helper_clts);
 	// abort block because static cpu state changed
 	ctx.eip = ctx.reg_nextrip;
+}
+
+// SWAPGS
+void assist_swapgs(Context& ctx) {
+	// This instruction is created as an assist because we 
+	// have to make sure that we dont do any out-of order 
+	// execution of after this opcode untill its completed
+	// So it acts as a barriar instruction
+	// Actual swap of GS is already done in uops
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// Barrier
+void assist_barrier(Context& ctx) {
+	// Simple barrier assist to make sure we don't do any 
+	// out of order execution beyound the instruction that calls
+	// this assist function
+	ctx.eip = ctx.reg_nextrip;
+}
+
+// Halt
+void assist_halt(Context& ctx) {
+	W64 next_eip = ctx.reg_nextrip - ctx.segs[R_CS].base;
+	ASSIST_IN_QEMU(helper_hlt, next_eip);
 }
 
 void assist_rdtsc(Context& ctx) {
@@ -1846,11 +1884,14 @@ bool TraceDecoder::decode_complex() {
 	// ljmp imm
 	if(use64) {
 		// mark as invalid op
+		MakeInvalid();
+		break;
 	}
+
 	W32 offset;
 	int sizeshift;
 	if(addrsize_prefix) {
-		DECODE(iform, ra, v_mode);
+		DECODE(iform, ra, d_mode);
 		sizeshift = 2;
 	} else {
 		DECODE(iform, ra, w_mode);
@@ -2071,18 +2112,20 @@ bool TraceDecoder::decode_complex() {
   }
 
   case 0xfa: { // cli
-    // (nop)
-    // NOTE! We still have to output something so %rip gets incremented correctly!
     EndOfDecode();
-    this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
+
+	// TODO : Add privilage check for this instruction
+	microcode_assist(ASSIST_CLI, ripstart, rip);
+	end_of_block = 1;
     break;
   }
 
   case 0xfb: { // sti
-    // (nop)
-    // NOTE! We still have to output something so %rip gets incremented correctly!
     EndOfDecode();
-    this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
+
+	// TODO : Add privilage check for this instruction
+	microcode_assist(ASSIST_STI, ripstart, rip);
+	end_of_block = 1;
     break;
   }
 
@@ -2219,6 +2262,9 @@ bool TraceDecoder::decode_complex() {
 
 			this << TransOp(OP_st, REG_mem, REG_zero, REG_imm,
 					REG_temp6, 3, ra.imm.imm);
+
+			microcode_assist(ASSIST_BARRIER, ripstart, rip);
+			end_of_block = 1;
 			break;
 		case 1: 
 			if (modrm.mod == 3) {
@@ -2272,7 +2318,7 @@ bool TraceDecoder::decode_complex() {
 								ripstart);
 
 						this << TransOp(OP_mov, REG_ar1, REG_zero,
-								REG_imm, REG_zero, 3, rip - ripstart);
+								REG_imm, REG_zero, 3, rip - cs_base);
 						microcode_assist(ASSIST_MWAIT,
 								ripstart, rip);
 						break;
@@ -2307,6 +2353,9 @@ bool TraceDecoder::decode_complex() {
 
 				this << TransOp(OP_st, REG_mem, REG_zero, REG_imm,
 						REG_temp6, 3, ra.imm.imm);
+				
+				microcode_assist(ASSIST_BARRIER, ripstart, rip);
+				end_of_block = 1;
 			}
 			break;
 		case 2: // lgdt
@@ -2410,6 +2459,8 @@ bool TraceDecoder::decode_complex() {
 					this << *st2;
 					delete st1;
 					delete st2;
+					microcode_assist(ASSIST_BARRIER, ripstart, rip);
+					end_of_block = 1;
 				}
 
 			}
@@ -2432,6 +2483,8 @@ bool TraceDecoder::decode_complex() {
 			delete ldp;
 
 			result_store(REG_temp0, REG_zero, rd);
+			microcode_assist(ASSIST_BARRIER, ripstart, rip);
+			end_of_block = 1;
 			break;
 		case 6: // LMSW
 			if (check_privilege(*this)) {
@@ -2449,7 +2502,8 @@ bool TraceDecoder::decode_complex() {
 			if (check_privilege(*this)) {
 				if(modrm.mod == 3) {
 					if(use64 && modrm.rm == 0) {
-						// Swapgs
+						// swapgs
+						EndOfDecode();
 						TransOp ld1(OP_ld, REG_temp0, REG_ctx, REG_imm,
 								REG_zero, 3, 
 								offsetof_t(Context, segs[R_GS].base));
@@ -2473,6 +2527,10 @@ bool TraceDecoder::decode_complex() {
 						this << *st2;
 						delete st1;
 						delete st2;
+
+						microcode_assist(ASSIST_SWAPGS, ripstart, rip);
+						end_of_block = 1;
+
 					} else {
 						goto invalid_opcode;
 					}	
@@ -2488,8 +2546,6 @@ bool TraceDecoder::decode_complex() {
 					operand_load(REG_ar1, ra);
 					microcode_assist(ASSIST_INVLPG,
 							ripstart, rip);
-					this << TransOp(OP_jmp, REG_rip, REG_zero,
-							REG_imm, REG_zero, 3, rip);
 					end_of_block = 1;
 				}
 			}
@@ -3127,7 +3183,7 @@ bool TraceDecoder::decode_complex() {
     // syscall or hypercall
     // Saves return address into %rcx and jumps to MSR_LSTAR
     EndOfDecode();
-    abs_code_addr_immediate(REG_rcx, 3, (Waddr)rip);
+    abs_code_addr_immediate(REG_rcx, 3, (Waddr)(rip - cs_base));
 //    microcode_assist((kernel) ? ASSIST_HYPERCALL : ASSIST_SYSCALL, ripstart, rip);
     microcode_assist(ASSIST_SYSCALL, ripstart, rip);
     end_of_block = 1;

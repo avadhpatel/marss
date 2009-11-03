@@ -340,6 +340,8 @@ enum {
   ASSIST_IRET16,
   ASSIST_IRET32,
   ASSIST_IRET64,
+  ASSIST_STI,
+  ASSIST_CLI,
   // Control register updates
   ASSIST_CPUID,
   ASSIST_RDTSC,
@@ -394,6 +396,12 @@ enum {
   ASSIST_VERW,
   // CLTS
   ASSIST_CLTS,
+  // SWAPGS
+  ASSIST_SWAPGS,
+  // Barrier
+  ASSIST_BARRIER,
+  // HLT
+  ASSIST_HLT,
   ASSIST_COUNT,
 };
 
@@ -458,6 +466,8 @@ static const char* assist_names[ASSIST_COUNT] = {
   "iret16",
   "iret32",
   "iret64",
+  "sti",
+  "cli",
   // Control register updates
   "cpuid",
   "rdtsc",
@@ -512,6 +522,12 @@ static const char* assist_names[ASSIST_COUNT] = {
   "verw",
   // CLTS
   "clts",
+  // SWAPGS
+  "swapgs",
+  // Barrier
+  "barrier",
+  // HLT
+  "halt",
 };
 
 int propagate_exception_during_assist(Context& ctx, byte exception, W32 errorcode, Waddr virtaddr = 0, bool intN = 0);
@@ -568,6 +584,8 @@ void assist_sysenter(Context& ctx);
 void assist_iret16(Context& ctx);
 void assist_iret32(Context& ctx);
 void assist_iret64(Context& ctx);
+void assist_sti(Context& ctx);
+void assist_cli(Context& ctx);
 // Control registe rupdates
 void assist_cpuid(Context& ctx);
 void assist_rdtsc(Context& ctx);
@@ -622,6 +640,12 @@ void assist_verr(Context& ctx);
 void assist_verw(Context& ctx);
 // CLTS
 void assist_clts(Context& ctx);
+// SWAPGS
+void assist_swapgs(Context& ctx);
+// Barrier
+void assist_barrier(Context& ctx);
+// HLT
+void assist_halt(Context& ctx);
 
 //
 // Global functions
