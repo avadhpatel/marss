@@ -954,6 +954,8 @@ struct Context: public CPUX86State {
 	  W64 flags = reg_flags;
 	  // Set the 2nd bit to 1 for compatibility
 	  flags = (flags | FLAG_INV); 
+	  // Set the 3rd bit to 0
+//	  flags = (flags | ~FLAG_WAIT);
 //	  load_eflags(flags, (TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK));
 	  load_eflags(flags, -1);
   }
@@ -963,7 +965,7 @@ struct Context: public CPUX86State {
 	  set_cpu_env((CPUX86State*)this);
 	  W64 flags = compute_eflags();
 
-	  // Clear the 2nd bit as its used by PTLSim to indicate if 
+	  // Clear the 2nd and 3rd bit as its used by PTLSim to indicate if 
 	  // uop is executed correctly or not
 	  flags = (flags & ~(W64)(FLAG_INV));
 	  reg_flags = flags;

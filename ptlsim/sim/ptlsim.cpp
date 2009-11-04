@@ -420,9 +420,9 @@ void backup_and_reopen_logfile() {
     sys_unlink(oldname);
     sys_rename(config.log_filename, oldname);
     ptl_logfile.open(config.log_filename);
-#ifdef TRACE_RIP
-	ptl_rip_trace.open("ptl_rip_trace");
-#endif
+//#ifdef TRACE_RIP
+//	ptl_rip_trace.open("ptl_rip_trace");
+//#endif
   }
 }
 
@@ -488,6 +488,9 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
     backup_and_reopen_logfile();
     current_log_filename = config.log_filename;
   }
+#ifdef TRACE_RIP
+	ptl_rip_trace.open("ptl_rip_trace");
+#endif
 
 //  ptl_logfile.setchain((config.log_on_console) ? &cout : null);
 

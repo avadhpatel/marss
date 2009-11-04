@@ -1233,14 +1233,14 @@ handle_page_fault: {
 		  ptl_logfile << "Page fault exception address: ",
 					  hexstring(exception_address, 64), 
 					  " is_write: ", write_exception, endl;
-	  if (exception_address < 0x10000) {
-		  ptl_logfile << "Page address causing exception seems to be ",
-					  "invalid so aborting..\n", endl;
-		  ptl_logfile << ctx, endl;
-		  dump_smt_state(ptl_logfile);
-		  ptl_logfile << flush;
-		  assert(0);
-	  }
+//	  if (exception_address < 0x10000) {
+//		  ptl_logfile << "Page address causing exception seems to be ",
+//					  "invalid so aborting..\n", endl;
+//		  ptl_logfile << ctx, endl;
+//		  dump_smt_state(ptl_logfile);
+//		  ptl_logfile << flush;
+//		  assert(0);
+//	  }
 	  int old_exception = ctx.exception_index;
 	  ctx.handle_page_fault(exception_address, write_exception);
 	  // If we return here means the QEMU has fix the page fault

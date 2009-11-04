@@ -905,6 +905,7 @@ namespace OutOfOrderModel {
       refcount = 0;
       threadid = 0xff;
       all_consumers_sourced_from_bypass = 1;
+	  flags = flags & ~(FLAG_INV | FLAG_WAIT);
     }
 
   private:

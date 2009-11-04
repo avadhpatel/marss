@@ -1374,13 +1374,13 @@ static void host_alarm_handler(int host_signum)
 #endif
         if (alarm_timer) alarm_timer->flags |= ALARM_FLAG_EXPIRED;
 
-#ifdef PTLSIM_QEMU
+//#ifdef PTLSIM_QEMU
 //		if (in_simulation)
 //			update_progress();
-		if (env && !in_simulation) {
-#else
+//		if (env && !in_simulation) {
+//#else
         if (env) {
-#endif
+//#endif
             /* stop the currently executing cpu because a timer occured */
             cpu_interrupt(env, CPU_INTERRUPT_EXIT);
 #ifdef USE_KQEMU
