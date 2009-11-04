@@ -283,13 +283,6 @@ bool TraceDecoder::decode_fast() {
     break;
   }
 
-  case 0x90: {
-    // 0x90 (xchg eax,eax) is a NOP and in x86-64 is treated as such (i.e. does not zero upper 32 bits as usual)
-    EndOfDecode();
-    this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
-    break;
-  }
-
   case 0x98: {
     // cbw cwde cdqe
     int rashift = (opsize_prefix) ? 0 : ((rex.mode64) ? 2 : 1);

@@ -1136,16 +1136,17 @@ void assist_ioport_out(Context& ctx) {
 }
 #endif
 
-static inline void svm_check_intercept(TraceDecoder& dec, W64 type, W64 param=0) {
+static inline int svm_check_intercept(TraceDecoder& dec, W64 type, W64 param=0) {
 	// No SVM activated, do nothing
 	if likely(!(dec.hflags & HF_SVMI_MASK))
-		return;
+		return 0;
 	cerr << "SVM Check failed..\n";
     dec << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
 	dec << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 3, type);
 	dec << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, param);
 	dec.microcode_assist(ASSIST_SVM_CHECK, dec.ripstart, dec.rip);
 	dec.end_of_block = 1;
+	return 1;
 }
 
 static inline bool check_privilege(TraceDecoder& dec) {
@@ -2128,6 +2129,19 @@ bool TraceDecoder::decode_complex() {
 	end_of_block = 1;
     break;
   }
+
+  case 0x90: {
+    // 0x90 (xchg eax,eax) is a NOP and in x86-64 is treated as such (i.e. does not zero upper 32 bits as usual)
+    EndOfDecode();
+	// If it has rep prefix then do SVM_EXIT
+	if(prefixes & PFX_REPZ) {
+		if(svm_check_intercept(*this, SVM_EXIT_PAUSE)) 
+			break;
+	} 
+	this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
+    break;
+  }
+
 
   case 0x100: {
 	switch(modrm.reg) {
