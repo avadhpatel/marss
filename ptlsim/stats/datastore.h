@@ -231,7 +231,8 @@ struct DataStoreNode {
 
   bool read(ifstream& is);
 
-  ostream& write(ostream& os) const;
+  ostream& write(ostream& os, bool bin=0) const;
+  ofstream& write_bin(ofstream& os, bool bin=0) const;
 
   ostream& generate_structural_code(ostream& os, int level = 0) const;
   ostream& generate_reconstruction_code(ostream& os, int level = 0) const;
@@ -460,8 +461,12 @@ struct DataStoreNode {
   }
 };
 
+//inline ofstream& operator <<(ofstream& os, const DataStoreNode& node) {
+//  return node.write_bin(os, 1);
+//}
+
 inline ostream& operator <<(ostream& os, const DataStoreNode& node) {
-  return node.write(os);
+  return node.write(os, 1);
 }
 
 //
@@ -568,7 +573,7 @@ struct DataStoreNodeTemplate: public DataStoreNodeTemplateBase {
   //
   // Write structural definition in binary format for use by ptlstats:
   //
-  ostream& write(ostream& os) const;
+  ofstream& write(ofstream& os) const;
 
   //
   // Read structural definition in binary format for use by ptlstats:

@@ -130,10 +130,13 @@ while (<STDIN>) {
   if (!$enabled) {
     if ($topnode eq $target) {
       print("\n");
-      print("  cout << $target;\n");
-#      print("  ofstream os(cout.filehandle());\n");
+#	  print("  cout.flags(std::ios::binary);\n");
+#      print("  cout << $target;\n");
+      print("  ofstream os(argv[1], std::ios::binary | std::ios::out);\n");
+#      print("  os.write((char*)&$target, sizeof($target));\n");
 #      print("  os << $target;\n");
-#      print("  os.close();\n");
+	  print("  $target.write(os);\n");
+      print("  os.close();\n");
       print("}\n");
     }
 

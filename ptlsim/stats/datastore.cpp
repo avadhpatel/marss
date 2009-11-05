@@ -771,7 +771,7 @@ bool DataStoreNode::read(ifstream& is) {
   return is;
 }
 
-ostream& DataStoreNode::write(ostream& os) const {
+ofstream& DataStoreNode::write_bin(ofstream& os, bool bin) const {
   DataStoreNodeHeader h;
   DataStoreNodeArrayHeader ah;
 
@@ -805,7 +805,10 @@ ostream& DataStoreNode::write(ostream& os) const {
     // Write the <count> histogram slot labels
     foreach (i, count) {
       W16 ll = strlen(labels[i]);
-      os << ll;
+      if(bin)
+          os << ll;
+      else
+          os.write((char*)(&ll), sizeof(ll));
       os.write(labels[i], ll);
     }
   }
@@ -816,7 +819,10 @@ ostream& DataStoreNode::write(ostream& os) const {
   }
   case DS_NODE_TYPE_INT: {
     if (count == 1) {
-      os << value.w;
+        if(bin)
+            os << value.w;
+        else
+            os.write((char*)(&value.w), sizeof(value.w));
     } else {
       os.write(reinterpret_cast<const char*>(values), count * sizeof(DataType));
     }
@@ -824,7 +830,10 @@ ostream& DataStoreNode::write(ostream& os) const {
   }
   case DS_NODE_TYPE_FLOAT: {
     if (count == 1) {
-      os << value.f;
+        if(bin)
+            os << value.f;
+        else
+            os.write((char*)(&value.f), sizeof(value.f));
     } else {
       os.write(reinterpret_cast<const char*>(values), count * sizeof(DataType));
     }
@@ -834,13 +843,123 @@ ostream& DataStoreNode::write(ostream& os) const {
     if (count == 1) {
       int len = strlen(value.s);
       assert(len < 65536);     
-      os << (W16)len;
+      if(bin)
+          os << (W16)len;
+      else
+          os.write((char*)(&len), sizeof(W16));
       os.write(value.s, len+1);
     } else {
       foreach (i, count) {
         int len = strlen(values[i].s);
         assert(len < 65536);
-        os << (W16)len;
+        if(bin)
+            os << (W16)len;
+        else
+            os.write((char*)(&len), sizeof(W16));
+        os.write(reinterpret_cast<const char*>(values[i].s), len+1);
+      }
+    }
+    break;
+  }
+  default:
+    assert(false);
+  }
+
+  if (subnodes) {
+    DataStoreNodeDirectory& a = getentries();
+    foreach (i, a.length) {
+      a[i].value->write(os);
+    }
+    delete &a;
+  }
+  return os;
+}
+
+ostream& DataStoreNode::write(ostream& os, bool bin) const {
+  DataStoreNodeHeader h;
+  DataStoreNodeArrayHeader ah;
+
+  int namelen = strlen(name);
+  assert(namelen < 256);
+
+  h.magic = DSN_MAGIC_VER_3;
+  h.type = type;
+  h.namelength = (byte)namelen;
+  h.histogramarray = histogramarray;
+  h.summable = summable;
+  h.identical_subtrees = identical_subtrees;
+  h.labeled_histogram = labeled_histogram;
+
+  h.isarray = (count > 1);
+  if (count > 1) {
+    ah.count = count;
+    ah.histomin = histomin;
+    ah.histomax = histomax;
+    ah.histostride = histostride;
+  }
+
+  h.subcount = (subnodes) ? subnodes->count : 0;
+
+  os << h;
+  if (h.isarray) os << ah;
+
+  os.write(name, h.namelength + 1);
+
+  if (h.isarray & h.histogramarray & h.labeled_histogram) {
+    // Write the <count> histogram slot labels
+    foreach (i, count) {
+      W16 ll = strlen(labels[i]);
+      if(bin)
+          os << ll;
+      else
+          os.write((char*)(&ll), sizeof(ll));
+      os.write(labels[i], ll);
+    }
+  }
+
+  switch (type) {
+  case DS_NODE_TYPE_NULL: {
+    break;
+  }
+  case DS_NODE_TYPE_INT: {
+    if (count == 1) {
+        if(bin)
+            os << value.w;
+        else
+            os.write((char*)(&value.w), sizeof(value.w));
+    } else {
+      os.write(reinterpret_cast<const char*>(values), count * sizeof(DataType));
+    }
+    break;
+  }
+  case DS_NODE_TYPE_FLOAT: {
+    if (count == 1) {
+        if(bin)
+            os << value.f;
+        else
+            os.write((char*)(&value.f), sizeof(value.f));
+    } else {
+      os.write(reinterpret_cast<const char*>(values), count * sizeof(DataType));
+    }
+    break;
+  }
+  case DS_NODE_TYPE_STRING: {
+    if (count == 1) {
+      int len = strlen(value.s);
+      assert(len < 65536);     
+      if(bin)
+          os << (W16)len;
+      else
+          os.write((char*)(&len), sizeof(W16));
+      os.write(value.s, len+1);
+    } else {
+      foreach (i, count) {
+        int len = strlen(values[i].s);
+        assert(len < 65536);
+        if(bin)
+            os << (W16)len;
+        else
+            os.write((char*)(&len), sizeof(W16));
         os.write(reinterpret_cast<const char*>(values[i].s), len+1);
       }
     }
@@ -994,16 +1113,21 @@ ostream& DataStoreNodeTemplate::generate_struct_def(ostream& os, int depth) cons
 //
 // Write structural definition in binary format for use by ptlstats:
 //
-ostream& DataStoreNodeTemplate::write(ostream& os) const {
+ofstream& DataStoreNodeTemplate::write(ofstream& os) const {
   W16 n;
 
   os.write((char*)((DataStoreNodeTemplateBase*)this), sizeof(DataStoreNodeTemplateBase));
 
-  n = strlen(name); os << n; os.write(name, n);
+  n = strlen(name); 
+  os.write((char*)(&n), sizeof(W16)); 
+  os.write(name, n);
 
   if (labeled_histogram) {
     foreach (i, count) {
-      n = strlen(labels[i]); os << n; os.write(labels[i], n);
+      n = strlen(labels[i]); 
+      os.write((char*)(&n), sizeof(W16)); 
+//      os << n; 
+      os.write(labels[i], n);
     }
   }
 
@@ -1217,7 +1341,8 @@ void StatsFileWriter::flush() {
 //    os << (W64)(namelink->uuid);
 	os.write((char*)(&namelink->uuid), sizeof(W64));
     W16 namelen = strlen(namelink->name) + 1;
-    os << namelen;
+//    os << namelen;
+    os.write((char*)(&namelen), sizeof(W16));
     os.write(namelink->name, namelen);
     namelink = (StatsIndexRecordLink*)namelink->next;
     n++;
@@ -1227,6 +1352,8 @@ void StatsFileWriter::flush() {
 
   os.seekp(0);
   os << header;
+
+  assert(os.good());
 
   os.seekp(header.record_offset + (header.record_count * header.record_size));
 }
@@ -1302,13 +1429,16 @@ bool StatsFileReader::open(const char* filename) {
   foreach (i, header.index_count) {
     W64 uuid = 0;
     is >> uuid;
+    cout << "UUID is: ", uuid, endl;
     assert(is.is_open());
     W16 namelen;
     is >> namelen;
+    cout << "namelength is: ", namelen, endl;
     assert(is.is_open());
     if (namelen) {
       char* name = new char[namelen];
       is.read(name, namelen);
+      cout << "name is: ", name, endl;
       name_to_uuid.add(name, uuid);
       delete[] name;
     }
@@ -1323,10 +1453,15 @@ DataStoreNode* StatsFileReader::get(W64 uuid) {
   if unlikely (uuid >= header.record_count) return null;
   W64 offset = header.record_offset + (header.record_size * uuid);
 
+//  cout << "offset is: ", hexstring(offset, 64), endl;
+
   is.seekg(offset);
   is.read((char*)(buf), header.record_size);
-  int size = strlen((char*)(buf));
-  if unlikely (size != header.record_size) return null;
+  assert(is.good());
+  cout << "file position: ", is.tellg(), endl;
+//  int size = strlen((char*)(buf));
+//  cout << "size is: ", size ,endl;
+  if unlikely (is.gcount() != header.record_size) return null;
 
   const W64* p = (const W64*)buf;
   DataStoreNode* dsn = dst->reconstruct(p);

@@ -90,11 +90,12 @@ dst_tmp = env.Program('build/dstbuild.temp',
         dst_objs + ["build/dstbuild.temp.cpp"],
         CCFLAGS = env['CCFLAGS'] + " -DDSTBUILD -include stats.h")
 ptl_dst = env.Command('build/ptlsim.dst', dst_tmp,
-        "./$SOURCE > $TARGET")
+        "./$SOURCE $TARGET")
 ptl_dst_o = env.Command('build/ptlsim.dst.o', ptl_dst,
         "objcopy -I binary -O elf64-x86-64 -B i386 --rename-section "+
         ".data=.dst,alloc,load,readonly,data,contents $SOURCE $TARGET")
 
+Depends(dst_tmp_cpp, dst_script)
 Requires(dst_tmp_cpp, st_i)
 Requires(dst_tmp, dst_tmp_cpp)
 #Delete(st_i)
