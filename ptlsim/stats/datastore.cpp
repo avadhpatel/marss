@@ -640,12 +640,12 @@ struct DataStoreNodeArrayHeader {
 };
 
 static inline ostream& operator <<(ostream& os, DataStoreNodeArrayHeader& ah) {
-//	os.write(reinterpret_cast<char*>(ah.count), sizeof(ah.count));
-//	os.write(reinterpret_cast<char*>(ah.padding), sizeof(ah.padding));
-//	os.write(reinterpret_cast<char*>(ah.histomin), sizeof(ah.histomin));
-//	os.write(reinterpret_cast<char*>(ah.histomax), sizeof(ah.histomax));
-//	os.write(reinterpret_cast<char*>(ah.histostride), sizeof(ah.histostride));
-	os.write(reinterpret_cast<char*>(&ah), sizeof(ah));
+//	os.write((char*)(ah.count), sizeof(ah.count));
+//	os.write((char*)(ah.padding), sizeof(ah.padding));
+//	os.write((char*)(ah.histomin), sizeof(ah.histomin));
+//	os.write((char*)(ah.histomax), sizeof(ah.histomax));
+//	os.write((char*)(ah.histostride), sizeof(ah.histostride));
+	os.write((char*)(&ah), sizeof(ah));
 	return os;
 }
 
@@ -668,7 +668,7 @@ DataStoreNode::DataStoreNode(ifstream& is) {
 }
 
 static inline ostream& operator <<(ostream& os, DataStoreNodeHeader& dh) {
-	os.write(reinterpret_cast<char*>(&dh), sizeof(dh));
+	os.write((char*)(&dh), sizeof(dh));
 	return os;
 }
 
@@ -818,7 +818,7 @@ ostream& DataStoreNode::write(ostream& os) const {
     if (count == 1) {
       os << value.w;
     } else {
-      os.write(reinterpret_cast<const char*>(&values), count * sizeof(DataType));
+      os.write(reinterpret_cast<const char*>(values), count * sizeof(DataType));
     }
     break;
   }
@@ -826,7 +826,7 @@ ostream& DataStoreNode::write(ostream& os) const {
     if (count == 1) {
       os << value.f;
     } else {
-      os.write(reinterpret_cast<const char*>(&values), count * sizeof(DataType));
+      os.write(reinterpret_cast<const char*>(values), count * sizeof(DataType));
     }
     break;
   }
@@ -841,7 +841,7 @@ ostream& DataStoreNode::write(ostream& os) const {
         int len = strlen(values[i].s);
         assert(len < 65536);
         os << (W16)len;
-        os.write(reinterpret_cast<const char*>(&values[i].s), len+1);
+        os.write(reinterpret_cast<const char*>(values[i].s), len+1);
       }
     }
     break;
@@ -997,7 +997,7 @@ ostream& DataStoreNodeTemplate::generate_struct_def(ostream& os, int depth) cons
 ostream& DataStoreNodeTemplate::write(ostream& os) const {
   W16 n;
 
-  os.write(reinterpret_cast<char*>((DataStoreNodeTemplateBase*)this), sizeof(DataStoreNodeTemplateBase));
+  os.write((char*)((DataStoreNodeTemplateBase*)this), sizeof(DataStoreNodeTemplateBase));
 
   n = strlen(name); os << n; os.write(name, n);
 
@@ -1021,7 +1021,7 @@ ostream& DataStoreNodeTemplate::write(ostream& os) const {
 //
 DataStoreNodeTemplate::DataStoreNodeTemplate(ifstream& is) {
   // Fill in all static fields:
-  is.read(reinterpret_cast<char*>(this), sizeof(DataStoreNodeTemplateBase));
+  is.read((char*)(this), sizeof(DataStoreNodeTemplateBase));
   assert(magic == DataStoreNodeTemplateBase::MAGIC);
   assert(length == sizeof(DataStoreNodeTemplateBase));
 
@@ -1165,7 +1165,8 @@ void DataStoreNodeTemplate::subtract(W64*& p, W64*& psub) const {
 //
 void StatsFileWriter::open(const char* filename, const void* dst, size_t dstsize, int record_size) {
   close();
-  os.open(filename, std::ofstream::binary);
+//  os.open(filename, std::ofstream::binary | std::ofstream::out);
+  os.open(filename, std::ios_base::binary | std::ios_base::out);
 
   namelist = null;
 
@@ -1180,7 +1181,7 @@ void StatsFileWriter::open(const char* filename, const void* dst, size_t dstsize
   os << header;
 
   os.seekp(header.template_offset);
-  os.write(reinterpret_cast<const char*>(&dst), dstsize);
+  os.write((char*)(dst), dstsize);
 
   os.seekp(header.record_offset);
 }
@@ -1194,14 +1195,19 @@ void StatsFileWriter::write(const void* record, const char* name) {
     header.index_count++;
   }
 
-  os.write(reinterpret_cast<const char*>(record), header.record_size);
+//  os.write(reinterpret_cast<const char*>(record), header.record_size);
+  os.write((char*)(record), header.record_size);
   header.record_count++;
 }
 
 void StatsFileWriter::flush() {
   if (!os.is_open()) return;
 
-  header.index_offset = os.tellp();
+  header.index_offset = (int)(os.tellp());
+  cerr << "Index offset is : ", os.tellp();
+  if(header.index_offset == -1) {
+	  cerr << "Error in file operation: ", errno, endl;
+  }
   assert(header.index_offset == (header.record_offset + (header.record_count * header.record_size)));
 
   StatsIndexRecordLink* namelink = namelist;
@@ -1209,7 +1215,7 @@ void StatsFileWriter::flush() {
 
   while (namelink) {
 //    os << (W64)(namelink->uuid);
-	os.write(reinterpret_cast<char*>(&namelink->uuid), sizeof(W64));
+	os.write((char*)(&namelink->uuid), sizeof(W64));
     W16 namelen = strlen(namelink->name) + 1;
     os << namelen;
     os.write(namelink->name, namelen);
@@ -1255,7 +1261,7 @@ void StatsFileWriter::close() {
 
 bool StatsFileReader::open(const char* filename) {
   close();
-  is.open(filename);
+  is.open(filename, std::ifstream::in | std::ifstream::binary);
 
   if (!is) {
     cerr << "StatsFileReader: cannot open ", filename, endl;
@@ -1318,8 +1324,8 @@ DataStoreNode* StatsFileReader::get(W64 uuid) {
   W64 offset = header.record_offset + (header.record_size * uuid);
 
   is.seekg(offset);
-  is.read(reinterpret_cast<char*>(buf), header.record_size);
-  int size = strlen(reinterpret_cast<char*>(buf));
+  is.read((char*)(buf), header.record_size);
+  int size = strlen((char*)(buf));
   if unlikely (size != header.record_size) return null;
 
   const W64* p = (const W64*)buf;
@@ -1335,13 +1341,13 @@ DataStoreNode* StatsFileReader::getdelta(W64 uuid, W64 uuidsub) {
   W64 offsetsub = header.record_offset + (header.record_size * uuidsub);
 
   is.seekg(offset);
-  is.read(reinterpret_cast<char*>(buf), header.record_size);
-  int size = strlen(reinterpret_cast<char*>(buf));
+  is.read((char*)(buf), header.record_size);
+  int size = strlen((char*)(buf));
   if unlikely (size != header.record_size) return null;
 
   is.seekg(offsetsub);
-  is.read(reinterpret_cast<char*>(bufsub), header.record_size);
-  size = strlen(reinterpret_cast<char*>(buf));
+  is.read((char*)(bufsub), header.record_size);
+  size = strlen((char*)(buf));
   if unlikely (size != header.record_size) return null;
 
   const W64* p = (const W64*)buf;

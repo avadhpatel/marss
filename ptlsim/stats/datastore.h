@@ -614,7 +614,7 @@ struct StatsFileHeader {
 };
 
 static inline ostream& operator <<(ostream& os, StatsFileHeader& sh) {
-	return os.write(reinterpret_cast<char*>(&sh), sizeof(sh));
+	return os.write((char*)(&sh), sizeof(sh));
 }
 
 struct StatsIndexRecordLink: public selflistlink {

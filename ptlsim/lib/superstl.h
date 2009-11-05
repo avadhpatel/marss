@@ -69,15 +69,19 @@ int format_float(char* buf, int bufsize, double v, int precision = 6, int pad = 
 
 #endif
 
+typedef std::ostream ostream;
+typedef std::istream istream;
+typedef std::ofstream ofstream;
+typedef std::ifstream ifstream;
 
 namespace superstl {
 
 //	using namespace std;
 
-	typedef std::ostream ostream;
-	typedef std::istream istream;
-	typedef std::ofstream ofstream;
-	typedef std::ifstream ifstream;
+//	typedef std::ostream ostream;
+//	typedef std::istream istream;
+//	typedef std::ofstream ofstream;
+//	typedef std::ifstream ifstream;
 //	typedef std::iosflush iosflush;
 //	typedef std::cin cin;
 //	typedef std::cout cout;

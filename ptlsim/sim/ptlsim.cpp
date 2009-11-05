@@ -494,13 +494,13 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 
 //  ptl_logfile.setchain((config.log_on_console) ? &cout : null);
 
-  if (config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
+//  if (config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
     // Can also use "-ptl_logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
     statswriter.open(config.stats_filename, &_binary_ptlsim_build_ptlsim_dst_start,
                      &_binary_ptlsim_build_ptlsim_dst_end - &_binary_ptlsim_build_ptlsim_dst_start,
                      sizeof(PTLsimStats));
     current_stats_filename = config.stats_filename;
-  }
+//  }
 
   if (config.trace_memory_updates_logfile.set() && (config.trace_memory_updates_logfile != current_trace_memory_updates_logfile)) {
     backup_and_reopen_memory_logfile();
@@ -876,7 +876,7 @@ extern "C" uint8_t ptl_simulate() {
 	if (!machine->stopped) {
 		ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).exception_index,
 			" ex: ", contextof(0).exception, " running: ",
-			contextof(0).running, endl;
+			contextof(0).running, endl, flush;
 		foreach(c, contextcount) {
 			Context& ctx = contextof(c);
 			ctx.setup_qemu_switch();
@@ -914,6 +914,14 @@ extern "C" uint8_t ptl_simulate() {
 	cerr << endl;
 #endif
 	print_stats_in_log();
+
+	
+	const char *final_name = "final";
+    strncpy(stats.snapshot_name, final_name, sizeof(final_name));
+	stats.snapshot_uuid = statswriter.next_uuid();
+	statswriter.write(&stats, final_name);
+
+	statswriter.close();
 
 	return 0;
 }

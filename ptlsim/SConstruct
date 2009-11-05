@@ -97,9 +97,9 @@ ptl_dst_o = env.Command('build/ptlsim.dst.o', ptl_dst,
 
 Requires(dst_tmp_cpp, st_i)
 Requires(dst_tmp, dst_tmp_cpp)
-Delete(st_i)
-Delete(dst_tmp_cpp)
-Delete(dst_tmp)
+#Delete(st_i)
+#Delete(dst_tmp_cpp)
+#Delete(dst_tmp)
 
 
 #lib = env.Library('build/libmptlsim', objs + ptl_dst_o)
