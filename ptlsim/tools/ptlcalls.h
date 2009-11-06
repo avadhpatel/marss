@@ -87,6 +87,11 @@ static inline W64 ptlcall_rdtsc() {
 //  0 = currently unknown before first call to is_running_under_ptlsim()
 // +1 = running under PTLsim with least one available invocation method
 //
+
+#define bits(x, i, l) (((x) >> (i)) & bitmask(l))
+#define LO32(x) (W32)((x) & 0xffffffffLL)
+#define bitmask(l) (((l) == 64) ? (W64)(-1LL) : ((1LL << (l))-1LL))
+
 static int ptlsim_check_status __attribute__((common)) = 0;
 static W64 supported_ptlcall_methods __attribute__((common)) = 0;
 static int selected_ptlcall_method __attribute__((common)) = -1;
@@ -105,10 +110,10 @@ static int ptlsim_ptlcall_init() {
   // a.k.a. cpuid(PTLSIM_CPUID_MAGIC, rax, rbx, rcx, rdx);
   asm volatile("cpuid" : "+a" (rax), "+b" (rbx), "+c" (rcx), "+d" (rdx) : : "memory");
 
-  cout << "rax = 0x", hexstring(rax, 32), endl;
-  cout << "rbx = 0x", hexstring(rbx, 32), endl;
-  cout << "rcx = 0x", hexstring(rcx, 32), endl;
-  cout << "rdx = 0x", hexstring(rdx, 32), endl;
+//  cout << "rax = 0x", hexstring(rax, 32), endl;
+//  cout << "rbx = 0x", hexstring(rbx, 32), endl;
+//  cout << "rcx = 0x", hexstring(rcx, 32), endl;
+//  cout << "rdx = 0x", hexstring(rdx, 32), endl;
   
   if (rax != PTLSIM_CPUID_FOUND) {
     ptlsim_check_status = -1;
@@ -199,7 +204,7 @@ static inline W64 ptlcall(W64 op, W64 arg1, W64 arg2, W64 arg3, W64 arg4, W64 ar
   if (selected_ptlcall_method == PTLCALL_METHOD_MMIO) {
     return do_ptlcall_mmio(op, arg1, arg2, arg3, arg4, arg5, arg6);
   } else {
-    assert(false);
+//    assert(false);
     return (W64)(-ENOSYS);
   }
 }
