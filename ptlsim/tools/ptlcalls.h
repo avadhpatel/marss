@@ -17,6 +17,7 @@
 
 #if (!defined(__INSIDE_PTLSIM__)) && (!defined(__INSIDE_PTLSIM_QEMU__))
 #define PTLCALLS_USERSPACE
+#define _GNU_SOURCE
 #endif
 
 #ifdef PTLCALLS_USERSPACE

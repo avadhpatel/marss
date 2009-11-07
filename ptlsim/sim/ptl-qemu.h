@@ -50,9 +50,6 @@ extern uint8_t inside_ptlsim;
 //				  example, switch between simulation modes or change any
 //				  configuration option.  It also registers a chunk of memory in
 //				  RAM used by memory manager of PTLsim.
-//#ifdef __cplusplus
-//extern "C" 
-//#endif
 void ptlsim_init(void);
 
 // ptl_machine_init 
@@ -99,6 +96,19 @@ uint8_t ptl_simulate(void);
 // returns void
 // working		: Print the progress of PTLSim to stdout
 void update_progress(void);
+
+// ptl_cpuid
+// index		: requested cpuid index value
+// count		: requested count value in cpuid
+// eax			: value to return in eax
+// ebx			: value to return in ebx
+// ecx			: value to return in ecx
+// edx			: value to return in edx
+// return int	: 1 indicate if PTLsim has handled the cpuid and fill the 
+//				  required values into the registers and 0 indicates its not
+//				  handled by PTLsim
+int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
+		uint32_t *ecx, uint32_t *edx);
 
 #ifdef __cplusplus
 }

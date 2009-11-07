@@ -1467,6 +1467,12 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
                    uint32_t *eax, uint32_t *ebx,
                    uint32_t *ecx, uint32_t *edx)
 {
+
+#ifdef PTLSIM_QEMU
+	if(ptl_cpuid(index, count, eax, ebx, ecx, edx) > 0)
+		return;
+#endif
+
     /* test if maximum index reached */
     if (index & 0x80000000) {
         if (index > env->cpuid_xlevel)

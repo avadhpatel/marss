@@ -263,7 +263,6 @@ void MemoryHierarchy::private_L2_configuration()
 
 	}
 
-#define ENABLE_L3_CACHE
 #ifdef ENABLE_L3_CACHE
 	GET_STRINGBUF_PTR(l3_name, "L3");
 	SimpleWTCache::CacheController *l3 = new SimpleWTCache::CacheController(

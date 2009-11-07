@@ -54,6 +54,8 @@ static const int NUMBER_OF_CORES_PER_L2 = 1;
 
 #endif
 
+// Enable/Disable L3 cache
+#define ENABLE_L3_CACHE
 
 typedef __SIZE_TYPE__ size_t;
 typedef unsigned long long W64;
