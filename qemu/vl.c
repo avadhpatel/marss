@@ -1356,6 +1356,8 @@ static void host_alarm_handler(int host_signum)
         last_clock = ti;
     }
 #endif
+#ifdef PTLSIM_QEMU
+#endif
     if (alarm_has_dynticks(alarm_timer) ||
         (!use_icount && 
             qemu_timer_expired(active_timers[QEMU_TIMER_VIRTUAL],
@@ -1421,6 +1423,11 @@ static uint64_t qemu_next_deadline_dyntick(void)
         delta = INT32_MAX;
     else
         delta = (qemu_next_deadline() + 999) / 1000;
+
+#ifdef PTLSIM_QEMU
+	if (in_simulation)
+		delta = INT32_MAX;
+#endif
 
     if (active_timers[QEMU_TIMER_REALTIME]) {
         rtdelta = (active_timers[QEMU_TIMER_REALTIME]->expire_time -

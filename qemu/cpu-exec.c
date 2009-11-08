@@ -375,7 +375,7 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 					// Restore PC
 
 					in_simulation = ptl_simulate();
-					printf("Back from simulation mode eip: %ld\n", env->eip);
+//					printf("Back from simulation mode eip: %ld\n", env->eip);
 					interrupt_request = env->interrupt_request;
 					if (unlikely(interrupt_request)) {
 						if (unlikely(env->singlestep_enabled & SSTEP_NOIRQ)) {
@@ -431,6 +431,10 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 #endif
 							}
 						}
+					}
+					if (unlikely(env->exit_request)) {
+						env->exit_request = 0;
+						env->exception_index = EXCP_INTERRUPT;
 					}
 					cpu_loop_exit();
 				}

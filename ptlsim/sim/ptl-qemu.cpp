@@ -89,13 +89,20 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 							(target_ulong)(name_addr++));
 				}
 
-				cout << "PQRS::Creating checkpoint ", 
-					 checkpoint_name, endl;
 				vm_stop(0);
+				if(arg3 != PTLCALL_CHECKPOINT_DUMMY) {
+					cout << "PQRS::Creating checkpoint ", 
+						 checkpoint_name, endl;
 
-				do_savevm(checkpoint_name);
-				cout << "PQRS::Checkpoint ", checkpoint_name,
-					 " created\n";
+					do_savevm(checkpoint_name);
+					cout << "PQRS::Checkpoint ", checkpoint_name,
+						 " created\n";
+
+				} else {
+					cout << "PQRS::Reached to Chekpoint location..\n";
+					cout << "PQRS::Now you can create your checkpont..\n";
+					break;
+				}
 
 				switch(arg3) {
 					case PTLCALL_CHECKPOINT_AND_CONTINUE:

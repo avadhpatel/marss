@@ -578,13 +578,18 @@ void assist_pushf(Context& ctx) {
 //
 void assist_popf(Context& ctx) {
   W32 flags = ctx.reg_ar1;
+
+  W32 mask = 0;
+  if(ctx.kernel_mode) {
+	  mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK);
+  } else {
+	  mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK);
+  }
   // bit 1 is always '1', and bits {3, 5, 15} are always '0':
 //  flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
 //  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
 //  ctx.eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
-  ASSIST_IN_QEMU(helper_write_eflags, flags , (uint32_t)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK));
-//  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
-//  ctx.reg_flags = flags;
+  ASSIST_IN_QEMU(helper_write_eflags, flags , mask);
   ctx.eip = ctx.reg_nextrip;
 
   // Update internal flags too (only update non-standard flags in internal_flags_bits):

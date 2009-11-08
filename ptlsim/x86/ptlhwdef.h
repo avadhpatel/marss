@@ -956,8 +956,8 @@ struct Context: public CPUX86State {
 	  flags = (flags | FLAG_INV); 
 	  // Set the 3rd bit to 0
 //	  flags = (flags | ~FLAG_WAIT);
-//	  load_eflags(flags, (TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK));
-	  load_eflags(flags, -1);
+	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O));
+//	  load_eflags(flags, -1);
   }
 
   void setup_ptlsim_switch() {

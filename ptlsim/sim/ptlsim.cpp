@@ -641,6 +641,20 @@ extern "C" void ptl_machine_init(char* config_str) {
 //OutOfOrderMachine ooomodel("ooo");
 	// Setup the configuration
 	ptl_reconfigure(config_str);
+
+	// After reconfigure reset the machine's initalized variable
+	
+	PTLsimMachine* machine = null;
+	char* machinename = config.core_name;
+	if likely (curr_ptl_machine != null) {
+		machine = curr_ptl_machine;
+	} else {
+		machine = PTLsimMachine::getmachine(machinename);
+	}
+
+	if(machine)
+		machine->initialized = 0;
+
 }
 
 //Context* ptl_contexts[MAX_CONTEXTS];

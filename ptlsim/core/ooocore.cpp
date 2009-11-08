@@ -773,11 +773,6 @@ bool OutOfOrderCore::runcycle() {
       exiting = 1;
 	  assert(0);
     }
-	if(thread->ctx.check_events()) {
-		cerr << "\nInterrupt: ", thread->ctx.interrupt_request,
-			 " exception: ", thread->ctx.exception_index, endl;
-		exiting = 1;
-	}
   }
 
 
@@ -2116,11 +2111,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 						  ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] Already stopped at cycle ", sim_cycle, endl;
 						  stopped[thread->ctx.cpu_index] = 1;
 						  exiting = 1;
-					  } else {
-//						  if (thread->ctx.check_events()) thread->handle_interrupt();
-						  if (thread->ctx.check_events()) 
-							  exiting = 1;
-					  }
+					  } 
 					  continue;
 				  }
 				  //	  MYDEBUG << "[vcpu ", thread->ctx.cpu_index, "] is running by [core ", core.coreid, "] [thread ", thread->threadid, "]", endl;

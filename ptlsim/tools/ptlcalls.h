@@ -357,6 +357,7 @@ static inline W64 ptlcall_capture_stats(const char* snapshot) {
 #define PTLCALL_CHECKPOINT_AND_SHUTDOWN  1
 #define PTLCALL_CHECKPOINT_AND_REBOOT    2
 #define PTLCALL_CHECKPOINT_AND_PAUSE     3
+#define PTLCALL_CHECKPOINT_DUMMY		 4
 
 #ifdef PTLCALLS_USERSPACE
 
@@ -384,6 +385,13 @@ static inline W64 ptlcall_checkpoint() {
   static const char* checkpoint_name = "default";
   return ptlcall_checkpoint_and_shutdown(checkpoint_name);
 }
+
+// This function will only make QEMU to pause
+static inline W64 ptlcall_checkpoint_dummy() {
+  static const char* checkpoint_name = "default";
+  return ptlcall_checkpoint_generic(name, PTLCALL_CHECKPOINT_DUMMY);
+}
+	
 
 #endif // PTLCALLS_USERSPACE
 

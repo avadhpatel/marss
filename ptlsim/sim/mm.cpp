@@ -1654,19 +1654,21 @@ DataStoreNode& ptl_mm_capture_stats(DataStoreNode& root) {
 //asmlinkage void free(void* ptr) {
 //  ptl_mm_free(ptr, getcaller());
 //}
-//
-//void* operator new(size_t sz) {
+
+void* operator new(size_t sz) {
+	return qemu_malloc(sz);
 //  return ptl_mm_alloc(sz, getcaller());
-//}
-//
+}
+
 //void operator delete(void* m) {
 //  ptl_mm_free(m, getcaller());
 //}
-//
-//void* operator new[](size_t sz) {
+
+void* operator new[](size_t sz) {
+	return qemu_malloc(sz);
 //  return ptl_mm_alloc(sz, getcaller());
-//}
-//
+}
+
 //void operator delete[](void* m) {
 //  ptl_mm_free(m, getcaller());
 //}
