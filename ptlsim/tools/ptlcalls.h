@@ -388,7 +388,7 @@ static inline W64 ptlcall_checkpoint() {
 
 // This function will only make QEMU to pause
 static inline W64 ptlcall_checkpoint_dummy() {
-  static const char* checkpoint_name = "default";
+  static const char* name= "default";
   return ptlcall_checkpoint_generic(name, PTLCALL_CHECKPOINT_DUMMY);
 }
 	

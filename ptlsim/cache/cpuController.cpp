@@ -252,6 +252,13 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 			*queueEntry, endl);
 	MemoryRequest *request = queueEntry->request;
 
+	// Clear up the entry before going to core becaus of QEMU's
+	// data loading/storing, we might not come back in case of page fault
+	
+	request->decRefCounter();
+	if(!queueEntry->annuled)
+		pendingRequests_.free(queueEntry);
+
 	if(request->is_instruction()) {
 		W64 lineAddress = get_line_address(request);
 		if(icacheBuffer_.isFull()) {
@@ -270,9 +277,6 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 				request->get_physical_address());
 	}
 
-	request->decRefCounter();
-	if(!queueEntry->annuled)
-		pendingRequests_.free(queueEntry);
 	memdebug("Entry finalized..\n");
 
 	// now check if pendingRequests_ buffer has space left then

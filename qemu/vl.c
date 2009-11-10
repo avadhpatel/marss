@@ -816,6 +816,11 @@ static int64_t cpu_sim_ticks_offset;
 /* return the host CPU cycle counter and handle stop/restart */
 int64_t cpu_get_ticks(void)
 {
+#ifdef PTLSIM_QEMU
+	if(in_simulation) {
+		return cpu_sim_ticks_offset + sim_cycle;
+	}
+#endif
     if (use_icount) {
         return cpu_get_icount();
     }
@@ -868,7 +873,7 @@ void cpu_disable_ticks(void)
 }
 
 #ifdef PTLSIM_QEMU
-#define PTLSIM_FREQ 20e9 // 2GHz Frequency of Simulated CPU
+#define PTLSIM_FREQ 2e9 // 2GHz Frequency of Simulated CPU
 #define freq_to_ns(freq) (1e9/freq)
 
 void cpu_set_sim_ticks(void)
@@ -1355,8 +1360,6 @@ static void host_alarm_handler(int host_signum)
         }
         last_clock = ti;
     }
-#endif
-#ifdef PTLSIM_QEMU
 #endif
     if (alarm_has_dynticks(alarm_timer) ||
         (!use_icount && 
@@ -3824,6 +3827,7 @@ static int main_loop(void)
 #ifdef PTLSIM_QEMU
 		if (start_simulation && !vm_running) {
 			in_simulation = 1;
+			cpu_set_sim_ticks();
 			if (!vm_running) {
 				vm_start();
 			}
@@ -3832,9 +3836,9 @@ static int main_loop(void)
 #endif
         if (vm_running) {
 
-#ifdef PTLSIM_QEMU
-			uint8_t exception_pending = 0;
-#endif
+//#ifdef PTLSIM_QEMU
+//			uint8_t exception_pending = 0;
+//#endif
 
             for(;;) {
                 /* get next cpu */
@@ -3861,10 +3865,10 @@ static int main_loop(void)
 #ifdef CONFIG_PROFILER
                 qemu_time += profile_getclock() - ti;
 #endif
-#ifdef PTLSIM_QEMU
-				exception_pending = env->exception_index > 0 ? 1 : \
-									exception_pending;
-#endif
+//#ifdef PTLSIM_QEMU
+//				exception_pending = env->exception_index > 0 ? 1 : \
+//									exception_pending;
+//#endif
                 if (use_icount) {
                     /* Fold pending instructions back into the
                        instruction counter, and clear the interrupt flag.  */
@@ -3958,14 +3962,14 @@ static int main_loop(void)
                 timeout = 0;
             }
 
-#ifdef PTLSIM_QEMU
-			if(in_simulation && !exception_pending) {
+//#ifdef PTLSIM_QEMU
+//			if(in_simulation && !exception_pending) {
 //				cpu_exec(first_cpu, 1);
-				timeout = 0;
+//				timeout = 0;
 //				printf("Going into simulation mode\n");
 //				in_simulation = ptl_simulate();
-			}
-#endif
+//			}
+//#endif
         } else {
             if (shutdown_requested) {
                 ret = EXCP_INTERRUPT;

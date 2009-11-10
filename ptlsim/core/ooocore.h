@@ -763,6 +763,7 @@ namespace OutOfOrderModel {
     void fencewakeup();
     LoadStoreQueueEntry* find_nearest_memory_fence();
     bool release_mem_lock(bool forced = false);
+	bool recheck_page_fault();
     ostream& print(ostream& os) const;
     stringbuf& get_operand_info(stringbuf& sb, int operand) const;
     ostream& print_operand_info(ostream& os, int operand) const;
@@ -789,7 +790,7 @@ namespace OutOfOrderModel {
 #define LSQ_SIZE (LDQ_SIZE + STQ_SIZE)
 
   // Define this to allow speculative issue of loads before unresolved stores
-#define SMT_ENABLE_LOAD_HOISTING
+//#define SMT_ENABLE_LOAD_HOISTING
 
   struct LoadStoreQueueEntry: public SFR {
     ReorderBufferEntry* rob;
@@ -799,6 +800,8 @@ namespace OutOfOrderModel {
     W8 store:1, lfence:1, sfence:1, entry_valid:1;
     //   W32 padding;
     W32 time_stamp;
+	W64 sfr_data;
+	W8 sfr_bytemask;
     LoadStoreQueueEntry() { }
 
     int index() const { return idx; }
@@ -808,6 +811,8 @@ namespace OutOfOrderModel {
       setzero(*this);
       idx = oldidx;
       mbtag = -1;
+	  sfr_data = -1;
+	  sfr_bytemask = 0;
     }
 
     void init(int idx) {

@@ -311,6 +311,24 @@ ostream& IssueQueue<size, operandcount>::print(ostream& os) const {
 // Instantiate all methods in the specific IssueQueue sizes we're using:
 declare_issueq_templates;
 
+static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
+  union {
+    W8 w8;
+    W16 w16;
+    W32 w32;
+    W64 w64;
+  } sizes;
+
+  switch (sizeshift) {
+  case 0: sizes.w64 = rd; sizes.w8 = ra; return sizes.w64;
+  case 1: sizes.w64 = rd; sizes.w16 = ra; return sizes.w64;
+  case 2: return LO32(ra);
+  case 3: return ra;
+  }
+
+  return rd;
+}
+
 //
 // Issue a single ROB. 
 //
@@ -485,8 +503,8 @@ int ReorderBufferEntry::issue() {
     changestate(thread.rob_ready_to_commit_queue);
   }
 
-//  bool mispredicted = (physreg->data != uop.riptaken);
-  bool mispredicted = (physreg->valid()) ? (physreg->data != uop.riptaken) : false;
+  bool mispredicted = (physreg->data != uop.riptaken);
+//  bool mispredicted = (physreg->valid()) ? (physreg->data != uop.riptaken) : false;
 
   if unlikely (config.event_log_enabled && (propagated_exception | (!(ld|st)))) {
     event = core.eventlog.add(EVENT_ISSUE_OK, this);
@@ -549,9 +567,9 @@ int ReorderBufferEntry::issue() {
           uop.synthop = get_synthcode_for_cond_branch(uop.opcode, uop.cond, uop.size, 0);
           swap(uop.riptaken, uop.ripseq);
         } else if unlikely (isclass(uop.opcode, OPCLASS_INDIR_BRANCH)) {
-			return -1;
-//          uop.riptaken = realrip;
-//          uop.ripseq = realrip;
+//			return -1;
+          uop.riptaken = realrip;
+          uop.ripseq = realrip;
         } else if unlikely (isclass(uop.opcode, OPCLASS_UNCOND_BRANCH)) { // unconditional branches need no special handling
           assert(realrip == uop.riptaken);
         }
@@ -639,6 +657,36 @@ int ReorderBufferEntry::issue() {
 }
 
 //
+// Re check if the load or store will cause page fault or not
+//
+bool ReorderBufferEntry::recheck_page_fault() {
+
+	if(uop.internal || (lsq->sfence | lsq->lfence))
+		return false;
+
+    if unlikely (physreg->flags & FLAG_INV)
+		return true;
+
+	int exception;
+	PageFaultErrorCode pfec;
+	PTEUpdate pteupdate;
+	Context& ctx = getthread().ctx;
+	Waddr physaddr = ctx.check_and_translate(lsq->virtaddr, 1, 0, 0, exception, pfec);
+
+	Waddr addr = lsq->physaddr << 3;
+	Waddr virtaddr = lsq->virtaddr;
+	if unlikely (exception) {
+		if(!handle_common_load_store_exceptions(*lsq, virtaddr, addr, exception, pfec)) {
+			physreg->flags = lsq->data;
+			physreg->data = (lsq->invalid << log2(FLAG_INV)) | ((!lsq->datavalid) << log2(FLAG_WAIT));
+			return true;
+		}
+	}
+
+	return false;
+}
+
+//
 // Address generation common to both loads and stores
 //
 Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, Waddr& virtpage, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate, Waddr& addr, int& exception, PageFaultErrorCode& pfec, bool& annul) {
@@ -652,7 +700,7 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
   bool signext = (uop.opcode == OP_ldx);
 
   addr = (st) ? (ra + rb) : ((aligntype == LDST_ALIGN_NORMAL) ? (ra + rb) : ra);
-  if(logable(6)) {
+  if(logable(0)) {
 	  ptl_logfile << "ROB::addrgen: st:", st, " ra:", ra, " rb:", rb,
 				  " rc:", rc, " addr:", hexstring(addr, 64), endl;
 	  ptl_logfile << " at uop: ", uop, " at rip: ",
@@ -1389,6 +1437,13 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   if (sfra && sfra->addrvalid && sfra->datavalid) assert(sfra->physaddr == state.physaddr);
 
+  if(sfra && logable(10))
+	  ptl_logfile << " Load will be forwared from sfra\n", 
+				  " load addr: ", hexstring(state.virtaddr, 64), 
+				  " at rip: ", hexstring(uop.rip.rip, 64),
+				  " sfra-addrvalid: ", sfra->addrvalid,
+				 " sfra-datavalid: ", sfra->datavalid, endl; 
+
   //
   // Always update deps in case redispatch is required
   // because of a future speculation failure: we must
@@ -1591,7 +1646,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   }
  
   state.addrvalid = 1;
-  if(config.verify_cache){
+//  if(config.verify_cache){
     if unlikely (aligntype == LDST_ALIGN_HI) {
       if likely (annul) {
         //
@@ -1612,61 +1667,63 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     generated_addr = addr;
     original_addr = origaddr;
     annul_flag = annul;  
-  }else{
- 
-    // make it as a function to return data:
-
-    if unlikely (aligntype == LDST_ALIGN_HI) {
-      //
-      // Concatenate the aligned data from a previous ld.lo uop provided in rb
-      // with the currently loaded data D as follows:
-      //
-      // rb | D
-      //
-      // Example:
-      //
-      // floor(a) floor(a)+8
-      // ---rb--  --DD---
-      // 0123456701234567
-      //    XXXXXXXX
-      //    ^ origaddr
-      //
-      if likely (!annul) {
-        if unlikely (sfra) data = mux64(expand_8bit_to_64bit_lut[sfra->bytemask], data, sfra->data);
-      
-        struct {
-          W64 lo;
-          W64 hi;
-        } aligner;
-      
-        aligner.lo = rb;
-        aligner.hi = data;
-      
-        W64 offset = lowbits(origaddr - floor(origaddr, 8), 4);
-
-        data = extract_bytes(((byte*)&aligner) + offset, sizeshift, signext);
-      } else {
-        //
-        // annulled: we need no data from the high load anyway; only use the low data
-        // that was already checked for exceptions and forwarding:
-        //
-        W64 offset = lowbits(origaddr, 3);
-        state.data = extract_bytes(((byte*)&rb) + offset, sizeshift, signext);
-        state.invalid = 0;
-        state.datavalid = 1;
-
-        if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_HIGH_ANNULLED, this, sfra, addr);
-
-        return ISSUE_COMPLETED;
-      }
-    } else {
-      if unlikely (sfra) data = mux64(expand_8bit_to_64bit_lut[sfra->bytemask], data, sfra->data);
-      data = extract_bytes(((byte*)&data) + lowbits(addr, 3), sizeshift, signext);
-    }
-  }
+//  }else{
+// 
+//    // make it as a function to return data:
+//
+//    if unlikely (aligntype == LDST_ALIGN_HI) {
+//      //
+//      // Concatenate the aligned data from a previous ld.lo uop provided in rb
+//      // with the currently loaded data D as follows:
+//      //
+//      // rb | D
+//      //
+//      // Example:
+//      //
+//      // floor(a) floor(a)+8
+//      // ---rb--  --DD---
+//      // 0123456701234567
+//      //    XXXXXXXX
+//      //    ^ origaddr
+//      //
+//      if likely (!annul) {
+//        if unlikely (sfra && sfra->datavalid) 
+//			data = mux64(expand_8bit_to_64bit_lut[sfra->bytemask], data, sfra->data);
+//      
+//        struct {
+//          W64 lo;
+//          W64 hi;
+//        } aligner;
+//      
+//        aligner.lo = rb;
+//        aligner.hi = data;
+//      
+//        W64 offset = lowbits(origaddr - floor(origaddr, 8), 4);
+//
+//        data = extract_bytes(((byte*)&aligner) + offset, sizeshift, signext);
+//      } else {
+//        //
+//        // annulled: we need no data from the high load anyway; only use the low data
+//        // that was already checked for exceptions and forwarding:
+//        //
+//        W64 offset = lowbits(origaddr, 3);
+//        state.data = extract_bytes(((byte*)&rb) + offset, sizeshift, signext);
+//        state.invalid = 0;
+//        state.datavalid = 1;
+//
+//        if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_HIGH_ANNULLED, this, sfra, addr);
+//
+//        return ISSUE_COMPLETED;
+//      }
+//    } else {
+//      if unlikely (sfra) data = mux64(expand_8bit_to_64bit_lut[sfra->bytemask], data, sfra->data);
+//      data = extract_bytes(((byte*)&data) + lowbits(addr, 3), sizeshift, signext);
+//    }
+//  }
 
   // shift is how many bits to shift the 8-bit bytemask left by within the cache line;
-  bool covered = core.caches.covered_by_sfr(addr, sfra, sizeshift);
+//  bool covered = core.caches.covered_by_sfr(addr, sfra, sizeshift);
+  bool covered = core.caches.covered_by_sfr(physaddr, sfra, sizeshift);
   per_context_ooocore_stats_update(threadid, dcache.load.forward.cache += (sfra == null));
   per_context_ooocore_stats_update(threadid, dcache.load.forward.sfr += ((sfra != null) & covered));
   per_context_ooocore_stats_update(threadid, dcache.load.forward.sfr_and_cache += ((sfra != null) & (!covered)));
@@ -1693,6 +1750,8 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 			sizeshift);
 	state.data = data;
     state.datavalid = 1;
+	state.invalid = 0;
+	state.bytemask = 0xff;
 
 #ifdef NEW_MEMORY
     if(config.verify_cache && !config.comparing_cache){ //if we rely on cache data only: we have to flush the cache so we can get correct data:
@@ -1753,18 +1812,22 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
        
       load_store_second_phase = 1;
       state.datavalid = 1;
-      if(config.verify_cache){
+//      if(config.verify_cache){
         //      W64 data = (annul) ? 0 : loadphys(physaddr);
         W64 data = 0; // if it is really covered, the data should come from sfra.
         data = get_load_data(state, data);
         state.data = data;
-        //msdebug1 << " load is covered by previous store ", (void*)data, endl;
+		if(logable(10)) {
+			ptl_logfile << " load is covered by previous store ", (void*)data, endl;
+			ptl_logfile << " addr: ", hexstring(state.virtaddr, 64), " rip: ", 
+						hexstring(uop.rip.rip, 64), endl;
+		}
         if(config.trace_memory_updates){
           trace_mem_logfile << " Cycle ", sim_cycle, " load forward addr ", (void*)physaddr, " data ", (void*) data, endl;
         }
         state.invalid = 0;
         state.bytemask = 0xff;
-      }
+//      }
       physreg->flags &= ~FLAG_WAIT;
       physreg->complete();
       changestate(thread.rob_issued_list[cluster]);
@@ -1797,6 +1860,23 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 //       }
 #ifdef NEW_MEMORY
       //      bool L1hit = core.memoryHierarchy.access_dcache_read(core.coreid, threadid, &lsi, lsq);
+	  
+	  if(sfra && (sfra->bytemask & state.bytemask)) {
+		  // the data is partially covered by previous store..
+		  // store the data into the lsq's sfra_data and also 
+		  // store the sfra bytemask to we load most up-to date
+		  // data when we get rest of data from cache
+		  state.sfr_data = sfra->data;
+		  state.sfr_bytemask = sfra->bytemask;
+		  if(logable(10))
+			  ptl_logfile << "Partial match of load/store rip: ", hexstring(uop.rip.rip, 64),
+						  " sfr_bytemask: ", sfra->bytemask, " sfr_data: ",
+						  sfra->data, endl;
+	  } else {
+		  state.sfr_data = -1;
+		  state.sfr_bytemask = 0;
+	  }
+
       bool L1hit = core.memoryHierarchy.access_cache(core.coreid,
                                                      threadid,
                                                      idx/*robid*/,
@@ -1810,7 +1890,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 #endif
       //      lsi_seq = lsi.seq; // use to match call backs from cache
 
-      if likely (L1hit) {    
+      if likely (L1hit) {// && !recheck_page_fault()) {    
         cycles_left = LOADLAT;
         
         if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_HIT, this, sfra, addr);
@@ -1818,7 +1898,15 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         load_store_second_phase = 1;
         state.datavalid = 1;
 		W64 offset = lowbits(state.virtaddr, 3);
-		W64 tmp_data = thread.ctx.loadvirt(state.virtaddr);
+		W64 tmp_data;
+		tmp_data = thread.ctx.loadvirt(state.virtaddr);
+		// Now check if there is most upto date data from
+		// sfra available or not
+		if(lsq->sfr_data != -1 && lsq->sfr_bytemask != 0) {
+			int s = lowbits(state.virtaddr, 3) * 8;
+			W64 sel = expand_8bit_to_64bit_lut[lsq->sfr_bytemask] << s;
+			tmp_data = mux64(sel, tmp_data, lsq->sfr_data << s);
+		}
 		state.data = (annul) ? 0 : extract_bytes(((byte*)&tmp_data),
 				sizeshift, signext);
 //		state.data = (annul) ? 0 : extract_bytes(((byte*)&tmp_data) + 
@@ -2200,6 +2288,13 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 	  // If the ROB cache miss is serviced already by other request
 	  // then just ignore this response
 	  if(rob.current_state_list == &thread->rob_cache_miss_list) {
+
+		  // Because of QEMU's in-order execution and Simulator's 
+		  // out-of-order execution we may have page fault at this point
+		  // so just make sure that we handle page fault at correct location
+//		  if(rob.recheck_page_fault())
+//			  return;
+
 		  rob.tlb_walk_level = 0;
 		  rob.loadwakeup();     
 		  // load the data now
@@ -2207,10 +2302,16 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 			  int sizeshift = rob.uop.size;
 			  bool signext = (rob.uop.opcode == OP_ldx);
 			  W64 offset = lowbits(rob.lsq->virtaddr, 3);
-			  W64 data = thread->ctx.loadvirt(rob.lsq->virtaddr);
-			  //		  W64 data = thread->ctx.loadphys(physaddr);
-			  //		  rob.lsq->data = extract_bytes(((byte*)&data) + 
-			  //				  offset, sizeshift, signext);
+			  W64 data;
+			  data = thread->ctx.loadvirt(rob.lsq->virtaddr);
+			  
+			  // Now check if there is most upto date data from
+			  // sfra available or not
+			  if(rob.lsq->sfr_data != -1 && rob.lsq->sfr_bytemask != 0) {
+				  int s = offset * 8;
+				  W64 sel = expand_8bit_to_64bit_lut[rob.lsq->sfr_bytemask] << s;
+				  data = mux64(sel, data, rob.lsq->sfr_data << s);
+			  }
 			  rob.lsq->data = extract_bytes(((byte*)&data) , 
 					  sizeshift, signext);
 			  rob.physreg->data = rob.lsq->data;

@@ -157,6 +157,7 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
   assist_barrier,
   // Halt
   assist_halt,
+  assist_pause,
 };
 
 int assist_index(assist_func_t assist) {

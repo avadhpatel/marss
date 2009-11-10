@@ -436,7 +436,7 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 						env->exit_request = 0;
 						env->exception_index = EXCP_INTERRUPT;
 					}
-					cpu_loop_exit();
+					longjmp(env->jmp_env, 1);
 				}
 #endif
 

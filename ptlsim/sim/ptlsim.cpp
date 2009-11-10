@@ -879,6 +879,9 @@ extern "C" uint8_t ptl_simulate() {
 		ctx.running = 1;
 	}
 
+	if(machine->stopped != 0)
+		machine->stopped = 0;
+
 	ptl_logfile << "Starting simulation at rip: ", (void*)contextof(0).get_cs_eip(), " kernel_mode: ", contextof(0).kernel_mode, endl;
 
 	machine->run(config);
@@ -1382,6 +1385,7 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
 
 W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
 	Waddr addr = virtaddr; //floor(virtaddr, 8);
+	assert(virtaddr > 0xffff);
 	setup_qemu_switch();
 	W64 data = 0;
 	if(kernel_mode) {

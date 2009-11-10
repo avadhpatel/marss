@@ -546,20 +546,19 @@ void assist_halt(Context& ctx) {
 	ASSIST_IN_QEMU(helper_hlt, next_eip);
 }
 
+// Pause
+void assist_pause(Context& ctx) {
+	// TODO: Currently we will advance the sim_cycle by
+	// a fix value but we can do more things here
+//	cerr << "Pausing CPU for 500 sim cycles\n";
+//	sim_cycle += 1000;
+	ctx.eip = ctx.reg_nextrip;
+}
+
 void assist_rdtsc(Context& ctx) {
 	ASSIST_IN_QEMU(helper_rdtsc);
-//	ctx.setup_qemu_switch();
-//	helper_rdtsc();
-//  W64& rax = ctx.regs[R_EAX];
-//  W64& rdx = ctx.regs[R_EDX];
-//#ifdef PTLSIM_HYPERVISOR
-//  W64 tsc = ctx.tsc_offset + sim_cycle; 
-//#else
-//  W64 tsc = sim_cycle;
-//#endif
-//  rax = LO32(tsc);
-//  rdx = HI32(tsc);
-//
+//	cerr << "rdtsc: eax: ", ctx.regs[R_EAX], " edx: ", 
+//		 ctx.regs[R_EDX], endl;
   ctx.eip = ctx.reg_nextrip;
 }
 
@@ -983,7 +982,7 @@ void assist_iret64(Context& ctx) {
 	if(prefixes & PFX_REX) {
 		shift = 2;
 	} else if(prefixes & PFX_DATA) {
-		shift ^= 1;
+		shift = 1;
 	}
 
 	if(!pe) {
@@ -1093,7 +1092,7 @@ void assist_ioport_in(Context& ctx) {
 //    "in port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) => 0x",
 //    hexstring(value, 64), endl;
 
-  ctx.regs[R_EAX] = value;
+  ctx.regs[R_EAX] = x86_merge(ctx.regs[R_EAX], value, sizeshift);
   ctx.eip = ctx.reg_nextrip;
 }
 
@@ -1928,7 +1927,7 @@ bool TraceDecoder::decode_complex() {
 
     int sizeshift = (op == 0xee) ? 0 : (opsize_prefix ? 1 : 2);
 
-    this << TransOp(OP_mov, REG_ar1, REG_zero, REG_rdx, REG_zero, 1);
+    this << TransOp(OP_mov, REG_ar1, REG_zero, REG_rdx, REG_zero, 3);
     this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 0, sizeshift);
     microcode_assist(ASSIST_IOPORT_OUT, ripstart, rip);
     end_of_block = 1;
@@ -1955,7 +1954,7 @@ bool TraceDecoder::decode_complex() {
 
     int sizeshift = (op == 0xec) ? 0 : (opsize_prefix ? 1 : 2);
 
-    this << TransOp(OP_mov, REG_ar1, REG_zero, REG_rdx, REG_zero, 1);
+    this << TransOp(OP_mov, REG_ar1, REG_zero, REG_rdx, REG_zero, 3);
     this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 0, sizeshift);
     microcode_assist(ASSIST_IOPORT_IN, ripstart, rip);
     end_of_block = 1;
@@ -1973,6 +1972,9 @@ bool TraceDecoder::decode_complex() {
     // hlt (nop)
     // This should be trapped by hypervisor to properly do idle time
     EndOfDecode();
+	// If it has rep prefix then do SVM_EXIT
+	if(svm_check_intercept(*this, SVM_EXIT_PAUSE)) 
+		break;
     this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
     break;
   }
@@ -2142,6 +2144,8 @@ bool TraceDecoder::decode_complex() {
 	if(prefixes & PFX_REPZ) {
 		if(svm_check_intercept(*this, SVM_EXIT_PAUSE)) 
 			break;
+//		microcode_assist(ASSIST_PAUSE, ripstart, rip);
+//		break;
 	} 
 	this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
     break;
@@ -2247,8 +2251,6 @@ bool TraceDecoder::decode_complex() {
 	int sizeshift;
 	TransOp* st1;
 	TransOp* st2;
-	cerr << "0x101 opcode is called...", endl, superstl::flush;
-	ptl_logfile << "0x101 opcode is called...", endl, superstl::flush;
 	switch(modrm.reg) {
 		case 0: // sgdt
 			// Get the address in ra 
@@ -2560,8 +2562,6 @@ bool TraceDecoder::decode_complex() {
 					this << TransOp(OP_collcc, REG_temp0, REG_zf, 
 							REG_cf, REG_of, 3, 0, 0, 
 							FLAGS_DEFAULT_ALU);
-					this << TransOp(OP_jmp, REG_rip, REG_zero,
-							REG_imm, REG_zero, 3, ripstart);
 					operand_load(REG_ar1, ra);
 					microcode_assist(ASSIST_INVLPG,
 							ripstart, rip);
@@ -3233,13 +3233,14 @@ bool TraceDecoder::decode_complex() {
   case 0x131: {
     // rdtsc: put result into %edx:%eax
     EndOfDecode();
-    TransOp ldp1(OP_ld, REG_rdx, REG_zero, REG_imm, REG_zero, 3, (Waddr)&sim_cycle); ldp1.internal = 1; this << ldp1;
+//    TransOp ldp1(OP_ld, REG_rdx, REG_zero, REG_imm, REG_zero, 3, (Waddr)&sim_cycle); ldp1.internal = 1; this << ldp1;
 #ifdef PTLSIM_HYPERVISOR
-    TransOp ldp2(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 3, offsetof_t(Context, tsc_offset)); ldp2.internal = 1; this << ldp2;
-    this << TransOp(OP_add, REG_rdx, REG_rdx, REG_temp0, REG_zero, 3);
+//    TransOp ldp2(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 3, offsetof_t(Context, tsc_offset)); ldp2.internal = 1; this << ldp2;
+//    this << TransOp(OP_add, REG_rdx, REG_rdx, REG_temp0, REG_zero, 3);
 #endif
-    this << TransOp(OP_mov, REG_rax, REG_zero, REG_rdx, REG_zero, 2);
-    this << TransOp(OP_shr, REG_rdx, REG_rdx, REG_imm, REG_zero, 3, 32);
+//    this << TransOp(OP_mov, REG_rax, REG_zero, REG_rdx, REG_zero, 2);
+//    this << TransOp(OP_shr, REG_rdx, REG_rdx, REG_imm, REG_zero, 3, 32);
+	microcode_assist(ASSIST_RDTSC, ripstart, rip);
     break;
   }
 

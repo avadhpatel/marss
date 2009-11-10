@@ -380,8 +380,9 @@ bool OutOfOrderCore::runcycle() {
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
     bool current_interrupts_pending = thread->ctx.check_events();
-    bool edge_triggered = ((!thread->prev_interrupts_pending) & current_interrupts_pending);
-    thread->handle_interrupt_at_next_eom |= edge_triggered;
+//    bool edge_triggered = ((!thread->prev_interrupts_pending) & current_interrupts_pending);
+//    thread->handle_interrupt_at_next_eom |= edge_triggered;
+	thread->handle_interrupt_at_next_eom = current_interrupts_pending;
     thread->prev_interrupts_pending = current_interrupts_pending;
   }
 #endif
@@ -609,8 +610,6 @@ bool OutOfOrderCore::runcycle() {
     }
   }
 
-  ptl_logfile << "Fetch done...\n";
-
   //
   // Always clock the issue queues: they're independent of all threads
   //
@@ -704,6 +703,7 @@ bool OutOfOrderCore::runcycle() {
 		  ptl_logfile << " [vcpu ", i, "] in interrupt handling at rip ", thread->current_basic_block->rip, endl, flush;
 	  }
       exiting = 1;
+      machine.stopped[thread->ctx.cpu_index] = 1;
       thread->handle_interrupt();
       break;
     }
@@ -762,7 +762,7 @@ bool OutOfOrderCore::runcycle() {
 
 //    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  8192 ) {
 //    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  2048 ) {
-    if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 1*4096) {
+    if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 20*4096) {
       stringbuf sb;
       sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
         sim_cycle, ", ", total_user_insns_committed,  " user commits: no instructions have committed for ",
@@ -770,6 +770,10 @@ bool OutOfOrderCore::runcycle() {
       ptl_logfile << sb, flush;
       cerr << sb, flush;
 	  dump_smt_state(ptl_logfile);
+#ifdef NEW_MEMORY
+	  ptl_logfile << " memoryHierarchy: ",endl;
+	  machine.memoryHierarchyPtr->dump_info(ptl_logfile);
+#endif
       exiting = 1;
 	  assert(0);
     }
@@ -2085,7 +2089,8 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  logenable = 1;
 	  }
 
-	  update_progress();
+//	  if(sim_cycle % 100 == 0)
+		  update_progress();
 	  //    inject_events();
 	  // limit the ptl_logfile size
 	  if unlikely (ptl_logfile.tellp() > config.log_file_size)

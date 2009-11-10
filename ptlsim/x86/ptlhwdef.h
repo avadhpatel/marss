@@ -1189,6 +1189,74 @@ struct Context: public CPUX86State {
 	  return invalid_reg;
   }
 
+  void set_reg(int index, W64 value) {
+	  if likely (index < 16) {
+		  regs[index] = value;
+	  }
+	  else if(index < 48) {
+		  int i = (index - 16) / 2;
+		  if(index % 2 == 0) {
+			  xmm_regs[i]._d[0] = value;
+		  } else {
+			  xmm_regs[i]._d[1] = value;
+		  }
+	  }
+	  else if(index == REG_fptos) {
+		  reg_fptos = value;
+	  } 
+	  else if(index == REG_fpsw) {
+		  fpus = value;
+	  } 
+	  else if(index == REG_fptags) {
+		  reg_fptag = value;
+	  } 
+	  else if(index == REG_fpstack) {
+//		  return (W64&)(fpregs[0]);
+		  reg_fpstack = value;
+	  } 
+	  else if(index == 52) {
+		  // Not implemented in Xen or anywhere else..
+		  return;
+	  } 
+	  else if(index == 53) {
+		  // Not implemented in Xen or anywhere else..
+		  return;
+	  } 
+	  else if(index == 54) {
+		  reg_trace = value;
+	  } 
+	  else if(index == 55) {
+		  reg_ctx = value;
+	  } 
+	  else if(index == 56) {
+		  eip = value;
+	  } 
+	  else if(index == REG_flags) {
+		  reg_flags = value; //(W64&)(eflags);
+	  } 
+	  else if(index == 58) {
+		  // Not implemented in Xen or anywhere else..
+		  return;
+	  } 
+	  else if(index == 59) {
+		  reg_selfrip = value;
+	  } 
+	  else if(index == 60) {
+		  reg_nextrip = value;
+	  } 
+	  else if(index == 61) {
+		  reg_ar1 = value;
+	  } 
+	  else if(index == 62) {
+		  reg_ar2 = value;
+	  } 
+	  else if(index == 63) {
+		  reg_zero = 0;
+	  } 
+
+	  return ;
+  }
+
   void update_mode(bool is_kernel) {
 	  kernel_mode = is_kernel;
   }

@@ -402,6 +402,7 @@ enum {
   ASSIST_BARRIER,
   // HLT
   ASSIST_HLT,
+  ASSIST_PAUSE,
   ASSIST_COUNT,
 };
 
@@ -528,6 +529,7 @@ static const char* assist_names[ASSIST_COUNT] = {
   "barrier",
   // HLT
   "halt",
+  "pause",
 };
 
 int propagate_exception_during_assist(Context& ctx, byte exception, W32 errorcode, Waddr virtaddr = 0, bool intN = 0);
@@ -646,6 +648,7 @@ void assist_swapgs(Context& ctx);
 void assist_barrier(Context& ctx);
 // HLT
 void assist_halt(Context& ctx);
+void assist_pause(Context& ctx);
 
 //
 // Global functions

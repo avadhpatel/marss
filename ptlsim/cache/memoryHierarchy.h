@@ -24,11 +24,11 @@
 
 #ifdef DEBUG_MEMORY
 #ifdef DEBUG_WITH_FILE_NAME
-#define memdebug(...) if(config.loglevel >= 3) { \
+#define memdebug(...) if(config.loglevel >= 5) { \
 	ptl_logfile << __FILE__, ":", __LINE__,":\t", \
 	__VA_ARGS__ ; ptl_logfile.flush(); }
 #else
-#define memdebug(...) if(config.loglevel >= 3) { \
+#define memdebug(...) if(config.loglevel >= 5) { \
 	ptl_logfile << __VA_ARGS__ ; } //ptl_logfile.flush(); 
 #endif
 #else

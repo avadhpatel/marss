@@ -1708,8 +1708,9 @@ int ThreadContext::commit() {
       last_commit_at_cycle = sim_cycle;
 
 #ifdef TRACE_RIP
-	  ptl_rip_trace << "Commit rip: ", 
-					hexstring(rob.uop.rip.rip, 64), " \tkernel: ",
+	  ptl_rip_trace << "commit_rip: ", 
+					hexstring(rob.uop.rip.rip, 64), " \t",
+					"simcycle: ", sim_cycle, "\tkernel: ",
 					rob.uop.rip.kernel, endl;
 #endif
 
@@ -1828,6 +1829,12 @@ int ReorderBufferEntry::commit() {
     thread.flush_mem_lock_release_list();
   }
 
+  // In case of store make sure that we don't have page fault in QEMU 
+  // when we will actually write the data. So recheck this entry and 
+  // also recheck all the subrob entries
+//  if(isstore(uop.opcode) && !uop.internal)
+//	  recheck_page_fault();
+
   //
   // Each x86 instruction may be composed of multiple uops; none of the uops
   // may commit until ALL uops are ready to commit (either correctly or
@@ -1849,6 +1856,9 @@ int ReorderBufferEntry::commit() {
 
   foreach_forward_from(thread.ROB, this, j) {
     ReorderBufferEntry& subrob = thread.ROB[j];
+
+//	if(subrob.ready_to_commit() && isstore(subrob.uop.opcode))
+//		subrob.recheck_page_fault();
 
     found_eom |= subrob.uop.eom;
 
@@ -2075,6 +2085,16 @@ int ReorderBufferEntry::commit() {
   if (ld) physreg->data = lsq->data;
 
   W64 result = physreg->data;
+  
+  W64 old_data = ctx[uop.rd];
+  W64 merged_data;
+  if(ld | st) {
+	  merged_data = mux64(
+			  expand_8bit_to_64bit_lut[lsq->bytemask], 
+			  old_data, physreg->data);
+  } else {
+	  merged_data = physreg->data;
+  }
 
 #ifdef WATTCH
 	//Commit accesses architectural register file (or this should be moved to writeback)
@@ -2122,7 +2142,10 @@ int ReorderBufferEntry::commit() {
     thread.commitrrt[uop.rd] = physreg;
     thread.commitrrt[uop.rd]->addcommitref(uop.rd, thread.threadid);
 
-    if likely (uop.rd < ARCHREG_COUNT) ctx[uop.rd] = physreg->data;
+//    if likely (uop.rd < ARCHREG_COUNT) ctx[uop.rd] = physreg->data;
+    if likely (uop.rd < ARCHREG_COUNT) {
+		ctx.set_reg(uop.rd, physreg->data);
+	}
 
     physreg->rob = null;
   }
@@ -2219,22 +2242,26 @@ int ReorderBufferEntry::commit() {
 			thread.ctx.store_internal(lsq->virtaddr, lsq->data,
 					lsq->bytemask);
 		} else if(lsq->bytemask){
-//      if (lsq->bytemask) {
-        assert(lsq->physaddr);
-        assert(core.memoryHierarchy.access_cache(core.coreid, 
-                                                 threadid,
-                                                 idx/*robid*/,
-                                                 uop.uuid/*owner uuid*/,
-                                                 sim_cycle/* owner timestamp*/, 
-                                                 lsq->physaddr << 3, 
-                                                 false/* icache */, 
-                                                 true/* is write*/));
-        // update memory img:
-//        thread.ctx.storemask(lsq->physaddr << 3, lsq->data, lsq->bytemask);
-//        thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
-		assert(lsq->virtaddr > 0xfff);
-//		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, uop.size);
-		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
+			// Because of QEMU we might have page fault while storing the data
+			// so make sure that in case of page fault its handle at correct
+			// location in simulation and not here..
+		//      if (lsq->bytemask) {
+				assert(lsq->physaddr);
+				assert(core.memoryHierarchy.access_cache(core.coreid, 
+														 threadid,
+														 idx/*robid*/,
+														 uop.uuid/*owner uuid*/,
+														 sim_cycle/* owner timestamp*/, 
+														 lsq->physaddr << 3, 
+														 false/* icache */, 
+														 true/* is write*/));
+				// update memory img:
+		//        thread.ctx.storemask(lsq->physaddr << 3, lsq->data, lsq->bytemask);
+		//        thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
+				assert(lsq->virtaddr > 0xfff);
+		//		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, uop.size);
+				thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
+				lsq->datavalid = 1;
       }
 #endif
     }

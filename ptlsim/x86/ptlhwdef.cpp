@@ -351,7 +351,7 @@ const char* arch_reg_names[TRANSREG_COUNT] = {
 //}
 
 bool Context::check_events() const {
-	if(exit_request && (eflags & IF_MASK))
+	if(exit_request)// && (eflags & IF_MASK))
 		return true;
 	if(eflags & IF_MASK)
 		return ((exception_index >= 0) || (interrupt_request > 0));
