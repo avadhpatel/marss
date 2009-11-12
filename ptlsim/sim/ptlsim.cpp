@@ -1337,6 +1337,42 @@ redo:
 	return INVALID_PHYSADDR;
 }
 
+bool Context::is_mmio_addr(Waddr virtaddr, bool store) {
+	
+	int mmu_index = cpu_mmu_index((CPUState*)this);
+	int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+	W64 tlb_addr;
+
+	if likely (!store) {
+		tlb_addr = tlb_table[mmu_index][index].addr_read;
+	} else {
+		tlb_addr = tlb_table[mmu_index][index].addr_write;
+	}
+
+	if(logable(10)) {
+		ptl_logfile << "mmio mmu_index:", mmu_index, " index:", index,
+					" virtaddr:", hexstring(virtaddr, 64), 
+					" tlb_addr:", hexstring(tlb_addr, 64), 
+					" virtpage:", hexstring(
+							(virtaddr & TARGET_PAGE_MASK), 64), 
+					" tlbpage:", hexstring(
+							(tlb_addr & TARGET_PAGE_MASK), 64),
+					" addend:", hexstring(
+							tlb_table[mmu_index][index].addend, 64),
+					endl;
+	}
+	if likely ((virtaddr & TARGET_PAGE_MASK) == 
+			(tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
+		// Check if its not MMIO address
+		if(tlb_addr & ~TARGET_PAGE_MASK) {
+			return true;
+		}
+	}
+
+	return false;
+
+}
+
 int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) {
 
 	int n = 0 ;
@@ -1388,14 +1424,46 @@ W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
 	assert(virtaddr > 0xffff);
 	setup_qemu_switch();
 	W64 data = 0;
+
+	if(is_mmio_addr(virtaddr, 0)) {
+		switch(sizeshift) {
+			case 0: {
+						W8 d = ldub_kernel(virtaddr);
+						data = (W64)d;
+						break;
+					}
+			case 1: {
+						W16 d = lduw_kernel(virtaddr);
+						data = (W64)d;
+						break;
+					}
+			case 2: {
+						W32 d = ldl_kernel(virtaddr);
+						data = (W64)d;
+						break;
+					}
+			default:
+					data = ldq_kernel(virtaddr);
+		}
+		if(logable(10))
+			ptl_logfile << "MMIO READ addr: ", hexstring(virtaddr, 64),
+						" data: ", hexstring(data, 64), " size: ",
+						sizeshift, endl;
+//		cerr << "MMIO READ addr: ", hexstring(virtaddr, 64),
+//					" data: ", hexstring(data, 64), " size: ",
+//					sizeshift, endl;
+		return data;
+	}
+
 	if(kernel_mode) {
 		data = ldq_kernel(addr);
 	} else {
 		data = ldq_user(addr);
 	}
-	ptl_logfile << "Context::loadvirt addr[", hexstring(addr, 64),
-				"] data[", hexstring(data, 64), "] origaddr[",
-				hexstring(virtaddr, 64), "]\n";
+	if(logable(10))
+		ptl_logfile << "Context::loadvirt addr[", hexstring(addr, 64),
+					"] data[", hexstring(data, 64), "] origaddr[",
+					hexstring(virtaddr, 64), "]\n";
 	setup_ptlsim_switch();
 	return data;
 }
@@ -1426,10 +1494,12 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
 				data = W64(*(W64*)(addr));
 					 }
 		}
-		ptl_logfile << "Context::internal_loadphys addr[", 
-					hexstring(addr, 64), "] data[", 
-					hexstring(data, 64), "] sizeshift[", sizeshift,
-					"] ", endl;
+
+		if(logable(10))
+			ptl_logfile << "Context::internal_loadphys addr[", 
+						hexstring(addr, 64), "] data[", 
+						hexstring(data, 64), "] sizeshift[", sizeshift,
+						"] ", endl;
 		return data;
 	}
 
@@ -1438,9 +1508,11 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
 	addr = floor(addr, 8);
 	setup_qemu_switch();
 	data = ldq_raw((uint8_t*)addr);
-	ptl_logfile << "Context::loadphys addr[", hexstring(addr, 64),
-				"] data[", hexstring(data, 64), "] origaddr[",
-				hexstring(orig_addr, 64), "]\n";
+
+	if(logable(10))
+		ptl_logfile << "Context::loadphys addr[", hexstring(addr, 64),
+					"] data[", hexstring(data, 64), "] origaddr[",
+					hexstring(orig_addr, 64), "]\n";
 	setup_ptlsim_switch();
 	return data;
 }
@@ -1468,26 +1540,80 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
 //	return data;
 //}
 
-W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask) {
+W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshift) {
 	W64 old_data = 0;
 	setup_qemu_switch();
 	Waddr paddr = floor(virtaddr, 8);
-	ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
-				" with bytemask ", bytemask, " data: ", hexstring(
-						data, 64), endl;
-	if(kernel_mode) {
-		old_data = ldq_kernel(paddr);
-	} else {
-		old_data = ldq_user(paddr);
+
+	if(logable(10))
+		ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
+					" with bytemask ", bytemask, " data: ", hexstring(
+							data, 64), endl;
+
+	if(is_mmio_addr(virtaddr, 1)) {
+		switch(sizeshift) {
+			case 0: {
+						stb_kernel(virtaddr, (W8)data);
+						break;
+					}
+			case 1: {
+						stw_kernel(virtaddr, (W16)data);
+						break;
+					}
+			case 2: {
+						stl_kernel(virtaddr, (W32)data);
+						break;
+					}
+			default:
+					stq_kernel(virtaddr, data);
+		}
+		if(logable(10))
+			ptl_logfile << "MMIO WRITE addr: ", hexstring(virtaddr, 64),
+						" data: ", hexstring(data, 64), " size: ",
+						sizeshift, endl;
+//		cerr << "MMIO WRITE addr: ", hexstring(virtaddr, 64),
+//					" data: ", hexstring(data, 64), " size: ",
+//					sizeshift, endl;
+		return data;
 	}
-	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
-	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
-				"] data[", hexstring(merged_data, 64), "]\n";
-	if(kernel_mode) {
-		stq_kernel(paddr, merged_data);
-	} else {
-		stq_user(paddr, merged_data);
+
+	switch(sizeshift) {
+		case 0: // byte write
+			(kernel_mode) ? stb_kernel(virtaddr, data) : 
+				stb_user(virtaddr, data);
+			break;
+		case 1: // word write
+			(kernel_mode) ? stw_kernel(virtaddr, data) :
+				stw_user(virtaddr, data);
+			break;
+		case 2: // double word write
+			(kernel_mode) ? stl_kernel(virtaddr, data) :
+				stl_user(virtaddr, data);
+			break;
+		case 3: // quad word write
+		default:
+			(kernel_mode) ? stq_kernel(virtaddr, data) :
+				stq_user(virtaddr, data);
+			break;
 	}
+	if(logable(10))
+		ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
+					"] data[", hexstring(data, 64), "]\n";
+	return data;
+
+//	if(kernel_mode) {
+//		old_data = ldq_kernel(paddr);
+//	} else {
+//		old_data = ldq_user(paddr);
+//	}
+//	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
+//	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
+//				"] data[", hexstring(merged_data, 64), "]\n";
+//	if(kernel_mode) {
+//		stq_kernel(paddr, merged_data);
+//	} else {
+//		stq_user(paddr, merged_data);
+//	}
 //#define CHECK_STORE
 #ifdef CHECK_STORE
 	W64 new_data = 0;
@@ -1496,22 +1622,24 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask) {
 	} else {
 		new_data = ldq_user(paddr);
 	}
-	ptl_logfile << "Context::storemask store-check: addr[",
-				hexstring(paddr, 64), "] data[", hexstring(new_data,
-						64), "]\n";
+	if(logable(10))
+		ptl_logfile << "Context::storemask store-check: addr[",
+					hexstring(paddr, 64), "] data[", hexstring(new_data,
+							64), "]\n";
 	assert(new_data == merged_data);
 #endif
-	return merged_data;
+//	return merged_data;
 }
 
 W64 Context::store_internal(Waddr addr, W64 data, byte bytemask) {
 	W64 old_data = W64(*(W64*)(addr));
 	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], 
 			old_data, data);
-	ptl_logfile << "Context::store_internal addr[", 
-				hexstring(addr, 64), "] old_data[", 
-				hexstring(old_data, 64), "] new_data[",
-				hexstring(merged_data, 64), "]\n";
+	if(logable(10))
+		ptl_logfile << "Context::store_internal addr[", 
+					hexstring(addr, 64), "] old_data[", 
+					hexstring(old_data, 64), "] new_data[",
+					hexstring(merged_data, 64), "]\n";
 	*(W64*)(addr) = merged_data;
 	return merged_data;
 }
@@ -1519,13 +1647,15 @@ W64 Context::store_internal(Waddr addr, W64 data, byte bytemask) {
 W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
 	W64 old_data = 0;
 	setup_qemu_switch();
-	ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
-				" with bytemask ", bytemask, " data: ", hexstring(
-						data, 64), endl;
+	if(logable(10))
+		ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
+					" with bytemask ", bytemask, " data: ", hexstring(
+							data, 64), endl;
 	old_data = ldq_raw((uint8_t*)paddr);
 	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
-	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
-				"] data[", hexstring(merged_data, 64), "]\n";
+	if(logable(10))
+		ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
+					"] data[", hexstring(merged_data, 64), "]\n";
 	stq_raw((uint8_t*)paddr, merged_data);
 #define CHECK_STORE
 #ifdef CHECK_STORE

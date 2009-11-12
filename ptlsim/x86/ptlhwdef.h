@@ -973,11 +973,14 @@ struct Context: public CPUX86State {
 	  eip = eip + segs[R_CS].base;
 	  cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
+	  update_mode_count();
 	  reg_fptos = fpstt << 3;
 	  reg_fpstack = ((Waddr)&fpregs[0]);
   }
 
   Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code=0); //, PTEUpdate& pteupdate, Level1PTE& pteused);
+
+  bool is_mmio_addr(Waddr virtaddr, bool store);
 
   void handle_page_fault(Waddr virtaddr, int is_write) ;
   //Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, PTEUpdate& pteupdate) {
@@ -1012,7 +1015,7 @@ struct Context: public CPUX86State {
   W64 loadvirt(Waddr virtaddr, int sizeshift=3);
   W64 loadphys(Waddr addr, bool internal=0, int sizeshift=3);
 
-  W64 storemask_virt(Waddr paddr, W64 data, byte bytemask);
+  W64 storemask_virt(Waddr paddr, W64 data, byte bytemask, int sizeshift);
 //  W64 storemask_virt(Waddr paddr, W64 data, int sizeshift);
   W64 storemask(Waddr paddr, W64 data, byte bytemask) ;
   W64 store_internal(Waddr addr, W64 data, byte bytemask);

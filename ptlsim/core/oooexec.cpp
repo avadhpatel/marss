@@ -33,6 +33,9 @@
 #define logable(level) (0)
 #endif
 
+// This will disable issue of load/store if any store is pending
+#define DISABLE_SF
+
 using namespace OutOfOrderModel;
 
 //
@@ -700,7 +703,7 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
   bool signext = (uop.opcode == OP_ldx);
 
   addr = (st) ? (ra + rb) : ((aligntype == LDST_ALIGN_NORMAL) ? (ra + rb) : ra);
-  if(logable(0)) {
+  if(logable(10)) {
 	  ptl_logfile << "ROB::addrgen: st:", st, " ra:", ra, " rb:", rb,
 				  " rc:", rc, " addr:", hexstring(addr, 64), endl;
 	  ptl_logfile << " at uop: ", uop, " at rip: ",
@@ -984,6 +987,13 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     }
   }
 
+#ifndef DISABLE_SF
+  bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid)) && rcready;
+#else
+  bool ready = (sfra == null) && rcready;
+  sfra = null;
+#endif
+
   if (sfra && sfra->addrvalid && sfra->datavalid) {
     assert(sfra->physaddr == state.physaddr);
     assert(sfra->rob->uop.uuid < uop.uuid);
@@ -997,8 +1007,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   operands[RS]->unref(*this, thread.threadid);
   operands[RS] = (sfra) ? sfra->rob->physreg : &core.physregfiles[0][PHYS_REG_NULL];
   operands[RS]->addref(*this, thread.threadid);
-
-  bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid)) && rcready;
 
   //
   // If any of the following are true:
@@ -1189,12 +1197,12 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   switch (aligntype) {
   case LDST_ALIGN_NORMAL:
   case LDST_ALIGN_LO:
-    bytemask = ((1 << (1 << sizeshift))-1) << (lowbits(origaddr, 3));
-    rc <<= 8*lowbits(origaddr, 3);
+    bytemask = ((1 << (1 << sizeshift))-1);// << (lowbits(origaddr, 3));
+//    rc <<= 8*lowbits(origaddr, 3);
     break;
   case LDST_ALIGN_HI:
-    bytemask = ((1 << (1 << sizeshift))-1) >> (8 - lowbits(origaddr, 3));
-    rc >>= 8*(8 - lowbits(origaddr, 3));
+    bytemask = ((1 << (1 << sizeshift))-1);// >> (8 - lowbits(origaddr, 3));
+//    rc >>= 8*(8 - lowbits(origaddr, 3));
   }
 
   state.invalid = 0;
@@ -1394,6 +1402,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   // stores can depend on them using the rs dependency.
   //
 
+
   foreach_backward_before(LSQ, lsq, i) {
     LoadStoreQueueEntry& stbuf = LSQ[i];
     
@@ -1433,7 +1442,12 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   per_context_ooocore_stats_update(threadid, dcache.load.dependency.independent += (sfra == null));
 
+#ifndef DISABLE_SF
   bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid));
+#else
+  bool ready = (sfra == null);
+  sfra = null;
+#endif
 
   if (sfra && sfra->addrvalid && sfra->datavalid) assert(sfra->physaddr == state.physaddr);
 
@@ -1473,6 +1487,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     // when they replay; clearing both suppresses the aliasing replay the second time around.
     //
 
+#ifndef DISABLE_SF
     assert(sfra);
 
     if unlikely (config.event_log_enabled) {
@@ -1488,6 +1503,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.sfr_data_not_ready += ((sfra->addrvalid) & (!sfra->datavalid)));
     }
 
+#endif
     replay();
     load_store_second_phase = 1;
     return ISSUE_NEEDS_REPLAY;
@@ -1647,22 +1663,22 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
  
   state.addrvalid = 1;
 //  if(config.verify_cache){
-    if unlikely (aligntype == LDST_ALIGN_HI) {
-      if likely (annul) {
-        //
-        // annulled: we need no data from the high load anyway; only use the low data
-        // that was already checked for exceptions and forwarding:
-        //
-        W64 offset = lowbits(origaddr, 3);
-        state.data = extract_bytes(((byte*)&rb) + offset, sizeshift, signext);
-        state.invalid = 0;
-        state.datavalid = 1;
-
-        if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_HIGH_ANNULLED, this, sfra, addr);
-
-        return ISSUE_COMPLETED;
-      }
-    }
+//    if unlikely (aligntype == LDST_ALIGN_HI) {
+//      if likely (annul) {
+//        //
+//        // annulled: we need no data from the high load anyway; only use the low data
+//        // that was already checked for exceptions and forwarding:
+//        //
+//        W64 offset = lowbits(origaddr, 3);
+//        state.data = extract_bytes(((byte*)&rb) + offset, sizeshift, signext);
+//        state.invalid = 0;
+//        state.datavalid = 1;
+//
+//        if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_HIGH_ANNULLED, this, sfra, addr);
+//
+//        return ISSUE_COMPLETED;
+//      }
+//    }
   
     generated_addr = addr;
     original_addr = origaddr;
@@ -1753,7 +1769,8 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 	state.invalid = 0;
 	state.bytemask = 0xff;
 
-#ifdef NEW_MEMORY
+#if 0
+#ifdef 0 NEW_MEMORY
     if(config.verify_cache && !config.comparing_cache){ //if we rely on cache data only: we have to flush the cache so we can get correct data:
       int cycle_in_flush_cache = core.machine.memoryHierarchyPtr->flush();
       thread.last_commit_at_cycle = sim_cycle; // to avoid long flush latency cause exit
@@ -1772,6 +1789,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       state.invalid = 0;
       state.bytemask = 0xff;
     }
+#endif
 #endif
     physreg->flags &= ~FLAG_WAIT;
     physreg->complete();
@@ -1889,7 +1907,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       bool L1hit;
 #endif
       //      lsi_seq = lsi.seq; // use to match call backs from cache
-
+/*
       if likely (L1hit) {// && !recheck_page_fault()) {    
         cycles_left = LOADLAT;
         
@@ -1940,7 +1958,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         per_context_dcache_stats_update(core.coreid, threadid, load.hit.L1++);
         return ISSUE_COMPLETED;
       }
-
+*/
       per_context_ooocore_stats_update(threadid, dcache.load.issue.miss++);
   
       cycles_left = 0;
@@ -2314,7 +2332,8 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 			  }
 			  rob.lsq->data = extract_bytes(((byte*)&data) , 
 					  sizeshift, signext);
-			  rob.physreg->data = rob.lsq->data;
+			  rob.loadwakeup();
+//			  rob.physreg->data = rob.lsq->data;
 		  }
 	  }
     
@@ -2336,6 +2355,7 @@ void ReorderBufferEntry::loadwakeup() {
     // Actually wake up the load
     if unlikely (config.event_log_enabled) getcore().eventlog.add_load_store(EVENT_LOAD_WAKEUP, this);
 
+	physreg->data = lsq->data;
     physreg->flags &= ~FLAG_WAIT;
     physreg->complete();
     

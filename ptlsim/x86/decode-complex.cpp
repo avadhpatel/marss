@@ -568,7 +568,7 @@ void assist_pushf(Context& ctx) {
 	ctx.setup_ptlsim_switch();
 	// now push the flags on the stack
 	ctx.regs[R_ESP] -= 8;
-	ctx.storemask_virt(ctx.regs[R_ESP], flags, 0xff);
+	ctx.storemask_virt(ctx.regs[R_ESP], flags, 0xff, 8);
 	ctx.eip = ctx.reg_nextrip;
 }
 

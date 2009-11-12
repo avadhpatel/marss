@@ -213,8 +213,9 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
   }
 
 //  fetchrip = realrip;
-  ptl_logfile << "realrip:", hexstring(realrip, 48), " csbase:", ctx.segs[R_CS].base,
-			  endl;
+  if(logable(10))
+	  ptl_logfile << "realrip:", hexstring(realrip, 48), " csbase:", ctx.segs[R_CS].base,
+				  endl;
   fetchrip = realrip ;//+ ctx.segs[R_CS].base;
   fetchrip.update(ctx);
   stall_frontend = 0;
@@ -480,7 +481,10 @@ bool ThreadContext::fetch() {
       fetch_bb_address_ringbuf[fetch_bb_address_ringbuf_head] = fetchrip;
       fetch_bb_address_ringbuf_head = add_index_modulo(fetch_bb_address_ringbuf_head, +1, lengthof(fetch_bb_address_ringbuf));
 	  assert((W64)(fetchrip) != 0);
-	  ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
+	  
+	  if(logable(10))
+		  ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
+
       if(fetch_or_translate_basic_block(fetchrip) == null)
 		  break;
     }
@@ -608,9 +612,11 @@ bool ThreadContext::fetch() {
       synthop = current_basic_block->synthops[current_basic_block_transop_index];
     }
 
-    transop.unaligned = core.get_unaligned_hint(fetchrip) && 
-      ((transop.opcode == OP_ld) | (transop.opcode == OP_ldx) | (transop.opcode == OP_st)) &&
-      (transop.cond == LDST_ALIGN_NORMAL);
+//    transop.unaligned = core.get_unaligned_hint(fetchrip) && 
+//      ((transop.opcode == OP_ld) | (transop.opcode == OP_ldx) | (transop.opcode == OP_st)) &&
+//      (transop.cond == LDST_ALIGN_NORMAL);
+	transop.unaligned = ((transop.opcode == OP_ld) | (transop.opcode == OP_ldx) | (transop.opcode == OP_st)) &&
+      (transop.cond);// == LDST_ALIGN_NORMAL);
     transop.ld_st_truly_unaligned = 0;
     transop.rip = fetchrip;
     transop.uuid = fetch_uuid;
@@ -2153,7 +2159,10 @@ int ReorderBufferEntry::commit() {
   if likely (uop.eom) {
     if unlikely (uop.rd == REG_rip) {
       assert(isbranch(uop.opcode));
-	  ptl_logfile << "destination is REG_rip : ", physreg->data, endl, flush;
+	  
+	  if(logable(10))
+		  ptl_logfile << "destination is REG_rip : ", physreg->data, endl, flush;
+
 	  if(uop.riptaken != physreg->data) {
 		  if(logable(6)) {
 			  ptl_logfile << "branch misprediction: assumed-rip: ",
@@ -2260,7 +2269,7 @@ int ReorderBufferEntry::commit() {
 		//        thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
 				assert(lsq->virtaddr > 0xfff);
 		//		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, uop.size);
-				thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
+				thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
 				lsq->datavalid = 1;
       }
 #endif

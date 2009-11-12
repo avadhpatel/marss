@@ -2089,7 +2089,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  logenable = 1;
 	  }
 
-//	  if(sim_cycle % 100 == 0)
+	  if(sim_cycle % 1000 == 0)
 		  update_progress();
 	  //    inject_events();
 	  // limit the ptl_logfile size
