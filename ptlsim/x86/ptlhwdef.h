@@ -973,7 +973,6 @@ struct Context: public CPUX86State {
 	  eip = eip + segs[R_CS].base;
 	  cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
-	  update_mode_count();
 	  reg_fptos = fpstt << 3;
 	  reg_fpstack = ((Waddr)&fpregs[0]);
   }
@@ -1261,6 +1260,7 @@ struct Context: public CPUX86State {
   }
 
   void update_mode(bool is_kernel) {
+	  update_mode_count();
 	  kernel_mode = is_kernel;
   }
 

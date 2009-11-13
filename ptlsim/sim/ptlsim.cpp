@@ -1224,19 +1224,27 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 }
 
 void Context::update_mode_count() {
-	if likely (!kernel_mode) {
-		W64 prev_cycles = cycles_at_last_mode_switch;
-		W64 prev_insns = insns_at_last_mode_switch;
-		W64 delta_cycles = sim_cycle - cycles_at_last_mode_switch;
-		W64 delta_insns = user_instructions_commited - 
-			insns_at_last_mode_switch;
+	W64 prev_cycles = cycles_at_last_mode_switch;
+	W64 prev_insns = insns_at_last_mode_switch;
+	W64 delta_cycles = sim_cycle - cycles_at_last_mode_switch;
+	W64 delta_insns = user_instructions_commited - 
+		insns_at_last_mode_switch;
 
-		cycles_at_last_mode_switch = sim_cycle;
-		insns_at_last_mode_switch = user_instructions_commited;
+	cycles_at_last_mode_switch = sim_cycle;
+	insns_at_last_mode_switch = user_instructions_commited;
 
-		if likely (use64) {
+	if likely (use64) {
+		if(kernel_mode) {
+			per_core_event_update(cpu_index, cycles_in_mode.kernel64 += delta_cycles);
+			per_core_event_update(cpu_index, insns_in_mode.kernel64 += delta_insns);
+		} else {
 			per_core_event_update(cpu_index, cycles_in_mode.user64 += delta_cycles);
 			per_core_event_update(cpu_index, insns_in_mode.user64 += delta_insns);
+		}
+	} else {
+		if(kernel_mode) {
+			per_core_event_update(cpu_index, cycles_in_mode.kernel32 += delta_cycles);
+			per_core_event_update(cpu_index, insns_in_mode.kernel32 += delta_insns);
 		} else {
 			per_core_event_update(cpu_index, cycles_in_mode.user32 += delta_cycles);
 			per_core_event_update(cpu_index, insns_in_mode.user32 += delta_insns);

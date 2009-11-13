@@ -34,7 +34,7 @@
 #endif
 
 // This will disable issue of load/store if any store is pending
-#define DISABLE_SF
+//#define DISABLE_SF
 
 using namespace OutOfOrderModel;
 
@@ -964,7 +964,9 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
       // Only considered a match if it's not a fence (which doesn't match anything)
       if unlikely (stbuf.lfence | stbuf.sfence) continue;
 
-      if (stbuf.physaddr == state.physaddr) {
+//      if (stbuf.physaddr == state.physaddr) {
+	  int x = (stbuf.physaddr - state.physaddr);
+	  if(-1 <= x && x <= 1) {
         per_context_ooocore_stats_update(threadid, dcache.load.dependency.stq_address_match++);
         sfra = &stbuf;
         break;
@@ -995,7 +997,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 #endif
 
   if (sfra && sfra->addrvalid && sfra->datavalid) {
-    assert(sfra->physaddr == state.physaddr);
+//    assert(sfra->physaddr == state.physaddr);
     assert(sfra->rob->uop.uuid < uop.uuid);
   }
 
@@ -1206,8 +1208,10 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   }
 
   state.invalid = 0;
-  state.data = (sfra) ? mux64(expand_8bit_to_64bit_lut[bytemask], sfra->data, rc) : rc;
-  state.bytemask = (sfra) ? (sfra->bytemask | bytemask) : bytemask;
+//  state.data = (sfra) ? mux64(expand_8bit_to_64bit_lut[bytemask], sfra->data, rc) : rc;
+//  state.bytemask = (sfra) ? (sfra->bytemask | bytemask) : bytemask;
+  state.data = rc;
+  state.bytemask = bytemask;
   state.datavalid = 1;
   if(config.trace_memory_updates){
     trace_mem_logfile << " cycle: ", sim_cycle, " generated store addr ", (void*)origaddr, " rc ", (void*)rc, " data ", (void*)state.data,  " sfr ", state, endl;
@@ -1403,6 +1407,9 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   //
 
 
+  int num_sfra_found = 0;
+  int sfra_addr_diff;
+
   foreach_backward_before(LSQ, lsq, i) {
     LoadStoreQueueEntry& stbuf = LSQ[i];
     
@@ -1413,10 +1420,17 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       // Only considered a match if it's not a fence (which doesn't match anything)
       if unlikely (stbuf.lfence | stbuf.sfence) continue;
 
-      if (stbuf.physaddr == state.physaddr) {
+//      if (stbuf.physaddr == state.physaddr) {
+	  sfra_addr_diff = (stbuf.physaddr - state.physaddr);
+	  if(-1 <= sfra_addr_diff && sfra_addr_diff <= 1) {
         per_context_ooocore_stats_update(threadid, dcache.load.dependency.stq_address_match++);
         sfra = &stbuf;
-        break;
+		num_sfra_found++;
+		if(num_sfra_found > 1) {
+		   	break;
+		}
+		continue;
+//        break;
       }
     } else {
       // Address is unknown: is it a memory fence that hasn't committed?
@@ -1444,12 +1458,13 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
 #ifndef DISABLE_SF
   bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid));
+  if(num_sfra_found > 1) ready = false;
 #else
   bool ready = (sfra == null);
   sfra = null;
 #endif
 
-  if (sfra && sfra->addrvalid && sfra->datavalid) assert(sfra->physaddr == state.physaddr);
+//  if (sfra && sfra->addrvalid && sfra->datavalid) assert(sfra->physaddr == state.physaddr);
 
   if(sfra && logable(10))
 	  ptl_logfile << " Load will be forwared from sfra\n", 
@@ -1822,7 +1837,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     return probecache(physaddr, sfra);
   }else { // use cpu, bus, cache controllers, etc
     //    if(core.test_controller.probe_cache_and_sfr(physaddr, sfra, uop.size)){ // the value of load get from previous store:
-    if(covered){ // if we got from sfra:
+/*    if(covered){ // if we got from sfra:
       cycles_left = LOADLAT;
    
       //    if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_HIT, this, sfra, addr);
@@ -1876,16 +1891,26 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 //         state.invalid = 0;
 //         state.bytemask = 0xff;
 //       }
+       */
 #ifdef NEW_MEMORY
       //      bool L1hit = core.memoryHierarchy.access_dcache_read(core.coreid, threadid, &lsi, lsq);
 	  
-	  if(sfra && (sfra->bytemask & state.bytemask)) {
+	  if(sfra) { // && (sfra->bytemask & state.bytemask)) {
 		  // the data is partially covered by previous store..
 		  // store the data into the lsq's sfra_data and also 
 		  // store the sfra bytemask to we load most up-to date
 		  // data when we get rest of data from cache
 		  state.sfr_data = sfra->data;
 		  state.sfr_bytemask = sfra->bytemask;
+		  if(state.physaddr < sfra->physaddr) {
+			  int addr_diff = sfra->virtaddr - state.virtaddr;
+			  state.sfr_data <<= (addr_diff * 8);
+			  state.sfr_bytemask <<= addr_diff;
+		  } else {
+			  int addr_diff = state.virtaddr - sfra->virtaddr;
+			  state.sfr_data >>= (addr_diff * 8);
+			  state.sfr_bytemask >>= addr_diff;
+		  }
 		  if(logable(10))
 			  ptl_logfile << "Partial match of load/store rip: ", hexstring(uop.rip.rip, 64),
 						  " sfr_bytemask: ", sfra->bytemask, " sfr_data: ",
@@ -1965,7 +1990,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       changestate(thread.rob_cache_miss_list); // TODO: change to cache access waiting list
       if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_LOAD_MISS, this, sfra, addr);
     
-    }
+//    }
   }
   return ISSUE_COMPLETED;
 }
@@ -2325,10 +2350,10 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 			  
 			  // Now check if there is most upto date data from
 			  // sfra available or not
-			  if(rob.lsq->sfr_data != -1 && rob.lsq->sfr_bytemask != 0) {
+			  if(rob.lsq->sfr_bytemask != 0) {
 				  int s = offset * 8;
-				  W64 sel = expand_8bit_to_64bit_lut[rob.lsq->sfr_bytemask] << s;
-				  data = mux64(sel, data, rob.lsq->sfr_data << s);
+				  W64 sel = expand_8bit_to_64bit_lut[rob.lsq->sfr_bytemask];// << s;
+				  data = mux64(sel, data, rob.lsq->sfr_data);// << s);
 			  }
 			  rob.lsq->data = extract_bytes(((byte*)&data) , 
 					  sizeshift, signext);
