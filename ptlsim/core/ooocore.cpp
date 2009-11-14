@@ -1301,7 +1301,7 @@ bool ThreadContext::handle_interrupt() {
   // Release resources of everything in the pipeline:
   core_to_external_state();
   if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline.",endl;
-  flush_pipeline();
+//  flush_pipeline();
 
   if (logable(6)) {
     ptl_logfile << "[vcpu ", threadid, "] interrupts pending at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
@@ -1322,7 +1322,7 @@ bool ThreadContext::handle_interrupt() {
 
   // Flush again, but restart at modified rip
   if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline again.",endl;
-  flush_pipeline();
+//  flush_pipeline();
 #endif
   return true;
 }
@@ -2027,7 +2027,8 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  if(first_run) {
 			  cores[cur_core]->reset();
 		  }
-		  cores[cur_core]->flush_pipeline_all();
+		  if(cores[cur_core]->threads[0]->ctx.eip != cores[cur_core]->threads[0]->ctx.old_eip)
+			  cores[cur_core]->flush_pipeline_all();
 
 		  //ptl_logfile << "IssueQueue states:", endl;
 

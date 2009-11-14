@@ -924,7 +924,18 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   Waddr physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
   if unlikely (exception) {
-    return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+	// Check if the page fault can be handled without causing exception
+	bool handled = false;
+	if(exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead) {
+		handled = thread.ctx.try_handle_fault(addr, 1);
+	}
+	if(!handled)
+		return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+	// else - regenerate the physical address as now tlb is filled
+	physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
+
+	assert(exception == 0);
+
   }
 
   per_context_ooocore_stats_update(threadid, dcache.store.type.aligned += ((!uop.internal) & (aligntype == LDST_ALIGN_NORMAL)));
@@ -953,6 +964,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 
   LoadStoreQueueEntry* sfra = null;
 
+#if 0
   foreach_backward_before(LSQ, lsq, i) {
     LoadStoreQueueEntry& stbuf = LSQ[i];
 
@@ -988,13 +1000,14 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
       break;
     }
   }
-
-#ifndef DISABLE_SF
-  bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid)) && rcready;
-#else
-  bool ready = (sfra == null) && rcready;
-  sfra = null;
 #endif
+
+//#ifndef DISABLE_SF
+  bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid)) && rcready;
+//#else
+//  bool ready = (sfra == null) && rcready;
+//  sfra = null;
+//#endif
 
   if (sfra && sfra->addrvalid && sfra->datavalid) {
 //    assert(sfra->physaddr == state.physaddr);
@@ -1364,7 +1377,19 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 					  uop, " at rip: ", hexstring(uop.rip.rip, 64),
 					  endl;
 	  }
-    return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+
+	// Check if the page fault can be handled without causing exception
+	bool handled = false;
+	if(exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead) {
+		handled = thread.ctx.try_handle_fault(addr, 0);
+	}
+	if(!handled)
+		return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+
+	// else - regenerate the physical address with new tlb entry
+	physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
+
+	assert(exception == 0);
   }
 
   per_context_ooocore_stats_update(threadid, dcache.load.type.aligned += ((!uop.internal) & (aligntype == LDST_ALIGN_NORMAL)));
@@ -1902,7 +1927,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 		  // data when we get rest of data from cache
 		  state.sfr_data = sfra->data;
 		  state.sfr_bytemask = sfra->bytemask;
-		  if(state.physaddr < sfra->physaddr) {
+		  if(state.virtaddr < sfra->virtaddr) {
 			  int addr_diff = sfra->virtaddr - state.virtaddr;
 			  state.sfr_data <<= (addr_diff * 8);
 			  state.sfr_bytemask <<= addr_diff;

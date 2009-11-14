@@ -312,7 +312,13 @@ extern ConfigurationParser<PTLsimConfig> configparser;
 ostream& operator <<(ostream& os, const PTLsimConfig& config);
 
 extern bool logenable;
+
+#ifdef DISABLE_LOGGING
+#define logable(l) (0)
+#else
 #define logable(level) (unlikely (logenable && (config.loglevel >= level)))
+#endif
+
 void force_logging_enabled();
 
 #endif // _PTLSIM_H_

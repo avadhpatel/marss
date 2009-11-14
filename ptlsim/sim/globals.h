@@ -121,6 +121,11 @@ static inline void assert_fail_trap(const char *__assertion, const char *__file,
 #define __STRING(x)	#x
 #define assert(expr) (__ASSERT_VOID_CAST ((unlikely(expr)) ? 0 : (assert_fail (__STRING(expr), __FILE__, __LINE__, __PRETTY_FUNCTION__), 0)))
 
+#ifdef DISABLE_ASSERT
+#undef assert
+#define assert(expr) (expr)
+#endif
+
 #define nan NAN
 #define inf INFINITY
 

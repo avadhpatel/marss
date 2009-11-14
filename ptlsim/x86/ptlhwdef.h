@@ -907,6 +907,7 @@ struct Context: public CPUX86State {
   byte dirty; // VCPU was just brought online
   Waddr virt_addr_mask;
   W32 internal_eflags; // parts of EFLAGS that are infrequently updated
+  W64 old_eip;
 
   W64 cycles_at_last_mode_switch;
   W64 insns_at_last_mode_switch;
@@ -948,6 +949,7 @@ struct Context: public CPUX86State {
   }
 
   void setup_qemu_switch() {
+	  old_eip = eip;
 	  set_eip_qemu();
 	  set_cpu_env((CPUX86State*)this);
 //	  load_eflags(internal_eflags , (TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK));
@@ -982,6 +984,8 @@ struct Context: public CPUX86State {
   bool is_mmio_addr(Waddr virtaddr, bool store);
 
   void handle_page_fault(Waddr virtaddr, int is_write) ;
+
+  bool try_handle_fault(Waddr virtaddr, bool is_write);
   //Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, PTEUpdate& pteupdate) {
   //  Level1PTE dummy;
   //  return check_and_translate(virtaddr, sizeshift, store, internal, exception, pfec, pteupdate, dummy);

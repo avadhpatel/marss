@@ -23,8 +23,8 @@ namespace Memory{
 	const double REQUEST_POOL_LOW_RATIO = 0.1;
 
 	// CPU Controller
-	const int CPU_CONT_PENDING_REQ_SIZE = 32;
-	const int CPU_CONT_ICACHE_BUF_SIZE = 8;
+	const int CPU_CONT_PENDING_REQ_SIZE = 128;
+	const int CPU_CONT_ICACHE_BUF_SIZE = 32;
 
 	// L1D                 // increase to 32 KB to match Core 2
 	const int L1D_LINE_SIZE = 16;

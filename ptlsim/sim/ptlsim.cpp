@@ -1151,8 +1151,9 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	// FIXME : Try to make it like memcpy to copy faster if this gets slower
 	this->setup_qemu_switch();
 
-	ptl_logfile << "Copying from userspace ", bytes, " bytes from ",
-				source, endl;
+	if(logable(10))
+		ptl_logfile << "Copying from userspace ", bytes, " bytes from ",
+					source, endl;
 
 	int exception = 0;
 	Waddr physaddr = check_and_translate(source, 0, 0, 0, exception,
@@ -1160,7 +1161,8 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	if (exception) {
 		int old_exception = exception_index;
 		int mmu_index = cpu_mmu_index((CPUState*)this);
-		ptl_logfile << "page fault while reading code", endl;
+		if(logable(10))
+			ptl_logfile << "page fault while reading code", endl;
 		int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
 				source, 0, mmu_index, 1);
 		if (fail && source == (Waddr)(eip)) {
@@ -1168,8 +1170,9 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 			raise_exception_err(exception_index, error_code);
 		}
 		if (fail) {
-			ptl_logfile << "Unable to read code from ", 
-						hexstring(source, 64), endl;
+			if(logable(10))
+				ptl_logfile << "Unable to read code from ", 
+							hexstring(source, 64), endl;
 			setup_ptlsim_switch();
 			// restore the exception index as it will be 
 			// restore when we try to commit this entry from ROB
@@ -1182,14 +1185,15 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	target_ulong source_b = source;
 	byte* target_b = (byte*)(target);
 	while(n < bytes) {
-		W8 data = ldub_code(source_b);
+		char data = ldub_code(source_b);
 		target_b[n] = data;
 		source_b++;
 		n++;
 	}
 	setup_ptlsim_switch();
 
-	ptl_logfile << "Copy done..\n";
+	if(logable(10))
+		ptl_logfile << "Copy done..\n";
 
 	return n;
 	//FIXME: We have to check the page permission of both source and
@@ -1557,6 +1561,8 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
 		ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
 					" with bytemask ", bytemask, " data: ", hexstring(
 							data, 64), endl;
+	if(floor(virtaddr, 16) == 0xFFFFFFFF810BC8D0)
+		assert(0);
 
 	if(is_mmio_addr(virtaddr, 1)) {
 		switch(sizeshift) {
@@ -1693,6 +1699,33 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
 	}
 	setup_ptlsim_switch();
 	return;
+}
+
+bool Context::try_handle_fault(Waddr virtaddr, bool store) {
+
+	setup_qemu_switch();
+
+	if(logable(10))
+		ptl_logfile << "Trying to fill tlb for addr: ", (void*)virtaddr, endl;
+
+	int mmu_index = cpu_mmu_index((CPUState*)this);
+	int fault = cpu_x86_handle_mmu_fault((CPUState*)this, virtaddr, store, mmu_index, 1);
+
+	setup_ptlsim_switch();
+	if(fault) {
+		if(logable(10))
+			ptl_logfile << "Fault for addr: ", (void*)virtaddr, endl, flush;
+
+		error_code = 0;
+		exception_index = -1;
+
+		return false;
+	}
+
+	if(logable(10))
+		ptl_logfile << "Tlb fill for addr: ", (void*)virtaddr, endl, flush;
+
+	return true;
 }
 
 #endif // CONFIG_ONLY

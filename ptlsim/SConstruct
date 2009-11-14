@@ -28,13 +28,19 @@ env['CPPPATH'].append("%s/%s" % (qemu_dir, "target-i386"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "fpu"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "x86_64-softmmu"))
 
+optimization_defs = '-fno-trapping-math -fno-stack-protector -fno-exceptions '
+optimization_defs += '-fno-rtti -funroll-loops -fno-strict-aliasing '
+
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
     env.Append(CCFLAGS = '-g')
     env.Append(CCFLAGS = '-O')
 else:
     env.Append(CCFLAGS = '-g3')
-    env.Append(CCFLAGS = '-O2')
+    env.Append(CCFLAGS = '-O')
+    env.Append(CCFLAGS = '-DDISABLE_ASSERT')
+    env.Append(CCFLAGS = '-DDISABLE_LOGGING')
+    env.Append(CCFLAGS = optimization_defs)
 
 # Set all the -D flags
 # enable PTLSIM_HYPERVISOR
