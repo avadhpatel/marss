@@ -73,10 +73,12 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 					command_addr++;
 				}
 
-				cout << "Command received : ", command_str, endl;
-				// inside_ptlsim = 1;
-				// Stop the QEMU vm so user can change to simulation mode
+				cout << "PQRS::Command received : ", command_str, endl;
+				// Stop the QEMU vm and change ptlsim configuration
+				// QEMU will be automatically started in simulation mode
 				vm_stop(0);
+				ptl_reconfigure(command_str);
+				cpu_interrupt(cpu, CPU_INTERRUPT_EXIT);
 				break;
 			  }
 			case PTLCALL_CHECKPOINT: {

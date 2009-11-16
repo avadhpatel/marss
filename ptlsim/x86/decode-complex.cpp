@@ -1286,13 +1286,13 @@ bool TraceDecoder::decode_complex() {
       int mergewith = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
       if (sizeshift >= 2) {
         // zero extend 32-bit to 64-bit or just load as 64-bit:
-        operand_load(REG_temp6, rd);
+        operand_load(REG_temp0, rd);
       } else {
         // need to merge 8-bit or 16-bit data:
         operand_load(REG_temp0, rd);
         if (reginfo[rd.reg.reg].hibyte)
-          this << TransOp(OP_maskb, REG_temp6, destreg, REG_temp0, REG_imm, 3, 0, MaskControlInfo(56, 8, 56));
-        else this << TransOp(OP_mov, REG_temp6, destreg, REG_temp0, REG_zero, sizeshift);
+          this << TransOp(OP_maskb, REG_temp0, destreg, REG_temp0, REG_imm, 3, 0, MaskControlInfo(56, 8, 56));
+        else this << TransOp(OP_mov, REG_temp0, destreg, REG_temp0, REG_zero, sizeshift);
       }
 
       //
@@ -1303,7 +1303,7 @@ bool TraceDecoder::decode_complex() {
       //
       // sel.c   t7 = t7,t6,(zero)            # ra always selected (passthrough)
       //
-      TransOp dummyop(OP_sel, REG_temp7, REG_temp7, REG_temp6, REG_zero, 3);
+      TransOp dummyop(OP_sel, REG_temp7, REG_temp7, REG_temp0, REG_zero, 3);
       dummyop.cond = COND_c;
       this << dummyop;
 
@@ -1316,7 +1316,7 @@ bool TraceDecoder::decode_complex() {
       // mov ra = zero,t6
       // Always move the full size: the temporary was already merged above
       //
-      this << TransOp(OP_mov, destreg, REG_zero, REG_temp6, REG_zero, 3);
+      this << TransOp(OP_mov, destreg, REG_zero, REG_temp0, REG_zero, 3);
 
       if (memory_fence_if_locked(1)) break;
     }
@@ -2165,12 +2165,12 @@ bool TraceDecoder::decode_complex() {
 
 			svm_check_intercept(*this, SVM_EXIT_LDTR_READ);
 
-			TransOp ldp(OP_ld, REG_temp6, REG_ctx, REG_imm, REG_zero, 2,
+			TransOp ldp(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 2,
 					offsetof_t(Context, ldt.selector));
 			ldp.internal = 1;
 			this << ldp;
 
-			result_store(REG_temp6, REG_zero, rd);
+			result_store(REG_temp0, REG_zero, rd);
 			break;
 		}
 		case 2: { // lldt
@@ -2261,28 +2261,31 @@ bool TraceDecoder::decode_complex() {
 				goto invalid_opcode;
 			}
 			svm_check_intercept(*this, SVM_EXIT_GDTR_READ);
-			ldp = new TransOp(OP_ld, REG_temp6, REG_ctx, REG_imm, 
+
+			address_generate_and_load_or_store(REG_temp1, REG_zero,
+					ra, OP_add);
+
+			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
 					REG_zero, 3, offsetof_t(Context, gdt.limit));
 			ldp->internal = 1;
 			this << *ldp;
 			delete ldp;
 
-			this << TransOp(OP_st, REG_mem, REG_zero, REG_imm, 
-					REG_temp6, 3, ra.imm.imm);
-			ra.imm.imm += 2;
+			this << TransOp(OP_st, REG_mem, REG_temp1, REG_zero, 
+					REG_temp0, 3);
 			
-			ldp2 = new TransOp(OP_ld, REG_temp6, REG_ctx, REG_imm, 
+			ldp2 = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
 					REG_zero, 3, offsetof_t(Context, gdt.base));
 			ldp2->internal = 1;
 			this << *ldp2;
 			delete ldp2;
 
 			if (!use64)
-				this << TransOp(OP_and, REG_temp6, REG_temp6, REG_imm,
+				this << TransOp(OP_and, REG_temp0, REG_temp0, REG_imm,
 						REG_zero, 3, 0xffffff);
 
-			this << TransOp(OP_st, REG_mem, REG_zero, REG_imm,
-					REG_temp6, 3, ra.imm.imm);
+			this << TransOp(OP_st, REG_mem, REG_temp1, REG_imm,
+					REG_temp0, 3, 2);
 
 			microcode_assist(ASSIST_BARRIER, ripstart, rip);
 			end_of_block = 1;
@@ -2312,7 +2315,7 @@ bool TraceDecoder::decode_complex() {
 						}
 
 						// Add DS segment base to reg_ar1
-						ldp = new TransOp(OP_ld, REG_temp6, REG_ctx, 
+						ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, 
 								REG_imm, REG_zero, sizeshift, 
 								offsetof_t(Context, 
 									segs[R_DS].base));
@@ -2320,7 +2323,7 @@ bool TraceDecoder::decode_complex() {
 						this << *ldp;
 						delete ldp;
 						this << TransOp(OP_add, REG_ar1, REG_ar1,
-								REG_temp6, REG_zero, sizeshift);
+								REG_temp0, REG_zero, sizeshift);
 						microcode_assist(ASSIST_MONITOR,
 								ripstart, rip);
 						break;
@@ -2353,27 +2356,29 @@ bool TraceDecoder::decode_complex() {
 
 				svm_check_intercept(*this, SVM_EXIT_IDTR_READ);
 
-				ldp = new TransOp(OP_ld, REG_temp6, REG_ctx, REG_imm, 
+				address_generate_and_load_or_store(REG_temp1, REG_zero,
+						ra, OP_add);
+
+				ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
 						REG_zero, 2, offsetof_t(Context, idt.limit));
 				ldp->internal = 1;
 				this << *ldp;
 				delete ldp;
-				this << TransOp(OP_st, REG_mem, REG_zero, REG_imm, 
-						REG_temp6, 3, ra.imm.imm);
-				ra.imm.imm += 2;
+				this << TransOp(OP_st, REG_mem, REG_temp1, REG_zero, 
+						REG_temp0, 3);
 
-				ldp2 = new TransOp(OP_ld, REG_temp6, REG_ctx, REG_imm, 
+				ldp2 = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
 						REG_zero, 3, offsetof_t(Context, idt.base));
 				ldp2->internal = 1;
 				this << *ldp2;
 				delete ldp2;
 
 				if (!use64)
-					this << TransOp(OP_and, REG_temp6, REG_temp6, 
+					this << TransOp(OP_and, REG_temp0, REG_temp0, 
 							REG_imm, REG_zero, 3, 0xffffff);
 
-				this << TransOp(OP_st, REG_mem, REG_zero, REG_imm,
-						REG_temp6, 3, ra.imm.imm);
+				this << TransOp(OP_st, REG_mem, REG_temp1, REG_imm,
+						REG_temp0, 3, 2);
 				
 				microcode_assist(ASSIST_BARRIER, ripstart, rip);
 				end_of_block = 1;
@@ -2445,15 +2450,16 @@ bool TraceDecoder::decode_complex() {
 					svm_check_intercept(*this, 
 							modrm.reg == 2 ? SVM_EXIT_GDTR_WRITE : \
 							SVM_EXIT_IDTR_WRITE);
-					ldp = new TransOp(OP_ld, REG_temp6, REG_zero, 
-							REG_imm, REG_zero, 2, ra.imm.imm);
-					ldp->internal = 1;
+
+					address_generate_and_load_or_store(REG_temp1, REG_zero,
+							ra, OP_add);
+
+					ldp = new TransOp(OP_ld, REG_temp0, REG_temp1, 
+							REG_zero, REG_zero, 2);
 					this << *ldp;
 					delete ldp;
-					ra.imm.imm += 2;
-					ldp2 = new TransOp(OP_ld, REG_temp7, REG_zero, 
-							REG_imm, REG_zero, 3, ra.imm.imm);
-					ldp2->internal = 1;
+					ldp2 = new TransOp(OP_ld, REG_temp7, REG_temp1, 
+							REG_imm, REG_zero, 3, 2);
 					this << *ldp2;
 					delete ldp2;
 
@@ -2474,7 +2480,7 @@ bool TraceDecoder::decode_complex() {
 							REG_zero, REG_imm, 2, offset_val1);
 					st1->internal = 1;
 					this << *st1;
-					st2 = new TransOp(OP_st, REG_mem, REG_temp6, 
+					st2 = new TransOp(OP_st, REG_mem, REG_temp0, 
 							REG_zero, REG_imm, 2, offset_val2);
 					st2->internal = 1;
 					this << *st2;
@@ -2562,7 +2568,11 @@ bool TraceDecoder::decode_complex() {
 					this << TransOp(OP_collcc, REG_temp0, REG_zf, 
 							REG_cf, REG_of, 3, 0, 0, 
 							FLAGS_DEFAULT_ALU);
-					operand_load(REG_ar1, ra);
+					//operand_load(REG_ar1, ra);
+					// Instead of load value from the operand, just load
+					// the effective address of ra into reg ar1
+					address_generate_and_load_or_store(REG_ar1, REG_zero,
+							ra, OP_add);
 					microcode_assist(ASSIST_INVLPG,
 							ripstart, rip);
 					end_of_block = 1;

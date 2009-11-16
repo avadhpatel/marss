@@ -593,6 +593,8 @@ int ReorderBufferEntry::issue() {
         // it has already been issued once. Just let it writeback and
         // commit like it was predicted perfectly in the first place.
         //
+		if(logable(10)) 
+			ptl_logfile << "Branch mispredicted: ", (void*)(realrip), " ", *this, endl;
         thread.reset_fetch_unit(realrip);
         per_context_ooocore_stats_update(threadid, issue.result.branch_mispredict++);
 
@@ -803,6 +805,7 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
     // of the x86 macro-op. The frontend will then split the uop into
     // low and high parts as it is refetched.
     //
+	  assert(0);
     if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_ALIGNMENT_FIXUP, this, null, addr);
 
     core.set_unaligned_hint(uop.rip, 1);
@@ -964,7 +967,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 
   LoadStoreQueueEntry* sfra = null;
 
-#if 0
+//#if 0
   foreach_backward_before(LSQ, lsq, i) {
     LoadStoreQueueEntry& stbuf = LSQ[i];
 
@@ -1000,7 +1003,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
       break;
     }
   }
-#endif
+//#endif
 
 //#ifndef DISABLE_SF
   bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid)) && rcready;
@@ -1797,6 +1800,8 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   if unlikely (uop.internal) {
     cycles_left = LOADLAT;
+
+	assert(sfra == null);
 
     if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_HIT, this, sfra, addr);
 

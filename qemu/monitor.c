@@ -509,7 +509,6 @@ static void do_ptlsim(char* args)
 	term_printf("ptlsim options received:%s\n", args);
 	ptl_machine_init(args);
     vm_stop(0);
-	start_simulation = 1;
 }
 #endif
 

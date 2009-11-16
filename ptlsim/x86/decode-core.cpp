@@ -861,9 +861,9 @@ bool DecodedOperand::eform(TraceDecoder& state, int bytemode) {
   mem.riprel = 0;
   mem.size = 0;
 
-  if (!state.use32 && !state.use64) {
-	  return eform_16(state, bytemode);
-  }
+//  if (!state.use32 && !state.use64) {
+//	  return eform_16(state, bytemode);
+//  }
 
   const int mod_and_rexextbase_and_rm_to_basereg_x86_64[4][2][8] = {
     {
@@ -920,6 +920,8 @@ bool DecodedOperand::eform(TraceDecoder& state, int bytemode) {
     };
 
     mem.basereg = rexextbase_and_base_to_basereg[state.rex.extbase][sib.base];
+	if(logable(12)) 
+		ptl_logfile << " SIB: ", hexstring(sib, 8), " basereg: ", hexstring(mem.basereg, 8), endl; 
     if (mem.basereg < 0) {
       const int rexextbase_and_mod_to_basereg[2][4] = {
         {APR_zero, APR_rbp, APR_rbp, -1}, // rex.extbase = 0
@@ -1015,7 +1017,9 @@ int TraceDecoder::bias_by_segreg(int basereg) {
 
     assert(segid >= 0);
 
-    int varoffs = offsetof_t(Context, segs[segid].base);
+    W64 varoffs = offsetof_t(Context, segs[segid].base);
+
+	assert(basereg != REG_temp6);
 
     TransOp ldp(OP_ld, REG_temp6, REG_ctx, REG_imm, REG_zero, 3, varoffs); ldp.internal = 1; this << ldp;
     this << TransOp(OP_add, REG_temp6, REG_temp6, basereg, REG_zero, 3);
@@ -1967,6 +1971,9 @@ int TraceDecoder::fillbuf(Context& ctx, byte* insnbytes, int insnbytes_bufsize) 
   pe = (ctx.hflags >> HF_PE_SHIFT) & 1;
   vm86 = (ctx.eflags >> VM_SHIFT) & 1;
   hflags = ctx.hflags;
+  use64 = ctx.use64;
+  use32 = ctx.use32;
+  ss32 = (ctx.hflags >> HF_SS32_SHIFT) & 1;
 
   byteoffset = 0;
   faultaddr = 0;
@@ -2044,7 +2051,8 @@ bool TraceDecoder::translate() {
 
   bool rc;
 
-  ptl_logfile << "Decoding op 0x", hexstring(op, 12), " (class ", (op >> 8), ") @ ", (void*)ripstart, endl;
+  ptl_logfile << "Decoding op 0x", hexstring(op, 12), " (class ", (op >> 8), ") @ ", (void*)ripstart, 
+			  " prefixes: ", hexstring(prefixes, 32), " rex: ", hexstring(rex, 8), endl;
 
   is_x87 = 0;
   is_sse = 0;
@@ -2180,7 +2188,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
 	  return null;
   }
 
-  if (logable(5) | log_code_page_ops) {
+  if (logable(10) | log_code_page_ops) {
     ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;
 	ptl_logfile << "Instruction Buffer:\n";
 	foreach(i, sizeof(insnbuf)) {
@@ -2258,7 +2266,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
 
   pagelist->refcount--;
 
-  if (logable(5)) {
+  if (logable(10)) {
     ptl_logfile << "=====================================================================", endl;
     ptl_logfile << *bb, endl;
     ptl_logfile << "End of basic block: rip ", trans.bb.rip, " -> taken rip 0x", (void*)(Waddr)trans.bb.rip_taken, ", not taken rip 0x", (void*)(Waddr)trans.bb.rip_not_taken, endl;

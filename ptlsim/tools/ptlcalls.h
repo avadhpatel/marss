@@ -324,6 +324,10 @@ static inline W64 ptlcall_switch_to_native() {
   return ptlcall_single_flush("-native");
 }
 
+static inline W64 ptlcall_kill() {
+  return ptlcall_single_flush("-kill");
+}
+
 static inline W64 ptlcall_capture_stats(const char* snapshot) {
   char buf[128];
   char runcmd[] = "-run";

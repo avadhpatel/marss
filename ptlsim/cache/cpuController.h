@@ -40,6 +40,7 @@ struct CPUControllerQueueEntry : public FixStateListObject
 		os << "Request{", *request, "} ";
 		os << "cycles[", cycles, "] ";
 		os << "depends[", depends, "] ";
+		os << "annuled[", annuled, "] ";
 		os << endl;
 		return os;
 	}

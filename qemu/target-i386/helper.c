@@ -130,10 +130,17 @@ typedef struct x86_def_t {
           CPUID_MTRR | CPUID_PGE | CPUID_MCA | CPUID_CMOV | CPUID_PAT | \
           CPUID_PSE36 | CPUID_FXSR)
 #define PENTIUM3_FEATURES (PENTIUM2_FEATURES | CPUID_SSE)
+#ifdef PTLSIM_QEMU
+#define PPRO_FEATURES (CPUID_FP87 | CPUID_DE | CPUID_PSE | CPUID_TSC | \
+          CPUID_MSR | CPUID_MCE | CPUID_CX8 | CPUID_PGE | CPUID_CMOV | \
+          CPUID_PAT | CPUID_FXSR | CPUID_SSE | CPUID_SSE2 | \
+          CPUID_PAE | CPUID_SEP | CPUID_APIC)
+#else
 #define PPRO_FEATURES (CPUID_FP87 | CPUID_DE | CPUID_PSE | CPUID_TSC | \
           CPUID_MSR | CPUID_MCE | CPUID_CX8 | CPUID_PGE | CPUID_CMOV | \
           CPUID_PAT | CPUID_FXSR | CPUID_MMX | CPUID_SSE | CPUID_SSE2 | \
           CPUID_PAE | CPUID_SEP | CPUID_APIC)
+#endif
 static x86_def_t x86_defs[] = {
 #ifdef TARGET_X86_64
     {
@@ -151,9 +158,14 @@ static x86_def_t x86_defs[] = {
         /* this feature is needed for Solaris and isn't fully implemented */
             CPUID_PSE36,
         .ext_features = CPUID_EXT_SSE3,
+#ifdef PTLSIM_QEMU
+        .ext2_features = (PPRO_FEATURES & 0x0183F3FF) | 
+            CPUID_EXT2_LM | CPUID_EXT2_SYSCALL | CPUID_EXT2_NX,
+#else
         .ext2_features = (PPRO_FEATURES & 0x0183F3FF) | 
             CPUID_EXT2_LM | CPUID_EXT2_SYSCALL | CPUID_EXT2_NX |
             CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT,
+#endif
         .ext3_features = CPUID_EXT3_SVM,
         .xlevel = 0x8000000A,
         .model_id = "QEMU Virtual CPU version " QEMU_VERSION,
@@ -284,7 +296,11 @@ static x86_def_t x86_defs[] = {
         .model = 2,
         .stepping = 3,
         .features = PPRO_FEATURES | CPUID_PSE36 | CPUID_VME | CPUID_MTRR | CPUID_MCA,
+#ifdef PTLSIM_QEMU
+        .ext2_features = (PPRO_FEATURES & 0x0183F3FF),
+#else
         .ext2_features = (PPRO_FEATURES & 0x0183F3FF) | CPUID_EXT2_MMXEXT | CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT,
+#endif
         .xlevel = 0x80000008,
         /* XXX: put another string ? */
         .model_id = "QEMU Virtual CPU version " QEMU_VERSION,

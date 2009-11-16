@@ -59,8 +59,8 @@ bool CPUController::handle_interconnect_cb(void *arg)
 	}
 	//assert(queueEntry);
 
-	finalize_request(queueEntry);
 	wakeup_dependents(queueEntry);
+	finalize_request(queueEntry);
 
 	return true;
 }

@@ -1131,9 +1131,9 @@ struct Context: public CPUX86State {
 	  else if(index < 48) {
 		  int i = (index - 16) / 2;
 		  if(index % 2 == 0) {
-			  return (W64&)(xmm_regs[i]._d[0]);
+			  return (W64&)(xmm_regs[i]._q[0]);
 		  } else {
-			  return (W64&)(xmm_regs[i]._d[1]);
+			  return (W64&)(xmm_regs[i]._q[1]);
 		  }
 	  }
 	  else if(index == REG_fptos) {
