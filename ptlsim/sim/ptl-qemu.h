@@ -110,6 +110,10 @@ void update_progress(void);
 int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
 		uint32_t *ecx, uint32_t *edx);
 
+// ptl_flush_bbcache
+// working		: Flush all the decoded cache on tlb flush
+void ptl_flush_bbcache();
+
 #ifdef __cplusplus
 }
 #endif

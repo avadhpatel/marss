@@ -1523,14 +1523,14 @@ bool BasicBlockCache::invalidate(BasicBlock* bb, int reason) {
   }
 
   pagelist = bbpages.get(bb->rip.mfnlo);
-  if (logable(3) | log_code_page_ops) ptl_logfile << "Remove bb ", bb, " (", bb->rip, ", ", bb->bytes, " bytes) from low page list ", pagelist, ": loc ", bb->mfnlo_loc.chunk, ":", bb->mfnlo_loc.index, endl;
+  if (logable(10) | log_code_page_ops) ptl_logfile << "Remove bb ", bb, " (", bb->rip, ", ", bb->bytes, " bytes) from low page list ", pagelist, ": loc ", bb->mfnlo_loc.chunk, ":", bb->mfnlo_loc.index, endl;
   assert(pagelist);
   pagelist->remove(bb->mfnlo_loc);
 
   int page_crossing = ((lowbits(bb->rip, 12) + (bb->bytes-1)) >> 12);
   if (page_crossing) {
     pagelist = bbpages.get(bb->rip.mfnhi);
-    if (logable(3) | log_code_page_ops) ptl_logfile << "Remove bb ", bb, " (", bb->rip, ", ", bb->bytes, " bytes) from high page list ", pagelist, ": loc ", bb->mfnhi_loc.chunk, ":", bb->mfnhi_loc.index, endl;
+    if (logable(10) | log_code_page_ops) ptl_logfile << "Remove bb ", bb, " (", bb->rip, ", ", bb->bytes, " bytes) from high page list ", pagelist, ": loc ", bb->mfnhi_loc.chunk, ":", bb->mfnhi_loc.index, endl;
     assert(pagelist);
     pagelist->remove(bb->mfnhi_loc);
   }
@@ -1985,16 +1985,16 @@ int TraceDecoder::fillbuf(Context& ctx, byte* insnbytes, int insnbytes_bufsize) 
 
 #ifdef PTLSIM_HYPERVISOR
 int TraceDecoder::fillbuf_phys_prechecked(byte* insnbytes, int insnbytes_bufsize, Level1PTE ptelo, Level1PTE ptehi) {
-  this->insnbytes = insnbytes;
-  this->insnbytes_bufsize = insnbytes_bufsize;
-  byteoffset = 0;
-  faultaddr = 0;
-  pfec = 0;
-  invalid = 0;
-  this->ptelo = ptelo;
-  this->ptehi = ptehi;
-  valid_byte_count = copy_from_user_phys_prechecked(insnbytes, bb.rip, insnbytes_bufsize, faultaddr);
-  return valid_byte_count;
+//  this->insnbytes = insnbytes;
+//  this->insnbytes_bufsize = insnbytes_bufsize;
+//  byteoffset = 0;
+//  faultaddr = 0;
+//  pfec = 0;
+//  invalid = 0;
+//  this->ptelo = ptelo;
+//  this->ptehi = ptehi;
+//  valid_byte_count = copy_from_user_phys_prechecked(insnbytes, bb.rip, insnbytes_bufsize, faultaddr);
+//  return valid_byte_count;
 }
 #endif
 
@@ -2051,8 +2051,9 @@ bool TraceDecoder::translate() {
 
   bool rc;
 
-  ptl_logfile << "Decoding op 0x", hexstring(op, 12), " (class ", (op >> 8), ") @ ", (void*)ripstart, 
-			  " prefixes: ", hexstring(prefixes, 32), " rex: ", hexstring(rex, 8), endl;
+  if(logable(5))
+	  ptl_logfile << "Decoding op 0x", hexstring(op, 12), " (class ", (op >> 8), ") @ ", (void*)ripstart, 
+				  " prefixes: ", hexstring(prefixes, 32), " rex: ", hexstring(rex, 8), endl;
 
   is_x87 = 0;
   is_sse = 0;
@@ -2176,7 +2177,9 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
   */
 
   BasicBlock* bb = get(rvp);
-  if likely (bb) return bb;
+  if likely (bb) {
+	  return bb;
+  }
 
   translate_timer.start();
 
@@ -2386,4 +2389,8 @@ void init_decode() {
 void shutdown_decode() {
   bbcache.flush();
   if (bbcache_dump_file) bbcache_dump_file.close();
+}
+
+extern "C" void ptl_flush_bbcache() {
+  bbcache.flush();
 }

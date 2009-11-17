@@ -486,7 +486,7 @@ bool OutOfOrderCore::runcycle() {
   commitcount = 0;
   writecount = 0;
 
-  if (logable(96)) {
+  if (logable(9)) {
 	  ptl_logfile << "OutOfOrderCore::run():thread-commit\n";
   }
 
@@ -532,7 +532,7 @@ bool OutOfOrderCore::runcycle() {
   //
   // Issue whatever is ready
   //
-  if (logable(96)) {
+  if (logable(9)) {
 	  ptl_logfile << "OutOfOrderCore::run():issue\n";
   }
 
@@ -541,7 +541,7 @@ bool OutOfOrderCore::runcycle() {
   //
   // Most of the frontend (except fetch!) also works with round robin priority
   //
-  if (logable(96)) {
+  if (logable(9)) {
 	  ptl_logfile << "OutOfOrderCore::run():dispatch\n";
   }
 
@@ -568,7 +568,7 @@ bool OutOfOrderCore::runcycle() {
   // This means we sort in ascending order, with any unused threads
   // (if any) given the lowest priority.
   //
-  if (logable(96)) {
+  if (logable(9)) {
 	  ptl_logfile << "OutOfOrderCore::run():fetch\n";
   }
 
@@ -640,7 +640,7 @@ bool OutOfOrderCore::runcycle() {
     ThreadContext* thread = threads[i];
     if unlikely (!thread->ctx.running) continue;
     int rc = commitrc[i];
-	if (logable(96)) {
+	if (logable(9)) {
 		ptl_logfile << "OutOfOrderCore::run():result check thread[",
 		i, "] rc[", rc, "]\n";
 	}
@@ -747,7 +747,7 @@ bool OutOfOrderCore::runcycle() {
 
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
-	if (logable(96)) {
+	if (logable(9)) {
 		stringbuf sb;
 		sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
 		   sim_cycle, ", ", total_user_insns_committed,  " user commits: ",

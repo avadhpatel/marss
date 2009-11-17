@@ -67,11 +67,13 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 
 				char *command_str = (char*)qemu_malloc(desc.length);
 				char *command_addr = (char*)(desc.command);
-				for(int i=0; i < desc.length; i++) {
+				int i = 0;
+				for(i=0; i < desc.length; i++) {
 					command_str[i] = (char)ldub_kernel(
 							(target_ulong)(command_addr));
 					command_addr++;
 				}
+				command_str[i] = '\0';
 
 				cout << "PQRS::Command received : ", command_str, endl;
 				// Stop the QEMU vm and change ptlsim configuration

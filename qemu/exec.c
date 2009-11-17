@@ -44,6 +44,9 @@
 #include <qemu.h>
 #endif
 
+#ifdef PTLSIM_QEMU
+#include <ptl-qemu.h>
+#endif
 //#define DEBUG_TB_INVALIDATE
 //#define DEBUG_FLUSH
 //#define DEBUG_TLB
@@ -609,6 +612,11 @@ void tb_flush(CPUState *env1)
     /* XXX: flush processor icache at this point if cache flush is
        expensive */
     tb_flush_count++;
+
+#ifdef PTLSIM_QEMU
+	if(in_simulation)
+		ptl_flush_bbcache();
+#endif
 }
 
 #ifdef DEBUG_TB_CHECK
@@ -1730,6 +1738,10 @@ void tlb_flush(CPUState *env, int flush_global)
     }
 
     memset (env->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof (void *));
+#ifdef PTLSIM_QEMU
+	if(in_simulation)
+		ptl_flush_bbcache();
+#endif
 
 #ifdef USE_KQEMU
     if (env->kqemu_enabled) {

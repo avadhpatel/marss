@@ -1487,6 +1487,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 #ifndef DISABLE_SF
   bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid));
   if(num_sfra_found > 1) ready = false;
+  if(sfra && uop.internal) ready = false;
 #else
   bool ready = (sfra == null);
   sfra = null;
