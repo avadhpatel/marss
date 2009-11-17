@@ -43,7 +43,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 	cout << "ptlcall_mmio_write: calltype ", calltype, " at rip ", cpu->eip,
 		 " (inside_ptlsim = ", in_simulation, " )", endl;
 
-	if(!in_simulation) {
+//	if(!in_simulation) {
 		switch(calltype) {
 			case PTLCALL_VERSION: {
 				cout << "PTLCALL type PTLCALL_VERSION\n";
@@ -131,9 +131,9 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 				cout << "PTLCALL type unknown : ", calltype, endl;
 				cpu->regs[REG_rax] = -EINVAL;
 		}
-	} else {
-		cout << "PTLCALL called while inside simulation\n";
-	}
+//	} else {
+//		cout << "PTLCALL called while inside simulation\n";
+//	}
 }
 
 static uint32_t ptlcall_mmio_read(CPUX86State* cpu, W64 offset, int length) {
