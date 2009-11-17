@@ -960,6 +960,7 @@ struct Context: public CPUX86State {
 //	  flags = (flags | ~FLAG_WAIT);
 	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O));
 //	  load_eflags(flags, -1);
+	  fpstt = reg_fptos;
   }
 
   void setup_ptlsim_switch() {
@@ -975,8 +976,9 @@ struct Context: public CPUX86State {
 	  eip = eip + segs[R_CS].base;
 	  cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
-	  reg_fptos = fpstt << 3;
+	  reg_fptos = fpstt;
 	  reg_fpstack = ((Waddr)&fpregs[0]);
+	  reg_trace = 0;
   }
 
   Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code=0); //, PTEUpdate& pteupdate, Level1PTE& pteused);
@@ -1124,7 +1126,7 @@ struct Context: public CPUX86State {
 
   int page_table_level_count() const { return 4; }
 
-  W64& operator[](int index) {
+  W64 get(int index) {
 	  if likely (index < 16) {
 		  return (W64&)(regs[index]);
 	  }
@@ -1194,6 +1196,7 @@ struct Context: public CPUX86State {
 
 	  return invalid_reg;
   }
+  
 
   void set_reg(int index, W64 value) {
 	  if likely (index < 16) {
@@ -1202,9 +1205,9 @@ struct Context: public CPUX86State {
 	  else if(index < 48) {
 		  int i = (index - 16) / 2;
 		  if(index % 2 == 0) {
-			  xmm_regs[i]._d[0] = value;
+			  xmm_regs[i]._q[0] = value;
 		  } else {
-			  xmm_regs[i]._d[1] = value;
+			  xmm_regs[i]._q[1] = value;
 		  }
 	  }
 	  else if(index == REG_fptos) {
@@ -1229,6 +1232,7 @@ struct Context: public CPUX86State {
 		  return;
 	  } 
 	  else if(index == 54) {
+		  assert(0);
 		  reg_trace = value;
 	  } 
 	  else if(index == 55) {

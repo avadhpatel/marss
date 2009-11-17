@@ -405,9 +405,9 @@ bool TraceDecoder::decode_sse() {
   case 0x568: // punpckhbw
   case 0x569: // punpckhwd
   case 0x56a: // punpckhdq
-  case 0x56b: { // packssdw
-//  case 0x56c: // punpcklqdq
-//  case 0x56d: { // punpckhqdq
+  case 0x56b: // packssdw
+  case 0x56c: // punpcklqdq
+  case 0x56d: { // punpckhqdq
     DECODE(gform, rd, x_mode);
     DECODE(eform, ra, x_mode);
     EndOfDecode();
@@ -493,6 +493,7 @@ bool TraceDecoder::decode_sse() {
     break;
   }
 
+			  /*
   case 0x56c: { // punpcklqdq
 	// Copy dest[63:0] to dest[63:0]
 	// Copy src[63:0] to dest[127:64]
@@ -540,6 +541,7 @@ bool TraceDecoder::decode_sse() {
 
 	break;
   }
+  */
 
   case 0x57c: // haddpd (SSE3)
   case 0x57d: { // hsubpd (SSE3)

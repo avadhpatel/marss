@@ -275,7 +275,7 @@ void ThreadContext::external_to_core_state() {
     PhysicalRegister* physreg = (i == REG_zero) ? zeroreg : rf.alloc(threadid);
     assert(physreg); /// need increase rf size if failed.
     physreg->archreg = i;
-    physreg->data = ctx[i];
+    physreg->data = ctx.get(i);
     physreg->flags = 0;
     commitrrt[i] = physreg;
   }
@@ -2092,7 +2092,7 @@ int ReorderBufferEntry::commit() {
 
   W64 result = physreg->data;
   
-  W64 old_data = ctx[uop.rd];
+  W64 old_data = ctx.get(uop.rd);
   W64 merged_data;
   if(ld | st) {
 	  merged_data = mux64(

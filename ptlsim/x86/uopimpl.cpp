@@ -554,6 +554,7 @@ void uop_impl_permb(IssueState& state, W64 ra, W64 rb, W64 rc, W16 raflags, W16 
   ab.w64.lo = ra;
   ab.w64.hi = rb;
 
+#define DEBUG (1)
   if unlikely (DEBUG) ptl_logfile << "Permute: ", *(vec16b*)&ab, " by control 0x", hexstring(rc, 32), ":", endl;
   foreach (i, 8) {
     int which = bits(rc, i*4, 4);
@@ -561,6 +562,7 @@ void uop_impl_permb(IssueState& state, W64 ra, W64 rb, W64 rc, W16 raflags, W16 
     if unlikely (DEBUG) ptl_logfile << "  z[", i, "] = ", "ab[", which, "] = 0x", hexstring(ab.bytes.b[which], 8), endl;
     d.bytes.b[i] = ab.bytes.b[which];
   }
+#undef DEBUG
 
   state.reg.rddata = d.w64.data;
   state.reg.rdflags = x86_genflags<W64>(d.w64.data);

@@ -913,7 +913,7 @@ struct SequentialCore {
 
   void external_to_core_state(Context& ctx) {
     foreach (i, ARCHREG_COUNT) {
-      arf[i] = ctx[(int)i];
+      arf[i] = ctx.get(i);
       arflags[i] = 0;
     }
     for (int i = ARCHREG_COUNT; i < TRANSREG_COUNT; i++) {
@@ -926,7 +926,8 @@ struct SequentialCore {
 
   void core_to_external_state(Context& ctx) {
     foreach (i, ARCHREG_COUNT) {
-      ctx[i] = arf[i];
+		ctx.set_reg(i, arf[i]);
+//      ctx[i] = arf[i];
     }
   }
 

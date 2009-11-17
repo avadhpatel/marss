@@ -1127,7 +1127,7 @@ bool ThreadContext::handle_barrier() {
   int assistid = ctx.eip;
   assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
   
-  if (logable(4)) {
+  if (logable(0)) {
     ptl_logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
       (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
       ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
@@ -1158,7 +1158,7 @@ bool ThreadContext::handle_barrier() {
   }
 
   // Flush again, but restart at possibly modified rip
-  if (logable(3)) ptl_logfile << " handle_barrier, flush_pipeline again.",endl;
+  if (logable(0)) ptl_logfile << " handle_barrier, flush_pipeline again.",endl;
   flush_pipeline();
 
 #ifndef PTLSIM_HYPERVISOR

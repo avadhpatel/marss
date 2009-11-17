@@ -88,14 +88,15 @@ make_two_input_x87_func_with_pop(fyl2xp1, st1u.d = x87_fyl2xp1(st1u.d, st0u.d));
 make_two_input_x87_func_with_pop(fpatan, st1u.d = x87_fpatan(st1u.d, st0u.d));
 
 void assist_x87_fscale(Context& ctx) {
-  W64& tos = (W64&)ctx.fpstt;
-  W64& st0 = (W64&)ctx.fpregs[tos >> 3];
-  W64& st1 = (W64&)ctx.fpregs[((tos >> 3) + 1) & 0x7];
-  SSEType st0u(st0); SSEType st1u(st1);
-  st0u.d = st0u.d * exp2(trunc(st1u.d));
-  st0 = st0u.w64;
-  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
-  sw->c1 = 0; sw->c2 = 0;
+//  W64& tos = (W64&)ctx.fpstt;
+//  W64& st0 = (W64&)ctx.fpregs[tos >> 3];
+//  W64& st1 = (W64&)ctx.fpregs[((tos >> 3) + 1) & 0x7];
+//  SSEType st0u(st0); SSEType st1u(st1);
+//  st0u.d = st0u.d * exp2(trunc(st1u.d));
+//  st0 = st0u.w64;
+//  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
+//  sw->c1 = 0; sw->c2 = 0;
+	ASSIST_IN_QEMU(helper_fscale);
   ctx.eip = ctx.reg_nextrip;
 }
 

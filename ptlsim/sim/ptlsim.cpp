@@ -1177,17 +1177,22 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	if (exception) {
 		int old_exception = exception_index;
 		int mmu_index = cpu_mmu_index((CPUState*)this);
-		if(logable(10))
-			ptl_logfile << "page fault while reading code", endl;
 		int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
-				source, 0, mmu_index, 1);
-		if (fail && source == (Waddr)(eip)) {
+				source, 2, mmu_index, 1);
+		if(logable(10))
+			ptl_logfile << "page fault while reading code fault:", fail, 
+						" source_addr:", (void*)(source), 
+						" eip:", (void*)(eip), endl;
+		if (fail && (this->eip == (W64)(source))) {
+
+			if(logable(10))
+				ptl_logfile << "Will handle page fault in QEMU\n";
+			assert(eip == source);
 			char d = ldub_code((target_ulong)(source));
 			// if we retured from above function means that
 			// the page fault in handled without exception
 			// so now we have a valid tlb entry so fetch the code
 			fail = 0;
-//			raise_exception_err(exception_index, error_code);
 		}
 		if (fail) {
 			if(logable(10))
@@ -1206,7 +1211,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	byte* target_b = (byte*)(target);
 	while(n < bytes) {
 		char data = ldub_code(source_b);
-		if(logable(109)) {
+		if(logable(10)) {
 			ptl_logfile << "[", hexstring((W8)(data), 8),
 						"-", hexstring((W8)(ldub_code(source_b)), 8), 
 						"@", (void*)(source_b), "] ";
@@ -1216,7 +1221,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 		n++;
 	}
 
-	if(logable(109)) ptl_logfile << endl;
+	if(logable(10)) ptl_logfile << endl;
 
 	setup_ptlsim_switch();
 
@@ -1589,8 +1594,6 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
 		ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
 					" with bytemask ", bytemask, " data: ", hexstring(
 							data, 64), endl;
-	if(virtaddr == 0xffffffff81391419)
-		assert(0);
 
 	if(is_mmio_addr(virtaddr, 1)) {
 		switch(sizeshift) {
@@ -1716,6 +1719,9 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
 	if(kernel_mode) {
 //		cerr << "Page fault in kernel mode...", endl, flush;
 		ptl_logfile << "Page fault in kernel mode...", endl, flush;
+	}
+	if(logable(5)) {
+		ptl_logfile << "Context before page fault handling:\n", *this, endl;
 	}
 	exception_is_int = 0;
 	int mmu_index = cpu_mmu_index((CPUState*)this);
