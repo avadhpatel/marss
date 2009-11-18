@@ -861,10 +861,12 @@ extern "C" uint8_t ptl_simulate() {
 		machine->initialized = 1;
 		machine->first_run = 1;
 
-		ptl_logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
-		cerr <<  "Switching to simulation core '", machinename, "'...", endl, flush;
-		ptl_logfile << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
-		cerr << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
+		if(logable(1)) {
+			ptl_logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
+			cerr <<  "Switching to simulation core '", machinename, "'...", endl, flush;
+			ptl_logfile << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
+			cerr << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
+		}
 
 		// Update stats every half second:
 		ticks_per_update = seconds_to_ticks(0.2);
@@ -892,7 +894,8 @@ extern "C" uint8_t ptl_simulate() {
 	if(machine->stopped != 0)
 		machine->stopped = 0;
 
-	ptl_logfile << "Starting simulation at rip: ", (void*)contextof(0).get_cs_eip(), " kernel_mode: ", contextof(0).kernel_mode, endl;
+	if(logable(1))
+		ptl_logfile << "Starting simulation at rip: ", (void*)contextof(0).get_cs_eip(), " kernel_mode: ", contextof(0).kernel_mode, endl;
 
 	machine->run(config);
 

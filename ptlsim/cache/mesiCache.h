@@ -239,7 +239,7 @@ class CacheController : public Controller
 		int cacheAccessLatency_;
 
 		// A Queue conatining pending requests for this cache
-		FixStateList<CacheQueueEntry, 128> pendingRequests_;
+		FixStateList<CacheQueueEntry, 256> pendingRequests_;
 
 		// Flag to indicate if this cache is lowest private
 		// level cache
