@@ -597,16 +597,18 @@ bool OutOfOrderCore::runcycle() {
   // instruction cache port. In a banked i-cache, we can
   // fetch from multiple threads every cycle.
   //
+  bool fetch_exception[MAX_THREADS_PER_CORE];
   foreach (j, threadcount) {
     int i = priority_index[j];
     ThreadContext* thread = threads[i];
     assert(thread);
+	fetch_exception[i] = true;
     if unlikely (!thread->ctx.running) {
       continue;
     }
 
     if likely (dispatchrc[i] >= 0) {
-      thread->fetch();
+		fetch_exception[i] = thread->fetch();
     }
   }
 
@@ -645,7 +647,15 @@ bool OutOfOrderCore::runcycle() {
 		i, "] rc[", rc, "]\n";
 	}
 
-    if likely ((rc == COMMIT_RESULT_OK) | (rc == COMMIT_RESULT_NONE)) continue;
+    if likely ((rc == COMMIT_RESULT_OK) | (rc == COMMIT_RESULT_NONE)) {
+		if(fetch_exception[i])
+			continue;
+
+		// Its a instruction page fault
+		rc = COMMIT_RESULT_EXCEPTION;
+		thread->ctx.exception = EXCEPTION_PageFaultOnExec;
+		thread->ctx.page_fault_addr = thread->ctx.eip;
+	}
 
     switch (rc) {
     case COMMIT_RESULT_SMC: {
@@ -2095,8 +2105,8 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  update_progress();
 	  //    inject_events();
 	  // limit the ptl_logfile size
-	  if unlikely (ptl_logfile.tellp() > config.log_file_size)
-		  backup_and_reopen_logfile();
+//	  if unlikely (ptl_logfile.tellp() > config.log_file_size)
+//		  backup_and_reopen_logfile();
 
 	  int running_thread_count = 0;
 

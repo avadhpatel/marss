@@ -485,8 +485,13 @@ bool ThreadContext::fetch() {
 	  if(logable(10))
 		  ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
 
-      if(fetch_or_translate_basic_block(fetchrip) == null)
+      if(fetch_or_translate_basic_block(fetchrip) == null) {
+		  if(fetchrip.rip == ctx.eip) {
+			  if(logable(10)) ptl_logfile << "Exception in Code page\n";
+			  return false;
+		  }
 		  break;
+	  }
     }
 
     if unlikely (current_basic_block->invalidblock) {

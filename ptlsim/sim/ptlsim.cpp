@@ -1183,17 +1183,17 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 			ptl_logfile << "page fault while reading code fault:", fail, 
 						" source_addr:", (void*)(source), 
 						" eip:", (void*)(eip), endl;
-		if (fail && (this->eip == (W64)(source))) {
-
-			if(logable(10))
-				ptl_logfile << "Will handle page fault in QEMU\n";
-			assert(eip == source);
-			char d = ldub_code((target_ulong)(source));
-			// if we retured from above function means that
-			// the page fault in handled without exception
-			// so now we have a valid tlb entry so fetch the code
-			fail = 0;
-		}
+//		if (fail && (this->eip == (W64)(source))) {
+//
+//			if(logable(10))
+//				ptl_logfile << "Will handle page fault in QEMU\n";
+//			assert(eip == source);
+//			char d = ldub_code((target_ulong)(source));
+//			// if we retured from above function means that
+//			// the page fault in handled without exception
+//			// so now we have a valid tlb entry so fetch the code
+//			fail = 0;
+//		}
 		if (fail) {
 			if(logable(10))
 				ptl_logfile << "Unable to read code from ", 
@@ -1211,7 +1211,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	byte* target_b = (byte*)(target);
 	while(n < bytes) {
 		char data = ldub_code(source_b);
-		if(logable(10)) {
+		if(logable(109)) {
 			ptl_logfile << "[", hexstring((W8)(data), 8),
 						"-", hexstring((W8)(ldub_code(source_b)), 8), 
 						"@", (void*)(source_b), "] ";
@@ -1221,7 +1221,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 		n++;
 	}
 
-	if(logable(10)) ptl_logfile << endl;
+	if(logable(109)) ptl_logfile << endl;
 
 	setup_ptlsim_switch();
 

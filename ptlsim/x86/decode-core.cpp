@@ -1105,7 +1105,6 @@ void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, c
     if (force_seg_bias) basereg = bias_by_segreg(basereg);
 
     if (memop) {
-		ptl_logfile << "abs code_addr rip: ", rip, " Waddr(rip) ", Waddr(rip), " offset ", offset, endl;
       abs_code_addr_immediate(REG_temp8, 3, Waddr(rip) + offset);
       TransOp ldst(opcode, destreg, REG_temp8, REG_imm, srcreg, memref.mem.size, 0);
       ldst.datatype = datatype;

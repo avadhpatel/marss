@@ -835,20 +835,20 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   }
   for(i; i < 48; i++) {
 	  if(i % 2 == 0) {
-		  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.xmm_regs[i]._q[0], 64);
+		  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring((W64)ctx.xmm_regs[i]._q[0], 64);
 	  } else {
-		  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.xmm_regs[i]._q[1], 64);
+		  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring((W64)ctx.xmm_regs[i]._q[1], 64);
 	  }
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
-  os << "  ", padstring(arch_reg_names[48], -6), " 0x", hexstring(ctx.fpstt, 64);
+  os << "  ", padstring(arch_reg_names[48], -6), " 0x", hexstring(ctx.reg_fptos, 64);
   os << "  ", padstring(arch_reg_names[49], -6), " 0x", hexstring(ctx.fpus, 64);
   W64 t_fptag = 0;
   foreach(j, 8) {
 	  t_fptag |= ((W64(ctx.fptags[i])) << 8 * i);
   }
   os << "  ", padstring(arch_reg_names[50], -6), " 0x", hexstring(t_fptag, 64);
-  os << "  ", padstring(arch_reg_names[51], -6), " 0x", hexstring(ctx.fpregs[0].d, 64), endl;
+  os << "  ", padstring(arch_reg_names[51], -6), " 0x", hexstring(ctx.reg_fpstack, 64), endl;
   os << "  ", padstring(arch_reg_names[52], -6), " 0x", hexstring(ctx.invalid_reg, 64);
   os << "  ", padstring(arch_reg_names[53], -6), " 0x", hexstring(ctx.invalid_reg, 64);
   os << "  ", padstring(arch_reg_names[54], -6), " 0x", hexstring(ctx.reg_trace, 64);
@@ -924,7 +924,7 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   for (int i = 7; i >= 0; i--) {
     int stackid = (i - (ctx.fpstt >> 3)) & 0x7;
     os << "    fp", i, "  st(", stackid, ")  ", (ctx.fptags[i] ? "Valid" : "Empty"),
-      "  0x", hexstring(ctx.fpregs[i].d, 64), " => ", *((double*)&ctx.fpregs[i]), endl;
+      "  0x", hexstring(ctx.fpregs[i].mmx.q, 64), " => ", *((double*)&(ctx.fpregs[i].d)), endl;
   }
 
   os << "  Internal State:", endl;

@@ -95,6 +95,12 @@ typedef int64_t sbits64;
 #endif
 #endif /* !CONFIG_SOFTFLOAT */
 
+#ifdef PTLSIM_QEMU
+#ifdef FLOATX80
+#undef FLOATX80
+#endif
+#endif
+
 #define STATUS_PARAM , float_status *status
 #define STATUS(field) status->field
 #define STATUS_VAR , status

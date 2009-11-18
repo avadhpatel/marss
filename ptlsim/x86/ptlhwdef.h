@@ -960,7 +960,10 @@ struct Context: public CPUX86State {
 //	  flags = (flags | ~FLAG_WAIT);
 	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O));
 //	  load_eflags(flags, -1);
-	  fpstt = reg_fptos;
+	  fpstt = reg_fptos >> 3;
+	  foreach(i, 8) {
+		  reg_fptag |= ((W64(fptags[i])) << (8*i));
+	  }
   }
 
   void setup_ptlsim_switch() {
@@ -976,9 +979,13 @@ struct Context: public CPUX86State {
 	  eip = eip + segs[R_CS].base;
 	  cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
-	  reg_fptos = fpstt;
-	  reg_fpstack = ((Waddr)&fpregs[0]);
+	  reg_fptos = fpstt << 3;
+	  reg_fpstack = ((W64)&(fpregs[0].mmx.q));
 	  reg_trace = 0;
+
+	  foreach(i, 8) {
+		  fptags[i] = (reg_fptag >> (8*i)) & 0x1;
+	  }
   }
 
   Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code=0); //, PTEUpdate& pteupdate, Level1PTE& pteused);
@@ -1145,9 +1152,9 @@ struct Context: public CPUX86State {
 		  return (W64&)fpus;
 	  } 
 	  else if(index == REG_fptags) {
-		  foreach(i, 8) {
-			  reg_fptag |= ((W64(fptags[i])) << 8*i);
-		  }
+//		  foreach(i, 8) {
+//			  reg_fptag |= ((W64(fptags[i])) << 8*i);
+//		  }
 		  return reg_fptag;
 	  } 
 	  else if(index == REG_fpstack) {

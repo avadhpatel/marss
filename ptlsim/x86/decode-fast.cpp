@@ -588,9 +588,6 @@ bool TraceDecoder::decode_fast() {
       this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
     TransOp transop(OP_bru, REG_rip, REG_zero, REG_zero, REG_zero, 3);
 
-	ptl_logfile << "branch call or jmp: rip: ", hexstring(rip, 64),
-				" ra.imm.imm: ", hexstring((W64s)ra.imm.imm, 64),
-				endl;
     transop.extshift = (iscall) ? BRANCH_HINT_PUSH_RAS : 0;
     transop.riptaken = (Waddr)rip + (W64s)ra.imm.imm;
     transop.ripseq = (Waddr)rip + (W64s)ra.imm.imm;

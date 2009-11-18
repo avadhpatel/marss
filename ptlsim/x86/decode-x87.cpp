@@ -29,8 +29,6 @@ void assist_x87_fprem(Context& ctx) {
 #define make_two_input_x87_func_with_pop(name, expr) \
 void assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
-	/*ctx.setup_qemu_switch();*/ \
-	/*helper_##name(); */\
 	ctx.eip = ctx.reg_nextrip; \
 }
 //  W64& tos = (W64&)ctx.fpstt; \
@@ -105,8 +103,6 @@ void assist_x87_fscale(Context& ctx) {
 #define make_unary_x87_func(name, expr) \
 void assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
-	/* ctx.setup_qemu_switch(); */ \
-	/* helper_##name(); */ \
 	ctx.eip = ctx.reg_nextrip; \
 }
 //  W64& r = (W64&)ctx.fpregs[ctx.fpstt >> 3]; \
@@ -149,8 +145,6 @@ void assist_x87_frndint(Context& ctx) {
 #define make_two_output_x87_func_with_push(name, expr) \
 void assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
-	/* ctx.setup_qemu_switch();*/ \
-	/* helper_##name();*/ \
 	ctx.eip = ctx.reg_nextrip; \
 }
 //  W64& tos = ctx.fpstt; \
@@ -735,7 +729,7 @@ bool TraceDecoder::decode_x87() {
           ASSIST_X87_FRNDINT, ASSIST_X87_FSCALE, ASSIST_X87_FSIN, ASSIST_X87_FCOS
         };
 
-        if (x87op == 0) MakeInvalid(); // we don't support very old fprem form
+//        if (x87op == 0) MakeInvalid(); // we don't support very old fprem form
         microcode_assist(x87op_to_assist_idx[x87op], ripstart, rip);
         end_of_block = 1;
       }
