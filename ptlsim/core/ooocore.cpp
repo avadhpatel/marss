@@ -2105,8 +2105,8 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  update_progress();
 	  //    inject_events();
 	  // limit the ptl_logfile size
-//	  if unlikely (ptl_logfile.tellp() > config.log_file_size)
-//		  backup_and_reopen_logfile();
+	  if unlikely (ptl_logfile.tellp() > config.log_file_size)
+		  backup_and_reopen_logfile();
 
 	  int running_thread_count = 0;
 
