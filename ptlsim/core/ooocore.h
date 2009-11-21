@@ -2036,6 +2036,9 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
       W64 mfence;
     } fence;
   } dcache;
+
+  W64 interrupt_requests;
+  W64 cpu_exit_requests;
 };
 
 //

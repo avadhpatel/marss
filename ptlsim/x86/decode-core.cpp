@@ -1502,9 +1502,10 @@ void print_invalid_insns(int op, const byte* ripstart, const byte* rip, int vali
   }
 }
 
-void assist_invalid_opcode(Context& ctx) {
+bool assist_invalid_opcode(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+  return true;
 }
 
 static const bool log_code_page_ops = 0;
@@ -1633,7 +1634,7 @@ int BasicBlockCache::reclaim(size_t bytesreq, int urgency) {
     oldest = min(oldest, bb->lastused);
     newest = max(newest, bb->lastused);
     average += bb->lastused;
-    total_bytes += ptl_mm_getsize(bb);
+    total_bytes += sizeof(bb);
     n++;
   }
 
@@ -1641,13 +1642,13 @@ int BasicBlockCache::reclaim(size_t bytesreq, int urgency) {
   assert(n > 0);
   average /= n;
 
-  if unlikely (urgency >= MAX_URGENCY) {
-    //
-    // The allocator is so strapped for memory, we need to free
-    // everything possible at all costs:
-    //
-    average = infinity;
-  }
+  //if unlikely (urgency >= MAX_URGENCY) {
+  //  //
+  //  // The allocator is so strapped for memory, we need to free
+  //  // everything possible at all costs:
+  //  //
+  //  average = infinity;
+  //}
 
   if (DEBUG) {
     ptl_logfile << "Before:", endl;
@@ -1679,7 +1680,7 @@ int BasicBlockCache::reclaim(size_t bytesreq, int urgency) {
 
     // We use '<=' to guarantee even a uniform distribution will eventually be reclaimed:
     if likely (bb->lastused <= average) {
-      reclaimed_bytes += ptl_mm_getsize(bb);
+      reclaimed_bytes += sizeof(bb);
       reclaimed_objs++;
       invalidate(bb, INVALIDATE_REASON_RECLAIM);
     }
@@ -1731,7 +1732,8 @@ int BasicBlockCache::reclaim(size_t bytesreq, int urgency) {
 void BasicBlockCache::flush() {
   bool DEBUG = 1;
 
-  if (DEBUG) ptl_logfile << "Flushing basic block cache at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits:", endl;
+  if (logable(1)) 
+	  ptl_logfile << "Flushing basic block cache at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits:", endl;
 
   stats.decoder.reclaim_rounds++;
 
@@ -1760,7 +1762,7 @@ void BasicBlockCache::flush() {
   }
 }
 
-void assist_exec_page_fault(Context& ctx) {
+bool assist_exec_page_fault(Context& ctx) {
   //
   // We need to check if faultaddr is now a valid page, since the page tables
   // could have been updated since the cut-off basic block was speculatively
@@ -1803,16 +1805,20 @@ void assist_exec_page_fault(Context& ctx) {
     }
     bbcache.invalidate(RIPVirtPhys(ctx.reg_selfrip).update(ctx), INVALIDATE_REASON_SPURIOUS);
     ctx.eip = ctx.reg_selfrip;
-    return;
+    return true;
   }
 
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
+
+  return true;
 }
 
-void assist_gp_fault(Context& ctx) {
+bool assist_gp_fault(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault, ctx.reg_ar1);
+
+  return true;
 }
 
 bool TraceDecoder::invalidate() {
@@ -2382,7 +2388,7 @@ void bbcache_reclaim(size_t bytes, int urgency) {
 }
 
 void init_decode() {
-  ptl_mm_register_reclaim_handler(bbcache_reclaim);
+  //ptl_mm_register_reclaim_handler(bbcache_reclaim);
 }
 
 void shutdown_decode() {

@@ -4,17 +4,14 @@
 // Simulator Structures
 //
 // Copyright 2003-2008 Matt T. Yourst <yourst@yourst.com>
+// 
+// Copyright 2009 Avadh Patel <avadh4all@gmail.com>
 //
 
 #ifndef _PTLSIM_H_
 #define _PTLSIM_H_
 
 #include <globals.h>
-#include <mm.h>
-#ifdef PTLSIM_HYPERVISOR
-#else
-#include <kernel.h>
-#endif
 #include <ptlhwdef.h>
 #include <config-parser.h>
 #include <datastore.h>

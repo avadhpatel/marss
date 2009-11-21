@@ -873,8 +873,8 @@ void cpu_disable_ticks(void)
 }
 
 #ifdef PTLSIM_QEMU
-#define PTLSIM_FREQ 2e9 // 2GHz Frequency of Simulated CPU
-#define freq_to_ns(freq) (1e9/freq)
+#define PTLSIM_FREQ 2.4e9 // 2GHz Frequency of Simulated CPU
+#define freq_to_ns(freq) (PTLSIM_FREQ/freq)
 
 void cpu_set_sim_ticks(void)
 {

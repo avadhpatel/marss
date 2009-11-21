@@ -5,6 +5,9 @@
 //
 // Copyright 1999-2008 Matt T. Yourst <yourst@yourst.com>
 //
+// Modification for PQRS by Avadh Patel
+// Copyright 2009 Avadh Patel <avadh4all@gmail.com>
+//
 
 #ifndef _PTLHWDEF_H
 #define _PTLHWDEF_H
@@ -13,7 +16,6 @@ extern "C" {
 #include <cpu.h>
 #define CPU_NO_GLOBAL_REGS
 #include <exec.h>
-//register struct CPUX86State *env asm(AREG0);
 }
 
 #define PTLSIM_VIRT_BASE 0x0000000000000000ULL // PML4 entry 0
@@ -799,98 +801,6 @@ typedef W64 Level1PTE;
 // all relevant control registers, MSRs, x87 FP state, exception
 // and interrupt vectors, Xen-specific data and so forth.
 //
-// The ContextBase structure must be less than 4096 bytes (1 page);
-// the actual Context structure rounds the size up to a page
-//
-// PTLsim cores will need to define other per-VCPU structures to
-// hold their internal state.
-//
-struct ContextBase {
-  W64 commitarf[64];
-  int vcpuid;
-  SegmentDescriptorCache seg[SEGID_COUNT];
-  W64 swapgs_base;
-
-  W64 fpstack[8];
-  X87ControlWord fpcw;
-  MXCSR mxcsr;
-
-  byte use32; // depends on active CS descriptor
-  byte use64; // depends on active CS descriptor
-
-  Waddr virt_addr_mask;
-  W64 exception;
-  Waddr error_code;
-
-  W32 internal_eflags; // parts of EFLAGS that are infrequently updated
-
-#ifdef PTLSIM_HYPERVISOR
-  Waddr x86_exception;
-
-  byte kernel_mode; // VGCF_IN_KERNEL
-  byte kernel_in_syscall; // VGCF_IN_SYSCALL
-  byte i387_valid; // VGCF_I387_VALID
-  byte failsafe_disables_events;
-  byte syscall_disables_events;
-  byte saved_upcall_mask;
-  byte running;
-  byte dirty; // VCPU was just brought online
-
-  CR0 cr0;
-  Waddr cr1, cr2, cr3;
-  CR4 cr4;
-  Waddr cr5, cr6, cr7;
-  Waddr kernel_ptbase_mfn, user_ptbase_mfn;
-  DebugReg dr0, dr1, dr2, dr3, dr4, dr5, dr6, dr7;
-  Waddr kernel_ss, kernel_sp;
-
-  Waddr event_callback_rip;
-  Waddr failsafe_callback_rip;
-  Waddr syscall_rip;
-
-  Waddr fs_base;
-  Waddr gs_base_kernel;
-  Waddr gs_base_user;
-  EFER efer;
-
-  struct TrapTarget idt[256]; // Virtual IDT
-  Waddr ldtvirt;
-  Waddr gdtpages[16];
-  W16 ldtsize;
-  W16 gdtsize;
-
-  Waddr vm_assist;
-
-  W64 base_tsc;
-  W64 base_system_time;
-  W64 core_freq_hz;
-  double sys_time_cycles_to_nsec_coeff;
-
-  W16s virq_to_port[32];
-  W64  timer_cycle;
-  W64  poll_timer_cycle;
-
-  RunstateInfo runstate;
-  RunstateInfo* user_runstate;
-
-  static const int PTE_CACHE_SIZE = 16;
-  W64 cached_pte_virt[PTE_CACHE_SIZE];
-  Level1PTE cached_pte[PTE_CACHE_SIZE];
-#else
-  // Always running in userspace version:
-  byte running;
-#endif
-
-  inline void reset() {
-    setzero(commitarf);
-#ifdef PTLSIM_HYPERVISOR
-    setzero(cached_pte_virt);
-    setzero(cached_pte);
-#endif
-
-    exception = 0;
-  }
-};
 
 enum {
 	CONTEXT_STOPPED = 0,
@@ -898,7 +808,6 @@ enum {
 };
 
 struct Context: public CPUX86State {
-  //byte padding[PAGE_SIZE - sizeof(ContextBase)];
 
   bool use32;
   bool use64;
@@ -927,18 +836,10 @@ struct Context: public CPUX86State {
   W64 reg_fptos;
   W64 reg_fpstack;
   W64 page_fault_addr;
-//  W64 fpstack[8];
 
   void change_runstate(int new_state) { running = new_state; }
 
   void propagate_x86_exception(byte exception, W32 errorcode = 0, Waddr virtaddr = 0) ;
-//	  setup_qemu_switch();
-//	  if(errorcode) {
-//		  raise_exception_err((int)exception, (int)errorcode);
-//	  } else {
-//		  raise_exception((int)exception);
-//	  }
-//  }
 
   void set_eip_ptlsim() {
 	  eip = eip + segs[R_CS].base;
@@ -952,14 +853,10 @@ struct Context: public CPUX86State {
 	  old_eip = eip;
 	  set_eip_qemu();
 	  set_cpu_env((CPUX86State*)this);
-//	  load_eflags(internal_eflags , (TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK));
 	  W64 flags = reg_flags;
 	  // Set the 2nd bit to 1 for compatibility
 	  flags = (flags | FLAG_INV); 
-	  // Set the 3rd bit to 0
-//	  flags = (flags | ~FLAG_WAIT);
 	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O));
-//	  load_eflags(flags, -1);
 	  fpstt = reg_fptos >> 3;
 	  foreach(i, 8) {
 		  reg_fptag |= ((W64(fptags[i])) << (8*i));
@@ -995,25 +892,12 @@ struct Context: public CPUX86State {
   void handle_page_fault(Waddr virtaddr, int is_write) ;
 
   bool try_handle_fault(Waddr virtaddr, bool is_write);
-  //Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, PTEUpdate& pteupdate) {
-  //  Level1PTE dummy;
-  //  return check_and_translate(virtaddr, sizeshift, store, internal, exception, pfec, pteupdate, dummy);
-  //}
-
-  //int copy_to_user(Waddr target, void* source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr);
-
-  //int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec, Level1PTE& ptelo, Level1PTE& ptehi);
 
   W64 get_cs_eip() {
 	  return eip;
-//	  return eip + segs[R_CS].base;
   }
 
   int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = false) ;
-  //  Level1PTE ptelo;
-  //  Level1PTE ptehi;
-  //  return copy_from_user(target, source, bytes, pfec, faultaddr, forexec, ptelo, ptehi);
-  //}
 
   CPUTLBEntry* get_tlb_entry(Waddr virtaddr) {
 	  int mmu_idx = cpu_mmu_index((CPUX86State*)this);
@@ -1028,7 +912,6 @@ struct Context: public CPUX86State {
   W64 loadphys(Waddr addr, bool internal=0, int sizeshift=3);
 
   W64 storemask_virt(Waddr paddr, W64 data, byte bytemask, int sizeshift);
-//  W64 storemask_virt(Waddr paddr, W64 data, int sizeshift);
   W64 storemask(Waddr paddr, W64 data, byte bytemask) ;
   W64 store_internal(Waddr addr, W64 data, byte bytemask);
 
@@ -1079,54 +962,13 @@ struct Context: public CPUX86State {
   void smc_cleardirty(Waddr virtaddr) {
 	  //TODO
   }
-  //  PageFaultErrorCode pfec;
-  //  Waddr faultaddr;
-  //  return copy_from_user(target, source, bytes, pfec, faultaddr, false);
-  //}
 
-  //int copy_to_user(Waddr target, void* source, int bytes) {
-  //  PageFaultErrorCode pfec;
-  //  Waddr faultaddr;
-  //  return copy_to_user(target, source, bytes, pfec, faultaddr);
-  //}
-
-  //int write_segreg(unsigned int segid, W16 selector);
-  //void reload_segment_descriptor(unsigned int segid, W16 selector);
-  //void swapgs();
   void init();
-  //void fxsave(FXSAVEStruct& state);
-  //void fxrstor(const FXSAVEStruct& state);
 
   Context() : invalid_reg(-1), reg_zero(0), reg_ctx((Waddr)this) { }
 
-#ifdef PTLSIM_HYPERVISOR
-  //void restorefrom(const vcpu_guest_context& ctx);
-  //void restorefrom(const vcpu_extended_context& ctx);
-  //void saveto(vcpu_guest_context& ctx);
-  //void saveto(vcpu_extended_context& ctx);
-
-  //bool gdt_entry_valid(W16 idx);
-  //SegmentDescriptor get_gdt_entry(W16 idx);
-
-#ifndef PTLSIM_PUBLIC_ONLY
-  //Level1PTE virt_to_host_pte(W64 rawvirt);
-  //Level1PTE virt_to_pte(W64 rawvirt);
-#endif
-
   W64 virt_to_pte_phys_addr(Waddr virtaddr, int level = 0);
 
-  //int virt_to_pte_span(Level1PTE* ptes, W64 virtaddr, int pagecount);
-
-  // Flush the context mini-TLB and propagate flush to any core-specific TLBs
-  //void flush_tlb(bool propagate_flush_to_model = true);
-  //void flush_tlb_virt(Waddr virtaddr, bool propagate_flush_to_model = true);
-  //void print_tlb(ostream& os);
-
-  //void update_pte_acc_dirty(W64 rawvirt, const PTEUpdate& update) {
-  //  return page_table_acc_dirty_update(rawvirt, cr3 >> 12, update);
-  //}
-
-  //bool create_bounce_frame(W16 target_cs, Waddr target_rip, int action);
   void update_mode_count();
   bool check_events() const;
   bool event_upcall();
@@ -1152,13 +994,9 @@ struct Context: public CPUX86State {
 		  return (W64&)fpus;
 	  } 
 	  else if(index == REG_fptags) {
-//		  foreach(i, 8) {
-//			  reg_fptag |= ((W64(fptags[i])) << 8*i);
-//		  }
 		  return reg_fptag;
 	  } 
 	  else if(index == REG_fpstack) {
-//		  return (W64&)(fpregs[0]);
 		  return reg_fpstack;
 	  } 
 	  else if(index == 52) {
@@ -1227,7 +1065,6 @@ struct Context: public CPUX86State {
 		  reg_fptag = value;
 	  } 
 	  else if(index == REG_fpstack) {
-//		  return (W64&)(fpregs[0]);
 		  reg_fpstack = value;
 	  } 
 	  else if(index == 52) {
@@ -1286,10 +1123,6 @@ struct Context: public CPUX86State {
 	  virt_addr_mask = (use64 ? 0xffffffffffffffffULL : 0x00000000ffffffffULL);
   }
 
-#else
-  //void update_pte_acc_dirty(W64 rawvirt, const PTEUpdate& update) { }
-  void update_shadow_segment_descriptors();
-#endif
 };
 
 ostream& operator <<(ostream& os, const Context& ctx);
@@ -1915,7 +1748,7 @@ static inline stringbuf& operator <<(stringbuf& sb, const flagstring& bs) {
   return sb;
 }
 
-typedef void (*assist_func_t)(Context& ctx);
+typedef bool (*assist_func_t)(Context& ctx);
 
 const char* assist_name(assist_func_t func);
 int assist_index(assist_func_t func);

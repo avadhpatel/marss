@@ -1,12 +1,38 @@
 
-// Some of the functions are referenced from 'qemu-kvm-ptlsim.c' file of project
-// 'PTLsim-KVM 3.0'.
-// They are modified to use QEMU CPU context by Avadh Patel
-// Copyright of those functions by Matt Yourst
+/* 
+ * PQRS : A Full System Computer-Architecture Simulator
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ * 
+ * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
+ * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
+ * 
+ * Some of the functions are referenced from 'qemu-kvm-ptlsim.c' file of project
+ * 'PTLsim-KVM 3.0'.
+ * They are modified to use QEMU CPU context by Avadh Patel
+ * Copyright of those functions by Matt Yourst
+ *
+ */
+
 
 #include <globals.h>
 #include <ptlhwdef.h>
-#include <mm.h>
 
 extern "C" {
 #include <sysemu.h>
@@ -189,8 +215,6 @@ void ptlsim_init() {
 	byte* ptlsim_ram_start = (byte*)qemu_malloc(PTLSIM_RAM_SIZE);
 	assert(ptlsim_ram_start);
 	byte* ptlsim_ram_end = ptlsim_ram_start + PTLSIM_RAM_SIZE;
-
-	ptl_mm_init(ptlsim_ram_start, ptlsim_ram_end);
 
 	// Register PTLsim PTLCALL mmio page
 	W64 ptlcall_mmio_pd = cpu_register_io_memory(0, ptlcall_mmio_read_ops, 

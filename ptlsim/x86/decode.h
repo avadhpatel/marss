@@ -542,113 +542,113 @@ int assist_index(assist_func_t func);
 void update_assist_stats(assist_func_t assist);
 
 // Forced assists based on decode context
-void assist_invalid_opcode(Context& ctx);
-void assist_exec_page_fault(Context& ctx);
-void assist_gp_fault(Context& ctx);
-void assist_ud2a(Context& ctx);
+bool assist_invalid_opcode(Context& ctx);
+bool assist_exec_page_fault(Context& ctx);
+bool assist_gp_fault(Context& ctx);
+bool assist_ud2a(Context& ctx);
 // Integer arithmetic
-template <typename T> void assist_div(Context& ctx);
-template <typename T> void assist_idiv(Context& ctx);
+template <typename T> bool assist_div(Context& ctx);
+template <typename T> bool assist_idiv(Context& ctx);
 // x87
-void assist_x87_fprem(Context& ctx);
-void assist_x87_fyl2xp1(Context& ctx);
-void assist_x87_fsqrt(Context& ctx);
-void assist_x87_fsincos(Context& ctx);
-void assist_x87_frndint(Context& ctx);
-void assist_x87_fscale(Context& ctx);
-void assist_x87_fsin(Context& ctx);
-void assist_x87_fcos(Context& ctx);
-void assist_x87_fxam(Context& ctx);
-void assist_x87_f2xm1(Context& ctx);
-void assist_x87_fyl2x(Context& ctx);
-void assist_x87_fptan(Context& ctx);
-void assist_x87_fpatan(Context& ctx);
-void assist_x87_fxtract(Context& ctx);
-void assist_x87_fprem1(Context& ctx);
-void assist_x87_fld80(Context& ctx);
-void assist_x87_fstp80(Context& ctx);
-void assist_x87_fsave(Context& ctx);
-void assist_x87_frstor(Context& ctx);
-void assist_x87_finit(Context& ctx);
-void assist_x87_fclex(Context& ctx);
-void assist_x87_fxch(Context& ctx);
+bool assist_x87_fprem(Context& ctx);
+bool assist_x87_fyl2xp1(Context& ctx);
+bool assist_x87_fsqrt(Context& ctx);
+bool assist_x87_fsincos(Context& ctx);
+bool assist_x87_frndint(Context& ctx);
+bool assist_x87_fscale(Context& ctx);
+bool assist_x87_fsin(Context& ctx);
+bool assist_x87_fcos(Context& ctx);
+bool assist_x87_fxam(Context& ctx);
+bool assist_x87_f2xm1(Context& ctx);
+bool assist_x87_fyl2x(Context& ctx);
+bool assist_x87_fptan(Context& ctx);
+bool assist_x87_fpatan(Context& ctx);
+bool assist_x87_fxtract(Context& ctx);
+bool assist_x87_fprem1(Context& ctx);
+bool assist_x87_fld80(Context& ctx);
+bool assist_x87_fstp80(Context& ctx);
+bool assist_x87_fsave(Context& ctx);
+bool assist_x87_frstor(Context& ctx);
+bool assist_x87_finit(Context& ctx);
+bool assist_x87_fclex(Context& ctx);
+bool assist_x87_fxch(Context& ctx);
 // SSE save/restore
-void assist_ldmxcsr(Context& ctx);
-void assist_fxsave(Context& ctx);
-void assist_fxrstor(Context& ctx);
+bool assist_ldmxcsr(Context& ctx);
+bool assist_fxsave(Context& ctx);
+bool assist_fxrstor(Context& ctx);
 // Interrupts, system calls, etc.
-void assist_int(Context& ctx);
-void assist_syscall(Context& ctx);
-void assist_sysret(Context& ctx);
-void assist_hypercall(Context& ctx);
-void assist_ptlcall(Context& ctx);
-void assist_sysenter(Context& ctx);
-void assist_iret16(Context& ctx);
-void assist_iret32(Context& ctx);
-void assist_iret64(Context& ctx);
-void assist_sti(Context& ctx);
-void assist_cli(Context& ctx);
+bool assist_int(Context& ctx);
+bool assist_syscall(Context& ctx);
+bool assist_sysret(Context& ctx);
+bool assist_hypercall(Context& ctx);
+bool assist_ptlcall(Context& ctx);
+bool assist_sysenter(Context& ctx);
+bool assist_iret16(Context& ctx);
+bool assist_iret32(Context& ctx);
+bool assist_iret64(Context& ctx);
+bool assist_sti(Context& ctx);
+bool assist_cli(Context& ctx);
 // Control registe rupdates
-void assist_cpuid(Context& ctx);
-void assist_rdtsc(Context& ctx);
-void assist_cld(Context& ctx);
-void assist_std(Context& ctx);
-void assist_pushf(Context& ctx);
-void assist_popf(Context& ctx);
-void assist_write_segreg(Context& ctx);
-void assist_wrmsr(Context& ctx);
-void assist_rdmsr(Context& ctx);
-void assist_write_cr0(Context& ctx);
-void assist_write_cr2(Context& ctx);
-void assist_write_cr3(Context& ctx);
-void assist_write_cr4(Context& ctx);
-void assist_write_debug_reg(Context& ctx);
+bool assist_cpuid(Context& ctx);
+bool assist_rdtsc(Context& ctx);
+bool assist_cld(Context& ctx);
+bool assist_std(Context& ctx);
+bool assist_pushf(Context& ctx);
+bool assist_popf(Context& ctx);
+bool assist_write_segreg(Context& ctx);
+bool assist_wrmsr(Context& ctx);
+bool assist_rdmsr(Context& ctx);
+bool assist_write_cr0(Context& ctx);
+bool assist_write_cr2(Context& ctx);
+bool assist_write_cr3(Context& ctx);
+bool assist_write_cr4(Context& ctx);
+bool assist_write_debug_reg(Context& ctx);
 // I/O and legacy
-void assist_ioport_in(Context& ctx);
-void assist_ioport_out(Context& ctx);
+bool assist_ioport_in(Context& ctx);
+bool assist_ioport_out(Context& ctx);
 // Jumps
-void assist_ljmp(Context& ctx);
-void assist_ljmp_prct(Context& ctx);
+bool assist_ljmp(Context& ctx);
+bool assist_ljmp_prct(Context& ctx);
 // BCD
-void assist_bcd_aas(Context& ctx);
+bool assist_bcd_aas(Context& ctx);
 // SVM
-void assist_svm_check(Context& ctx);
+bool assist_svm_check(Context& ctx);
 // MONITOR
-void assist_monitor(Context& ctx);
+bool assist_monitor(Context& ctx);
 // MWAIT
-void assist_mwait(Context& ctx);
+bool assist_mwait(Context& ctx);
 // VM
-void assist_vmrun(Context& ctx);
-void assist_vmcall(Context& ctx);
-void assist_vmload(Context& ctx);
-void assist_vmsave(Context& ctx);
+bool assist_vmrun(Context& ctx);
+bool assist_vmcall(Context& ctx);
+bool assist_vmload(Context& ctx);
+bool assist_vmsave(Context& ctx);
 // STGI
-void assist_stgi(Context& ctx);
+bool assist_stgi(Context& ctx);
 // CLGI
-void assist_clgi(Context& ctx);
+bool assist_clgi(Context& ctx);
 // SKINIT
-void assist_skinit(Context& ctx);
+bool assist_skinit(Context& ctx);
 // INVLPGA
-void assist_invlpga(Context& ctx);
-void assist_invlpg(Context& ctx);
+bool assist_invlpga(Context& ctx);
+bool assist_invlpg(Context& ctx);
 // LMSW
-void assist_lmsw(Context& ctx);
+bool assist_lmsw(Context& ctx);
 // LLDT
-void assist_lldt(Context& ctx);
+bool assist_lldt(Context& ctx);
 // LTR
-void assist_ltr(Context& ctx);
+bool assist_ltr(Context& ctx);
 // VERR / VERW
-void assist_verr(Context& ctx);
-void assist_verw(Context& ctx);
+bool assist_verr(Context& ctx);
+bool assist_verw(Context& ctx);
 // CLTS
-void assist_clts(Context& ctx);
+bool assist_clts(Context& ctx);
 // SWAPGS
-void assist_swapgs(Context& ctx);
+bool assist_swapgs(Context& ctx);
 // Barrier
-void assist_barrier(Context& ctx);
+bool assist_barrier(Context& ctx);
 // HLT
-void assist_halt(Context& ctx);
-void assist_pause(Context& ctx);
+bool assist_halt(Context& ctx);
+bool assist_pause(Context& ctx);
 
 //
 // Global functions

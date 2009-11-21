@@ -7,6 +7,9 @@
 //
 // Copyright 1997-2008 Matt T. Yourst <yourst@yourst.com>
 //
+// Modifications for PQRS
+// Copyright 2009 Avadh Patel <avadh4all@gmail.com>
+//
 // This program is free software; it is licensed under the
 // GNU General Public License, Version 2.
 //
@@ -76,16 +79,6 @@ typedef std::ifstream ifstream;
 
 namespace superstl {
 
-//	using namespace std;
-
-//	typedef std::ostream ostream;
-//	typedef std::istream istream;
-//	typedef std::ofstream ofstream;
-//	typedef std::ifstream ifstream;
-//	typedef std::iosflush iosflush;
-//	typedef std::cin cin;
-//	typedef std::cout cout;
-//	typedef std::cerr cerr;
   //
   // String buffer
   //
@@ -235,124 +228,11 @@ namespace superstl {
   static const char endl[] = "\n";
   static class iosflush { } flush;
 
-//#define OSTREAM_BUF_SIZE 256
-//
-//  class odstream {
-//  protected:
-//    int fd;
-//    byte* buf;
-//    int bufsize;
-//    int tail;
-//    odstream* chain;
-//    W64 offset;
-//    bool ringbuf_mode;
-//    byte* ringbuf;
-//    int ringbuf_tail;
-//  public:
-//    bool close_on_destroy;
-//
-//    odstream();
-//
-//    bool open(const char* filename, bool append = false, int bufsize = 65536);
-//
-//    bool open(int fd, int bufsize = 65536);
-//
-//    void close();
-//
-//    int setbuf(int bufsize);
-//
-//    void setchain(odstream* chain);
-//
-//    void set_ringbuf_mode(bool new_ringbuf_mode);
-//
-//    ~odstream();
-//
-//    odstream(int fd) {
-//      this->fd = -1;
-//      open(fd);
-//    }
-//
-//    odstream(const char* filename, bool append = false, int bufsize = 65536) {
-//      this->fd = -1;
-//      open(filename, append, bufsize);
-//    }
-//
-//    int write(const void* buf, int count);
-//
-//    operator bool() const {
-//      return ok();
-//    }
-//
-//    bool ok() const {
-//      return (fd >= 0);
-//    }
-//
-//    int filehandle() const {
-//      return fd;
-//    }
-//
-//    W64 seek(W64 pos, int whence = SEEK_SET);
-//
-//    W64 where() const;
-//
-//    void flush();
-//  };
-//  
-//  //
-//  // Manipulators
-//  //      
-//  static inline odstream& operator <<(odstream& os, const iosflush& v) {
-//    os.flush();
-//    return os;
-//  }
-//
-//  template <typename T>
-//  static inline odstream& operator <<(odstream& os, const T& v) {
-//    os.write(&v, sizeof(T));
-//    return os;
-//  }
-//
-//  template <typename T>
-//  static inline ostream& operator ,(ostream& os, const T& v) {
-//    return os << v;
-//  }
-//
-//  class ostream: public odstream {
-//  public:
-//    ostream(): odstream() { }
-//
-//    ostream(int fd): odstream(fd) { }
-//
-//    ostream(const char* filename, bool append = false): odstream(filename, append) { }
-//  };
-//  
-//  //
-//  // Inserters
-//  //
-//
-//  template <typename T>
-//  static inline ostream& operator <<(ostream& os, const T& v) {
-//    stringbuf sb;
-//    sb << v;
-//    os.write((char*)sb, sb.size());
-//    return os;
-//  }
-//
   static inline ostream& operator <<(ostream& os, const iosflush& v) {
     os.flush();
     return os;
   }
-//
-//  static inline ostream& operator <<(ostream& os, const char& v) {
-//    os.write(&v, sizeof(char));
-//    return os;
-//  }
-//
-//  static inline ostream& operator <<(ostream& os, const char* v) {
-//    if unlikely (!v) v = "<null>";
-//    os.write(v, strlen(v));
-//    return os;
-//  }
+
 
   // Some generic functions to write to ostream
 #define OUTPUT_TO_OSTREAM(T) \
@@ -360,18 +240,7 @@ namespace superstl {
 	  return os.write(reinterpret_cast<const char*>(&t), sizeof(T)); \
   }
 
-//  OUTPUT_TO_OSTREAM(W8);
-//  OUTPUT_TO_OSTREAM(W16);
-//  OUTPUT_TO_OSTREAM(W32);
-//  OUTPUT_TO_OSTREAM(W64);
-
   static inline ostream& operator <<(ostream& os, const stringbuf& v) { stringbuf sb; sb << (char*)v; os.write((char*)sb, sb.size()); return os; }
-
-//  static inline ofstream& operator <<(ofstream& os, const stringbuf& v) { stringbuf sb; sb << (char*)v; os.write((char*)sb, sb.size()); return os; }
-//
-//  static inline ostream& operator <<(ostream& os, const W64& v) {
-//	  return os.write(reinterpret_cast<const char*>(&v), sizeof(v));
-//  }
 
   static inline ostream& operator <<(ostream& os, const W8& v) {
 	  return os << (unsigned int)(v);
@@ -385,32 +254,12 @@ namespace superstl {
 	  return os << c;
   }
 
-//  static inline ostream& operator ,(ostream& os, const W16& v) {
-//	  return os << (int)(v);
-//  }
-//
-//  static inline ostream& operator ,(ostream& os, const W32& v) {
-//	  return os << (unsigned int)(v);
-//  }
-//  
-//  static inline ostream& operator ,(ostream& os, const W64& v) {
-//	  return os << (unsigned long)(v);
-//  }
-//
-//  static inline ostream& operator ,(ostream& os, const Waddr& v) {
-//	  return os << (unsigned long long)(v);
-//  }
-
   template <typename T>
   static inline ostream& operator ,(ostream& os, const T& v) {
     return os << v;
   }
 
 
-  //template <typename T>
-  //static inline ofstream& operator ,(ofstream& os, const T& v) {
-  //  return os << v;
-  //}
 
 #define DeclareStringBufToStream(T) inline ostream& operator <<(ostream& os, const T& arg) { stringbuf sb; sb << arg; os << sb; return os; }
 
@@ -618,96 +467,6 @@ namespace superstl {
   int stringsubst(stringbuf& sb, const char* pattern, const char* find, const char* replace);
   int stringsubst(stringbuf& sb, const char* pattern, const char* find[], const char* replace[], int substcount);
 
-  class readline;
-
-//  //
-//  // istream class
-//  //
-//  class idstream {
-//  protected:
-//    int fd;
-//    int error;
-//    int eos;
-//    int head;
-//    int tail;
-//    int bufsize;
-//    int bufused;
-//    W32 bufmask;
-//    W64 offset;
-//    byte* buf;
-//
-//    int fillbuf();
-//    int readbuf(byte* dest, int bytes);
-//    int unread(int bytes);
-//
-//    inline int addmod(int a, int b) { return ((a + b) & bufmask); }
-//
-//    inline void reset() { fd = -1; error = 0; eos = 0; head = 0; tail = 0; buf = null; bufused = 0; bufsize = 0; bufmask = 0; offset = 0; close_on_destroy = 1; }
-//
-//  public:
-//    bool close_on_destroy;
-//
-//    idstream() { reset(); }
-//
-//    bool open(const char* filename, int bufsize = 65536);
-//
-//    bool open(int fd, int bufsize = 65536);
-//
-//    int setbuf(int bufsize);
-//
-//    idstream(const char* filename) {
-//      reset();
-//      open(filename);
-//    }
-//
-//    idstream(int fd) {
-//      reset();
-//      open(fd);
-//    }
-//    
-//    void close();
-//
-//    ~idstream() {
-//      if likely (close_on_destroy) close();
-//    }
-//
-//    bool ok() const { return (!error); }
-//    operator bool() { return ok(); }
-//
-//    int read(void* data, int count);
-//
-//    int filehandle() const { return fd; }
-//
-//    int readline(char* v, int len);
-//    int readline(stringbuf& sb);
-//
-//    bool getc(char& c);
-//
-//    W64 seek(W64 pos, int whence = SEEK_SET);
-//    W64 where() const;
-//    W64 size() const;
-//
-//    void* mmap(long long size);
-//  };
-//
-//  template <typename T>
-//  inline idstream& operator >>(idstream& is, T& v) { 
-//    is.read(&v, sizeof(T)); 
-//    return is; 
-//  }
-//
-//  template <typename T>
-//  inline idstream& operator ,(idstream& is, T& v) {
-//    return is >> v;
-//  }
-//
-//  class istream: public idstream {
-//  public:
-//    istream(): idstream() { }
-//    istream(const char* filename): idstream(filename) { }
-//    istream(int fd): idstream(fd) { }
-//  };
-
   class readline { 
   public:
     readline(char* p, size_t l): buf(p), len(l) { }
@@ -733,9 +492,9 @@ namespace superstl {
     return is;
   }
 
-//  //
-//  // Global streams:
-//  //
+  //
+  // Global streams:
+  //
   extern istream& cin;
   extern ostream& cout;
   extern ostream& cerr;
@@ -939,34 +698,7 @@ namespace superstl {
       reserve(initcap);
     }
     
-//     dynarray(const dynarray<T>& arr) {
-//       //      cerr << " dynarray(const dynarray<T>& arr) addr ", (void*) this, endl;
-//       data = null;
-//       length = arr.length;
-//       granularity = arr.granularity;
-//       reserved = arr.reserved;       
-//       data = renew(data, 0, arr.reserved);
-//       foreach (i, arr.reserved) {
-//         data[i] = arr.data[i];
-//       }
-//    }
-
-//     dynarray& operator=(const dynarray<T>& arr) {
-//       if (!(isprimitive(T) | ispointer(T))) {
-//         foreach (i, reserved) data[i].~T();
-//       }
-//       if(data) free(data);
-//       length = arr.length;
-//       granularity = arr.granularity;
-//       reserved = arr.reserved;       
-//       data = renew(data, 0, arr.reserved);
-//       foreach (i, arr.reserved) {
-//         data[i] = arr.data[i];
-//       }
-//    }
-
     ~dynarray() {
-      //      cerr << " ~dynarray() addr ", (void*)this, endl;
       if (!(isprimitive(T) | ispointer(T))) {
         foreach (i, reserved) data[i].~T();
       }
@@ -1177,9 +909,7 @@ namespace superstl {
 
     selfqueuelink& unlink() {
       // No effect if next = prev = this (i.e., unlinked)
-//	  if(next)
 		  next->prev = prev;
-//	  if(prev)
 		  prev->next = next;
       prev = this;
       next = this;
@@ -1249,11 +979,9 @@ namespace superstl {
     virtual ostream& print(ostream& os) const {return os;}
   protected:
     void addlink(selfqueuelink* prev, selfqueuelink* next) {
-//	  if(next != null)
 		  next->prev = this;
       this->next = next;
       this->prev = prev;
-//	  if(prev != null)
 		  prev->next = this;      
     }
   };
@@ -1287,8 +1015,6 @@ namespace superstl {
     T* data;
 	bool free;
   public:
-//    void reset() { next = this; prev = this; data = null; 
-//		free = true; }
 	void reset() { next = null; prev = null; data = null;
 		free = true; }
     queuelink() { reset(); }
@@ -1310,7 +1036,6 @@ namespace superstl {
     }
 
     void addto(queuelink<T>& root) {
-//      addhead(root);
       add_to_head(root);
     }
 
@@ -1344,7 +1069,6 @@ namespace superstl {
 
     bool unlinked() const {
 		return ((!prev && !next));
-//      return ((!prev && !next) || ((prev == this) && (next == this)));
     }
 
     bool linked() const {
@@ -1377,11 +1101,6 @@ namespace superstl {
 		  }
 
   };
-
-//#define foreach_queuelink(Q, entry, linktype) \
-//  linktype *entry; \
-//  for(Q.reset_iter(), entry = Q.iter_next(); entry != null; entry = Q.iter_next())
-//
 
   template <class T, int SIZE>
   class FixQueueLink {

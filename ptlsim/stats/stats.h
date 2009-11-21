@@ -98,6 +98,7 @@ struct EventsInMode { // rootnode: summable
   W64 kernel64;
   W64 kernel32;
   W64 legacy16;
+  W64 userlib;
   W64 microcode;
   W64 idle;
 };

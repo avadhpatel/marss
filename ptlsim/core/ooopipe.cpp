@@ -2367,6 +2367,8 @@ int ReorderBufferEntry::commit() {
     thread.total_insns_committed++;
 
     stats.summary.insns++;
+	if(uop.rip.rip > 0x7f0000000000)
+		per_core_event_update(core.coreid, insns_in_mode.userlib++);
 #ifdef WATTCH
 	power_ooo_core_stats_update(core.coreid, committed)++;
 #endif

@@ -9,7 +9,7 @@ src_files = Glob('*.cpp')
 objs = env.Object(src_files)
 
 # specific list of objects for dstbuild
-dst_objs = env.Object(Split("superstl.cpp statelist.cpp kernel.cpp"))
+dst_objs = env.Object(Split("superstl.cpp statelist.cpp"))
 
 ret_objs = [objs, dst_objs]
 Return('ret_objs')

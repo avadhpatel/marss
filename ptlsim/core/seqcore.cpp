@@ -454,7 +454,7 @@ struct SequentialCoreEventLog {
 bool SequentialCoreEventLog::init(size_t bufsize) {
   reset();
   size_t bytes = bufsize * sizeof(SequentialCoreEvent);
-  start = (SequentialCoreEvent*)ptl_mm_alloc_private_pages(bytes);
+  start = (SequentialCoreEvent*)qemu_malloc(bytes);
   if unlikely (!start) return false;
   end = start + bufsize;
   tail = start;
@@ -467,7 +467,6 @@ void SequentialCoreEventLog::reset() {
   if (!start) return;
 
   size_t bytes = (end - start) * sizeof(SequentialCoreEvent);
-  ptl_mm_free_private_pages(start, bytes);
   start = null;
   end = null;
   tail = null;

@@ -4,6 +4,9 @@
 //
 // Copyright 2000-2008 Matt T. Yourst <yourst@yourst.com>
 //
+// Modifications for PQRS
+// Copyright 2009 Avadh Patel <avadh4all@gmail.com>
+//
 
 #include <globals.h>
 #include <ptlsim.h>
@@ -491,7 +494,8 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
     current_log_filename = config.log_filename;
   }
 #ifdef TRACE_RIP
-	ptl_rip_trace.open("ptl_rip_trace");
+	if(!ptl_rip_trace.is_open()) 
+		ptl_rip_trace.open("ptl_rip_trace");
 #endif
 
 //  ptl_logfile.setchain((config.log_on_console) ? &cout : null);
@@ -544,9 +548,6 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   if (config.log_trigger_virt_addr_start && (!config.log_trigger_virt_addr_end)) {
     config.log_trigger_virt_addr_end = config.log_trigger_virt_addr_start;
   }
-
-  ptl_mm_set_logging(config.mm_logfile.set() ? (char*)(config.mm_logfile) : null, config.mm_log_buffer_size, config.enable_inline_mm_logging);
-  ptl_mm_set_validate(config.enable_mm_validate);
 
 #ifdef __x86_64__
   config.start_log_at_rip = signext64(config.start_log_at_rip, 48);
@@ -870,7 +871,6 @@ extern "C" uint8_t ptl_simulate() {
 
 		// Update stats every half second:
 		ticks_per_update = seconds_to_ticks(0.2);
-		//ticks_per_update = seconds_to_ticks(0.1);
 		last_printed_status_at_ticks = 0;
 		last_printed_status_at_user_insn = 0;
 		last_printed_status_at_cycle = 0;
@@ -880,14 +880,8 @@ extern "C" uint8_t ptl_simulate() {
 	}
 
 	foreach(ctx_no, contextcount) {
-//		ptl_logfile << "Context[", ctx_no, "]:", endl, 
-//					contextof(ctx_no), endl;
 		Context& ctx = contextof(ctx_no);
 		ctx.setup_ptlsim_switch();
-//		ctx.cs_segment_updated();
-//		ctx.set_eip_ptlsim();
-//		ctx.update_mode(
-//				(((CPUX86State*)(&ctx))->hflags & HF_CPL_MASK) == 0);
 		ctx.running = 1;
 	}
 
@@ -904,9 +898,11 @@ extern "C" uint8_t ptl_simulate() {
 	}
 
 	if (!machine->stopped) {
-		ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).exception_index,
-			" ex: ", contextof(0).exception, " running: ",
-			contextof(0).running, endl, flush;
+		if(logable(1)) {
+			ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).exception_index,
+						" ex: ", contextof(0).exception, " running: ",
+						contextof(0).running, endl, flush;
+		}
 		foreach(c, contextcount) {
 			Context& ctx = contextof(c);
 			ctx.setup_qemu_switch();
@@ -940,7 +936,6 @@ extern "C" uint8_t ptl_simulate() {
 
 #ifdef PTLSIM_HYPERVISOR
 	last_printed_status_at_ticks = 0;
-//	update_progress();
 	cerr << endl;
 #endif
 	print_stats_in_log();
@@ -956,6 +951,11 @@ extern "C" uint8_t ptl_simulate() {
 	if(config.kill) {
 		ptl_logfile << "Received simulation kill signal, stopped the simulation and killing the VM\n";
 		ptl_logfile.flush();
+		ptl_logfile.close();
+#ifdef TRACE_RIP
+		ptl_rip_trace.flush();
+		ptl_rip_trace.close();
+#endif
 		exit(0);
 	}
 
@@ -1097,7 +1097,6 @@ void shutdown_subsystems() {
   //
   shutdown_uops();
   shutdown_decode();
-  ptl_mm_flush_logging();
 }
 
 RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
@@ -1456,8 +1455,9 @@ int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr&
 }
 
 void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virtaddr ) {
-	ptl_logfile << "Propagating exception from simulation at eip: ",
-				this->eip, " cycle: ", sim_cycle, endl;
+	if(logable(2))
+		ptl_logfile << "Propagating exception from simulation at eip: ",
+					this->eip, " cycle: ", sim_cycle, endl;
 	setup_qemu_switch();
 	if(errorcode) {
 		raise_exception_err((int)exception, (int)errorcode);

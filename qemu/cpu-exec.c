@@ -372,8 +372,6 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 
 #ifdef PTLSIM_QEMU
 				if (in_simulation) {
-					// Restore PC
-
 					in_simulation = ptl_simulate();
 //					printf("Back from simulation mode eip: %ld\n", env->eip);
 					interrupt_request = env->interrupt_request;

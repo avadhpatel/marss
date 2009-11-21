@@ -18,18 +18,20 @@
 
 #define FP_STACK_MASK 0x3f
 
-void assist_x87_fprem(Context& ctx) {
+bool assist_x87_fprem(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fprem);
 //	ctx.setup_qemu_switch();
 //	helper_fprem();
 //  assert(false);
   ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 
 #define make_two_input_x87_func_with_pop(name, expr) \
-void assist_x87_##name(Context& ctx) { \
+bool assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
 	ctx.eip = ctx.reg_nextrip; \
+  return false; \
 }
 //  W64& tos = (W64&)ctx.fpstt; \
 //  W64& st0 = (W64&)ctx.fpregs[tos >> 3]; \
@@ -85,7 +87,7 @@ make_two_input_x87_func_with_pop(fyl2xp1, st1u.d = x87_fyl2xp1(st1u.d, st0u.d));
 // st(1) = arctan(st(1) / st(0))
 make_two_input_x87_func_with_pop(fpatan, st1u.d = x87_fpatan(st1u.d, st0u.d));
 
-void assist_x87_fscale(Context& ctx) {
+bool assist_x87_fscale(Context& ctx) {
 //  W64& tos = (W64&)ctx.fpstt;
 //  W64& st0 = (W64&)ctx.fpregs[tos >> 3];
 //  W64& st1 = (W64&)ctx.fpregs[((tos >> 3) + 1) & 0x7];
@@ -96,14 +98,16 @@ void assist_x87_fscale(Context& ctx) {
 //  sw->c1 = 0; sw->c2 = 0;
 	ASSIST_IN_QEMU(helper_fscale);
   ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 
 #define log2 old_log2
 
 #define make_unary_x87_func(name, expr) \
-void assist_x87_##name(Context& ctx) { \
+bool assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
 	ctx.eip = ctx.reg_nextrip; \
+  return false; \
 }
 //  W64& r = (W64&)ctx.fpregs[ctx.fpstt >> 3]; \
 //  SSEType ra(r); ra.d = (expr); r = ra.w64; \
@@ -117,11 +121,12 @@ make_unary_x87_func(fsin, sin(ra.d));
 make_unary_x87_func(fcos, cos(ra.d));
 make_unary_x87_func(f2xm1, exp2(ra.d) - 1);
 
-void assist_x87_frndint(Context& ctx) {
+bool assist_x87_frndint(Context& ctx) {
 	ASSIST_IN_QEMU(helper_frndint);
 //	ctx.setup_qemu_switch();
 //	helper_frndint();
     ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 //  W64& r = (W64&)ctx.fpregs[ctx.fpstt >> 3];
 //  SSEType ra(r);
@@ -143,9 +148,10 @@ void assist_x87_frndint(Context& ctx) {
 //}
 
 #define make_two_output_x87_func_with_push(name, expr) \
-void assist_x87_##name(Context& ctx) { \
+bool assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
 	ctx.eip = ctx.reg_nextrip; \
+  return false; \
 }
 //  W64& tos = ctx.fpstt; \
 //  W64& st0 = ctx.fpregs[tos >> 3]; \
@@ -169,11 +175,12 @@ make_two_output_x87_func_with_push(fptan, (st1u.d = 1.0, st0u.d = tan(st0u.d)));
 
 make_two_output_x87_func_with_push(fxtract, (st1u.d = significand(st0u.d), st0u.d = ilogb(st0u.d)));
 
-void assist_x87_fprem1(Context& ctx) {
+bool assist_x87_fprem1(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fprem1);
 //	ctx.setup_qemu_switch();
 //	helper_fprem1();
 	ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 //  W64& tos = ctx.fpstt;
 //  W64& st0 = ctx.fpregs[tos >> 3];
@@ -192,11 +199,12 @@ void assist_x87_fprem1(Context& ctx) {
 //  ctx.eip = ctx.reg_nextrip;
 //}
 
-void assist_x87_fxam(Context& ctx) {
+bool assist_x87_fxam(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fxam_ST0);
 //	ctx.setup_qemu_switch();
 //	helper_fxam_ST0();
 	ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 //  W64& r = ctx.fpregs[ctx.fpstt >> 3];
 //  SSEType ra(r);
@@ -214,7 +222,7 @@ void assist_x87_fxam(Context& ctx) {
 
 // We need a general purpose "copy from user virtual addresses" function
 
-void assist_x87_fld80(Context& ctx) {
+bool assist_x87_fld80(Context& ctx) {
   // Virtual address is in sr2
   Waddr addr = ctx.reg_ar1;
 
@@ -234,9 +242,10 @@ void assist_x87_fld80(Context& ctx) {
 //
 
   ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 
-void assist_x87_fstp80(Context& ctx) {
+bool assist_x87_fstp80(Context& ctx) {
   // Store and pop from stack
 //  W64& tos = ctx.fpstt;
 //  CPU86_LDoubleU data;
@@ -263,25 +272,29 @@ void assist_x87_fstp80(Context& ctx) {
 //  ctx.fptags[tos] = 0; 
 //  tos = (tos + 8) & FP_STACK_MASK;
   ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 
-void assist_x87_fsave(Context& ctx) {
+bool assist_x87_fsave(Context& ctx) {
   //++MTY TODO
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+  return false;
 }
 
-void assist_x87_frstor(Context& ctx) {
+bool assist_x87_frstor(Context& ctx) {
   //++MTY TODO
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+  return false;
 }
 
-void assist_x87_fclex(Context& ctx) {
+bool assist_x87_fclex(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fclex);
 //	ctx.setup_qemu_switch();
 //	helper_fclex();
 	ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 //  X87StatusWord fpsw = ctx.fpus;
 //  fpsw.pe = 0;
@@ -297,7 +310,7 @@ void assist_x87_fclex(Context& ctx) {
 //  ctx.eip = ctx.reg_nextrip;
 //}
 
-void assist_x87_finit(Context& ctx) {
+bool assist_x87_finit(Context& ctx) {
   ctx.fpuc = 0x037f;
   ctx.fpus = 0;
 //  ctx.commitarf[REG_fptags] = 0;
@@ -305,14 +318,16 @@ void assist_x87_finit(Context& ctx) {
 	  ctx.fptags[i] = 0;
   }
   ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 
-void assist_x87_fxch(Context& ctx) {
+bool assist_x87_fxch(Context& ctx) {
 	int reg = ctx.reg_ar1;
 
 	ASSIST_IN_QEMU(helper_fxchg_ST0_STN, reg);
 
 	ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 
 //

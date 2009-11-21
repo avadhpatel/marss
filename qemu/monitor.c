@@ -504,9 +504,9 @@ static void do_stop(void)
 }
 
 #ifdef PTLSIM_QEMU
-static void do_ptlsim(char* args)
+static void do_simulate(char* args)
 {
-	term_printf("ptlsim options received:%s\n", args);
+	term_printf("simulation options received:%s\n", args);
 	ptl_machine_init(args);
     vm_stop(0);
 }
@@ -1592,7 +1592,7 @@ static const term_cmd_t term_cmds[] = {
     { "set_link", "ss", do_set_link,
       "name [up|down]", "change the link status of a network adapter" },
 #ifdef PTLSIM_QEMU
-	{ "ptlsim", "W", do_ptlsim, "-help for all options", "Set various simulation options" },
+	{ "simulate", "W", do_simulate, "-help for all options", "Set various simulation options" },
 #endif
     { NULL, NULL, },
 };

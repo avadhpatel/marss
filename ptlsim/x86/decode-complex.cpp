@@ -13,37 +13,39 @@ extern "C" {
 #include <cpu.h>
 }
 
-template <typename T> void assist_div(Context& ctx) {
+template <typename T> bool assist_div(Context& ctx) {
   Waddr rax = ctx.regs[R_EAX]; Waddr rdx = ctx.regs[R_EDX];
   asm("div %[divisor];" : "+a" (rax), "+d" (rdx) : [divisor] "q" ((T)ctx.reg_ar1));
   ctx.regs[R_EAX] = rax; ctx.regs[R_EDX] = rdx;
   ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 
-template <typename T> void assist_idiv(Context& ctx) {
+template <typename T> bool assist_idiv(Context& ctx) {
   Waddr rax = ctx.regs[R_EAX]; Waddr rdx = ctx.regs[R_EDX];
   asm("idiv %[divisor];" : "+a" (rax), "+d" (rdx) : [divisor] "q" ((T)ctx.reg_ar1));
   ctx.regs[R_EAX] = rax; ctx.regs[R_EDX] = rdx;
   ctx.eip = ctx.reg_nextrip;
+  return false;
 }
 
 // Not possible in 64-bit mode
 #ifndef __x86_64__
-template <> void assist_div<W64>(Context& ctx) { assert(false); }
-template <> void assist_idiv<W64>(Context& ctx) { assert(false); }
+template <> bool assist_div<W64>(Context& ctx) { assert(false); return true;}
+template <> bool assist_idiv<W64>(Context& ctx) { assert(false); return true;}
 #endif
 
-template void assist_div<byte>(Context& ctx);
-template void assist_div<W16>(Context& ctx);
-template void assist_div<W32>(Context& ctx);
-template void assist_div<W64>(Context& ctx);
+template bool assist_div<byte>(Context& ctx);
+template bool assist_div<W16>(Context& ctx);
+template bool assist_div<W32>(Context& ctx);
+template bool assist_div<W64>(Context& ctx);
 
-template void assist_idiv<byte>(Context& ctx);
-template void assist_idiv<W16>(Context& ctx);
-template void assist_idiv<W32>(Context& ctx);
-template void assist_idiv<W64>(Context& ctx);
+template bool assist_idiv<byte>(Context& ctx);
+template bool assist_idiv<W16>(Context& ctx);
+template bool assist_idiv<W32>(Context& ctx);
+template bool assist_idiv<W64>(Context& ctx);
 
-void assist_int(Context& ctx) {
+bool assist_int(Context& ctx) {
   byte intid = ctx.reg_ar1;
 #ifdef PTLSIM_HYPERVISOR
   // The returned rip is nextrip for explicit intN instructions:
@@ -57,6 +59,7 @@ void assist_int(Context& ctx) {
     assert(false);
   }
 #endif
+  return true;
 }
 
 #ifdef PTLSIM_HYPERVISOR
@@ -65,7 +68,7 @@ void assist_int(Context& ctx) {
 //extern void handle_syscall_assist(Context& ctx);
 #endif
 
-void assist_syscall(Context& ctx) {
+bool assist_syscall(Context& ctx) {
 #ifdef PTLSIM_HYPERVISOR
 //  //
 //  // SYSCALL has two distinct sets of semantics on Xen x86-64.
@@ -95,17 +98,21 @@ void assist_syscall(Context& ctx) {
   }
 #endif
   // REG_rip is filled out for us
+  return true;
 }
 
-void assist_sysret(Context& ctx) {
+bool assist_sysret(Context& ctx) {
 	ctx.eip = ctx.reg_selfrip;
 	int dflag = (ctx.use64 | ctx.use32 ) ? 2 : 1;
 	ASSIST_IN_QEMU(helper_sysret, dflag);
+
+	return true;
 }
 
-void assist_hypercall(Context& ctx) {
+bool assist_hypercall(Context& ctx) {
 	cerr << "assist_hypercall is called, ", \
 		 "this function should not be called in QEMU\n";
+	return false;
 //#ifdef PTLSIM_HYPERVISOR
 //  //
 //  // SYSCALL has two distinct sets of semantics on Xen x86-64.
@@ -121,11 +128,12 @@ void assist_hypercall(Context& ctx) {
 //#endif
 }
 
-void assist_ptlcall(Context& ctx) {
+bool assist_ptlcall(Context& ctx) {
 	cerr << "Assist PTLcall from simulator..unsupported..", endl;
+	return false;
 }
 
-void assist_sysenter(Context& ctx) {
+bool assist_sysenter(Context& ctx) {
 	ASSIST_IN_QEMU(helper_sysenter);
 //	ctx.setup_qemu_switch();
 //	helper_sysenter();
@@ -137,6 +145,7 @@ void assist_sysenter(Context& ctx) {
 //  handle_syscall_32bit(SYSCALL_SEMANTICS_SYSENTER);
 //#endif
   // REG_rip is filled out for us
+	return true;
 }
 
 static const char cpuid_vendor[12+1] = "GenuineIntel";
@@ -266,7 +275,7 @@ union ProcessorMiscInfo {
   (0 << 16) /* reserved */ | \
   (0 << 24)) /* APIC ID (must be patched later!) */
 
-void assist_cpuid(Context& ctx) {
+bool assist_cpuid(Context& ctx) {
 	ASSIST_IN_QEMU(helper_cpuid);
 //	ctx.setup_qemu_switch();
 //	helper_cpuid();
@@ -342,19 +351,22 @@ void assist_cpuid(Context& ctx) {
 //  }
 //
   ctx.eip = ctx.reg_nextrip;
+  return true;
 }
 
-void assist_sti(Context& ctx) {
+bool assist_sti(Context& ctx) {
 	ASSIST_IN_QEMU(helper_sti);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
-void assist_cli(Context& ctx) {
+bool assist_cli(Context& ctx) {
 	ASSIST_IN_QEMU(helper_cli);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
-void assist_ud2a(Context& ctx) {
+bool assist_ud2a(Context& ctx) {
 	// This instruction should never occur in simulation.
 	// Linux Kernel uses ud2a to trigger Bug in the code or
 	// hardware so we use it to generate an assert(0) and 
@@ -362,9 +374,11 @@ void assist_ud2a(Context& ctx) {
 	ptl_logfile << "*****Got UD2A*****\n";
 	ptl_logfile << "Context:\n", ctx, endl;
 	assert(0);
+
+	return true;
 }
 
-void assist_ljmp_prct(Context& ctx) {
+bool assist_ljmp_prct(Context& ctx) {
 	W32 new_cs = ctx.reg_ar1;
 	W32 new_eip = ctx.reg_ar2;
 	W32 next_eip_addend = ctx.reg_nextrip - ctx.reg_selfrip;
@@ -375,9 +389,10 @@ void assist_ljmp_prct(Context& ctx) {
 	ASSIST_IN_QEMU(helper_ljmp_protected, new_cs, new_eip,
 			next_eip_addend);
 	ctx.cs_segment_updated();
+	return true;
 }
 
-void assist_ljmp(Context& ctx) {
+bool assist_ljmp(Context& ctx) {
 	W32 new_cs = ctx.reg_ar1;
 	W32 new_eip = ctx.reg_ar2;
 	ptl_logfile << "assit_ljmp: csbase: ", ctx.reg_ar1,
@@ -388,181 +403,206 @@ void assist_ljmp(Context& ctx) {
 	ctx.segs[R_CS].base = base;
 	ctx.cs_segment_updated();
 	ctx.eip = base + new_eip;//new_cs + 
+	return true;
 }
 
 // BCD Assist
-void assist_bcd_aas(Context& ctx) {
+bool assist_bcd_aas(Context& ctx) {
 //	ctx.setup_qemu_switch();
 //	helper_aas();
 	ASSIST_IN_QEMU(helper_aas);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // SVM Assist
-void assist_svm_check(Context& ctx) {
+bool assist_svm_check(Context& ctx) {
 	W64 type = ctx.reg_ar1;
 	W64 param = ctx.reg_ar2;
 	ASSIST_IN_QEMU(helper_svm_check_intercept_param, type, param);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // MWait Assist
-void assist_mwait(Context& ctx) {
+bool assist_mwait(Context& ctx) {
 	W64 next_eip = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_mwait, next_eip);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // Monitor assist
-void assist_monitor(Context& ctx) {
+bool assist_monitor(Context& ctx) {
 	W64 ptr = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_monitor, ptr);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // VMRun
-void assist_vmrun(Context& ctx) {
+bool assist_vmrun(Context& ctx) {
 	W64 aflag = ctx.reg_ar1;
 	W64 next_eip = ctx.reg_ar2;
 	ASSIST_IN_QEMU(helper_vmrun, aflag, next_eip);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // VMCall
-void assist_vmcall(Context& ctx) {
+bool assist_vmcall(Context& ctx) {
 	ASSIST_IN_QEMU(helper_vmmcall);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // VMLoad
-void assist_vmload(Context& ctx) {
+bool assist_vmload(Context& ctx) {
 	W64 aflag = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_vmload, aflag);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // VMSave
-void assist_vmsave(Context& ctx) {
+bool assist_vmsave(Context& ctx) {
 	W64 aflag = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_vmsave, aflag);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // STGI
-void assist_stgi(Context& ctx) {
+bool assist_stgi(Context& ctx) {
 	ASSIST_IN_QEMU(helper_stgi);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // CLGI
-void assist_clgi(Context& ctx) {
+bool assist_clgi(Context& ctx) {
 	ASSIST_IN_QEMU(helper_clgi);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // SKINIT
-void assist_skinit(Context& ctx) {
+bool assist_skinit(Context& ctx) {
 	ASSIST_IN_QEMU(helper_skinit);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // INVLPGA
-void assist_invlpga(Context& ctx) {
+bool assist_invlpga(Context& ctx) {
 	W64 aflag = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_invlpga, aflag);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // INVLPG
-void assist_invlpg(Context& ctx) {
+bool assist_invlpg(Context& ctx) {
 	W64 addr = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_invlpg, addr);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // LMSW
-void assist_lmsw(Context& ctx) {
+bool assist_lmsw(Context& ctx) {
 	W64 t0 = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_lmsw, t0);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // LLDT
-void assist_lldt(Context& ctx) {
+bool assist_lldt(Context& ctx) {
 	W32 ldt = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_lldt, ldt);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // LTR
-void assist_ltr(Context& ctx) {
+bool assist_ltr(Context& ctx) {
 	W32 ltr = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_ltr, ltr);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // VERR
-void assist_verr(Context& ctx) {
+bool assist_verr(Context& ctx) {
 	W32 v = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_verr, v);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // VERW
-void assist_verw(Context& ctx) {
+bool assist_verw(Context& ctx) {
 	W32 v = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_verw, v);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // CLTS
-void assist_clts(Context& ctx) {
+bool assist_clts(Context& ctx) {
 	ASSIST_IN_QEMU(helper_clts);
 	// abort block because static cpu state changed
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // SWAPGS
-void assist_swapgs(Context& ctx) {
+bool assist_swapgs(Context& ctx) {
 	// This instruction is created as an assist because we 
 	// have to make sure that we dont do any out-of order 
 	// execution of after this opcode untill its completed
 	// So it acts as a barriar instruction
 	// Actual swap of GS is already done in uops
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // Barrier
-void assist_barrier(Context& ctx) {
+bool assist_barrier(Context& ctx) {
 	// Simple barrier assist to make sure we don't do any 
 	// out of order execution beyound the instruction that calls
 	// this assist function
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 // Halt
-void assist_halt(Context& ctx) {
+bool assist_halt(Context& ctx) {
 	W64 next_eip = ctx.reg_nextrip - ctx.segs[R_CS].base;
 	ASSIST_IN_QEMU(helper_hlt, next_eip);
+	return true;
 }
 
 // Pause
-void assist_pause(Context& ctx) {
+bool assist_pause(Context& ctx) {
 	// TODO: Currently we will advance the sim_cycle by
 	// a fix value but we can do more things here
 //	cerr << "Pausing CPU for 500 sim cycles\n";
 //	sim_cycle += 1000;
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
-void assist_rdtsc(Context& ctx) {
+bool assist_rdtsc(Context& ctx) {
 	ASSIST_IN_QEMU(helper_rdtsc);
 //	cerr << "rdtsc: eax: ", ctx.regs[R_EAX], " edx: ", 
 //		 ctx.regs[R_EDX], endl;
   ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
-void assist_pushf(Context& ctx) {
+bool assist_pushf(Context& ctx) {
 	ctx.setup_qemu_switch();
 	W64 flags = helper_read_eflags();
 	ctx.setup_ptlsim_switch();
@@ -570,12 +610,13 @@ void assist_pushf(Context& ctx) {
 	ctx.regs[R_ESP] -= 8;
 	ctx.storemask_virt(ctx.regs[R_ESP], flags, 0xff, 8);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 //
 // Pop from stack into flags register, with checking for reserved bits
 //
-void assist_popf(Context& ctx) {
+bool assist_popf(Context& ctx) {
   W32 flags = ctx.reg_ar1;
 
   W32 mask = 0;
@@ -596,28 +637,31 @@ void assist_popf(Context& ctx) {
   // this << TransOp(OP_and, REG_temp1, REG_temp0, REG_imm, REG_zero, 2, ~(FLAG_ZAPS|FLAG_CF|FLAG_OF));
   // TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, REG_temp1, 2, offsetof(Context, internal_eflags)); stp.internal = 1; this << stp;
   // this << TransOp(OP_movrcc, REG_temp0, REG_zero, REG_temp0, REG_zero, 3, 0, 0, FLAGS_DEFAULT_ALU);
+	return true;
 }
 
 //
 // CLD and STD must be barrier assists since a new RIPVirtPhys
 // context key may be active after the direction flag is altered.
 //
-void assist_cld(Context& ctx) {
+bool assist_cld(Context& ctx) {
   ctx.internal_eflags &= ~FLAG_DF;
   ctx.eip = ctx.reg_nextrip;  
+	return true;
 }
 
-void assist_std(Context& ctx) {
+bool assist_std(Context& ctx) {
   ctx.internal_eflags |= FLAG_DF;
   ctx.eip = ctx.reg_nextrip;  
+	return true;
 }
 
 //
 // PTL calls
 //
-extern void assist_ptlcall(Context& ctx);
+extern bool assist_ptlcall(Context& ctx);
 
-void assist_write_segreg(Context& ctx) {
+bool assist_write_segreg(Context& ctx) {
   W16 selector = ctx.reg_ar1;
   byte segid = ctx.reg_ar2;
 
@@ -641,9 +685,10 @@ void assist_write_segreg(Context& ctx) {
 //  }
 //
   ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
-void assist_ldmxcsr(Context& ctx) {
+bool assist_ldmxcsr(Context& ctx) {
   //
   // LDMXCSR needs to flush the pipeline since future FP instructions will
   // depend on its value and can't be issued out of order w.r.t the mxcsr.
@@ -665,9 +710,11 @@ void assist_ldmxcsr(Context& ctx) {
   // uopimpl would need to update a speculative version of the mxcsr.
   //
   ctx.eip = ctx.reg_nextrip;
+
+  return true;
 }
 
-void assist_fxsave(Context& ctx) {
+bool assist_fxsave(Context& ctx) {
 //  FXSAVEStruct state;
 //
 //  ctx.fxsave(state);
@@ -688,9 +735,10 @@ void assist_fxsave(Context& ctx) {
 //  ctx.setup_qemu_switch();
 //  helper_fxsave(target, 1);
   ctx.eip = ctx.reg_nextrip;
+  return true;
 }
 
-void assist_fxrstor(Context& ctx) {
+bool assist_fxrstor(Context& ctx) {
 //  FXSAVEStruct state;
 //
 //  Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
@@ -716,12 +764,14 @@ void assist_fxrstor(Context& ctx) {
 //  ctx.setup_qemu_switch();
 //  helper_fxrstor(target, 1);
   ctx.eip = ctx.reg_nextrip;
+  return true;
 }
 
-void assist_wrmsr(Context& ctx) {
+bool assist_wrmsr(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_wrmsr);
   ctx.eip = ctx.reg_nextrip;
+	return true;
 //  ctx.setup_qemu_switch();
 //  helper_wrmsr();
 //
@@ -758,12 +808,13 @@ void assist_wrmsr(Context& ctx) {
 }
 
 
-void assist_rdmsr(Context& ctx) {
+bool assist_rdmsr(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
 //  ctx.setup_qemu_switch();
 //  helper_rdmsr();
 	ASSIST_IN_QEMU(helper_rdmsr);
 	ctx.eip = ctx.reg_nextrip;
+	return true;
 
 //#ifdef PTLSIM_HYPERVISOR
 //  if (ctx.kernel_mode) {
@@ -798,7 +849,7 @@ void assist_rdmsr(Context& ctx) {
 }
 
 #ifdef PTLSIM_HYPERVISOR
-void assist_write_cr0(Context& ctx) {
+bool assist_write_cr0(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
 //  ctx.setup_qemu_switch();
 //  helper_write_crN(0, ctx.reg_ar1);
@@ -820,9 +871,10 @@ void assist_write_cr0(Context& ctx) {
 //  ctx.cr[0] = val;
 
   ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
-void assist_write_cr2(Context& ctx) {
+bool assist_write_cr2(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 2, ctx.reg_ar1);
 //  ctx.setup_qemu_switch();
@@ -837,11 +889,12 @@ void assist_write_cr2(Context& ctx) {
 //  sshinfo.vcpu_info[ctx.cpu_index].arch.cr2 = val;
 //  ctx.cr[2] = val;
   ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 //void switch_page_table(mfn_t mfn);
 
-void assist_write_cr3(Context& ctx) {
+bool assist_write_cr3(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
 //  ctx.setup_qemu_switch();
@@ -856,9 +909,10 @@ void assist_write_cr3(Context& ctx) {
 //  ctx.flush_tlb();
 //  switch_page_table(ctx.cr[3] >> 12);
   ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
-void assist_write_cr4(Context& ctx) {
+bool assist_write_cr4(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 4, ctx.reg_ar1);
 //  ctx.setup_qemu_switch();
@@ -872,14 +926,15 @@ void assist_write_cr4(Context& ctx) {
   // (Ignore all writes to CR4 under Xen)
 
   ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
-void assist_write_debug_reg(Context& ctx) {
+bool assist_write_debug_reg(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
 
   if (!ctx.kernel_mode) {
     ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-    return;
+    return true;
   }
 
   W64 value = ctx.reg_ar1;
@@ -914,46 +969,54 @@ void assist_write_debug_reg(Context& ctx) {
 //  };
 
   ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
 #else
 //
 // Userspace PTLsim does not support these:
 //
-void assist_write_cr0(Context& ctx) {
+bool assist_write_cr0(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+	return false;
 }
 
-void assist_write_cr2(Context& ctx) {
+bool assist_write_cr2(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+	return false;
 }
 
-void assist_write_cr3(Context& ctx) {
+bool assist_write_cr3(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+	return false;
 }
 
-void assist_write_cr4(Context& ctx) {
+bool assist_write_cr4(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+	return false;
 }
 
-void assist_write_debug_reg(Context& ctx) {
+bool assist_write_debug_reg(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+	return false;
 }
 #endif
 
-void assist_iret16(Context& ctx) {
+bool assist_iret16(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+	return true;
 }
 
-void assist_iret32(Context& ctx) {
+bool assist_iret32(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+	return true;
 }
 
 extern bool force_synchronous_streams;
@@ -969,7 +1032,7 @@ static inline ostream& operator <<(ostream& os, const IRETStackFrame& iretctx) {
   return os;
 }
 
-void assist_iret64(Context& ctx) {
+bool assist_iret64(Context& ctx) {
 	bool pe;
 	bool vm86;
 	W32 prefixes;
@@ -998,6 +1061,8 @@ void assist_iret64(Context& ctx) {
 		W64 eip = ctx.eip - ctx.segs[R_CS].base;
 		ASSIST_IN_QEMU(helper_iret_protected, shift, eip);
 	}
+
+	return true;
 
 //#ifdef PTLSIM_HYPERVISOR
 //  IRETStackFrame frame;
@@ -1060,7 +1125,7 @@ static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
 }
 
 #ifdef PTLSIM_HYPERVISOR
-void assist_ioport_in(Context& ctx) {
+bool assist_ioport_in(Context& ctx) {
   // ar1 = 16-bit port number
   // ar2 = sizeshift
   // rax = output
@@ -1094,9 +1159,10 @@ void assist_ioport_in(Context& ctx) {
 
   ctx.regs[R_EAX] = x86_merge(ctx.regs[R_EAX], value, sizeshift);
   ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 
-void assist_ioport_out(Context& ctx) {
+bool assist_ioport_out(Context& ctx) {
   // ar1 = 16-bit port number
   // ar2 = sizeshift
   // rax = value to write
@@ -1127,16 +1193,19 @@ void assist_ioport_out(Context& ctx) {
 //    hexstring(value, 64), endl;
 
   ctx.eip = ctx.reg_nextrip;
+	return true;
 }
 #else
-void assist_ioport_in(Context& ctx) {
+bool assist_ioport_in(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+	return true;
 }
 
-void assist_ioport_out(Context& ctx) {
+bool assist_ioport_out(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
+	return true;
 }
 #endif
 
