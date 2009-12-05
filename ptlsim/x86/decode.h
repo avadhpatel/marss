@@ -20,7 +20,7 @@
 // function in QEMU please add both setup functions as
 // written in the macro.
 #define ASSIST_IN_QEMU(func_name, ...) \
-	ctx.setup_qemu_switch();	\
+	setup_qemu_switch_all_ctx(ctx); \
 	func_name(__VA_ARGS__);		\
 	ctx.setup_ptlsim_switch();
 

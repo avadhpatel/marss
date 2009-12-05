@@ -1755,9 +1755,11 @@ void BasicBlockCache::flush() {
     int pages_freed = 0;
 
     while (page = iter.next()) {
-      assert(page->empty());
-      bbpages.remove(page);
-      delete page;
+      //assert(page->empty());
+	  if(page->empty()) {
+		  bbpages.remove(page);
+		  delete page;
+	  }
     }
   }
 }

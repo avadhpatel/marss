@@ -603,6 +603,7 @@ bool assist_rdtsc(Context& ctx) {
 }
 
 bool assist_pushf(Context& ctx) {
+	setup_qemu_switch_except_ctx(ctx);
 	ctx.setup_qemu_switch();
 	W64 flags = helper_read_eflags();
 	ctx.setup_ptlsim_switch();
@@ -666,6 +667,7 @@ bool assist_write_segreg(Context& ctx) {
   byte segid = ctx.reg_ar2;
 
 //  ASSIST_IN_QEMU(helper_load_seg, segid , selector);
+  setup_qemu_switch_except_ctx(ctx);
   ctx.setup_qemu_switch();
 
   // Before calling helper_load_seg we have to set the 
@@ -940,6 +942,7 @@ bool assist_write_debug_reg(Context& ctx) {
   W64 value = ctx.reg_ar1;
   W64 regid = ctx.reg_ar2;
 
+  setup_qemu_switch_except_ctx(ctx);
   ctx.setup_qemu_switch();
 
   int i;
@@ -1140,6 +1143,7 @@ bool assist_ioport_in(Context& ctx) {
   W64 port = ctx.reg_ar1;
   W64 sizeshift = ctx.reg_ar2;
 
+  setup_qemu_switch_except_ctx(ctx);
   ctx.setup_qemu_switch();
   W64 value;
   if(sizeshift == 0) {
@@ -1178,6 +1182,7 @@ bool assist_ioport_out(Context& ctx) {
   W64 sizeshift = ctx.reg_ar2;
   W64 value = x86_merge(0, ctx.regs[R_EAX], sizeshift);
 
+  setup_qemu_switch_except_ctx(ctx);
   ctx.setup_qemu_switch();
   if(sizeshift == 0) {
 	  helper_outb(port, value);

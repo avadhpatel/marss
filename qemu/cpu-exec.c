@@ -214,6 +214,7 @@ static void cpu_handle_debug_exception(CPUState *env)
 void set_cpu_env(CPUState* env1)
 {
 	env = env1;
+	cpu_single_env = env1;
 	env_to_regs();
 }
 #endif
@@ -372,8 +373,6 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 
 #ifdef PTLSIM_QEMU
 				if (in_simulation) {
-					in_simulation = ptl_simulate();
-//					printf("Back from simulation mode eip: %ld\n", env->eip);
 					interrupt_request = env->interrupt_request;
 					if (unlikely(interrupt_request)) {
 						if (unlikely(env->singlestep_enabled & SSTEP_NOIRQ)) {
@@ -433,7 +432,12 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 					if (unlikely(env->exit_request)) {
 						env->exit_request = 0;
 						env->exception_index = EXCP_INTERRUPT;
+						longjmp(env->jmp_env, 1);
 					}
+
+					in_simulation = ptl_simulate();
+//					printf("Back from simulation mode eip: %ld\n", env->eip);
+
 					longjmp(env->jmp_env, 1);
 				}
 #endif
@@ -758,8 +762,11 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 
 
 #if defined(TARGET_I386)
-    /* restore flags in standard format */
-    env->eflags = env->eflags | helper_cc_compute_all(CC_OP) | (DF & DF_MASK);
+#ifdef PTLSIM_QEMU
+	if(!in_simulation)
+#endif
+		/* restore flags in standard format */
+		env->eflags = env->eflags | helper_cc_compute_all(CC_OP) | (DF & DF_MASK);
 #elif defined(TARGET_ARM)
     /* XXX: Save/restore host fpu exception state?.  */
 #elif defined(TARGET_SPARC)

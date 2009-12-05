@@ -1930,7 +1930,7 @@ int ReorderBufferEntry::commit() {
     return COMMIT_RESULT_NONE;
   }
 
-  if(logable(10)) {
+  if(logable(5)) {
 	  ptl_logfile << "Committing ROB entry: ", *this, 
 				  " destreg_value:", hexstring(physreg->data, 64),
 				  endl, superstl::flush;

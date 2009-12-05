@@ -728,6 +728,9 @@ bool OutOfOrderCore::runcycle() {
       break;
     }
     }
+
+	if(exiting)
+		machine.ret_qemu_env = &thread->ctx;
   }
 
 #ifdef PTLSIM_HYPERVISOR
@@ -2044,8 +2047,13 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 	  if(first_run) {
 		  cores[cur_core]->reset();
 	  }
-	  if(cores[cur_core]->threads[0]->ctx.eip != cores[cur_core]->threads[0]->ctx.old_eip)
+	  Context& ctx = cores[cur_core]->threads[0]->ctx;
+	  if(ctx.eip != ctx.old_eip) {
+		  if(logable(5))
+			  ptl_logfile << "Old_eip: ", (void*)(ctx.old_eip), " New_eip: " ,
+						  (void*)(ctx.eip), endl;
 		  cores[cur_core]->flush_pipeline_all();
+	  }
 
 	  //ptl_logfile << "IssueQueue states:", endl;
 
@@ -2087,7 +2095,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  update_progress();
 	  
 	  // limit the ptl_logfile size
-	  if unlikely (ptl_logfile.tellp() > config.log_file_size)
+	  if unlikely (ptl_logfile.is_open() && (ptl_logfile.tellp() > config.log_file_size))
 		  backup_and_reopen_logfile();
 
 	  int running_thread_count = 0;
@@ -2109,6 +2117,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 						  // Thread is already waiting for an event: stop it now
 						  ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] Already stopped at cycle ", sim_cycle, endl;
 						  stopped[thread->ctx.cpu_index] = 1;
+						  ret_qemu_env = &thread->ctx;
 						  exiting = 1;
 					  } 
 					  continue;

@@ -837,6 +837,24 @@ void print_stats_in_log(){
 #endif // NEW_CACHE
 }
 
+void setup_qemu_switch_all_ctx(Context& last_ctx) {
+	foreach(c, contextcount) {
+		Context& ctx = contextof(c);
+		if(&ctx != &last_ctx)
+			ctx.setup_qemu_switch();
+	}
+
+	/* last_ctx must setup after all other ctx are set */
+	last_ctx.setup_qemu_switch();
+}
+
+void setup_qemu_switch_except_ctx(const Context& const_ctx) {
+	foreach(c, contextcount) {
+		Context& ctx = contextof(c);
+		if(&ctx != &const_ctx)
+			ctx.setup_qemu_switch();
+	}
+}
 
 extern "C" uint8_t ptl_simulate() {
 	PTLsimMachine* machine = null;
@@ -885,6 +903,11 @@ extern "C" uint8_t ptl_simulate() {
 		ctx.running = 1;
 	}
 
+	/* Set ret_qemu_env to null, it will be set at the exit of simulation 'run'
+	 * to the Context that has interrupts/exceptions pending 
+	 */
+	machine->ret_qemu_env = null;
+
 	if(machine->stopped != 0)
 		machine->stopped = 0;
 
@@ -903,11 +926,11 @@ extern "C" uint8_t ptl_simulate() {
 						" ex: ", contextof(0).exception, " running: ",
 						contextof(0).running, endl, flush;
 		}
-		foreach(c, contextcount) {
-			Context& ctx = contextof(c);
-			ctx.setup_qemu_switch();
-		}
-		return 1;  // Tell QEMU that we will come back to simulate
+
+		setup_qemu_switch_all_ctx(*machine->ret_qemu_env);
+
+		/* Tell QEMU that we will come back to simulate */
+		return 1;  
 	}
 
 
@@ -1167,7 +1190,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	// Avadh: We use QEMU's ldub_code function to copy all the bytes
 	// from the simulating domain, this is slow but it works
 	// FIXME : Try to make it like memcpy to copy faster if this gets slower
-	this->setup_qemu_switch();
+	setup_qemu_switch_all_ctx(*this);
 
 	if(logable(10))
 		ptl_logfile << "Copying from userspace ", bytes, " bytes from ",
@@ -1185,17 +1208,6 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 			ptl_logfile << "page fault while reading code fault:", fail, 
 						" source_addr:", (void*)(source), 
 						" eip:", (void*)(eip), endl;
-//		if (fail && (this->eip == (W64)(source))) {
-//
-//			if(logable(10))
-//				ptl_logfile << "Will handle page fault in QEMU\n";
-//			assert(eip == source);
-//			char d = ldub_code((target_ulong)(source));
-//			// if we retured from above function means that
-//			// the page fault in handled without exception
-//			// so now we have a valid tlb entry so fetch the code
-//			fail = 0;
-//		}
 		if (fail) {
 			if(logable(10))
 				ptl_logfile << "Unable to read code from ", 
@@ -1208,7 +1220,6 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 		}
 	}
 	
-//	byte* source_b = (byte*)(source);
 	target_ulong source_b = source;
 	byte* target_b = (byte*)(target);
 	while(n < bytes) {
@@ -1231,35 +1242,6 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 		ptl_logfile << "Copy done..\n";
 
 	return n;
-	//FIXME: We have to check the page permission of both source and
-	//target to make sure that userspace can't copy from kernel mode
-
-//	int exception = 0;
-//	Waddr source_paddr = check_and_translate(source, 0, false, false, exception, pfec, 1);
-//
-//	if(exception > 0 || pfec > 0) {
-//		this->exception = exception;
-//		faultaddr = source;
-//		return 0;
-//	}
-//	n = min(4096 - lowbits(source, 12), (Waddr)bytes);
-//	memcpy(target, (void*)source_paddr, n);
-//
-//	// Check if all the bytes are read in first page or not
-//	if likely (n == bytes) return n;
-//
-//	source_paddr = check_and_translate(source + n, 0, false, false, exception, pfec, 1);
-//	if(exception > 0 || pfec > 0) {
-//		this->exception = exception;
-//		faultaddr = source + n;
-//		return 0;
-//	}
-//
-//	Waddr next_page_addr = ((source >> TARGET_PAGE_BITS) + 1) << TARGET_PAGE_BITS;
-//
-//	memcpy((byte*)target + n, (void*)next_page_addr, bytes - n);
-//	n = bytes;
-//	return n;
 }
 
 void Context::update_mode_count() {
@@ -1296,26 +1278,18 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 	exception = 0;
 	pfec = 0;
 
-//	if unlikely (lowbits(virtaddr, sizeshift)) {
-//		exception = EXCEPTION_UnalignedAccess;
-//		return INVALID_PHYSADDR;
-//	}
-
 	if unlikely (internal) {
-		//
-		// Directly mapped to PTL space (microcode load/store)
-		// We need to patch in PTLSIM_VIRT_BASE since in 32-bit
-		// mode, ctx.virt_addr_mask will chop off these bits.
-		//
-		// Now in QEMU we dont have any special mapping of this 
-		// memory region, so virtualaddress is where we
-		// will store the internal data
-		//
+		/*
+		 *  Directly mapped to PTL space (microcode load/store)
+		 *  We need to patch in PTLSIM_VIRT_BASE since in 32-bit
+		 *  mode, ctx.virt_addr_mask will chop off these bits.
+		 *  Now in QEMU we dont have any special mapping of this 
+		 *  memory region, so virtualaddress is where we
+		 *  will store the internal data
+		 */
 		return virtaddr;
 	}
 
-	// TODO : We are currently looking directly at the TLB of QEMU
-	// we don't simulate multilevel page entries right now.
 	bool page_not_present;
 	bool page_read_only;
 	bool page_kernel_only;
@@ -1350,8 +1324,6 @@ redo:
 			(tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
 		// Check if its not MMIO address
 		if(tlb_addr & ~TARGET_PAGE_MASK) {
-//			cerr << "Doing MMIO Access at address : ", 
-//				hexstring(virtaddr, 64), endl;
 			return (Waddr)(virtaddr + iotlb[mmu_index][index]);
 		}
 
@@ -1359,28 +1331,11 @@ redo:
 		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
 	}
 
-	// In QEMU we have to call helper function to handle Page faults
-	// FIXME : Currently we are simply calling QEMU functions to 
-	// handle the faults but we should implement a way to simulate
-	// the dealys for page faults
-//	tlb_fill(virtaddr, store, mmu_index, null);
-//	goto redo;
-
 	// Can't find valid TLB entry, its an exception
 	exception = (store) ? EXCEPTION_PageFaultOnWrite : EXCEPTION_PageFaultOnRead;
 	pfec.rw = store;
 	pfec.us = (!kernel_mode);
 
-	//
-	// Flush out the bogus TLB entry to avoid an infinite loop after the
-	// kernel updates the page tables. Technically only valid PTEs should
-	// be cached in the TLB, but we don't know what "valid" means until
-	// we do the full protection checks. Hence we just invalidate it here:
-	//
-	//flush_tlb_virt(virtaddr);
-	//
-	// Avadh: TODO and also needs to check that in QEMU do we need to flush
-	// the TLB?
 	return INVALID_PHYSADDR;
 }
 
@@ -1458,7 +1413,7 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
 	if(logable(2))
 		ptl_logfile << "Propagating exception from simulation at eip: ",
 					this->eip, " cycle: ", sim_cycle, endl;
-	setup_qemu_switch();
+	setup_qemu_switch_all_ctx(*this);
 	if(errorcode) {
 		raise_exception_err((int)exception, (int)errorcode);
 	} else {
@@ -1470,7 +1425,7 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
 W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
 	Waddr addr = virtaddr; //floor(virtaddr, 8);
 	assert(virtaddr > 0xffff);
-	setup_qemu_switch();
+	setup_qemu_switch_all_ctx(*this);
 	W64 data = 0;
 
 	if(is_mmio_addr(virtaddr, 0)) {
@@ -1497,9 +1452,6 @@ W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
 			ptl_logfile << "MMIO READ addr: ", hexstring(virtaddr, 64),
 						" data: ", hexstring(data, 64), " size: ",
 						sizeshift, endl;
-//		cerr << "MMIO READ addr: ", hexstring(virtaddr, 64),
-//					" data: ", hexstring(data, 64), " size: ",
-//					sizeshift, endl;
 		return data;
 	}
 
@@ -1554,7 +1506,7 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
 	W64 data = 0;
 	Waddr orig_addr = addr;
 	addr = floor(addr, 8);
-	setup_qemu_switch();
+	setup_qemu_switch_all_ctx(*this);
 	data = ldq_raw((uint8_t*)addr);
 
 	if(logable(10))
@@ -1565,32 +1517,9 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
 	return data;
 }
 
-//W64 Context::storemask_virt(Waddr virtaddr, W64 data, int size) {
-//	switch(size) {
-//		case 0: // byte write
-//			(kernel_mode) ? stb_kernel(virtaddr, data) : 
-//				stb_user(virtaddr, data);
-//			break;
-//		case 1: // word write
-//			(kernel_mode) ? stw_kernel(virtaddr, data) :
-//				stw_user(virtaddr, data);
-//			break;
-//		case 2: // double word write
-//			(kernel_mode) ? stl_kernel(virtaddr, data) :
-//				stl_user(virtaddr, data);
-//			break;
-//		case 3: // quad word write
-//		default:
-//			(kernel_mode) ? stq_kernel(virtaddr, data) :
-//				stq_user(virtaddr, data);
-//			break;
-//	}
-//	return data;
-//}
-
 W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshift) {
 	W64 old_data = 0;
-	setup_qemu_switch();
+	setup_qemu_switch_all_ctx(*this);
 	Waddr paddr = floor(virtaddr, 8);
 
 	if(logable(10))
@@ -1619,9 +1548,6 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
 			ptl_logfile << "MMIO WRITE addr: ", hexstring(virtaddr, 64),
 						" data: ", hexstring(data, 64), " size: ",
 						sizeshift, endl;
-//		cerr << "MMIO WRITE addr: ", hexstring(virtaddr, 64),
-//					" data: ", hexstring(data, 64), " size: ",
-//					sizeshift, endl;
 		return data;
 	}
 
@@ -1649,19 +1575,6 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
 					"] data[", hexstring(data, 64), "]\n";
 	return data;
 
-//	if(kernel_mode) {
-//		old_data = ldq_kernel(paddr);
-//	} else {
-//		old_data = ldq_user(paddr);
-//	}
-//	W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
-//	ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
-//				"] data[", hexstring(merged_data, 64), "]\n";
-//	if(kernel_mode) {
-//		stq_kernel(paddr, merged_data);
-//	} else {
-//		stq_user(paddr, merged_data);
-//	}
 //#define CHECK_STORE
 #ifdef CHECK_STORE
 	W64 new_data = 0;
@@ -1694,7 +1607,7 @@ W64 Context::store_internal(Waddr addr, W64 data, byte bytemask) {
 
 W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
 	W64 old_data = 0;
-	setup_qemu_switch();
+	setup_qemu_switch_all_ctx(*this);
 	if(logable(10))
 		ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
 					" with bytemask ", bytemask, " data: ", hexstring(
@@ -1718,7 +1631,7 @@ W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
 }
 
 void Context::handle_page_fault(Waddr virtaddr, int is_write) {
-	setup_qemu_switch();
+	setup_qemu_switch_all_ctx(*this);
 	if(kernel_mode) {
 //		cerr << "Page fault in kernel mode...", endl, flush;
 		ptl_logfile << "Page fault in kernel mode...", endl, flush;
@@ -1740,7 +1653,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
 
 bool Context::try_handle_fault(Waddr virtaddr, bool store) {
 
-	setup_qemu_switch();
+	setup_qemu_switch_all_ctx(*this);
 
 	if(logable(10))
 		ptl_logfile << "Trying to fill tlb for addr: ", (void*)virtaddr, endl;

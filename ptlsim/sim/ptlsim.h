@@ -47,6 +47,7 @@ struct PTLsimMachine {
   bool initialized;
   bool stopped;
   bool first_run;
+  Context* ret_qemu_env;
   PTLsimMachine() { initialized = 0; stopped = 0;}
   virtual bool init(PTLsimConfig& config);
   virtual int run(PTLsimConfig& config);  
@@ -66,6 +67,9 @@ struct PTLsimMachine {
 	  return *ptl_contexts[i];
   }
 };
+
+void setup_qemu_switch_all_ctx(Context& last_ctx);
+void setup_qemu_switch_except_ctx(const Context& const_ctx);
 
 inline Context& contextof(W8 i) {
 	return *ptl_contexts[i];

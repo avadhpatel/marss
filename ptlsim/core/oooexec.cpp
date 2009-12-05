@@ -2353,11 +2353,11 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
   //thread->print_rob(ptl_logfile);
   assert(inrange(idx, 0, ROB_SIZE-1));
   ReorderBufferEntry& rob = thread->ROB[idx];
-  if(logable(5)) ptl_logfile << " dcache_wakeup ", rob, " lsi ", lsi, endl;
+  if(logable(6)) ptl_logfile << " dcache_wakeup ", rob, " lsi ", lsi, endl;
   if(config.use_new_memory_system){
     if(rob.lsq && lsi.seq == rob.uop.uuid &&
 			rob.lsq->physaddr == physaddr >> 3){
-      if(logable(5)) ptl_logfile << " rob ", rob, endl; 
+      if(logable(6)) ptl_logfile << " rob ", rob, endl; 
 
 	  // If the ROB cache miss is serviced already by other request
 	  // then just ignore this response
@@ -2394,7 +2394,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 	  }
     
     }else{
-      if(logable(5)) ptl_logfile << " ignor annulled request because lsi seq ", lsi.seq, " doesn't match  rob.uop.uuid ", rob.uop.uuid, " rob ", rob, endl;
+      if(logable(6)) ptl_logfile << " ignor annulled request because lsi seq ", lsi.seq, " doesn't match  rob.uop.uuid ", rob.uop.uuid, " rob ", rob, endl;
     }
   }else{
      rob.loadwakeup(); 

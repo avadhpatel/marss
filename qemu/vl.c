@@ -3883,6 +3883,11 @@ static int main_loop(void)
                     event_pending = 0;
                     break;
                 }
+#ifdef PTLSIM_QEMU
+				if (in_simulation)
+					/* No need to run for other cpus */
+					break;
+#endif
                 if (ret == EXCP_HLT) {
                     /* Give the next CPU a chance to run.  */
                     cur_cpu = env;

@@ -1328,7 +1328,6 @@ void StatsFileWriter::flush() {
   if (!os.is_open()) return;
 
   header.index_offset = (int)(os.tellp());
-  cerr << "Index offset is : ", os.tellp();
   if(header.index_offset == -1) {
 	  cerr << "Error in file operation: ", errno, endl;
   }

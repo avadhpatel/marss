@@ -37,7 +37,7 @@ namespace Memory{
 		MAIN_MEMORY
 	};
 
-	const int REQUEST_POOL_SIZE = 512;
+	const int REQUEST_POOL_SIZE = 2048;
 	const double REQUEST_POOL_LOW_RATIO = 0.1;
 
 	// CPU Controller
