@@ -1861,7 +1861,7 @@ bool TraceDecoder::invalidate() {
     if (outcome == DECODE_OUTCOME_OK) outcome = DECODE_OUTCOME_INVALID_OPCODE;
 
     ptl_logfile << "Invalid opcode at ", (void*)ripstart, ": split_invalid_basic_blocks ", split_invalid_basic_blocks, ", first_insn_in_bb? ", first_insn_in_bb(), endl;
-    cerr << "Invalid opcode at ", (void*)ripstart, ": split_invalid_basic_blocks ", split_invalid_basic_blocks, ", first_insn_in_bb? ", first_insn_in_bb(), endl;
+    // cerr << "Invalid opcode at ", (void*)ripstart, ": split_invalid_basic_blocks ", split_invalid_basic_blocks, ", first_insn_in_bb? ", first_insn_in_bb(), endl;
     print_invalid_insns(op, (const byte*)ripstart, (const byte*)rip, valid_byte_count, 0, faultaddr);
 	ptl_logfile << superstl::flush;
 

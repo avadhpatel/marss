@@ -15,7 +15,11 @@
 #include <logic.h>
 #include <dcache.h>
 #define INSIDE_OOOCORE
+#ifdef USE_AMD_OOOCORE
+#include <ooocore-amd-k8.h>
+#else
 #include <ooocore.h>
+#endif
 // #include <memorysystem.h>
 //#include <cachecontroller.h>
 #ifdef NEW_CACHE

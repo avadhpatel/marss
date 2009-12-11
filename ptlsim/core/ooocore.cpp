@@ -20,7 +20,11 @@
 
 #define INSIDE_OOOCORE
 #define DECLARE_STRUCTURES
+#ifdef USE_AMD_OOOCORE
+#include <ooocore-amd-k8.h>
+#else
 #include <ooocore.h>
+#endif
 // #include <memorysystem.h>
 #ifdef NEW_CACHE
 #include <memoryHierarchy.h>

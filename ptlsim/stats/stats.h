@@ -291,6 +291,9 @@ struct PTLsimStats { // rootnode:
     BusStats bus;
 #endif
 
+	W64 dcache_latency[200]; // histo: 0, 199, 1
+	W64 icache_latency[200]; // histo: 0, 199, 1
+
   } memory;
 };
 

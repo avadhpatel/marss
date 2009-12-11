@@ -277,6 +277,9 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 	if(!queueEntry->annuled)
 		pendingRequests_.free(queueEntry);
 
+	int req_latency = sim_cycle - request->get_init_cycles();
+	req_latency = (req_latency >= 200) ? 199 : req_latency; 
+
 	if(request->is_instruction()) {
 		W64 lineAddress = get_line_address(request);
 		if(icacheBuffer_.isFull()) {
@@ -286,9 +289,11 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 		}
 		CPUControllerBufferEntry *bufEntry = icacheBuffer_.alloc();
 		bufEntry->lineAddress = lineAddress;
+		stats.memory.icache_latency[req_latency]++;
 		memoryHierarchy_->icache_wakeup_wrapper(request->get_coreid(),
 				request->get_physical_address());
 	} else {
+		stats.memory.dcache_latency[req_latency]++;
 		memoryHierarchy_->dcache_wakeup_wrapper(request->get_coreid(),
 				request->get_threadid(), request->get_robid(),
 				request->get_owner_uuid(), 

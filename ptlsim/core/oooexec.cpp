@@ -15,7 +15,11 @@
 #include <dcache.h>
 
 #define INSIDE_OOOCORE
+#ifdef USE_AMD_OOOCORE
+#include <ooocore-amd-k8.h>
+#else
 #include <ooocore.h>
+#endif
 #ifdef NEW_CACHE
 #include <memoryHierarchy.h>
 #else
@@ -979,11 +983,13 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
       // Only considered a match if it's not a fence (which doesn't match anything)
       if unlikely (stbuf.lfence | stbuf.sfence) continue;
 
-//      if (stbuf.physaddr == state.physaddr) {
 	  int x = (stbuf.physaddr - state.physaddr);
 	  if(-1 <= x && x <= 1) {
-        per_context_ooocore_stats_update(threadid, dcache.load.dependency.stq_address_match++);
-        sfra = &stbuf;
+		// Stores are unaligned and the load with more than two matching stores
+		// in qeueu will not be issued, so we can issue stores that overlap
+		// without any problem.
+		sfra = null;
+        // sfra = &stbuf;
         break;
       }
     } else {
@@ -1437,6 +1443,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   int num_sfra_found = 0;
   int sfra_addr_diff;
+  bool all_sfra_datavalid = true;
 
   foreach_backward_before(LSQ, lsq, i) {
     LoadStoreQueueEntry& stbuf = LSQ[i];
@@ -1452,15 +1459,19 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 	  sfra_addr_diff = (stbuf.physaddr - state.physaddr);
 	  if(-1 <= sfra_addr_diff && sfra_addr_diff <= 1) {
         per_context_ooocore_stats_update(threadid, dcache.load.dependency.stq_address_match++);
-        sfra = &stbuf;
-		num_sfra_found++;
-		if(num_sfra_found > 1) {
-		   	break;
-		}
+		if(sfra == null) sfra = &stbuf;
+		all_sfra_datavalid &= stbuf.datavalid;
+		// num_sfra_found++;
+		// if(num_sfra_found > 1) {
+			   // break;
+		// }
 		continue;
 //        break;
       }
     } else {
+
+	  if (sfra != null) continue;
+
       // Address is unknown: is it a memory fence that hasn't committed?
       if unlikely (stbuf.lfence) {
         per_context_ooocore_stats_update(threadid, dcache.load.dependency.fence++);
@@ -1485,8 +1496,8 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   per_context_ooocore_stats_update(threadid, dcache.load.dependency.independent += (sfra == null));
 
 #ifndef DISABLE_SF
-  bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid));
-  if(num_sfra_found > 1) ready = false;
+  bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid && all_sfra_datavalid));
+  /* if(num_sfra_found > 1) ready = false; */
   if(sfra && uop.internal) ready = false;
 #else
   bool ready = (sfra == null);
@@ -1946,6 +1957,9 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 			  ptl_logfile << "Partial match of load/store rip: ", hexstring(uop.rip.rip, 64),
 						  " sfr_bytemask: ", sfra->bytemask, " sfr_data: ",
 						  sfra->data, endl;
+		  // Change the sfr_bytemask to 0xff to indicate the we have
+		  // matching SFR entry in LSQ
+		  state.sfr_bytemask = 0xff;
 	  } else {
 		  state.sfr_data = -1;
 		  state.sfr_bytemask = 0;
@@ -2359,18 +2373,19 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 			rob.lsq->physaddr == physaddr >> 3){
       if(logable(6)) ptl_logfile << " rob ", rob, endl; 
 
-	  // If the ROB cache miss is serviced already by other request
-	  // then just ignore this response
+      /*
+	   * If the ROB cache miss is serviced already by other request
+	   * then just ignore this response
+       */
 	  if(rob.current_state_list == &thread->rob_cache_miss_list) {
 
-		  // Because of QEMU's in-order execution and Simulator's 
-		  // out-of-order execution we may have page fault at this point
-		  // so just make sure that we handle page fault at correct location
-//		  if(rob.recheck_page_fault())
-//			  return;
+          /*
+		   * Because of QEMU's in-order execution and Simulator's 
+		   * out-of-order execution we may have page fault at this point
+		   * so just make sure that we handle page fault at correct location
+           */
 
 		  rob.tlb_walk_level = 0;
-		  rob.loadwakeup();     
 		  // load the data now
 		  if (isload(rob.uop.opcode)) {
 			  int sizeshift = rob.uop.size;
@@ -2379,17 +2394,60 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 			  W64 data;
 			  data = thread->ctx.loadvirt(rob.lsq->virtaddr);
 			  
-			  // Now check if there is most upto date data from
-			  // sfra available or not
+              /*
+			   * Now check if there is most upto date data from
+			   * sfra available or not
+               */
 			  if(rob.lsq->sfr_bytemask != 0) {
-				  int s = offset * 8;
-				  W64 sel = expand_8bit_to_64bit_lut[rob.lsq->sfr_bytemask];// << s;
-				  data = mux64(sel, data, rob.lsq->sfr_data);// << s);
+
+                  /*
+				   * Scan through all the LSQ from head to find Store that may 
+				   * have the most recent data and merge all the data for this load
+                   */
+				  Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread->LSQ;
+				  LoadStoreQueueEntry* lsq_head = &LSQ[LSQ.head];
+				  foreach_forward(LSQ, i) {
+					  LoadStoreQueueEntry& stq = LSQ[i];
+					  if unlikely (&stq == rob.lsq)
+						  break;
+
+					  if likely (!stq.store) continue;
+
+					  if likely (stq.addrvalid) {
+						  int addr_diff = stq.physaddr - rob.lsq->physaddr;
+						  if(-1 <= addr_diff && addr_diff <= 1) {
+							  assert(stq.datavalid);
+							  /* Found a store that might provide recent data */
+							  W64 tmp_data = stq.data;
+							  W8 tmp_bytemask = stq.bytemask;
+							  if(rob.lsq->virtaddr < stq.virtaddr) {
+								  int addr_diff = stq.virtaddr - rob.lsq->virtaddr;
+								  tmp_data <<= (addr_diff * 8);
+								  tmp_bytemask <<= addr_diff;
+							  } else {
+								  int addr_diff = rob.lsq->virtaddr - stq.virtaddr;
+								  tmp_data >>= (addr_diff * 8);
+								  tmp_bytemask >>= addr_diff;
+							  }
+
+							  if(tmp_bytemask == 0) continue;
+
+							  W64 sel = expand_8bit_to_64bit_lut[tmp_bytemask];
+							  data = mux64(sel, data, tmp_data);
+						  }
+					  }
+				  }
+                  /*
+				   * int s = offset * 8;
+				   * W64 sel = expand_8bit_to_64bit_lut[rob.lsq->sfr_bytemask];// << s;
+				   * data = mux64(sel, data, rob.lsq->sfr_data);// << s);
+                   */
 			  }
 			  rob.lsq->data = extract_bytes(((byte*)&data) , 
 					  sizeshift, signext);
 			  rob.loadwakeup();
-//			  rob.physreg->data = rob.lsq->data;
+		  } else {
+			  rob.loadwakeup();     
 		  }
 	  }
     

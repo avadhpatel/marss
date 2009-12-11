@@ -33,6 +33,7 @@
 #include <controller.h>
 #include <interconnect.h>
 #include <cacheConstants.h>
+#include <memoryStats.h>
 
 namespace Memory {
 
@@ -234,6 +235,9 @@ class CacheController : public Controller
 		
 		CacheType type_;
 		CacheLinesBase *cacheLines_;
+		CacheStats *stats_;
+		CacheStats *totalStats_;
+
 
 		// No of bits needed to find Cache Line address
 		int cacheLineBits_;

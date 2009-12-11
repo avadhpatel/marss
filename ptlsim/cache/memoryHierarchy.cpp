@@ -195,6 +195,8 @@ void MemoryHierarchy::shared_L2_configuration()
 	interconnectsFullFlags_.resize(allInterconnects_.count(), false);
 }
 
+#define SINGLE_CORE_MEM_CONFIG
+
 void MemoryHierarchy::private_L2_configuration()
 {
 	memdebug("Setting up private L2 Configuration\n");
@@ -202,13 +204,21 @@ void MemoryHierarchy::private_L2_configuration()
 	stringbuf cpuName;
 	cpuName << "CPUController";
 
-	//using namespace Memory::SimpleWTCache;
+#ifdef SINGLE_CORE_MEM_CONFIG
+	using namespace Memory::SimpleWTCache;
+#else
 	using namespace Memory::MESICache;
+#endif
 
+#ifdef SINGLE_CORE_MEM_CONFIG
+	GET_STRINGBUF_PTR(l2p2p_name, "L2-p2p");
+	P2PInterconnect *l2p2p = new P2PInterconnect(l2p2p_name->buf, this);
+#else
 	GET_STRINGBUF_PTR(bus_name, "Bus");
 	//BusInterconnect *bus = new BusInterconnect(bus_name->buf, this);
 	MESICache::BusInterconnect *bus = new 
 		MESICache::BusInterconnect(bus_name->buf, this);
+#endif
 
 	foreach(i, coreNo_) {
 
@@ -275,8 +285,13 @@ void MemoryHierarchy::private_L2_configuration()
 		l2->register_upper_interconnect(p2pL2L1d);
 		l2->register_second_upper_interconnect(p2pL2L1i);
 		l2->set_lowest_private(true);
+#ifdef SINGLE_CORE_MEM_CONFIG
+		l2->register_lower_interconnect(l2p2p);
+		l2p2p->register_controller(l2);
+#else
 		l2->register_lower_interconnect(bus);
 		bus->register_controller(l2);
+#endif
 		l2->set_private(true);
 
 	}
@@ -287,9 +302,14 @@ void MemoryHierarchy::private_L2_configuration()
 			0, l3_name->buf, this, L3_CACHE);
 	l3->set_wt_disable(true);
 	allControllers_.push((Controller*)l3);
+#ifdef SINGLE_CORE_MEM_CONFIG
+	l3->register_upper_interconnect(l2p2p);
+	l2p2p->register_controller(l3);
+#else
 	l3->register_upper_interconnect(bus);
-	l3->set_private(false);
 	bus->register_controller(l3);
+#endif
+	l3->set_private(false);
 
 	GET_STRINGBUF_PTR(l3_mem_p2p_name, "L3MemP2P");
 	P2PInterconnect *l3_mem_p2p = new P2PInterconnect(l3_mem_p2p_name->buf,
@@ -307,13 +327,22 @@ void MemoryHierarchy::private_L2_configuration()
 	mem->register_cache_interconnect(l3_mem_p2p);
 	l3_mem_p2p->register_controller(mem);
 #else
+#ifdef SINGLE_CORE_MEM_CONFIG
+	mem->register_cache_interconnect(l2p2p);
+	l2p2p->register_controller(mem);
+#else
 	mem->register_cache_interconnect(bus);
 	bus->register_controller(mem);
+#endif
 #endif
 	mem->set_private(false);
 	memoryController_ = mem;
 
+#ifdef SINGLE_CORE_MEM_CONFIG
+	allInterconnects_.push((Interconnect*)l2p2p);
+#else
 	allInterconnects_.push((Interconnect*)bus);
+#endif
 
 	// Setup the full flags
 	cpuFullFlags_.resize(cpuControllers_.count(), false);

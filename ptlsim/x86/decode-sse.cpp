@@ -836,8 +836,6 @@ bool TraceDecoder::decode_sse() {
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     int rareg;
 
-	cerr << "cvtps2dq found...............\n";
-
     if (ra.type == OPTYPE_MEM) {
       operand_load(REG_temp0, ra, OP_ld, DATATYPE_FLOAT);
       rareg = REG_temp0;

@@ -68,27 +68,27 @@ namespace OutOfOrderModel {
   static const int LOADLAT = 2;
 
   enum {
-    FU_LDU0       = (1 << 0),
-    FU_STU0       = (1 << 1),
-    FU_LDU1       = (1 << 2),
-    FU_STU1       = (1 << 3),
-    FU_ALU0       = (1 << 4),
-    FU_FPU0       = (1 << 5),
-    FU_ALU1       = (1 << 6),
-    FU_FPU1       = (1 << 7),
+	FU_LDU0       = (1 << 0),
+	FU_STU0       = (1 << 1),
+	FU_LDU1       = (1 << 2),
+	FU_STU1       = (1 << 3),
+	FU_ALU0       = (1 << 4),
+	FU_FPU0       = (1 << 5),
+	FU_ALU1       = (1 << 6),
+	FU_FPU1       = (1 << 7),
   };
 
   static const int LOAD_FU_COUNT = 2;
 
   static const char* fu_names[FU_COUNT] = {
-    "ldu0",
-    "stu0",
-    "ldu1",
-    "stu1",
-    "alu0",
-    "fpu0",
-    "alu1",
-    "fpu1",
+	"ldu0",
+	"stu0",
+	"ldu1",
+	"stu1",
+	"alu0",
+	"fpu0",
+	"alu1",
+	"fpu1",
   };
 
   //
@@ -96,6 +96,7 @@ namespace OutOfOrderModel {
   //
 #define ALU0 FU_ALU0
 #define ALU1 FU_ALU1
+#define ALU2 FU_ALU2
 #define STU0 FU_STU0
 #define STU1 FU_STU1
 #define LDU0 FU_LDU0
@@ -331,7 +332,7 @@ namespace OutOfOrderModel {
   //  const int ROB_SIZE = 64;
 
   // Maximum number of branches in the pipeline at any given time
-  const int MAX_BRANCHES_IN_FLIGHT = 16;
+  const int MAX_BRANCHES_IN_FLIGHT = 24;
 
   // Set this to combine the integer and FP phys reg files:
   // #define UNIFIED_INT_FP_PHYS_REG_FILE
@@ -348,7 +349,7 @@ namespace OutOfOrderModel {
   // Load and Store Queues
   //
   const int LDQ_SIZE = 48;
-  const int STQ_SIZE = 32;
+  const int STQ_SIZE = 44;
 
   //
   // Fetch
@@ -360,7 +361,7 @@ namespace OutOfOrderModel {
   // Frontend (Rename and Decode)
   //
   const int FRONTEND_WIDTH = 4;
-  const int FRONTEND_STAGES = 5;
+  const int FRONTEND_STAGES = 7;
 
   //
   // Dispatch
@@ -382,7 +383,7 @@ namespace OutOfOrderModel {
   //
   const int MAX_FORWARDING_LATENCY = 2;
 
-//#define MULTI_IQ
+// #define MULTI_IQ
 
 // #ifdef ENABLE_SMT
 //   //

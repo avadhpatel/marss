@@ -97,7 +97,7 @@ namespace Memory{
 	// Main Memory
 	const int MEM_REQ_NUM = 64;
 	const int MEM_BANKS = 8;
-	const int MEM_LATENCY = 100;
+	const int MEM_LATENCY = 64;
 
 	// Bus Dealys
 	const int BUS_ARBITRATE_DELAY = 1;

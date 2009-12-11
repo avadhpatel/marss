@@ -48,6 +48,9 @@ env.Append(CCFLAGS = '-DPTLSIM_HYPERVISOR -DNEED_CPU_H')
 env.Append(CCFLAGS = '-D__STDC_FORMAT_MACROS')
 env.Append(CCFLAGS = '-DPTLSIM_QEMU')
 
+# To use AMD ooocore file uncomment this
+# env.Append(CCFLAGS = '-DUSE_AMD_OOOCORE')
+
 # enable new cache code (TODO: Make this default when we release)
 env.Append(CCFLAGS = '-DNEW_CACHE')
 # Check for 64bit machine

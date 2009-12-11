@@ -104,6 +104,7 @@ namespace Memory {
 		CacheStats L2;
 		CacheStats L3;
 	};
+
 };
 
 #endif // MEMORY_STATS_H

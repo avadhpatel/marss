@@ -3833,6 +3833,8 @@ static int main_loop(void)
 			}
 			start_simulation = 0;
 		}
+
+		ptl_check_ptlcall_queue();
 #endif
         if (vm_running) {
 

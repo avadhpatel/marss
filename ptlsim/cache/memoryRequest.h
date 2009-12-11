@@ -125,6 +125,8 @@ class MemoryRequest: public selfqueuelink
 		OP_TYPE get_type() { return opType_; }
 		void set_op_type(OP_TYPE type) { opType_ = type; }
 
+		W64 get_init_cycles() { return cycles_; }
+
 //		ostream& print(ostream& os) const;
 
 		ostream& print(ostream& os) const
