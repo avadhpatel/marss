@@ -1428,16 +1428,13 @@ bool StatsFileReader::open(const char* filename) {
   foreach (i, header.index_count) {
     W64 uuid = 0;
     is >> uuid;
-    cout << "UUID is: ", uuid, endl;
     assert(is.is_open());
     W16 namelen;
     is >> namelen;
-    cout << "namelength is: ", namelen, endl;
     assert(is.is_open());
     if (namelen) {
       char* name = new char[namelen];
       is.read(name, namelen);
-      cout << "name is: ", name, endl;
       name_to_uuid.add(name, uuid);
       delete[] name;
     }
@@ -1452,14 +1449,9 @@ DataStoreNode* StatsFileReader::get(W64 uuid) {
   if unlikely (uuid >= header.record_count) return null;
   W64 offset = header.record_offset + (header.record_size * uuid);
 
-//  cout << "offset is: ", hexstring(offset, 64), endl;
-
   is.seekg(offset);
   is.read((char*)(buf), header.record_size);
   assert(is.good());
-  cout << "file position: ", is.tellg(), endl;
-//  int size = strlen((char*)(buf));
-//  cout << "size is: ", size ,endl;
   if unlikely (is.gcount() != header.record_size) return null;
 
   const W64* p = (const W64*)buf;
