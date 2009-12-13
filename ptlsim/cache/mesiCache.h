@@ -126,7 +126,7 @@ class CacheLines : public CacheLinesBase,
 		CacheLine* probe(MemoryRequest *request);
 		CacheLine* insert(MemoryRequest *request, W64& oldTag);
 		int invalidate(MemoryRequest *request);
-		bool get_port(MemoryRequest *request);
+		bool get_port(MemoryRequest *reqest);
 		void print(ostream& os) const;
 };
 

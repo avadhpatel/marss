@@ -667,7 +667,10 @@ struct SequentialCore {
 
     exception = 0;
 
-    W64 physaddr = (annul) ? INVALID_PHYSADDR : ctx.check_and_translate(addr, uop.size, STORE, uop.internal, exception, pfec);
+	int mmio = 0;
+
+    W64 physaddr = (annul) ? INVALID_PHYSADDR : 
+		ctx.check_and_translate(addr, uop.size, STORE, uop.internal, exception, mmio, pfec);
     return physaddr;
   }
 

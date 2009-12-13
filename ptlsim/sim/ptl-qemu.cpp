@@ -405,8 +405,9 @@ RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
 
   int exception = 0;
   PageFaultErrorCode pfec = 0;
+  int mmio = 0;
   physaddr = ctx.check_and_translate(rip, 0, 0, 0, exception,
-		  pfec, true);
+		  mmio, pfec, true);
 
   if(exception > 0) {
 	  physaddr = INVALID;
@@ -437,8 +438,9 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 					source, endl;
 
 	int exception = 0;
+	int mmio = 0;
 	Waddr physaddr = check_and_translate(source, 0, 0, 0, exception,
-			pfec, 1);
+			mmio, pfec, 1);
 	if (exception) {
 		int old_exception = exception_index;
 		int mmu_index = cpu_mmu_index((CPUState*)this);
@@ -515,7 +517,7 @@ void Context::update_mode_count() {
 	}
 }
 
-Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, PageFaultErrorCode& pfec, bool is_code) {
+Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, int& mmio, PageFaultErrorCode& pfec, bool is_code) {
 
 	exception = 0;
 	pfec = 0;
@@ -566,12 +568,16 @@ redo:
 			(tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
 		/* Check if its not MMIO address */
 		if(tlb_addr & ~TARGET_PAGE_MASK) {
+			mmio = 1;
 			return (Waddr)(virtaddr + iotlb[mmu_index][index]);
 		}
 
 		/* we find valid TLB entry, return the physical address for it */
+		mmio = 0;
 		return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
 	}
+
+	mmio = 0;
 
 	/* Can't find valid TLB entry, its an exception */
 	exception = (store) ? EXCEPTION_PageFaultOnWrite : EXCEPTION_PageFaultOnRead;
@@ -623,7 +629,9 @@ int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr&
 
 	int exception;
 	PageFaultErrorCode pfec;
-	Waddr source_paddr = contextof(0).check_and_translate(source, 0, false, false, exception, pfec);
+	int mmio;
+	Waddr source_paddr = contextof(0).check_and_translate(source, 0, false, false, 
+			exception, mmio, pfec);
 
 	if(exception > 0 || pfec > 0) {
 		faultaddr = source;
@@ -635,7 +643,8 @@ int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr&
 	/* Check if all the bytes are read in first page or not */
 	if likely (n == bytes) return n;
 
-	source_paddr = contextof(0).check_and_translate(source + n, 0, false, false, exception, pfec);
+	source_paddr = contextof(0).check_and_translate(source + n, 0, false, false, 
+			exception, mmio, pfec);
 	if(exception > 0 || pfec > 0) {
 		faultaddr = source + n;
 		return 0;

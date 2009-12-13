@@ -1868,6 +1868,7 @@ int ReorderBufferEntry::commit() {
   //
 
   bool found_eom = 0;
+  ReorderBufferEntry* cant_commit_subrob = null;
 
   foreach_forward_from(thread.ROB, this, j) {
     ReorderBufferEntry& subrob = thread.ROB[j];
@@ -1879,6 +1880,7 @@ int ReorderBufferEntry::commit() {
 
     if unlikely (!subrob.ready_to_commit()) {
       all_ready_to_commit = false;
+	  cant_commit_subrob = &subrob;
     }
 
 #ifdef PTLSIM_HYPERVISOR
@@ -1931,6 +1933,41 @@ int ReorderBufferEntry::commit() {
 
   if unlikely (!all_ready_to_commit) {
     per_context_ooocore_stats_update(threadid, commit.result.none++);
+
+	if(cant_commit_subrob->current_state_list == &getthread().rob_free_list) {
+		per_context_ooocore_stats_update(threadid, commit.fail.free_list++);
+	} else if (cant_commit_subrob->current_state_list == &getthread().rob_frontend_list) {
+		per_context_ooocore_stats_update(threadid, commit.fail.frontend_list++);
+	} else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_dispatch_list) {
+		per_context_ooocore_stats_update(threadid, commit.fail.ready_to_dispatch_list++);
+	} else if (cant_commit_subrob->current_state_list == &getthread().rob_cache_miss_list) {
+		per_context_ooocore_stats_update(threadid, commit.fail.cache_miss_list++);
+	} else if (cant_commit_subrob->current_state_list == &getthread().rob_tlb_miss_list) {
+		per_context_ooocore_stats_update(threadid, commit.fail.tlb_miss_list++);
+	} else if (cant_commit_subrob->current_state_list == &getthread().rob_memory_fence_list) {
+		per_context_ooocore_stats_update(threadid, commit.fail.memory_fence_list++);
+	} else {
+		foreach(j, MAX_CLUSTERS) {
+			if(cant_commit_subrob->current_state_list == &getthread().rob_dispatched_list[j]) {
+				per_context_ooocore_stats_update(threadid, commit.fail.dispatched_list++);
+			} else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_issue_list[j]) {
+				per_context_ooocore_stats_update(threadid, commit.fail.ready_to_issue_list++);
+			} else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_store_list[j]) {
+				per_context_ooocore_stats_update(threadid, commit.fail.ready_to_store_list++);
+			} else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_load_list[j]) {
+				per_context_ooocore_stats_update(threadid, commit.fail.ready_to_load_list++);
+			} else if (cant_commit_subrob->current_state_list == &getthread().rob_completed_list[j]) {
+				per_context_ooocore_stats_update(threadid, commit.fail.completed_list++);
+			} else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_writeback_list[j]) {
+				per_context_ooocore_stats_update(threadid, commit.fail.ready_to_writeback_list++);
+			}
+		}
+	}
+
+	if(logable(5)) {
+		ptl_logfile << "Can't Commit ROB entry: ", *this, " because subrob: ", 
+					*cant_commit_subrob, endl;
+	}
     return COMMIT_RESULT_NONE;
   }
 
@@ -2371,8 +2408,8 @@ int ReorderBufferEntry::commit() {
     thread.total_insns_committed++;
 
     stats.summary.insns++;
-	if(uop.rip.rip > 0x7f0000000000)
-		per_core_event_update(core.coreid, insns_in_mode.userlib++);
+	// if(uop.rip.rip > 0x7f0000000000)
+		// per_core_event_update(core.coreid, insns_in_mode.userlib++);
 #ifdef WATTCH
 	power_ooo_core_stats_update(core.coreid, committed)++;
 #endif

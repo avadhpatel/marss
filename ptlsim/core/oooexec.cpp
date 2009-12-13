@@ -680,7 +680,8 @@ bool ReorderBufferEntry::recheck_page_fault() {
 	PageFaultErrorCode pfec;
 	PTEUpdate pteupdate;
 	Context& ctx = getthread().ctx;
-	Waddr physaddr = ctx.check_and_translate(lsq->virtaddr, 1, 0, 0, exception, pfec);
+	int mmio;
+	Waddr physaddr = ctx.check_and_translate(lsq->virtaddr, 1, 0, 0, exception, mmio, pfec);
 
 	Waddr addr = lsq->physaddr << 3;
 	Waddr virtaddr = lsq->virtaddr;
@@ -776,7 +777,12 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   exception = 0;
 
-  Waddr physaddr = (annul) ? INVALID_PHYSADDR : ctx.check_and_translate(addr, uop.size, st, uop.internal, exception, pfec);
+  int mmio = 0;
+  Waddr physaddr = (annul) ? INVALID_PHYSADDR : 
+	  ctx.check_and_translate(addr, uop.size, st, uop.internal, exception, 
+			  mmio, pfec);
+
+  state.mmio = mmio;
 
 #ifdef WATTCH //The address is generated and tell (wakeup) the ldq
 	if(st) 
@@ -1422,6 +1428,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   LoadStoreQueueEntry* sfra = null;
 
+#define SMT_ENABLE_LOAD_HOISTING
 #ifdef SMT_ENABLE_LOAD_HOISTING
   bool load_is_known_to_alias_with_store = (lsap(uop.rip) >= 0);
 #else
@@ -1471,6 +1478,13 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     } else {
 
 	  if (sfra != null) continue;
+
+	  /* If load address is mmio then dont let it issue before unresolved store */
+	  if unlikely (state.mmio) {
+		  per_context_ooocore_stats_update(threadid, dcache.load.dependency.mmio++);
+		  sfra = &stbuf;
+		  break;
+	  }
 
       // Address is unknown: is it a memory fence that hasn't committed?
       if unlikely (stbuf.lfence) {
@@ -2160,7 +2174,9 @@ void ReorderBufferEntry::tlbwalk() {
       PageFaultErrorCode pfec;
       PTEUpdate pteupdate;
       Context& ctx = getthread().ctx;
-      Waddr physaddr = ctx.check_and_translate(virtaddr, 1, 0, 0, exception, pfec);
+	  int mmio;
+      Waddr physaddr = ctx.check_and_translate(virtaddr, 1, 0, 0, exception, 
+			  mmio, pfec);
       core.caches.initiate_prefetch(physaddr, uop.cachelevel);
     } else {
       probecache(virtaddr, null);

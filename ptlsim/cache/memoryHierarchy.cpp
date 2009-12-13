@@ -206,6 +206,7 @@ void MemoryHierarchy::private_L2_configuration()
 
 #ifdef SINGLE_CORE_MEM_CONFIG
 	using namespace Memory::SimpleWTCache;
+	// using namespace Memory::MESICache;
 #else
 	using namespace Memory::MESICache;
 #endif

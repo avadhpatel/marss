@@ -357,13 +357,13 @@ bool assist_cpuid(Context& ctx) {
 bool assist_sti(Context& ctx) {
 	ASSIST_IN_QEMU(helper_sti);
 	ctx.eip = ctx.reg_nextrip;
-	return true;
+	return false;
 }
 
 bool assist_cli(Context& ctx) {
 	ASSIST_IN_QEMU(helper_cli);
 	ctx.eip = ctx.reg_nextrip;
-	return true;
+	return false;
 }
 
 bool assist_ud2a(Context& ctx) {
@@ -896,7 +896,15 @@ bool assist_write_cr2(Context& ctx) {
 
 //void switch_page_table(mfn_t mfn);
 
+#define STORE_CR3_VALUES
+#ifdef STORE_CR3_VALUES
+static ofstream cr3_values("cr3_values.txt");
+#endif
+
 bool assist_write_cr3(Context& ctx) {
+#ifdef STORE_CR3_VALUES
+	cr3_values << "sim_cycle: ", sim_cycle, " cr3: ", (void*)ctx.reg_ar1, endl, flush;
+#endif
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
 //  ctx.setup_qemu_switch();

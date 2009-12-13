@@ -52,7 +52,7 @@ namespace Memory{
 	const int L1D_LATENCY   = 2;
 //	const int L1D_REQ_NUM = 8;
 	const int L1D_READ_PORT = 2;
-	const int L1D_WRITE_PORT = 2;
+	const int L1D_WRITE_PORT = 3;
 //	const int L1D_WB_COUNT = L1D_REQ_NUM; // writeback buffer size
 //	const int L1D_SNOOP_PORT = 2;
 
@@ -97,7 +97,7 @@ namespace Memory{
 	// Main Memory
 	const int MEM_REQ_NUM = 64;
 	const int MEM_BANKS = 8;
-	const int MEM_LATENCY = 64;
+	const int MEM_LATENCY = 100;
 
 	// Bus Dealys
 	const int BUS_ARBITRATE_DELAY = 1;

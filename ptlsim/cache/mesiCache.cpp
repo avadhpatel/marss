@@ -981,8 +981,8 @@ bool CacheController::cache_access_cb(void *arg)
 		else hit = false;
 
 		// Testing 100 % L2 Hit
-//		if(type_ == L2_CACHE)
-//			hit = true;
+		// if(type_ == L2_CACHE)
+			// hit = true;
 
 		OP_TYPE type = queueEntry->request->get_type();
 		Signal *signal;

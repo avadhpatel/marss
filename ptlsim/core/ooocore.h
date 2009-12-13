@@ -378,10 +378,6 @@ namespace OutOfOrderModel {
   //
   const int COMMIT_WIDTH = 4;
 
-  //
-  // Clustering, Issue Queues and Bypass Network
-  //
-  const int MAX_FORWARDING_LATENCY = 2;
 
 // #define MULTI_IQ
 
@@ -396,8 +392,14 @@ namespace OutOfOrderModel {
 
 #ifdef MULTI_IQ
   const int MAX_CLUSTERS = 4;
+  //
+  // Clustering, Issue Queues and Bypass Network
+  //
+  const int MAX_FORWARDING_LATENCY = 2;
 #else
   const int MAX_CLUSTERS = 1;
+
+  const int MAX_FORWARDING_LATENCY = 0;
 #endif
 
   enum { PHYSREG_NONE, PHYSREG_FREE, PHYSREG_WAITING, PHYSREG_BYPASS, PHYSREG_WRITTEN, PHYSREG_ARCH, PHYSREG_PENDINGFREE, MAX_PHYSREG_STATE };
@@ -798,7 +800,7 @@ namespace OutOfOrderModel {
     W16 idx;
     byte coreid;
     W8s mbtag;
-    W8 store:1, lfence:1, sfence:1, entry_valid:1;
+    W8 store:1, lfence:1, sfence:1, entry_valid:1, mmio:1;
     //   W32 padding;
     W32 time_stamp;
 	W64 sfr_data;
@@ -814,6 +816,7 @@ namespace OutOfOrderModel {
       mbtag = -1;
 	  sfr_data = -1;
 	  sfr_bytemask = 0;
+	  mmio = 0;
     }
 
     void init(int idx) {
@@ -1923,6 +1926,23 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
       W64 dcache_stall;
     } result;
 
+	struct fail { // node: summable
+		W64 free_list;                             
+		W64 frontend_list;                         
+		W64 ready_to_dispatch_list;               
+		W64 dispatched_list;       
+		W64 ready_to_issue_list;  
+		W64 ready_to_store_list; 
+		W64 ready_to_load_list;   
+		W64 issued_list;         
+		W64 completed_list;     
+		W64 ready_to_writeback_list;
+		W64 cache_miss_list;                     
+		W64 tlb_miss_list;                      
+		W64 memory_fence_list;                 
+		W64 ready_to_commit_queue;            
+	} fail;
+
     struct setflags { // node: summable
       W64 yes;
       W64 no;
@@ -1982,6 +2002,7 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
         W64 stq_address_match;
         W64 stq_address_not_ready;
         W64 fence;
+		W64 mmio;
       } dependency;
         
       struct type { // node: summable

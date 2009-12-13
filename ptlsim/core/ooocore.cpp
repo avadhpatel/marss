@@ -719,7 +719,7 @@ bool OutOfOrderCore::runcycle() {
 		  ptl_logfile << " [vcpu ", i, "] in interrupt handling at rip ", thread->current_basic_block->rip, endl, flush;
 	  }
       exiting = 1;
-      machine.stopped[thread->ctx.cpu_index] = 1;
+      // machine.stopped[thread->ctx.cpu_index] = 1;
       thread->handle_interrupt();
       break;
     }
@@ -2140,14 +2140,16 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  exiting |= core.runcycle();
 	  }
 
-    if unlikely (!stopping) {
-      if (config.abort_at_end) {
-        config.abort_at_end = 0;
-        ptl_logfile << "Abort immediately: do not wait for next x86 boundary nor flush pipelines", endl;
-        stopped = 1;
-        exiting = 1;
-      }
-    }
+    /*
+     * if unlikely (!stopping) {
+     *   if (config.abort_at_end) {
+     *     config.abort_at_end = 0;
+     *     ptl_logfile << "Abort immediately: do not wait for next x86 boundary nor flush pipelines", endl;
+     *     stopped = 1;
+     *     exiting = 1;
+     *   }
+     * }
+     */
 
     stats.summary.cycles++;
     foreach (coreid, NUMBER_OF_CORES){
@@ -2173,17 +2175,19 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
   if(logable(1))
 	ptl_logfile << "Exiting out-of-order core at ", total_user_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
 
- foreach (cur_core, NUMBER_OF_CORES){
-   OutOfOrderCore& core =* cores[cur_core];
-   foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) { 
-    ThreadContext* thread = core.threads[cur_thread];
-    thread->core_to_external_state();
-
-    if (logable(6) | ((sim_cycle - thread->last_commit_at_cycle) > 1024) | config.dump_state_now) {
-		ptl_logfile << "Core [", core.coreid, "] Thread [", thread->threadid, "]: last_commit_cycle: ", thread->last_commit_at_cycle, " sim_cyclee: ", sim_cycle, endl;
-    }
-  }
- }
+/*
+ *  foreach (cur_core, NUMBER_OF_CORES){
+ *    OutOfOrderCore& core =* cores[cur_core];
+ *    foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) { 
+ *     ThreadContext* thread = core.threads[cur_thread];
+ *     thread->core_to_external_state();
+ * 
+ *     if (logable(6) | ((sim_cycle - thread->last_commit_at_cycle) > 1024) | config.dump_state_now) {
+ *         ptl_logfile << "Core [", core.coreid, "] Thread [", thread->threadid, "]: last_commit_cycle: ", thread->last_commit_at_cycle, " sim_cyclee: ", sim_cycle, endl;
+ *     }
+ *   }
+ *  }
+ */
 
   config.dump_state_now = 0;
   

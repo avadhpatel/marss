@@ -766,8 +766,10 @@ bool CacheController::wait_interconnect_cb(void *arg)
 		} else {
 			// Queue in interconnect is full so retry after interconnect delay
 			queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
+            int delay = queueEntry->sendTo->get_delay();
+            if(delay == 0) delay = 1;
 			memoryHierarchy_->add_event(&waitInterconnect_, 
-					queueEntry->sendTo->get_delay(), (void*)queueEntry);
+					delay, (void*)queueEntry);
 		}
 	} else {
 		if(queueEntry->request->get_type() == MEMORY_OP_UPDATE) 
