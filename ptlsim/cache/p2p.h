@@ -52,7 +52,7 @@ class P2PInterconnect : public Interconnect
 
 
 	public:
-		P2PInterconnect(const char *name, MemoryHierarchy *memoryHierarchy);
+		P2PInterconnect(char *name, MemoryHierarchy *memoryHierarchy);
 		bool controller_request_cb(void *arg);
 		void register_controller(Controller *controller);
 		int access_fast_path(Controller *controller, 

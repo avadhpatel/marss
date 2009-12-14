@@ -72,7 +72,8 @@ bool CPUController::handle_interconnect_cb(void *arg)
 	if(queueEntry == null) {
 		ptl_logfile << "Message received that is not for this queue\n";
 		ptl_logfile << "Message: ", *message, endl;
-		ptl_logfile << "Controler: ", get_name(), endl;
+		ptl_logfile << "Controler: " << get_name(), endl;
+		assert(0);
 		return true;
 	}
 	//assert(queueEntry);
@@ -100,6 +101,8 @@ void CPUController::annul_request(MemoryRequest *request)
 	foreach_list_mutable(pendingRequests_.list(), entry,
 			entry_t, nextentry_t) {
 		if(entry->request == request) {
+			ptl_logfile << "Annuling a CPU Controller request: ";
+			ptl_logfile << *entry << endl;
 			entry->annuled = true;
 			pendingRequests_.free(entry);
 		}

@@ -38,7 +38,7 @@
 
 using namespace Memory;
 
-P2PInterconnect::P2PInterconnect(const char *name, 
+P2PInterconnect::P2PInterconnect(char *name, 
 		MemoryHierarchy *memoryHierarchy) :
 	Interconnect(name, memoryHierarchy)
 {

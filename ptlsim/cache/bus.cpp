@@ -36,7 +36,7 @@
 
 using namespace Memory;
 
-BusInterconnect::BusInterconnect(const char *name, 
+BusInterconnect::BusInterconnect(char *name, 
 		MemoryHierarchy *memoryHierarchy) : 
 	Interconnect(name,memoryHierarchy),
 	busBusy_(false)

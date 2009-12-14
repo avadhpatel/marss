@@ -1113,7 +1113,9 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     // (see notes on Load Replay Conditions below)
     //
 
-    if unlikely ((!ldbuf.store) & ldbuf.addrvalid & ldbuf.rob->issued & (ldbuf.physaddr == state.physaddr)) {
+	int x = (ldbuf.physaddr - state.physaddr);
+    if unlikely ((!ldbuf.store) & ldbuf.addrvalid & ldbuf.rob->issued &
+		   (-1 <= x && x <= 1)) {
       //
       // Check for the extremely rare case where:
       // - load is in the ready_to_load state at the start of the simulated 
@@ -2393,6 +2395,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 	   * If the ROB cache miss is serviced already by other request
 	   * then just ignore this response
        */
+	  bool waiting_for_data = false;
 	  if(rob.current_state_list == &thread->rob_cache_miss_list) {
 
           /*
@@ -2432,7 +2435,12 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 					  if likely (stq.addrvalid) {
 						  int addr_diff = stq.physaddr - rob.lsq->physaddr;
 						  if(-1 <= addr_diff && addr_diff <= 1) {
-							  assert(stq.datavalid);
+
+							  /* If store doesn't has valid data, load will be replayed */
+							  if(!stq.datavalid) {
+								  return ;
+							  }
+
 							  /* Found a store that might provide recent data */
 							  W64 tmp_data = stq.data;
 							  W8 tmp_bytemask = stq.bytemask;

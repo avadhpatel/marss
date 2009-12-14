@@ -39,7 +39,7 @@
 using namespace Memory;
 using namespace Memory::MESICache;
 
-BusInterconnect::BusInterconnect(const char *name, 
+BusInterconnect::BusInterconnect(char *name, 
 		MemoryHierarchy *memoryHierarchy) : 
 	Interconnect(name,memoryHierarchy),
 	busBusy_(false),

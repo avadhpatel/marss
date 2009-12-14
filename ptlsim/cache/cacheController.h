@@ -169,6 +169,7 @@ enum {
 	CACHE_CLEAR_ENTRY_EVENT,
 	CACHE_INSERT_COMPLETE_EVENT,
 	CACHE_WAIT_INTERCONNECT_EVENT,
+	CACHE_WAIT_RESPONSE,
 	CACHE_NO_EVENTS
 };
 
@@ -187,6 +188,8 @@ struct CacheQueueEntry : public FixStateListObject
 		Interconnect *sendTo;
 		MemoryRequest *request;
 		bool annuled;
+		bool prefetch;
+		bool prefetchCompleted;
 
 		void init() {
 			request = null;
@@ -195,6 +198,8 @@ struct CacheQueueEntry : public FixStateListObject
 			depends = -1;
 			eventFlags.reset();
 			annuled = false;
+			prefetch = false;
+			prefetchCompleted = false;
 		}
 
 		ostream& print(ostream& os) const {
@@ -206,18 +211,21 @@ struct CacheQueueEntry : public FixStateListObject
 			os << "Request{", *request, "} ";
 
 			if(sender)
-				os << "sender[", sender->get_name(), "] ";
+				os << "sender[" << sender->get_name() << "] ";
 			else
 				os << "sender[none] ";
 
 			if(sendTo) 
-				os << "sendTo[", sendTo->get_name(), "] ";
+				os << "sendTo[" << sendTo->get_name() << "] ";
 			else
 				os << "sendTo[none] ";
 
-			os << "depends[", depends, "] ";
-			os << "eventFlags[", eventFlags, "] ";
-			os << "annuled[", annuled, "] ";
+			os << "depends[" << depends;
+			os << "] eventFlags[" << eventFlags;
+			os << "] annuled[" << annuled;
+			os << "] prefetch[" << prefetch;
+			os << "] pfComp[" << prefetchCompleted;
+			os << "] ";
 			os << endl;
 			return os;
 		}
@@ -255,6 +263,10 @@ class CacheController : public Controller
 		// Flag to indicate if cache is write through or not
 		bool wt_disabled_;
 
+		// Prefetch related variables
+		bool prefetchEnabled_;
+		int prefetchDelay_;
+
 		// This caches are connected to only two interconnects
 		// upper and lower interconnect.
 		Interconnect *upperInterconnect_;
@@ -286,6 +298,8 @@ class CacheController : public Controller
 
 		void send_update_message(CacheQueueEntry *queueEntry, 
 				W64 tag=-1);
+
+		void do_prefetch(MemoryRequest *request, int additional_delay=0);
 
 	public:
 		CacheController(W8 coreid, const char *name, 
@@ -327,18 +341,8 @@ class CacheController : public Controller
 		void print(ostream& os) const;
 
 		bool is_full(bool fromInterconnect = false) const {
-			if(fromInterconnect) {
-				// We keep some free entries for interconnect
-				// so if the queue is 100% full then only
-				// return false else return true
-				assert(!pendingRequests_.isFull());
-				return pendingRequests_.isFull();
-			}	
-			// Otherwise we keep 10 entries free for interconnect
-			// or some internal requests (for example, memory update
-			// requests are created internally)
 			if(pendingRequests_.count() >= (
-						pendingRequests_.size() - 10)) {
+						pendingRequests_.size() - 4)) {
 				return true;
 			}
 			return false;

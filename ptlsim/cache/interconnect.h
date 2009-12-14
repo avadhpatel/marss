@@ -35,12 +35,12 @@ namespace Memory {
 class Interconnect
 {
 	private:
-		const char *name_;
+		char *name_;
 		Signal controller_request_;
 		
 	public:
 		MemoryHierarchy *memoryHierarchy_;
-		Interconnect(const char *name, MemoryHierarchy *memoryHierarchy) :
+		Interconnect(char *name, MemoryHierarchy *memoryHierarchy) :
 			memoryHierarchy_(memoryHierarchy)
 			, controller_request_("Controller Request") 
 		{
@@ -61,7 +61,7 @@ class Interconnect
 			return &controller_request_;
 		}
 
-		const char* get_name() const {
+		char* get_name() const {
 			return name_;
 		}
 };

@@ -636,34 +636,37 @@ void MemoryHierarchy::annul_request(W8 coreid,
 		bool is_icache, bool is_write)
 {
 	MemoryRequest* annul_request = null;
+
+    /*
+	 * Flushin of the caches is disabled currently because we need to
+	 * implement a logic where every cache will check physaddr's cache line 
+	 * address with pending requests and flush them.
+     */
 	// First find the corresponding memory request
 	// in the rquest pool
-	MemoryRequest* memRequest;
-	foreach_list_mutable(requestPool_.used_list(), memRequest,
-			entry, nextentry) {
-		if(memRequest->is_same(coreid, threadid, robid,
-					physaddr, is_icache, is_write)) {
-			annul_request = memRequest;
-			break;
-		}
-	}
-
-	if(annul_request == null) {
-		return;
-	}
-
-	// now remove this request from queue of each controller
-	// and interconnect
-	foreach(i, cpuControllers_.count()) {
-		cpuControllers_[i]->annul_request(annul_request);
-	}
-	foreach(j, allControllers_.count()) {
-		allControllers_[j]->annul_request(annul_request);
-	}
-	foreach(k, allInterconnects_.count()) {
-		allInterconnects_[k]->annul_request(annul_request);
-	}
-	annul_request->set_ref_counter(0);
+/*
+ *     MemoryRequest* memRequest;
+ *     foreach_list_mutable(requestPool_.used_list(), memRequest,
+ *             entry, nextentry) {
+ *         if(memRequest->is_same(coreid, threadid, robid,
+ *                     physaddr, is_icache, is_write)) {
+ *             annul_request = memRequest;
+ *             // now remove this request from queue of each controller
+ *             // and interconnect
+ *             foreach(i, cpuControllers_.count()) {
+ *                 cpuControllers_[i]->annul_request(annul_request);
+ *             }
+ *             foreach(j, allControllers_.count()) {
+ *                 allControllers_[j]->annul_request(annul_request);
+ *             }
+ *             foreach(k, allInterconnects_.count()) {
+ *                 allInterconnects_[k]->annul_request(annul_request);
+ *             }
+ *             annul_request->set_ref_counter(0);
+ * 
+ *         }
+ *     }
+ */
 
 }
 
