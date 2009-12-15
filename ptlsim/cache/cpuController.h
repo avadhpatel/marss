@@ -106,6 +106,8 @@ class CPUController : public Controller
 		CacheStats *stats_;
 		CacheStats *totalStats_;
 
+		Signal cacheAccess_;
+
 		FixStateList<CPUControllerQueueEntry, \
 			CPU_CONT_PENDING_REQ_SIZE> pendingRequests_;
 		FixStateList<CPUControllerBufferEntry, \
@@ -130,29 +132,34 @@ class CPUController : public Controller
 	public:
 		CPUController(W8 coreid, const char *name, 
 				MemoryHierarchy *memoryHierarchy);
+
 		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);
+		bool cache_access_cb(void *arg);
+
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);
 		void clock();
 		void register_interconnect_L1_d(Interconnect *interconnect);
 		void register_interconnect_L1_i(Interconnect *interconnect);
-		int access(MemoryRequest *request) {
-			return access_fast_path(null, request);
-		}
 		void print(ostream& os) const;
-		bool is_full(bool fromInterconnect = false) const {
-			return pendingRequests_.isFull();
-		}
 		bool is_cache_availabe(bool is_icache);
 		void annul_request(MemoryRequest *request);
 
+		int access(MemoryRequest *request) {
+			return access_fast_path(null, request);
+		}
+
+		bool is_full(bool fromInterconnect = false) const {
+			return pendingRequests_.isFull();
+		}
+
 		void print_map(ostream& os)
 		{
-			os << "CPU-Controller: ", get_name(), endl;
-			os << "\tconnected to: ", endl;
-			os << "\t\tL1-i: ", int_L1_i_->get_name(), endl;
-			os << "\t\tL1-d: ", int_L1_d_->get_name(), endl;
+			os << "CPU-Controller: " << get_name()<< endl;
+			os << "\tconnected to: "<< endl;
+			os << "\t\tL1-i: "<< int_L1_i_->get_name()<< endl;
+			os << "\t\tL1-d: "<< int_L1_d_->get_name()<< endl;
 		}
 
 };

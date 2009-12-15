@@ -49,6 +49,13 @@ CPUController::CPUController(W8 coreid, const char *name,
 	dcacheLineBits_ = log2(L1D_LINE_SIZE);
 	stats_ = &(per_core_cache_stats_ref(coreid).CPUController);
 	totalStats_ = &(stats.memory.total.CPUController);
+
+	stringbuf *signal_name;
+	signal_name = new stringbuf();
+	*signal_name << name, "_Cache_Access";
+	cacheAccess_.set_name(signal_name->buf);
+	cacheAccess_.connect(signal_mem_ptr(*this, 
+				&CPUController::cache_access_cb));
 }
 
 bool CPUController::handle_request_cb(void *arg)
@@ -73,7 +80,7 @@ bool CPUController::handle_interconnect_cb(void *arg)
 		ptl_logfile << "Message received that is not for this queue\n";
 		ptl_logfile << "Message: ", *message, endl;
 		ptl_logfile << "Controler: " << get_name(), endl;
-		assert(0);
+		// assert(0);
 		return true;
 	}
 	//assert(queueEntry);
@@ -191,21 +198,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 		if(fastPathLat > 0) {
 			queueEntry->cycles = fastPathLat;
 		} else {
-			// Send request to corresponding interconnect
-			Interconnect *interconnect;
-			if(request->is_instruction())
-				interconnect = int_L1_i_;
-			else 
-				interconnect = int_L1_d_;
-
-			Message& message = *memoryHierarchy_->get_message();
-			message.sender = this;
-			message.request = request;
-			assert(interconnect->get_controller_request_signal()->emit(
-					&message));
-			// Free the message
-			memoryHierarchy_->free_message(&message);
-
+			cache_access_cb(queueEntry);
 		}
 	}
 	memdebug("Added Queue Entry: ", *queueEntry, endl);
@@ -313,6 +306,35 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 	}
 }
 
+bool CPUController::cache_access_cb(void *arg)
+{
+	CPUControllerQueueEntry* queueEntry = (CPUControllerQueueEntry*)arg;
+
+	if(queueEntry->cycles > 0)
+		return true;
+
+	// Send request to corresponding interconnect
+	Interconnect *interconnect;
+	if(queueEntry->request->is_instruction())
+		interconnect = int_L1_i_;
+	else 
+		interconnect = int_L1_d_;
+
+	Message& message = *memoryHierarchy_->get_message();
+	message.sender = this;
+	message.request = queueEntry->request;
+	bool success = interconnect->get_controller_request_signal()->
+		emit(&message);
+	// Free the message
+	memoryHierarchy_->free_message(&message);
+
+	if(!success) {
+		memoryHierarchy_->add_event(&cacheAccess_, 1, queueEntry);
+	}
+
+	return true;
+}
+
 void CPUController::clock()
 {
 //	foreach_queuelink(pendingRequests_, queueEntry, CPUControllerQueueEntry) {
@@ -330,12 +352,12 @@ void CPUController::clock()
 
 void CPUController::print(ostream& os) const
 {
-	os << "---CPU-Controller: ", get_name(), endl;
+	os << "---CPU-Controller: "<< get_name()<< endl;
 	if(pendingRequests_.count() > 0)
-		os << "Queue : ", pendingRequests_ , endl;
+		os << "Queue : "<< pendingRequests_ << endl;
 	if(icacheBuffer_.count() > 0)
-		os << "ICache Buffer: ", icacheBuffer_, endl;
-	os << "---End CPU-Controller: ", get_name(), endl;
+		os << "ICache Buffer: "<< icacheBuffer_<< endl;
+	os << "---End CPU-Controller: "<< get_name()<< endl;
 }
 
 void CPUController::register_interconnect_L1_i(Interconnect *interconnect)
