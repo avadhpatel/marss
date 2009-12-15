@@ -210,7 +210,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
 
   section("General Logging Control");
   add(quiet,                        "quiet",                "Do not print PTLsim system information banner");
-  add(log_filename,                 "ptl_logfile",              "Log filename (use /dev/fd/1 for stdout, /dev/fd/2 for stderr)");
+  add(log_filename,                 "logfile",              "Log filename (use /dev/fd/1 for stdout, /dev/fd/2 for stderr)");
   add(loglevel,                     "loglevel",             "Log level (0 to 99)");
   add(start_log_at_iteration,       "startlog",             "Start logging after iteration <startlog>");
   add(start_log_at_rip,             "startlogrip",          "Start logging after first translation of basic block starting at rip");
@@ -555,7 +555,7 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif
 
-  if(config.run && !config.kill) {
+  if(first_time && config.run && !config.kill) {
 	  start_simulation = 1;
   }
 

@@ -127,7 +127,8 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
             *((double*)variable) = atof(argv[i++]);
             break;
           case OPTION_TYPE_BOOL:
-            *((bool*)variable) = (!(*((bool*)variable)));
+			*((bool*)variable) = true;
+            // *((bool*)variable) = (!(*((bool*)variable)));
             break;
           case OPTION_TYPE_STRING: {
             if (i >= argc) {
