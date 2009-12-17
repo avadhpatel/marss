@@ -161,8 +161,10 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
-	// FIXME Assuming that we always gets a free entry in queue
-	assert(queueEntry);
+	if(queueEntry == null) {
+		memoryHierarchy_->add_event(&queueAccess_, 1, request);
+		return -1;
+	}
 
 	// now check if pendingRequests_ buffer is full then 
 	// set the full flag in memory hierarchy
@@ -331,6 +333,56 @@ bool CPUController::cache_access_cb(void *arg)
 	if(!success) {
 		memoryHierarchy_->add_event(&cacheAccess_, 1, queueEntry);
 	}
+
+	return true;
+}
+
+bool CPUController::queue_access_cb(void *arg)
+{
+	MemoryRequest *request = (MemoryRequest*)arg;
+
+	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
+
+	if(queueEntry == null) {
+		memoryHierarchy_->add_event(&queueAccess_, 1, request);
+		return true;
+	}
+
+	// now check if pendingRequests_ buffer is full then 
+	// set the full flag in memory hierarchy
+	if(pendingRequests_.isFull()) {
+		memoryHierarchy_->set_controller_full(this, true);
+		STAT_UPDATE(queueFull++);
+	}
+
+	queueEntry->request = request;
+	request->incRefCounter();
+	
+	CPUControllerQueueEntry *dependentEntry = find_dependency(request);
+
+	if(dependentEntry && 
+			dependentEntry->request->get_type() == request->get_type()) {
+		// Found an entry with same line request and request type, 
+		// Now in dependentEntry->depends add current entry's
+		// index value so it can wakeup this entry when 
+		// dependent entry is handled.
+		memdebug("Dependent entry is: ", *dependentEntry, endl);
+		dependentEntry->depends = queueEntry->idx;
+		queueEntry->cycles = -1;
+		if unlikely(queueEntry->request->is_instruction()) {
+			STAT_UPDATE(cpurequest.stall.read.dependency++);
+		}
+		else  {
+			if(queueEntry->request->get_type() == MEMORY_OP_READ)
+				STAT_UPDATE(cpurequest.stall.read.dependency++);
+			else
+				STAT_UPDATE(cpurequest.stall.write.dependency++);
+		}
+	} else {
+		cache_access_cb(queueEntry);
+	}
+
+	memdebug("Added Queue Entry: ", *queueEntry, endl);
 
 	return true;
 }

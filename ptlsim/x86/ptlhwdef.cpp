@@ -18,7 +18,7 @@ Context* ptl_contexts[MAX_CONTEXTS];
 const char* opclass_names[OPCLASS_COUNT] = {
   "logic", "addsub", "addsubc", "addshift", "sel", "cmp", "br.cc", "jmp", "bru", 
   "assist", "mf", "ld", "st", "ld.pre", "shiftsimple", "shift", "mul", "bitscan", "flags",  "chk", 
-  "fpu", "fp-div-sqrt", "fp-cmp", "fp-perm", "fp-cvt-i2f", "fp-cvt-f2i", "fp-cvt-f2f", "vec",
+  "fpu", "fp-div-sqrt", "fp-cmp", "fp-perm", "fp-cvt-i2f", "fp-cvt-f2i", "fp-cvt-f2f", "vec", "special",
 };
 
 //
@@ -188,6 +188,8 @@ const OpcodeInfo opinfo[OP_MAX_OPCODE] = {
   {"vsad",           OPCLASS_VEC_ALU,       opAB }, // sum of absolute differences
   {"vpack.us",       OPCLASS_VEC_ALU,       opAB }, // pack larger to smaller (unsigned saturation)
   {"vpack.ss",       OPCLASS_VEC_ALU,       opAB }, // pack larger to smaller (signed saturation)
+  // Special Opcodes
+  {"ast",			 OPCLASS_SPECIAL,		opABC|ccABC },// special assist functions
 };
 
 const char* exception_names[EXCEPTION_COUNT] = {

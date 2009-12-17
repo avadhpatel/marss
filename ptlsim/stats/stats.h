@@ -251,6 +251,7 @@ struct PTLsimStats { // rootnode:
 
   struct external {
     W64 assists[ASSIST_COUNT]; // label: assist_names
+	W64 l_assists[L_ASSIST_COUNT]; // label: light_assist_names
     W64 traps[256]; // label: x86_exception_names
 #ifdef PTLSIM_HYPERVISOR
 	PerCoreEvents total;

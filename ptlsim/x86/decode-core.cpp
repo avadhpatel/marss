@@ -186,6 +186,38 @@ void update_assist_stats(assist_func_t assist) {
   stats.external.assists[idx]++;
 }
 
+const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT] = {
+	l_assist_sti,
+	l_assist_cli,
+	l_assist_pushf,
+	l_assist_popf,
+	l_assist_ioport_in,
+	l_assist_ioport_out,
+};
+
+int light_assist_index(light_assist_func_t assist) {
+	foreach(i, L_ASSIST_COUNT) {
+		if(light_assistid_to_func[i] == assist) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+const char* light_assist_name(light_assist_func_t assist) {
+	foreach(i, L_ASSIST_COUNT) {
+		if(light_assistid_to_func[i] == assist) {
+			return light_assist_names[i];
+		}
+	}
+
+	return "unknown";
+}
+
+void update_light_assist_stats(int idx) {
+	stats.external.l_assists[idx]++;
+}
+
 void split_unaligned(const TransOp& transop, TransOpBuffer& buf) {
   assert(transop.unaligned);
 

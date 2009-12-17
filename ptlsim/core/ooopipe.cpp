@@ -1891,7 +1891,8 @@ int ReorderBufferEntry::commit() {
     }
 #endif
 
-    if unlikely (subrob.physreg->flags & FLAG_INV) {
+    if unlikely ((subrob.physreg->flags & FLAG_INV) &&
+			(subrob.uop.opcode != OP_ast)) {
       //
       // The exception is definitely going to happen, since the
       // excepting instruction is at the head of the ROB. However,
@@ -2240,7 +2241,12 @@ int ReorderBufferEntry::commit() {
   }
 
   if likely ((!ld) & (!st) & (!uop.nouserflags)) {
+		  // ((uop.opcode == OP_ast && physreg->flags != -1))) {
     W64 flagmask = setflags_to_x86_flags[uop.setflags];
+
+	// If Assist opcode, it might have updated the Interrupt flag
+	if(uop.opcode == OP_ast)
+		flagmask |= IF_MASK;
     ctx.reg_flags = (ctx.reg_flags & ~flagmask) | (physreg->flags & flagmask);
 
     per_context_ooocore_stats_update(threadid, commit.setflags.no += (uop.setflags == 0));

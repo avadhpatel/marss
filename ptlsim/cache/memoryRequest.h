@@ -139,6 +139,7 @@ class MemoryRequest: public selfqueuelink
 			os << "ref-counter[", refCounter_, "] ";
 			os << "op-type[", memory_op_names[opType_], "] ";
 			os << "isData[", isData_, "] ";
+			os << "ownerUUID[", ownerUUID_, "] ";
 			return os;
 		}
 

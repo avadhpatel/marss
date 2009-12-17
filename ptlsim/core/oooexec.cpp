@@ -368,6 +368,25 @@ int ReorderBufferEntry::issue() {
     return ISSUE_NEEDS_REPLAY;
   }
 
+  // All Asisst uops are issued when its Opcode is at the head of ROB
+  if unlikely (uop.opcode == OP_ast) {
+	  // Check if the uop belongs to the part of 
+	  // opcode of head of ROB
+	  foreach_backward_from(thread.ROB, this, robidx) {
+		  ReorderBufferEntry &rob = thread.ROB[robidx];
+
+		  if(rob.uop.som) {
+			  if(rob.idx != thread.ROB.head) {
+				  // ptl_logfile << "ASSIST NOT AT HEAD :: Reissuing: ", *this, endl;
+				  issueq_operation_on_cluster(core, cluster, replay(iqslot));
+				  return ISSUE_NEEDS_REPLAY;
+			  } else {
+				  break;
+			  }
+		  }
+	  }
+  }
+
   PhysicalRegister& ra = *operands[RA];
   PhysicalRegister& rb = *operands[RB];
   PhysicalRegister& rc = *operands[RC];
@@ -467,6 +486,8 @@ int ReorderBufferEntry::issue() {
       }
     } else if unlikely (uop.opcode == OP_ld_pre) {
       issueprefetch(state, radata, rbdata, rcdata, uop.cachelevel);
+	} else if unlikely (uop.opcode == OP_ast) {
+		issueast(state, uop.riptaken, radata, rbdata, rcdata, ra.flags, rb.flags, rc.flags);
     } else {
       if unlikely (br) {
         state.brreg.riptaken = uop.riptaken;
@@ -2056,6 +2077,26 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   return ISSUE_COMPLETED;
 }
 
+// Execute a lightweight Assist Function
+void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra, 
+		W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags) {
+
+	// Get the ast function ID from 
+	light_assist_func_t assist_func = light_assistid_to_func[assistid];
+	assert(assist_func != null);
+
+	Context& ctx = getthread().ctx;
+
+	W16 new_flags;
+	state.reg.rddata = assist_func(ctx, ra, rb, rc, raflags, rbflags, rcflags, new_flags);
+
+	state.reg.rdflags = (W16)(new_flags);
+
+	update_light_assist_stats(assistid);
+
+	return;
+}
+
 //
 // Probe the cache and initiate a miss if required
 //
@@ -2436,9 +2477,13 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 						  int addr_diff = stq.physaddr - rob.lsq->physaddr;
 						  if(-1 <= addr_diff && addr_diff <= 1) {
 
-							  /* If store doesn't has valid data, load will be replayed */
+							  /* 
+							   * If store doesn't has valid data, load will be replayed 
+							   * but we still continue with this load and if
+							   * its replayed we will access cache later
+							   */
 							  if(!stq.datavalid) {
-								  return ;
+								  continue;
 							  }
 
 							  /* Found a store that might provide recent data */

@@ -285,6 +285,8 @@ namespace OutOfOrderModel {
     {OP_vsad,           4, ANYFPU},
     {OP_vpack_us,       2, ANYFPU},
     {OP_vpack_ss,       2, ANYFPU},
+	// Special Opcodes
+	{OP_ast,			4, ANYINT},
   };
 
 #undef A
@@ -749,6 +751,7 @@ namespace OutOfOrderModel {
     int issueload(LoadStoreQueueEntry& state, Waddr& origvirt, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate);
     W64 get_load_data(LoadStoreQueueEntry& state, W64 data);
     void issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc, int cachelevel);
+	void issueast(IssueState& state, W64 assistid, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags);
     int probecache(Waddr addr, LoadStoreQueueEntry* sfra);
     void tlbwalk();
     int issuefence(LoadStoreQueueEntry& state);
@@ -1426,7 +1429,7 @@ namespace OutOfOrderModel {
   // How many bytes of x86 code to fetch into decode buffer at once
   static const int ICACHE_FETCH_GRANULARITY = 16;
   // Deadlock timeout: if nothing dispatches for this many cycles, flush the pipeline
-  static const int DISPATCH_DEADLOCK_COUNTDOWN_CYCLES = 2048; //256;
+  static const int DISPATCH_DEADLOCK_COUNTDOWN_CYCLES = 10*2048; //256;
   // Size of unaligned predictor Bloom filter
   static const int UNALIGNED_PREDICTOR_SIZE = 4096;
 

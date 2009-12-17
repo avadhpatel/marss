@@ -97,7 +97,7 @@ struct SynchronousRegisterFile {
 #define foreach_backward(Q, i) for (int i = add_index_modulo((Q).tail, -1, (Q).size); i != add_index_modulo((Q).head, -1, (Q).size); i = add_index_modulo(i, -1, (Q).size))
 
 // Iterate backward through queue from the specified entry until the tail
-#define foreach_backward_from(Q, i) for (int i = E->index(); i != add_index_modulo((Q).head, -1, (Q).size); i = add_index_modulo(i, -1, (Q).size))
+#define foreach_backward_from(Q, E, i) for (int i = E->index(); i != add_index_modulo((Q).head, -1, (Q).size); i = add_index_modulo(i, -1, (Q).size))
 
 // Iterate backward through queue from the entry before the specified entry until the head
 #define foreach_backward_before(Q, E, i) for (int i = add_index_modulo(E->index(), -1, (Q).size); ((i != add_index_modulo((Q).head, -1, (Q).size)) && (E->index() != (Q).head)); i = add_index_modulo(i, -1, (Q).size))

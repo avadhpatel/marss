@@ -360,10 +360,30 @@ bool assist_sti(Context& ctx) {
 	return false;
 }
 
+W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+		W16 rbflags, W16 rcflags, W16& flags) {
+
+	W16 current_flags = (W16)ra;
+	current_flags |= IF_MASK;
+	flags = current_flags;
+
+	return 0;
+}
+
 bool assist_cli(Context& ctx) {
 	ASSIST_IN_QEMU(helper_cli);
 	ctx.eip = ctx.reg_nextrip;
 	return false;
+}
+
+W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+		W16 rbflags, W16 rcflags, W16& flags) {
+
+	W16 current_flags = (W16)ra;
+	current_flags &= ~IF_MASK;
+	flags = current_flags;
+
+	return 0;
 }
 
 bool assist_ud2a(Context& ctx) {
@@ -614,6 +634,21 @@ bool assist_pushf(Context& ctx) {
 	return true;
 }
 
+W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+		W16 rbflags, W16 rcflags, W16& flags) {
+
+	// RA contains the latest flags contains ZAPS, CF, OF and IF
+	ctx.setup_qemu_switch();
+	W64 stable_flags = helper_read_eflags();
+	ctx.setup_ptlsim_switch();
+
+	W64 flagmask = (setflags_to_x86_flags[7] | FLAG_IF);
+	stable_flags |= (ra & flagmask);
+	flags = (W16)ra;
+	
+	return stable_flags;
+}
+
 //
 // Pop from stack into flags register, with checking for reserved bits
 //
@@ -640,6 +675,24 @@ bool assist_popf(Context& ctx) {
   // this << TransOp(OP_movrcc, REG_temp0, REG_zero, REG_temp0, REG_zero, 3, 0, 0, FLAGS_DEFAULT_ALU);
 	return true;
 }
+
+
+W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+		W16 rbflags, W16 rcflags, W16& flags) {
+
+	W32 mask = 0;
+	if(ctx.kernel_mode) {
+		mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK);
+	} else {
+		mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK);
+	}
+	W64 stable_flags = (ra & mask);
+
+	W64 flagmask = (setflags_to_x86_flags[7] | FLAG_IF);
+	flags = (W16)(ra & flagmask);
+	return stable_flags;
+}
+
 
 //
 // CLD and STD must be barrier assists since a new RIPVirtPhys
@@ -1174,6 +1227,30 @@ bool assist_ioport_in(Context& ctx) {
 	return true;
 }
 
+W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+		W16 rbflags, W16 rcflags, W16& flags) {
+
+	W64 port = ra;
+	W64 sizeshift = rb;
+	W64 old_eax = rc;
+
+	setup_qemu_switch_except_ctx(ctx);
+	ctx.setup_qemu_switch();
+	W64 value;
+	if(sizeshift == 0) {
+		value = helper_inb(port);
+	} else if(sizeshift == 1) {
+		value = helper_inw(port);
+	} else {
+		value = helper_inl(port);
+	}
+	ctx.setup_ptlsim_switch();
+
+	value = x86_merge(old_eax, value, sizeshift);
+
+	return value;
+}
+
 bool assist_ioport_out(Context& ctx) {
   // ar1 = 16-bit port number
   // ar2 = sizeshift
@@ -1208,6 +1285,30 @@ bool assist_ioport_out(Context& ctx) {
   ctx.eip = ctx.reg_nextrip;
 	return true;
 }
+
+W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+		W16 rbflags, W16 rcflags, W16& flags) {
+
+	W64 port = ra;
+	W64 sizeshift = rb;
+	W64 value = x86_merge(0, rc, sizeshift);
+
+	setup_qemu_switch_except_ctx(ctx);
+	ctx.setup_qemu_switch();
+	if(sizeshift == 0) {
+		helper_outb(port, value);
+	} else if(sizeshift == 1) {
+		helper_outw(port, value);
+	} else {
+		helper_outl(port, value);
+	}
+	ctx.setup_ptlsim_switch();
+
+	// Set flags to -1 so it will be ignored at commit time
+	flags = -1;
+	return 0;
+}
+
 #else
 bool assist_ioport_in(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
@@ -1524,17 +1625,12 @@ bool TraceDecoder::decode_complex() {
     TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof_t(Context, internal_eflags)); ldp.internal = 1; this << ldp;
     this << TransOp(OP_or, REG_temp1, REG_temp1, REG_temp0, REG_zero, 2); // merge in standard flags
 
-	// store in standard internal_flags
-	TransOp stp(OP_st, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, 
-			offsetof_t(Context, internal_eflags));
-	stp.internal = 1;
-	this << stp;
+	TransOp ast(OP_ast, REG_temp2, REG_temp1, REG_zero, REG_zero, 3);
+	ast.riptaken = L_ASSIST_PUSHF;
+	this << ast;
 
-	microcode_assist(ASSIST_PUSHF, ripstart, rip);
-	end_of_block = 1;
-
-//    this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
-//    this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_temp1, sizeshift, 0);
+   this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
+   this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_temp2, sizeshift, 0);
 
     break;
   }
@@ -1546,11 +1642,14 @@ bool TraceDecoder::decode_complex() {
     int sizeshift = (opsize_prefix) ? 1 : ((use64) ? 3 : 2);
     int size = (1 << sizeshift);
 
-    this << TransOp(OP_ld, REG_ar1, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
+    this << TransOp(OP_ld, REG_temp0, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
     this << TransOp(OP_add, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
 
-    microcode_assist(ASSIST_POPF, ripstart, rip);
-    end_of_block = 1;
+	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3);
+	ast.riptaken = L_ASSIST_POPF;
+	this << ast;
+
+    TransOp stp(OP_st, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof_t(Context, internal_eflags)); stp.internal = 1; this << stp;
     break;
   }
 
@@ -1960,10 +2059,13 @@ bool TraceDecoder::decode_complex() {
 
     int sizeshift = (op == 0xe6) ? 0 : (opsize_prefix ? 1 : 2);
 
-    this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 3, ra.imm.imm & 0xff);
-    this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 0, sizeshift);
-    microcode_assist(ASSIST_IOPORT_OUT, ripstart, rip);
-    end_of_block = 1;
+    this << TransOp(OP_mov, REG_temp0, REG_zero, REG_imm, REG_zero, 0, sizeshift);
+	this << TransOp(OP_mov, REG_temp1, REG_zero, REG_imm, REG_zero, 3, ra.imm.imm & 0xff);
+	TransOp ast(OP_ast, REG_temp0, REG_temp1, REG_temp0, REG_rax, 3);
+	ast.riptaken = L_ASSIST_IOPORT_OUT;
+	ast.nouserflags = 1;
+	this << ast;
+
     break;
   }
 
@@ -2009,10 +2111,12 @@ bool TraceDecoder::decode_complex() {
 
     int sizeshift = (op == 0xee) ? 0 : (opsize_prefix ? 1 : 2);
 
-    this << TransOp(OP_mov, REG_ar1, REG_zero, REG_rdx, REG_zero, 3);
-    this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 0, sizeshift);
-    microcode_assist(ASSIST_IOPORT_OUT, ripstart, rip);
-    end_of_block = 1;
+    this << TransOp(OP_mov, REG_temp0, REG_zero, REG_imm, REG_zero, 0, sizeshift);
+	TransOp ast(OP_ast, REG_temp0, REG_rdx, REG_temp0, REG_rax, 3);
+	ast.riptaken = L_ASSIST_IOPORT_OUT;
+	ast.nouserflags = 1;
+	this << ast;
+
     break;
   }
 
@@ -2023,10 +2127,13 @@ bool TraceDecoder::decode_complex() {
 
     int sizeshift = (op == 0xe4) ? 0 : (opsize_prefix ? 1 : 2);
 
-    this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 3, ra.imm.imm & 0xff);
-    this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 0, sizeshift);
-    microcode_assist(ASSIST_IOPORT_IN, ripstart, rip);
-    end_of_block = 1;
+    this << TransOp(OP_mov, REG_temp0, REG_zero, REG_imm, REG_zero, 0, sizeshift);
+	this << TransOp(OP_mov, REG_temp1, REG_zero, REG_imm, REG_zero, 3, ra.imm.imm & 0xff);
+	TransOp ast(OP_ast, REG_rax, REG_temp1, REG_temp0, REG_rax, 3);
+	ast.riptaken = L_ASSIST_IOPORT_IN;
+	ast.nouserflags = 1;
+	this << ast;
+
     break;
   }
 
@@ -2036,10 +2143,12 @@ bool TraceDecoder::decode_complex() {
 
     int sizeshift = (op == 0xec) ? 0 : (opsize_prefix ? 1 : 2);
 
-    this << TransOp(OP_mov, REG_ar1, REG_zero, REG_rdx, REG_zero, 3);
-    this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 0, sizeshift);
-    microcode_assist(ASSIST_IOPORT_IN, ripstart, rip);
-    end_of_block = 1;
+    this << TransOp(OP_mov, REG_temp0, REG_zero, REG_imm, REG_zero, 0, sizeshift);
+	TransOp ast(OP_ast, REG_rax, REG_rdx, REG_temp0, REG_rax, 3);
+	ast.riptaken = L_ASSIST_IOPORT_IN;
+	ast.nouserflags = 1;
+	this << ast;
+
     break;
   }
 #endif
@@ -2204,18 +2313,24 @@ bool TraceDecoder::decode_complex() {
   case 0xfa: { // cli
     EndOfDecode();
 
-	// TODO : Add privilage check for this instruction
-	microcode_assist(ASSIST_CLI, ripstart, rip);
-	end_of_block = 1;
+	this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 
+			3, 0, 0, FLAGS_DEFAULT_ALU);
+	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3);
+	ast.riptaken = L_ASSIST_CLI;
+	this << ast;
+
     break;
   }
 
   case 0xfb: { // sti
     EndOfDecode();
 
-	// TODO : Add privilage check for this instruction
-	microcode_assist(ASSIST_STI, ripstart, rip);
-	end_of_block = 1;
+	this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 
+			3, 0, 0, FLAGS_DEFAULT_ALU);
+	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3);
+	ast.riptaken = L_ASSIST_STI;
+	this << ast;
+
     break;
   }
 
@@ -2334,7 +2449,7 @@ bool TraceDecoder::decode_complex() {
 	TransOp* st1;
 	TransOp* st2;
 	switch(modrm.reg) {
-		case 0: // sgdt
+		case 0: { // sgdt
 			// Get the address in ra 
 			DECODE(eform, ra, v_mode);
 			EndOfDecode();
@@ -2369,9 +2484,13 @@ bool TraceDecoder::decode_complex() {
 			this << TransOp(OP_st, REG_mem, REG_temp1, REG_imm,
 					REG_temp0, 3, 2);
 
-			microcode_assist(ASSIST_BARRIER, ripstart, rip);
+			TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
+			mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
+			this << mf;
+			// microcode_assist(ASSIST_BARRIER, ripstart, rip);
 			end_of_block = 1;
 			break;
+				}
 		case 1: 
 			if (modrm.mod == 3) {
 				switch(modrm.rm) {
@@ -2462,7 +2581,10 @@ bool TraceDecoder::decode_complex() {
 				this << TransOp(OP_st, REG_mem, REG_temp1, REG_imm,
 						REG_temp0, 3, 2);
 				
-				microcode_assist(ASSIST_BARRIER, ripstart, rip);
+				TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
+				mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
+				this << mf;
+				// microcode_assist(ASSIST_BARRIER, ripstart, rip);
 				end_of_block = 1;
 			}
 			break;
@@ -2568,13 +2690,16 @@ bool TraceDecoder::decode_complex() {
 					this << *st2;
 					delete st1;
 					delete st2;
-					microcode_assist(ASSIST_BARRIER, ripstart, rip);
+					TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
+					mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
+					this << mf;
+					// microcode_assist(ASSIST_BARRIER, ripstart, rip);
 					end_of_block = 1;
 				}
 
 			}
 			break;
-		case 4: // SMSW
+		case 4: { // SMSW
 			DECODE(eform, rd, v_mode);
 			EndOfDecode();
 
@@ -2592,9 +2717,13 @@ bool TraceDecoder::decode_complex() {
 			delete ldp;
 
 			result_store(REG_temp0, REG_zero, rd);
-			microcode_assist(ASSIST_BARRIER, ripstart, rip);
+			TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
+			mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
+			this << mf;
+			// microcode_assist(ASSIST_BARRIER, ripstart, rip);
 			end_of_block = 1;
 			break;
+				}
 		case 6: // LMSW
 			if (check_privilege(*this)) {
 				DECODE(eform, ra, v_mode);
@@ -2637,7 +2766,10 @@ bool TraceDecoder::decode_complex() {
 						delete st1;
 						delete st2;
 
-						microcode_assist(ASSIST_SWAPGS, ripstart, rip);
+						TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
+						mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
+						this << mf;
+						// microcode_assist(ASSIST_SWAPGS, ripstart, rip);
 						end_of_block = 1;
 
 					} else {

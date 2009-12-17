@@ -30,9 +30,9 @@ extern "C" {
 //
 
 //
-// Flags format: OF -  - - SF ZF - AF wait PF inv CF
-//               11 10 9 8 7  6    4  3    2  1   0
-//               rc -  - - ra ra - ra -    ra -   rb
+// Flags format: OF -  IF - SF ZF - AF wait PF inv CF
+//               11 10  9 8 7  6    4  3    2  1   0
+//               rc -   - - ra ra - ra -    ra -   rb
 //
 #define FLAG_CF    0x001     // (1 << 0)
 #define FLAG_INV   0x002     // (1 << 1)
@@ -41,6 +41,7 @@ extern "C" {
 #define FLAG_AF    0x010     // (1 << 4)
 #define FLAG_ZF    0x040     // (1 << 6)
 #define FLAG_SF    0x080     // (1 << 7)
+#define FLAG_IF    0x200     // (1 << 9)
 #define FLAG_OF    0x800     // (1 << 11)
 #define FLAG_BR_TK 0x8000    // (1 << 15)
 #define FLAG_SF_ZF 0x0c0     // (1 << 7) | (1 << 6)
@@ -856,7 +857,7 @@ struct Context: public CPUX86State {
 	  W64 flags = reg_flags;
 	  // Set the 2nd bit to 1 for compatibility
 	  flags = (flags | FLAG_INV); 
-	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O));
+	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O | IF_MASK));
 	  fpstt = reg_fptos >> 3;
 	  foreach(i, 8) {
 		  reg_fptag |= ((W64(fptags[i])) << (8*i));
@@ -872,7 +873,7 @@ struct Context: public CPUX86State {
 	  // uop is executed correctly or not
 	  flags = (flags & ~(W64)(FLAG_INV));
 	  reg_flags = flags;
-	  internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
+	  internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF|FLAG_IF);
 	  eip = eip + segs[R_CS].base;
 	  cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
@@ -1144,7 +1145,7 @@ int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr&
 // Other flags not defined above
 enum {
   FLAG_TF = (1 << 8),
-  FLAG_IF = (1 << 9),
+  //FLAG_IF = (1 << 9),
   FLAG_DF = (1 << 10),
   FLAG_IOPL = (1 << 12) | (1 << 13),
   FLAG_NT = (1 << 14),
@@ -1207,7 +1208,9 @@ enum {
 
 #define OPCLASS_VEC_ALU                 (1 << 27)
 
-#define OPCLASS_COUNT                   28
+#define OPCLASS_SPECIAL					(1 << 28)
+
+#define OPCLASS_COUNT                   29
 
 #define OPCLASS_USECOND                 (OPCLASS_COND_BRANCH|OPCLASS_SELECT|OPCLASS_CHECK)
 
@@ -1366,6 +1369,8 @@ enum {
   OP_vsad,
   OP_vpack_us,
   OP_vpack_ss,
+  // Special Opcodes
+  OP_ast,
   OP_MAX_OPCODE,
 };
 
@@ -1749,9 +1754,15 @@ static inline stringbuf& operator <<(stringbuf& sb, const flagstring& bs) {
 }
 
 typedef bool (*assist_func_t)(Context& ctx);
+typedef W64 (*light_assist_func_t)(Context& ctx, W64 ra, W64 rb, W64 rc, 
+		W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
 
 const char* assist_name(assist_func_t func);
 int assist_index(assist_func_t func);
+
+const char* light_assist_name(light_assist_func_t func);
+int light_assist_index(assist_func_t func);
+void update_light_assist_stats(int idx);
 
 // Self Modifying code Support with QEMU
 static inline bool smc_isdirty(Waddr page_addr) {

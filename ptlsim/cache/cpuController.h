@@ -107,6 +107,7 @@ class CPUController : public Controller
 		CacheStats *totalStats_;
 
 		Signal cacheAccess_;
+		Signal queueAccess_;
 
 		FixStateList<CPUControllerQueueEntry, \
 			CPU_CONT_PENDING_REQ_SIZE> pendingRequests_;
@@ -136,6 +137,7 @@ class CPUController : public Controller
 		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);
 		bool cache_access_cb(void *arg);
+		bool queue_access_cb(void *arg);
 
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);

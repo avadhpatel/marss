@@ -534,6 +534,28 @@ static const char* assist_names[ASSIST_COUNT] = {
 
 int propagate_exception_during_assist(Context& ctx, byte exception, W32 errorcode, Waddr virtaddr = 0, bool intN = 0);
 
+// Light weight Assist Functions
+enum {
+	L_ASSIST_STI,
+	L_ASSIST_CLI,
+	L_ASSIST_PUSHF,
+	L_ASSIST_POPF,
+	L_ASSIST_IOPORT_IN,
+	L_ASSIST_IOPORT_OUT,
+	L_ASSIST_COUNT
+};
+
+extern const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT];
+
+static const char* light_assist_names[L_ASSIST_COUNT] = {
+	"l_sti",
+	"l_cli",
+	"l_pushf",
+	"l_popf",
+	"l_io_in",
+	"l_io_out",
+};
+
 //
 // Microcode assists
 //
@@ -649,6 +671,14 @@ bool assist_barrier(Context& ctx);
 // HLT
 bool assist_halt(Context& ctx);
 bool assist_pause(Context& ctx);
+
+// Light weight Assist
+W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
+W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
+W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
+W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
+W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
+W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
 
 //
 // Global functions
