@@ -74,7 +74,7 @@ class MemoryHierarchy;
 class Controller
 {
 	private:
-		const char *name_;
+		char *name_;
 		Signal handle_request_;
 		Signal handle_interconnect_;
 		bool isPrivate_;
@@ -83,7 +83,7 @@ class Controller
 		MemoryHierarchy *memoryHierarchy_;
 		W8 coreid_;
 
-		Controller(W8 coreid, const char *name, 
+		Controller(W8 coreid, char *name, 
 				MemoryHierarchy *memoryHierarchy) :
 			memoryHierarchy_(memoryHierarchy)
 			, coreid_(coreid)
@@ -119,7 +119,7 @@ class Controller
 			return &handle_request_;
 		}
 
-		const char* get_name() const {
+		char* get_name() const {
 			return name_;
 		}
 		

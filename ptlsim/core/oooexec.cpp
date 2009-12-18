@@ -714,6 +714,25 @@ bool ReorderBufferEntry::recheck_page_fault() {
 		}
 	}
 
+	int size = (1 << uop.size);
+	int page_crossing = ((lowbits(lsq->virtaddr, 12) + (size - 1)) >> 12);
+	if unlikely (page_crossing) {
+		physaddr = ctx.check_and_translate(addr + (size - 1), uop.size - size, 0,
+				uop.internal, exception, mmio, pfec);
+
+		addr = lsq->physaddr << 3;
+		virtaddr = lsq->virtaddr + size - 1;
+		if unlikely (exception) {
+			if(!handle_common_load_store_exceptions(*lsq, virtaddr, addr, exception, pfec)) {
+				physreg->flags = lsq->data;
+				physreg->data = (lsq->invalid << log2(FLAG_INV)) | ((!lsq->datavalid) << log2(FLAG_WAIT));
+				return true;
+			}
+		}
+
+	}
+
+
 	return false;
 }
 
@@ -802,6 +821,16 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
   Waddr physaddr = (annul) ? INVALID_PHYSADDR : 
 	  ctx.check_and_translate(addr, uop.size, st, uop.internal, exception, 
 			  mmio, pfec);
+
+
+  int op_size = (1 << sizeshift );
+  int page_crossing = ((lowbits(addr, 12) + (op_size - 1)) >> 12);
+  if unlikely (page_crossing && !annul) {
+	  ctx.check_and_translate(addr + (op_size - 1), uop.size - op_size, st,
+			  uop.internal, exception, mmio, pfec);
+	  if(exception)
+		  physaddr = INVALID_PHYSADDR;
+  }
 
   state.mmio = mmio;
 
@@ -965,6 +994,15 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 	}
 	if(!handled)
 		return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+
+	int size = (1 << uop.size);
+	int page_crossing = ((lowbits(origaddr, 12) + (size - 1)) >> 12);
+	if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
+		handled = thread.ctx.try_handle_fault(addr + (size-1), 0);
+		if(!handled)
+			return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+	}
+
 	// else - regenerate the physical address as now tlb is filled
 	physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
@@ -1423,6 +1461,14 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 	}
 	if(!handled)
 		return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+
+	int size = (1 << uop.size);
+	int page_crossing = ((lowbits(origaddr, 12) + (size - 1)) >> 12);
+	if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
+		handled = thread.ctx.try_handle_fault(addr + (size-1), 0);
+		if(!handled)
+			return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+	}
 
 	// else - regenerate the physical address with new tlb entry
 	physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
@@ -2436,8 +2482,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 	   * If the ROB cache miss is serviced already by other request
 	   * then just ignore this response
        */
-	  bool waiting_for_data = false;
-	  if(rob.current_state_list == &thread->rob_cache_miss_list) {
+	  // if(rob.current_state_list == &thread->rob_cache_miss_list) {
 
           /*
 		   * Because of QEMU's in-order execution and Simulator's 
@@ -2452,7 +2497,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 			  bool signext = (rob.uop.opcode == OP_ldx);
 			  W64 offset = lowbits(rob.lsq->virtaddr, 3);
 			  W64 data;
-			  data = thread->ctx.loadvirt(rob.lsq->virtaddr);
+			  data = thread->ctx.loadvirt(rob.lsq->virtaddr, sizeshift);
 			  
               /*
 			   * Now check if there is most upto date data from
@@ -2518,7 +2563,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 		  } else {
 			  rob.loadwakeup();     
 		  }
-	  }
+	  // }
     
     }else{
       if(logable(6)) ptl_logfile << " ignor annulled request because lsi seq ", lsi.seq, " doesn't match  rob.uop.uuid ", rob.uop.uuid, " rob ", rob, endl;

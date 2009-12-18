@@ -1908,7 +1908,14 @@ int ReorderBufferEntry::commit() {
       // Capture the faulting virtual address for page faults
       if ((ctx.exception == EXCEPTION_PageFaultOnRead) |
           (ctx.exception == EXCEPTION_PageFaultOnWrite)) {
-		  ctx.page_fault_addr = subrob.origvirt;
+
+		  int size = (1 << subrob.uop.size);
+		  int page_crossing = ((lowbits(subrob.origvirt, 12) + (size - 1)) >> 12);
+		  if unlikely (page_crossing) {
+			  ctx.page_fault_addr = subrob.origvirt + size;
+		  } else {
+			  ctx.page_fault_addr = subrob.origvirt;
+		  }
 //        ctx.cr[2] = subrob.origvirt;
       }
 #endif

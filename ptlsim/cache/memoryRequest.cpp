@@ -63,6 +63,9 @@ void MemoryRequest::init(W8 coreId,
 	opType_ = opType;
 	isData_ = !isInstruction;
 
+	if(history) delete history;
+	history = new stringbuf();
+
 	memdebug("Init ", *this, endl);
 }
 
@@ -78,6 +81,9 @@ void MemoryRequest::init(MemoryRequest *request)
 	refCounter_ = 0; // or maybe 1 	
 	opType_ = request->opType_;
 	isData_ = request->isData_;
+
+	if(history) delete history;
+	history = new stringbuf();
 
 	memdebug("Init ", *this, endl);
 }

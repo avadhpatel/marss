@@ -163,7 +163,7 @@ void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::print(ostream& os) co
 }
 
 
-CacheController::CacheController(W8 coreid, const char *name, 
+CacheController::CacheController(W8 coreid, char *name, 
 		MemoryHierarchy *memoryHierarchy, CacheType type) :
 	Controller(coreid, name, memoryHierarchy)
 	, type_(type)
@@ -362,6 +362,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 		queueEntry->request = msg->request;
 		queueEntry->sender = sender;
 		queueEntry->request->incRefCounter();
+		ADD_HISTORY_ADD(queueEntry->request);
 		
         /*
 		 * We are going to access the cache later, to make
@@ -471,6 +472,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 					newEntry->request = msg->request;
 					newEntry->sender = sender;
 					newEntry->request->incRefCounter();
+					ADD_HISTORY_ADD(newEntry->request);
 
 					newEntry->eventFlags[CACHE_ACCESS_EVENT]++;
 
@@ -627,7 +629,8 @@ bool CacheController::cache_insert_cb(void *arg)
 				oldTag);
 		if(oldTag != InvalidTag<W64>::INVALID || oldTag != -1) {
 			if(wt_disabled_ && line->isModified) {
-				send_update_message(queueEntry, oldTag);
+				if(!send_update_message(queueEntry, oldTag))
+					goto retry_insert;
 			}
 		}
 
@@ -639,6 +642,7 @@ bool CacheController::cache_insert_cb(void *arg)
 		return true;
 	}
 
+retry_insert:
 	queueEntry->eventFlags[CACHE_INSERT_EVENT]++;
 	memoryHierarchy_->add_event(&cacheInsert_, 1,
 			(void*)(queueEntry));
@@ -693,7 +697,8 @@ bool CacheController::cache_access_cb(void *arg)
 					if(wt_disabled_) {
 						line->isModified = true;
 					} else {
-						send_update_message(queueEntry);
+						if(!send_update_message(queueEntry))
+							goto retry_cache_access;
 					}
 				}
 			} else if(type == MEMORY_OP_UPDATE){
@@ -733,6 +738,7 @@ bool CacheController::cache_access_cb(void *arg)
 		}
 	}
 
+retry_cache_access:
 	// No port available yet, retry next cycle
 	queueEntry->eventFlags[CACHE_ACCESS_EVENT]++;
 	memoryHierarchy_->add_event(&cacheAccess_, 1, arg);
@@ -834,6 +840,7 @@ bool CacheController::clear_entry_cb(void *arg)
 		}
 
 		queueEntry->request->decRefCounter();
+		ADD_HISTORY_REM(queueEntry->request);
 		if(!queueEntry->annuled) {
 			if(pendingRequests_.list().count == 0) {
 				ptl_logfile << "Removing from pending request queue ",
@@ -865,7 +872,7 @@ void CacheController::annul_request(MemoryRequest *request)
 	}
 }
 
-void CacheController::send_update_message(CacheQueueEntry *queueEntry,
+bool CacheController::send_update_message(CacheQueueEntry *queueEntry,
 		W64 tag)
 {
 	MemoryRequest *request = memoryHierarchy_->get_free_request();
@@ -878,6 +885,9 @@ void CacheController::send_update_message(CacheQueueEntry *queueEntry,
 	}
 
 	CacheQueueEntry *new_entry = pendingRequests_.alloc();
+	if(new_entry == null)
+		return false;
+
 	assert(new_entry);
 
 	// set full flag if buffer is full
@@ -889,11 +899,14 @@ void CacheController::send_update_message(CacheQueueEntry *queueEntry,
 	new_entry->sender = null;
 	new_entry->sendTo = lowerInterconnect_;
 	request->incRefCounter();
+	ADD_HISTORY_ADD(request);
 
 	new_entry->eventFlags[
 		CACHE_WAIT_INTERCONNECT_EVENT]++;
 	memoryHierarchy_->add_event(&waitInterconnect_,
 			0, (void*)new_entry);
+
+	return true;
 }
 
 void CacheController::do_prefetch(MemoryRequest *request, int additional_delay)
@@ -927,6 +940,7 @@ void CacheController::do_prefetch(MemoryRequest *request, int additional_delay)
 	new_entry->prefetch = true;
 	new_entry->annuled = false;
 	new_request->incRefCounter();
+	ADD_HISTORY_ADD(new_request);
 
 	memoryHierarchy_->add_event(&cacheAccess_, prefetchDelay_+additional_delay,
 		   new_entry);

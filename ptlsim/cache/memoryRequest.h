@@ -68,6 +68,8 @@ class MemoryRequest: public selfqueuelink
 			refCounter_ = 0; // or maybe 1 	
 			opType_ = MEMORY_OP_READ;
 			isData_ = 0;
+			if(history != null) delete history;
+			history = new stringbuf();
 		}
 
 		void incRefCounter(){
@@ -127,6 +129,8 @@ class MemoryRequest: public selfqueuelink
 
 		W64 get_init_cycles() { return cycles_; }
 
+		stringbuf& get_history() { return *history; }
+
 //		ostream& print(ostream& os) const;
 
 		ostream& print(ostream& os) const
@@ -140,6 +144,7 @@ class MemoryRequest: public selfqueuelink
 			os << "op-type[", memory_op_names[opType_], "] ";
 			os << "isData[", isData_, "] ";
 			os << "ownerUUID[", ownerUUID_, "] ";
+			os << "History[ " << *history << "] ";
 			return os;
 		}
 
@@ -154,6 +159,7 @@ class MemoryRequest: public selfqueuelink
 		W64 ownerUUID_;
 		int refCounter_;
 		OP_TYPE opType_;
+		stringbuf *history;
 
 };
 

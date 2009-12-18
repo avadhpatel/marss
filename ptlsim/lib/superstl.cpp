@@ -69,18 +69,20 @@ W64 get_core_freq_hz() {
   
   ifstream is("/proc/cpuinfo");
   
-  if (!is) {
+  if (!is.is_open()) {
     cerr << "get_core_freq_hz(): warning: cannot open /proc/cpuinfo. Is this a Linux machine?", endl;
     core_freq_hz = hz;
     return hz;
   }
   
-  while (is) {
+  while (!is.eof()) {
     char s[256];
-    is >> readline(s, sizeof(s));
+	is.getline(s, 256);
+	cout << "line: " << s << endl;
+    //is >> readline(s, sizeof(s));
     
     int mhz;
-    int n = sscanf(s, "cpu MHz : %d", &mhz);
+    int n = sscanf(s, "cpu MHz\t: %d\n", &mhz);
     if (n == 1) {
       hz = (W64)mhz * 1000000;
       core_freq_hz = hz;

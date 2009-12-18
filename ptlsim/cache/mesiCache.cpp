@@ -140,7 +140,7 @@ void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::print(ostream& os) co
 }
 
 
-CacheController::CacheController(W8 coreid, const char *name, 
+CacheController::CacheController(W8 coreid, char *name, 
 		MemoryHierarchy *memoryHierarchy, CacheType type) :
 	Controller(coreid, name, memoryHierarchy)
 	, type_(type)

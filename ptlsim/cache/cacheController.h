@@ -296,13 +296,13 @@ class CacheController : public Controller
 			return request->get_physical_address() >> cacheLineBits_;
 		}
 
-		void send_update_message(CacheQueueEntry *queueEntry, 
+		bool send_update_message(CacheQueueEntry *queueEntry, 
 				W64 tag=-1);
 
 		void do_prefetch(MemoryRequest *request, int additional_delay=0);
 
 	public:
-		CacheController(W8 coreid, const char *name, 
+		CacheController(W8 coreid, char *name, 
 				MemoryHierarchy *memoryHierarchy, CacheType type);
 		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);

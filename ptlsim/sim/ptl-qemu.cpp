@@ -678,7 +678,29 @@ W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
 	setup_qemu_switch_all_ctx(*this);
 	W64 data = 0;
 
-	if(is_mmio_addr(virtaddr, 0)) {
+	bool mmio = is_mmio_addr(virtaddr, 0);
+
+	if likely (!kernel_mode && !mmio) {
+		switch(sizeshift) {
+			case 0: {
+						W8 d = ldub_user(virtaddr);
+						data = (W64)d;
+						break;
+					}
+			case 1: {
+						W16 d = lduw_user(virtaddr);
+						data = (W64)d;
+						break;
+					}
+			case 2: {
+						W32 d = ldl_user(virtaddr);
+						data = (W64)d;
+						break;
+					}
+			default:
+					data = ldq_user(virtaddr);
+		}
+	} else {
 		switch(sizeshift) {
 			case 0: {
 						W8 d = ldub_kernel(virtaddr);
@@ -698,23 +720,19 @@ W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
 			default:
 					data = ldq_kernel(virtaddr);
 		}
-		if(logable(10))
-			ptl_logfile << "MMIO READ addr: ", hexstring(virtaddr, 64),
-						" data: ", hexstring(data, 64), " size: ",
-						sizeshift, endl;
-		return data;
 	}
 
-	if(kernel_mode) {
-		data = ldq_kernel(addr);
-	} else {
-		data = ldq_user(addr);
-	}
-	if(logable(10))
+	if(logable(10) && mmio)
+		ptl_logfile << "MMIO READ addr: ", hexstring(virtaddr, 64),
+					" data: ", hexstring(data, 64), " size: ",
+					sizeshift, endl;
+	else if(logable(10))
 		ptl_logfile << "Context::loadvirt addr[", hexstring(addr, 64),
 					"] data[", hexstring(data, 64), "] origaddr[",
 					hexstring(virtaddr, 64), "]\n";
+
 	setup_ptlsim_switch();
+
 	return data;
 }
 
@@ -868,19 +886,26 @@ W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
 
 void Context::handle_page_fault(Waddr virtaddr, int is_write) {
 	setup_qemu_switch_all_ctx(*this);
+
 	if(kernel_mode) {
-		ptl_logfile << "Page fault in kernel mode...", endl, flush;
+		if(logable(5))
+			ptl_logfile << "Page fault in kernel mode...", endl, flush;
 	}
+
 	if(logable(5)) {
 		ptl_logfile << "Context before page fault handling:\n", *this, endl;
 	}
+
 	exception_is_int = 0;
 	int mmu_index = cpu_mmu_index((CPUState*)this);
 	tlb_fill(virtaddr, is_write, mmu_index, null);
+
 	if(kernel_mode) {
-		ptl_logfile << "Page fault in kernel mode...handled", endl, 
-					flush;
+		if(logable(5))
+			ptl_logfile << "Page fault in kernel mode...handled", endl, 
+						flush;
 	}
+
 	setup_ptlsim_switch();
 	return;
 }

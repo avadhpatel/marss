@@ -315,7 +315,7 @@ class CacheController : public Controller
 
 
 	public:
-		CacheController(W8 coreid, const char *name, 
+		CacheController(W8 coreid, char *name, 
 				MemoryHierarchy *memoryHierarchy, CacheType type);
 		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);

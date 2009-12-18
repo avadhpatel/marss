@@ -74,7 +74,7 @@ class MemoryController : public Controller
 		int get_bank_id(W64 addr);
 
 	public:
-		MemoryController(W8 coreid, const char *name,
+		MemoryController(W8 coreid, char *name,
 				 MemoryHierarchy *memoryHierarchy);
 		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);

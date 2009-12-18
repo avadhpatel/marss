@@ -38,7 +38,7 @@
 
 using namespace Memory;
 
-MemoryController::MemoryController(W8 coreid, const char *name,
+MemoryController::MemoryController(W8 coreid, char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Controller(coreid, name, memoryHierarchy)
 {
@@ -125,6 +125,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 	queueEntry->request = message->request;
 
 	queueEntry->request->incRefCounter();
+	ADD_HISTORY_ADD(queueEntry->request);
 
 	int bank_no = get_bank_id(message->request->
 			get_physical_address());
@@ -184,6 +185,7 @@ bool MemoryController::access_completed_cb(void *arg)
 	}
 
 	queueEntry->request->decRefCounter();
+	ADD_HISTORY_REM(queueEntry->request);
 	if(!queueEntry->annuled || !queueEntry->free) {
 		if(pendingRequests_.list().count == 0) {
 			ptl_logfile << "Memory queue is 0 and freeing entry!!!\n";

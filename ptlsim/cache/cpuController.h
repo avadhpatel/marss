@@ -131,7 +131,7 @@ class CPUController : public Controller
 		}
 
 	public:
-		CPUController(W8 coreid, const char *name, 
+		CPUController(W8 coreid, char *name, 
 				MemoryHierarchy *memoryHierarchy);
 
 		bool handle_request_cb(void *arg);

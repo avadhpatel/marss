@@ -781,7 +781,7 @@ bool OutOfOrderCore::runcycle() {
 
 //    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  8192 ) {
 //    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  2048 ) {
-    if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 4*4096) {
+	if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 4*4096) {
       stringbuf sb;
       sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
         sim_cycle, ", ", total_user_insns_committed,  " user commits: no instructions have committed for ",
@@ -1248,10 +1248,10 @@ bool ThreadContext::handle_exception() {
 	  write_exception = 2;
 	  goto handle_page_fault;
 handle_page_fault: {
-	  if (logable(10)) 
+	  // if (logable(10)) 
 		  ptl_logfile << "Page fault exception address: ",
 					  hexstring(exception_address, 64), 
-					  " is_write: ", write_exception, endl;
+					  " is_write: ", write_exception, endl, ctx, endl;
 //	  if (exception_address < 0x10000) {
 //		  ptl_logfile << "Page address causing exception seems to be ",
 //					  "invalid so aborting..\n", endl;

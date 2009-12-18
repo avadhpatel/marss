@@ -39,7 +39,7 @@
 
 using namespace Memory;
 
-CPUController::CPUController(W8 coreid, const char *name, 
+CPUController::CPUController(W8 coreid, char *name, 
 		MemoryHierarchy *memoryHierarchy) :
 	Controller(coreid, name, memoryHierarchy)
 {
@@ -156,7 +156,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 		}
 	}
 
-	if(fastPathLat == 0)
+	if(fastPathLat == 0 && request->is_instruction())
 		return 0;
 
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
@@ -175,6 +175,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 
 	queueEntry->request = request;
 	request->incRefCounter();
+	ADD_HISTORY_ADD(request);
 	
 	CPUControllerQueueEntry *dependentEntry = find_dependency(request);
 
@@ -272,6 +273,7 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 	// data loading/storing, we might not come back in case of page fault
 	
 	request->decRefCounter();
+	ADD_HISTORY_REM(request);
 	if(!queueEntry->annuled)
 		pendingRequests_.free(queueEntry);
 
@@ -357,6 +359,7 @@ bool CPUController::queue_access_cb(void *arg)
 
 	queueEntry->request = request;
 	request->incRefCounter();
+	ADD_HISTORY_ADD(request);
 	
 	CPUControllerQueueEntry *dependentEntry = find_dependency(request);
 

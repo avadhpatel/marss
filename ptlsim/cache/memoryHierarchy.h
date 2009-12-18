@@ -53,6 +53,17 @@
 #define memdebug(...) (0)
 #endif
 
+// #define ENABLE_MEM_REQUEST_HISTORY
+#ifdef ENABLE_MEM_REQUEST_HISTORY
+#define ADD_HISTORY(req, ...) req->get_history() << __VA_ARGS__
+#define ADD_HISTORY_ADD(req) ADD_HISTORY(req, "{+", get_name(), "} ")
+#define ADD_HISTORY_REM(req) ADD_HISTORY(req, "{-", get_name(), "} ")
+#else
+#define ADD_HISTORY(req, ...) (0)
+#define ADD_HISTORY_ADD(req) (0)
+#define ADD_HISTORY_REM(req) (0)
+#endif
+
 #ifndef ENABLE_CHECKS
 #undef assert
 #define assert(x) (x)
