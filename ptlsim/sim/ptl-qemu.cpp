@@ -625,6 +625,25 @@ bool Context::is_mmio_addr(Waddr virtaddr, bool store) {
 
 }
 
+bool Context::has_page_fault(Waddr virtaddr, int store) {
+	int mmu_index = cpu_mmu_index((CPUState*)this);
+	int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+	W64 tlb_addr;
+
+	if likely (!store) {
+		tlb_addr = tlb_table[mmu_index][index].addr_read;
+	} else {
+		tlb_addr = tlb_table[mmu_index][index].addr_write;
+	}
+
+	if likely ((virtaddr & TARGET_PAGE_MASK) == 
+			(tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
+		return false;
+	}
+
+	return true;
+}
+
 int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) {
 
 	int n = 0 ;

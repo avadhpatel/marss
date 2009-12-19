@@ -1248,7 +1248,7 @@ bool ThreadContext::handle_exception() {
 	  write_exception = 2;
 	  goto handle_page_fault;
 handle_page_fault: {
-	  // if (logable(10)) 
+	  if (logable(10)) 
 		  ptl_logfile << "Page fault exception address: ",
 					  hexstring(exception_address, 64), 
 					  " is_write: ", write_exception, endl, ctx, endl;

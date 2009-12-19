@@ -714,23 +714,23 @@ bool ReorderBufferEntry::recheck_page_fault() {
 		}
 	}
 
-	int size = (1 << uop.size);
-	int page_crossing = ((lowbits(lsq->virtaddr, 12) + (size - 1)) >> 12);
-	if unlikely (page_crossing) {
-		physaddr = ctx.check_and_translate(addr + (size - 1), uop.size - size, 0,
-				uop.internal, exception, mmio, pfec);
+	// int size = (1 << uop.size);
+	// int page_crossing = ((lowbits(lsq->virtaddr, 12) + (size - 1)) >> 12);
+	// if unlikely (page_crossing) {
+		// physaddr = ctx.check_and_translate(addr + (size - 1), uop.size - size, 0,
+				// uop.internal, exception, mmio, pfec);
 
-		addr = lsq->physaddr << 3;
-		virtaddr = lsq->virtaddr + size - 1;
-		if unlikely (exception) {
-			if(!handle_common_load_store_exceptions(*lsq, virtaddr, addr, exception, pfec)) {
-				physreg->flags = lsq->data;
-				physreg->data = (lsq->invalid << log2(FLAG_INV)) | ((!lsq->datavalid) << log2(FLAG_WAIT));
-				return true;
-			}
-		}
+		// addr = lsq->physaddr << 3;
+		// virtaddr = lsq->virtaddr + size - 1;
+		// if unlikely (exception) {
+			// if(!handle_common_load_store_exceptions(*lsq, virtaddr, addr, exception, pfec)) {
+				// physreg->flags = lsq->data;
+				// physreg->data = (lsq->invalid << log2(FLAG_INV)) | ((!lsq->datavalid) << log2(FLAG_WAIT));
+				// return true;
+			// }
+		// }
 
-	}
+	// }
 
 
 	return false;
@@ -826,10 +826,15 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
   int op_size = (1 << sizeshift );
   int page_crossing = ((lowbits(addr, 12) + (op_size - 1)) >> 12);
   if unlikely (page_crossing && !annul) {
+	  int exception2 = 0;
+	  PageFaultErrorCode pfec2 = 0;
 	  ctx.check_and_translate(addr + (op_size - 1), uop.size - op_size, st,
-			  uop.internal, exception, mmio, pfec);
-	  if(exception)
+			  uop.internal, exception2, mmio, pfec2);
+	  if(exception2 != 0) {
+		  exception = exception2;
+		  pfec = pfec2;
 		  physaddr = INVALID_PHYSADDR;
+	  }
   }
 
   state.mmio = mmio;
@@ -998,7 +1003,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 	int size = (1 << uop.size);
 	int page_crossing = ((lowbits(origaddr, 12) + (size - 1)) >> 12);
 	if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
-		handled = thread.ctx.try_handle_fault(addr + (size-1), 0);
+		handled = thread.ctx.try_handle_fault(addr + (size-1), 1);
 		if(!handled)
 			return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
 	}
@@ -2482,7 +2487,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 	   * If the ROB cache miss is serviced already by other request
 	   * then just ignore this response
        */
-	  // if(rob.current_state_list == &thread->rob_cache_miss_list) {
+	  if(rob.current_state_list == &thread->rob_cache_miss_list) {
 
           /*
 		   * Because of QEMU's in-order execution and Simulator's 
@@ -2528,6 +2533,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 							   * its replayed we will access cache later
 							   */
 							  if(!stq.datavalid) {
+								  rob.replay();
 								  continue;
 							  }
 
@@ -2563,7 +2569,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(LoadStoreInfo lsi, W64 physaddr
 		  } else {
 			  rob.loadwakeup();     
 		  }
-	  // }
+	  }
     
     }else{
       if(logable(6)) ptl_logfile << " ignor annulled request because lsi seq ", lsi.seq, " doesn't match  rob.uop.uuid ", rob.uop.uuid, " rob ", rob, endl;

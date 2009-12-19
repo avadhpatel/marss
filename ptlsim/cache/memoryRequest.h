@@ -68,7 +68,6 @@ class MemoryRequest: public selfqueuelink
 			refCounter_ = 0; // or maybe 1 	
 			opType_ = MEMORY_OP_READ;
 			isData_ = 0;
-			if(history != null) delete history;
 			history = new stringbuf();
 		}
 

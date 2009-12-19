@@ -890,6 +890,8 @@ struct Context: public CPUX86State {
 
   bool is_mmio_addr(Waddr virtaddr, bool store);
 
+  bool has_page_fault(Waddr virtaddr, int store);
+
   void handle_page_fault(Waddr virtaddr, int is_write) ;
 
   bool try_handle_fault(Waddr virtaddr, bool is_write);
