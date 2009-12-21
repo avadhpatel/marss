@@ -126,12 +126,13 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 			{
 				cout << "PTLCALL type PTLCALL_CHECKPOINT\n";
 
-				char *checkpoint_name = (char*)qemu_malloc(arg2);
+				char *checkpoint_name = (char*)qemu_malloc(arg2 + 1);
 				char *name_addr = (char*)(arg1);
 				for(int i=0; i < arg2; i++) {
 					checkpoint_name[i] = (char)ldub_kernel(
 							(target_ulong)(name_addr++));
 				}
+				checkpoint_name[arg2] = '\0';
 
 				vm_stop(0);
 
