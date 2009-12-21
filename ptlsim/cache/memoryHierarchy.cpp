@@ -351,23 +351,9 @@ void MemoryHierarchy::private_L2_configuration()
 	interconnectsFullFlags_.resize(allInterconnects_.count(), false);
 }
 
-bool MemoryHierarchy::access_cache(W8 coreid, W8 threadid, int robid, 
-		W64 owner_uuid, W64 owner_timestamp, W64 physaddr,
-		bool is_icache, bool is_write)
+bool MemoryHierarchy::access_cache(MemoryRequest *request)
 {
-	// First get the free request
-	MemoryRequest *request = requestPool_.get_free_request();
-	assert(request != null);
-
-	OP_TYPE type;
-	if(is_write == true)
-		type = MEMORY_OP_WRITE;
-	else
-		type = MEMORY_OP_READ;
-
-	request->init(coreid, threadid, physaddr, robid, sim_cycle, 
-			is_icache, owner_timestamp, owner_uuid, type);
-
+	W8 coreid = request->get_coreid();
 	CPUController *cpuController = (CPUController*)cpuControllers_[coreid];
 	assert(cpuController != null);
 
@@ -377,7 +363,7 @@ bool MemoryHierarchy::access_cache(W8 coreid, W8 threadid, int robid,
 	if(ret_val == 0)
 		return true;
 
-	if(is_write == true)
+	if(request->get_type() == MEMORY_OP_WRITE)
 		return true;
 
 	return false;

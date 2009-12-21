@@ -43,26 +43,23 @@
 
 using namespace OutOfOrderModel;
 
-void OutOfOrderCoreCacheCallbacks::icache_wakeup(LoadStoreInfo lsi, W64 physaddr) {
-  if(logable(99)) ptl_logfile << " icache_wakeup addr ", (void*) physaddr, endl;
-  foreach (i, core.threadcount) {
-    ThreadContext* thread = core.threads[i];
-    if unlikely (thread 
-                 && thread->waiting_for_icache_fill 
-				 && thread->waiting_for_icache_fill_physaddr ==
-					floor(physaddr, ICACHE_FETCH_GRANULARITY)) {
-//                 && (floor(thread->waiting_for_icache_fill_physaddr,
-//                           Memory::L1I_LINE_SIZE) == 
-//					 floor(physaddr, Memory::L1I_LINE_SIZE))) {
-      if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
-      thread->waiting_for_icache_fill = 0;
-      thread->waiting_for_icache_fill_physaddr = 0;
-    }else{
-      if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr, " after floor : ",
-                        (void*) floor(thread->waiting_for_icache_fill_physaddr, Memory::L1I_LINE_SIZE), " delivered ", (void*) physaddr,endl;
-      //     assert(0);
-    }
-  }
+void OutOfOrderCoreCacheCallbacks::icache_wakeup(Memory::MemoryRequest *request) {
+	W64 physaddr = request->get_physical_address();
+	if(logable(99)) ptl_logfile << " icache_wakeup addr ", (void*) physaddr, endl;
+	foreach (i, core.threadcount) {
+		ThreadContext* thread = core.threads[i];
+		if unlikely (thread 
+				&& thread->waiting_for_icache_fill 
+				&& thread->waiting_for_icache_fill_physaddr ==
+				floor(physaddr, ICACHE_FETCH_GRANULARITY)) {
+			if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
+			thread->waiting_for_icache_fill = 0;
+			thread->waiting_for_icache_fill_physaddr = 0;
+		}else{
+			if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr, " after floor : ",
+				(void*) floor(thread->waiting_for_icache_fill_physaddr, Memory::L1I_LINE_SIZE), " delivered ", (void*) physaddr,endl;
+		}
+	}
 }
 
 //
@@ -529,30 +526,19 @@ bool ThreadContext::fetch() {
       }
 #endif
 
-      //      bool hit = core.caches.probe_icache(fetchrip, physaddr);
-      //      bool hit = config.use_new_memory_system ? core.test_controller.probe_icache(fetchrip, physaddr) : core.caches.probe_icache(fetchrip, physaddr);
-//       LoadStoreInfo lsi(0);
-//       lsi.threadid = threadid;
-//       lsi.icache = 1;
-//       lsi.sizeshift = 3;
-
-//       LoadStoreQueueEntry lsq_entry;
-//       setzero(lsq_entry);
-//       lsq_entry.physaddr = physaddr >> 3;
-//       lsq_entry.bytemask = 0xff; 
-      
 #ifdef NEW_MEMORY
       bool hit;
       if(config.use_new_memory_system){
         assert(!waiting_for_icache_fill);
-        hit = core.memoryHierarchy.access_cache(core.coreid, 
-                                                threadid,
-                                                0/*robid*/,
-                                                0/* owner uuid*/, 
-                                                sim_cycle/* timestamp */,
-                                                physaddr, 
-                                                true/* icache */,
-                                                false/* is write*/);
+
+		Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
+		assert(request != null);
+
+		request->init(core.coreid, threadid, physaddr, 0, sim_cycle, 
+				true, sim_cycle, 0, Memory::MEMORY_OP_READ);
+
+		hit = core.memoryHierarchy.access_cache(request);
+
       }else{
         hit =  core.caches.probe_icache(fetchrip, physaddr);
       }
@@ -2320,32 +2306,24 @@ int ReorderBufferEntry::commit() {
 			// Because of QEMU we might have page fault while storing the data
 			// so make sure that in case of page fault its handle at correct
 			// location in simulation and not here..
-		//      if (lsq->bytemask) {
-				assert(lsq->physaddr);
-				assert(core.memoryHierarchy.access_cache(core.coreid, 
-														 threadid,
-														 idx/*robid*/,
-														 uop.uuid/*owner uuid*/,
-														 sim_cycle/* owner timestamp*/, 
-														 lsq->physaddr << 3, 
-														 false/* icache */, 
-														 true/* is write*/));
-				// update memory img:
-		//        thread.ctx.storemask(lsq->physaddr << 3, lsq->data, lsq->bytemask);
-		//        thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask);
-				assert(lsq->virtaddr > 0xfff);
-		//		thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, uop.size);
-				thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
-				lsq->datavalid = 1;
+			assert(lsq->physaddr);
+
+			Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
+			assert(request != null);
+
+			request->init(core.coreid, threadid, lsq->physaddr << 3, 0, 
+					sim_cycle, true, sim_cycle, uop.uuid, 
+					Memory::MEMORY_OP_WRITE);
+
+			assert(core.memoryHierarchy.access_cache(request));
+			assert(lsq->virtaddr > 0xfff);
+			thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
+			lsq->datavalid = 1;
       }
 #endif
     }
         
   }
-
-  //if unlikely (pteupdate) {
-  //  ctx.update_pte_acc_dirty(virtpage, pteupdate);
-  //}
 
   //
   // Free physical registers, load/store queue entries, etc.

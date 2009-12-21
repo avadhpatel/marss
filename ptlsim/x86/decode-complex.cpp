@@ -1305,7 +1305,7 @@ W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	ctx.setup_ptlsim_switch();
 
 	// Set flags to -1 so it will be ignored at commit time
-	flags = -1;
+	// flags = -1;
 	return 0;
 }
 

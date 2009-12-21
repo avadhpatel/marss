@@ -796,6 +796,7 @@ bool OutOfOrderCore::runcycle() {
 	  ptl_logfile.flush();
       exiting = 1;
 	  assert(0);
+	  assert_fail(__STRING(0), __FILE__, __LINE__, __PRETTY_FUNCTION__);
     }
   }
 
@@ -2169,7 +2170,11 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 	  stopping = 1;
       break;
     }
-    if unlikely (exiting) break;
+    if unlikely (exiting) {
+		if unlikely(ret_qemu_env == null)
+			ret_qemu_env = &contextof(0);
+		break;
+	}
   }
 
   if(logable(1))
@@ -2407,43 +2412,28 @@ OutOfOrderCore& OutOfOrderModel::coreof(W8 coreid) {
 namespace Memory{
   using namespace OutOfOrderModel;
   
-  void MemoryHierarchy::icache_wakeup_wrapper(int coreid, W64 physaddr){
+  void MemoryHierarchy::icache_wakeup_wrapper(MemoryRequest *request){
 #ifdef NEW_CACHE
-    OutOfOrderCore* core = machine_.cores[coreid];
+    OutOfOrderCore* core = machine_.cores[request->get_coreid()];
 #else
-    OutOfOrderCore* core = machine.cores[coreid];
+    OutOfOrderCore* core = machine.cores[request->get_coreid()];
 #endif
     OutOfOrderCoreCacheCallbacks& callbacks = core->cache_callbacks;
 
-    msdebug << " physaddr ", (void*) physaddr, endl;
-    LoadStoreInfo dummy;
-    callbacks.icache_wakeup(dummy, physaddr);
+    callbacks.icache_wakeup(request);
   }
 
-  void MemoryHierarchy::dcache_wakeup_wrapper(int coreid, 
-                                              int threadid,
-                                              int rob_idx,
-                                              W64 seq,
-                                              W64 physaddr){
+  void MemoryHierarchy::dcache_wakeup_wrapper(MemoryRequest *request) {
 
-    msdebug << "coreid:", coreid,
-      " threadid:", threadid,
-      " rob_idx:", rob_idx,
-      " seq:", seq,
-      " physaddr:", (void*)physaddr;
+	  msdebug << "Dcache Wakeup Request: ", *request, endl;
 #ifdef NEW_CACHE
-    OutOfOrderCore* core = machine_.cores[coreid];
+    OutOfOrderCore* core = machine_.cores[request->get_coreid()];
 #else
-    OutOfOrderCore* core = machine.cores[coreid];
+    OutOfOrderCore* core = machine.cores[request->get_coreid()];
 #endif
     OutOfOrderCoreCacheCallbacks& callbacks = core->cache_callbacks;
-    LoadStoreInfo lsi;
-    lsi.rob = rob_idx;
-    lsi.threadid = threadid;
-    lsi.seq = seq;
 
-    msdebug << " physaddr ", (void*) physaddr, endl;
-    callbacks.dcache_wakeup(lsi, physaddr);
+    callbacks.dcache_wakeup(request);
   }
 
 };

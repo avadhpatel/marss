@@ -48,6 +48,7 @@ static const int MAX_ROB_IDX_BIT = 12; // up to 4096 ROB entries
 
 namespace Memory{
   class MemoryHierarchy;
+  class MemoryRequest;
 }
 
 namespace OutOfOrderModel {
@@ -1039,8 +1040,8 @@ namespace OutOfOrderModel {
   struct OutOfOrderCoreCacheCallbacks: public CacheSubsystem::PerCoreCacheCallbacks {
     OutOfOrderCore& core;
     OutOfOrderCoreCacheCallbacks(OutOfOrderCore& core_): core(core_) { }
-    virtual void dcache_wakeup(LoadStoreInfo lsi, W64 physaddr);
-    virtual void icache_wakeup(LoadStoreInfo lsi, W64 physaddr);
+    virtual void dcache_wakeup(Memory::MemoryRequest *request);
+    virtual void icache_wakeup(Memory::MemoryRequest *request);
   };
 
   struct MemoryInterlockEntry {

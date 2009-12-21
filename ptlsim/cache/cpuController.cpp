@@ -269,14 +269,6 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 			*queueEntry, endl);
 	MemoryRequest *request = queueEntry->request;
 
-	// Clear up the entry before going to core becaus of QEMU's
-	// data loading/storing, we might not come back in case of page fault
-	
-	request->decRefCounter();
-	ADD_HISTORY_REM(request);
-	if(!queueEntry->annuled)
-		pendingRequests_.free(queueEntry);
-
 	int req_latency = sim_cycle - request->get_init_cycles();
 	req_latency = (req_latency >= 200) ? 199 : req_latency; 
 
@@ -290,17 +282,18 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 		CPUControllerBufferEntry *bufEntry = icacheBuffer_.alloc();
 		bufEntry->lineAddress = lineAddress;
 		stats.memory.icache_latency[req_latency]++;
-		memoryHierarchy_->icache_wakeup_wrapper(request->get_coreid(),
-				request->get_physical_address());
+		memoryHierarchy_->icache_wakeup_wrapper(request);
 	} else {
 		stats.memory.dcache_latency[req_latency]++;
-		memoryHierarchy_->dcache_wakeup_wrapper(request->get_coreid(),
-				request->get_threadid(), request->get_robid(),
-				request->get_owner_uuid(), 
-				request->get_physical_address());
+		memoryHierarchy_->dcache_wakeup_wrapper(request);
 	}
 
 	memdebug("Entry finalized..\n");
+
+	request->decRefCounter();
+	ADD_HISTORY_REM(request);
+	if(!queueEntry->annuled)
+		pendingRequests_.free(queueEntry);
 
 	// now check if pendingRequests_ buffer has space left then
 	// clear the full flag in memory hierarchy

@@ -17,7 +17,7 @@ struct LoadStoreInfo {
   W8  threadid;
   W8  sizeshift:2, aligntype:2, sfrused:1, internal:1, signext:1, icache:1;
   //  W32 pad32;
-  W32 seq;
+  W64 seq;
   RawDataAccessors(LoadStoreInfo, W64);
 };
 

@@ -53,7 +53,7 @@
 #define memdebug(...) (0)
 #endif
 
-// #define ENABLE_MEM_REQUEST_HISTORY
+#define ENABLE_MEM_REQUEST_HISTORY
 #ifdef ENABLE_MEM_REQUEST_HISTORY
 #define ADD_HISTORY(req, ...) req->get_history() << __VA_ARGS__
 #define ADD_HISTORY_ADD(req) ADD_HISTORY(req, "{+", get_name(), "} ")
@@ -187,22 +187,11 @@ namespace Memory {
     bool is_cache_available(W8 coreid, W8 threadid, bool is_icache); 
 
     // interface to memory hierarchy
-    bool access_cache(W8 coreid,		/* core */
-                      W8 threadid,		/* thread */
-                      int robid,		/* rob needed to wakeup dcache read */
-                      W64 owner_uuid,	/* for debugging */
-                      W64 owner_timestamp, /* for debugging */
-                      W64 physaddr,		/* phyical address */
-                      bool is_icache,	/* access icache if true */
-                      bool is_write);	/* store request if true */
+	bool access_cache(MemoryRequest *request);
 
-    // callback with response
-    void icache_wakeup_wrapper(int coreid, W64 physaddr);
-    void dcache_wakeup_wrapper(int coreid, 
-                               int threadid,
-                               int rob_idx,
-                               W64 seq,
-                               W64 physaddr);
+	// callback with response
+	void icache_wakeup_wrapper(MemoryRequest *request);
+	void dcache_wakeup_wrapper(MemoryRequest *request);
 
 	// to remove the requests if rob eviction has occured
 	void annul_request(W8 coreid,

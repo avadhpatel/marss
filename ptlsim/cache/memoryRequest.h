@@ -153,7 +153,7 @@ class MemoryRequest: public selfqueuelink
 		W64 physicalAddress_;
 		bool isData_;
 		int robId_;
-		int cycles_;
+		W64 cycles_;
 		W64 ownerTimestamp_;
 		W64 ownerUUID_;
 		int refCounter_;
