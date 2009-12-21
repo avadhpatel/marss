@@ -67,6 +67,7 @@ class MemoryController : public Controller
 		bitvec<MEM_BANKS> banksUsed_;
 
 		Signal accessCompleted_;
+		Signal waitInterconnect_;
 
 		FixStateList<MemoryQueueEntry, MEM_REQ_NUM> pendingRequests_;
 
@@ -85,6 +86,7 @@ class MemoryController : public Controller
 		void register_cache_interconnect(Interconnect *interconnect);
 
 		bool access_completed_cb(void *arg);
+		bool wait_interconnect_cb(void *arg);
 
 		void annul_request(MemoryRequest *request);
 

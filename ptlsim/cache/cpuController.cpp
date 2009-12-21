@@ -159,6 +159,8 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 	if(fastPathLat == 0 && request->is_instruction())
 		return 0;
 
+	CPUControllerQueueEntry *dependentEntry = find_dependency(request);
+
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
 	if(queueEntry == null) {
@@ -177,8 +179,6 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 	request->incRefCounter();
 	ADD_HISTORY_ADD(request);
 	
-	CPUControllerQueueEntry *dependentEntry = find_dependency(request);
-
 	if(dependentEntry && 
 			dependentEntry->request->get_type() == request->get_type()) {
 		// Found an entry with same line request and request type, 
@@ -225,7 +225,7 @@ CPUControllerQueueEntry* CPUController::find_dependency(
 			prev_t) {
 		memdebug("In find_dependency\n", flush);
 		assert(queueEntry);
-		if(request == queueEntry->request)
+		if unlikely (request == queueEntry->request)
 			continue;
 
 		if(get_line_address(queueEntry->request) == requestLineAddr) {

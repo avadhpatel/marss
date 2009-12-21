@@ -74,6 +74,8 @@ namespace Memory {
 				} write;  
 			} stall;
 
+			W64 redirects;
+
 		} cpurequest ;
 
 		struct snooprequest {

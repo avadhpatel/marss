@@ -64,7 +64,7 @@ class MemoryRequest: public selfqueuelink
 			physicalAddress_ = 0;
 			robId_ = 0;
 			cycles_ = 0;
-			ownerTimestamp_ = 0;
+			ownerRIP_ = 0;
 			refCounter_ = 0; // or maybe 1 	
 			opType_ = MEMORY_OP_READ;
 			isData_ = 0;
@@ -83,9 +83,9 @@ class MemoryRequest: public selfqueuelink
 				W8 threadId,
 				W64 physicalAddress,
 				int robId,
-				int cycles,
+				W64 cycles,
 				bool isInstruction,
-				W64 ownerTimestamp,
+				W64 ownerRIP,
 				W64 ownerUUID,
 				OP_TYPE opType);
 
@@ -118,8 +118,9 @@ class MemoryRequest: public selfqueuelink
 		W8 get_threadid() { return threadId_; }
 
 		int get_robid() { return robId_; }
+		void set_robid(int idx) { robId_ = idx; }
 
-		W64 get_owner_timestamp() { return ownerTimestamp_; }
+		W64 get_owner_rip() { return ownerRIP_; }
 		
 		W64 get_owner_uuid() { return ownerUUID_; }
 
@@ -143,6 +144,7 @@ class MemoryRequest: public selfqueuelink
 			os << "op-type[", memory_op_names[opType_], "] ";
 			os << "isData[", isData_, "] ";
 			os << "ownerUUID[", ownerUUID_, "] ";
+			os << "ownerRIP[", (void*)ownerRIP_, "] ";
 			os << "History[ " << *history << "] ";
 			return os;
 		}
@@ -154,7 +156,7 @@ class MemoryRequest: public selfqueuelink
 		bool isData_;
 		int robId_;
 		W64 cycles_;
-		W64 ownerTimestamp_;
+		W64 ownerRIP_;
 		W64 ownerUUID_;
 		int refCounter_;
 		OP_TYPE opType_;

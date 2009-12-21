@@ -1999,7 +1999,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 	  assert(request != null);
 
 	  request->init(core.coreid, threadid, physaddr, idx, sim_cycle, 
-			  false, sim_cycle, uop.uuid, Memory::MEMORY_OP_READ);
+			  false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
 
 	  bool L1hit = core.memoryHierarchy.access_cache(request);
 

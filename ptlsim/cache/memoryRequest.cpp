@@ -46,9 +46,9 @@ void MemoryRequest::init(W8 coreId,
 		W8 threadId,
 		W64 physicalAddress,
 		int robId,
-		int cycles,
+		W64 cycles,
 		bool isInstruction,
-		W64 ownerTimestamp,
+		W64 ownerRIP,
 		W64 ownerUUID,
 		OP_TYPE opType)
 {
@@ -57,7 +57,7 @@ void MemoryRequest::init(W8 coreId,
 	physicalAddress_ = physicalAddress;
 	robId_ = robId;
 	cycles_ = cycles;
-	ownerTimestamp_ = ownerTimestamp;
+	ownerRIP_ = ownerRIP;
 	ownerUUID_ = ownerUUID;
 	refCounter_ = 0; // or maybe 1 	
 	opType_ = opType;
@@ -76,7 +76,7 @@ void MemoryRequest::init(MemoryRequest *request)
 	physicalAddress_ = request->physicalAddress_;
 	robId_ = request->robId_;
 	cycles_ = request->cycles_;
-	ownerTimestamp_ = request->ownerTimestamp_;
+	ownerRIP_ = request->ownerRIP_;
 	ownerUUID_ = request->ownerUUID_;
 	refCounter_ = 0; // or maybe 1 	
 	opType_ = request->opType_;

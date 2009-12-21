@@ -47,6 +47,11 @@ MemoryController::MemoryController(W8 coreid, char *name,
 	accessCompleted_.connect(signal_mem_ptr(*this,
 				&MemoryController::access_completed_cb));
 
+	GET_STRINGBUF_PTR(wait_interconnect_name, name, "_wait_interconnect");
+	waitInterconnect_.set_name(wait_interconnect_name->buf);
+	waitInterconnect_.connect(signal_mem_ptr(*this,
+				&MemoryController::wait_interconnect_cb));
+
 	bankBits_ = log2(MEM_BANKS);
 
 	foreach(i, MEM_BANKS) {
@@ -82,29 +87,37 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 			MEMORY_OP_UPDATE)
 		return true;
 
-	// if this request is a memory update request then
-	// first check the pending queue and see if we have a 
-	// memory update request to same line and if we can merge
-	// those requests then merge them into one request
+	/*
+	 * if this request is a memory update request then
+	 * first check the pending queue and see if we have a 
+	 * memory update request to same line and if we can merge
+	 * those requests then merge them into one request
+	 */
 	if(message->request->get_type() == MEMORY_OP_UPDATE) {
 		MemoryQueueEntry *entry;
 		foreach_list_mutable_backwards(pendingRequests_.list(),
 				entry, entry_t, nextentry_t) {
 			if(entry->request->get_physical_address() ==
 					message->request->get_physical_address()) {
-				// found an request for same line, now if this
-				// request is memory update then merge else
-				// don't merge to maintain the serialization 
-				// order
+				/*
+				 * found an request for same line, now if this
+				 * request is memory update then merge else
+				 * don't merge to maintain the serialization 
+				 * order
+				 */
 				if(!entry->inUse && entry->request->get_type() ==
 						MEMORY_OP_UPDATE) {
-					// We can merge the request, so in simulation
-					// we dont have data, so don't do anything
+					/*
+					 * We can merge the request, so in simulation
+					 * we dont have data, so don't do anything
+					 */
 					return true;
 				}
-				// we can't merge the request, so do normal
-				// simuation by adding the entry to pending request
-				// queue.
+				/*
+				 * we can't merge the request, so do normal
+				 * simuation by adding the entry to pending request
+				 * queue.
+				 */
 				break;
 			}
 		}
@@ -112,7 +125,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 
 	MemoryQueueEntry *queueEntry = pendingRequests_.alloc();
 
-	// if queue is full return false to indicate failure
+	/* if queue is full return false to indicate failure */
 	if(queueEntry == null) {
 		memdebug("Memory queue is full\n");
 		return false;
@@ -168,49 +181,13 @@ bool MemoryController::access_completed_cb(void *arg)
 	memdebug("Memory access done for Request: ", *queueEntry->request,
 			endl);
 
-	// Don't send response if its a memory update request
-	if(queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
-		// First send response of the current request
-		Message& message = *memoryHierarchy_->get_message();
-		message.sender = this;
-		message.request = queueEntry->request;
-		message.hasData = true;
+	/* Send response back to cache */
+	wait_interconnect_cb(queueEntry);
 
-		memdebug("Memory sending message: ", message);
-		cacheInterconnect_->get_controller_request_signal()->emit(
-				&message);
-		// Free the message
-		memoryHierarchy_->free_message(&message);
-
-	}
-
-	queueEntry->request->decRefCounter();
-	ADD_HISTORY_REM(queueEntry->request);
-	if(!queueEntry->annuled || !queueEntry->free) {
-		if(pendingRequests_.list().count == 0) {
-			ptl_logfile << "Memory queue is 0 and freeing entry!!!\n";
-			ptl_logfile << "Freeing: ", *queueEntry, endl;
-			ptl_logfile << "Queue:", pendingRequests_, endl;;
-		}
-		int count_before = pendingRequests_.list().count;
-		pendingRequests_.free(queueEntry);
-		int count_after = pendingRequests_.list().count;
-
-		if(count_before - 1 != count_after) {
-			ptl_logfile << "Count not synced: ", count_before, " after: ",
-					count_after, endl;
-			ptl_logfile << "when freeing entry: ", *queueEntry, endl;
-			ptl_logfile << "Qeueu: ", pendingRequests_, endl;
-		}
-	}
-
-	if(!pendingRequests_.isFull()) {
-		memoryHierarchy_->set_controller_full(this, false);
-	}
-
-	// Now check if we still have pending requests 
-	// for the same bank
-//	foreach_queuelink(pendingRequests_, entry, MemoryQueueEntry) {
+	/*
+	 * Now check if we still have pending requests 
+	 * for the same bank
+	 */
 	MemoryQueueEntry* entry;
 	foreach_list_mutable(pendingRequests_.list(), entry, entry_t,
 			prev_t) {
@@ -225,6 +202,51 @@ bool MemoryController::access_completed_cb(void *arg)
 		}
 	}
 
+	return true;
+}
+
+bool MemoryController::wait_interconnect_cb(void *arg)
+{
+	MemoryQueueEntry *queueEntry = (MemoryQueueEntry*)arg;
+	if(queueEntry->annuled)
+		return true;
+
+	bool success = false;
+
+	/* Don't send response if its a memory update request */
+	if(queueEntry->request->get_type() == MEMORY_OP_UPDATE) {
+		queueEntry->request->decRefCounter();
+		ADD_HISTORY_REM(queueEntry->request);
+		pendingRequests_.free(queueEntry);
+		return true;
+	}
+
+	/* First send response of the current request */
+	Message& message = *memoryHierarchy_->get_message();
+	message.sender = this;
+	message.request = queueEntry->request;
+	message.hasData = true;
+
+	memdebug("Memory sending message: ", message);
+	success = cacheInterconnect_->get_controller_request_signal()->
+		emit(&message);
+	/* Free the message */
+	memoryHierarchy_->free_message(&message);
+
+	if(!success) {
+		/* Failed to response to cache, retry after 1 cycle */
+		memoryHierarchy_->add_event(&waitInterconnect_, 1, queueEntry);
+	} else {
+		queueEntry->request->decRefCounter();
+		ADD_HISTORY_REM(queueEntry->request);
+		if(!queueEntry->annuled || !queueEntry->free) {
+			pendingRequests_.free(queueEntry);
+		}
+
+		if(!pendingRequests_.isFull()) {
+			memoryHierarchy_->set_controller_full(this, false);
+		}
+	}
 	return true;
 }
 

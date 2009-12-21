@@ -535,7 +535,7 @@ bool ThreadContext::fetch() {
 		assert(request != null);
 
 		request->init(core.coreid, threadid, physaddr, 0, sim_cycle, 
-				true, sim_cycle, 0, Memory::MEMORY_OP_READ);
+				true, 0, 0, Memory::MEMORY_OP_READ);
 
 		hit = core.memoryHierarchy.access_cache(request);
 
@@ -2312,7 +2312,7 @@ int ReorderBufferEntry::commit() {
 			assert(request != null);
 
 			request->init(core.coreid, threadid, lsq->physaddr << 3, 0, 
-					sim_cycle, true, sim_cycle, uop.uuid, 
+					sim_cycle, true, uop.rip.rip, uop.uuid, 
 					Memory::MEMORY_OP_WRITE);
 
 			assert(core.memoryHierarchy.access_cache(request));
