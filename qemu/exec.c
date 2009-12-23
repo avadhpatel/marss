@@ -44,7 +44,7 @@
 #include <qemu.h>
 #endif
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 #include <ptl-qemu.h>
 #endif
 //#define DEBUG_TB_INVALIDATE
@@ -613,7 +613,7 @@ void tb_flush(CPUState *env1)
        expensive */
     tb_flush_count++;
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 	if(in_simulation)
 		ptl_flush_bbcache();
 #endif
@@ -1738,7 +1738,7 @@ void tlb_flush(CPUState *env, int flush_global)
     }
 
     memset (env->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof (void *));
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 	if(in_simulation)
 		ptl_flush_bbcache();
 #endif

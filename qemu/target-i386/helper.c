@@ -30,7 +30,7 @@
 #include "qemu-common.h"
 #include "kvm.h"
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 #include <ptl-qemu.h>
 #endif
 
@@ -1468,7 +1468,7 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
                    uint32_t *ecx, uint32_t *edx)
 {
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 	if(ptl_cpuid(index, count, eax, ebx, ecx, edx) > 0)
 		return;
 #endif
@@ -1675,7 +1675,7 @@ CPUX86State *cpu_x86_init(const char *cpu_model)
     CPUX86State *env;
     static int inited;
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 	env = ptl_create_new_context();
 #else
     env = qemu_mallocz(sizeof(CPUX86State));

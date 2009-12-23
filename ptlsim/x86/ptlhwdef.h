@@ -5,7 +5,7 @@
 //
 // Copyright 1999-2008 Matt T. Yourst <yourst@yourst.com>
 //
-// Modification for PQRS by Avadh Patel
+// Modification for MARSSx86 by Avadh Patel
 // Copyright 2009 Avadh Patel <avadh4all@gmail.com>
 //
 

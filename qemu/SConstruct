@@ -19,7 +19,7 @@ env['CPPPATH'].append([".", "..", target_path, env['source_path']])
 env['CPPPATH'].append(target['dir'])
 env['CPPPATH'].append(ptlsim_inc_dir)
 env.Append(CCFLAGS = "-MMD -MP -DNEED_CPU_H")
-env.Append(CCFLAGS = "-DPTLSIM_QEMU")
+env.Append(CCFLAGS = "-DMARSS_QEMU")
 
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
@@ -204,17 +204,17 @@ libqemu = env.Library('qemu', Split(cpu_emu_objs))
 # Make sure that linux_user flag is not set
 if target['linux_user']:
     print("ERROR: Linux user flag is set.")
-    print("This configuration is not supported in PQRS")
+    print("This configuration is not supported in MARSSx86")
     Return('error_str')
 
 if target['darwin_user']:
     print("ERROR: Darwin user flag is set.")
-    print("This configuration is not supported in PQRS")
+    print("This configuration is not supported in MARSSx86")
     Return('error_str')
 
 if target['user_only']:
     print("ERROR: user mode flag is set.")
-    print("This configuration is not supported in PQRS")
+    print("This configuration is not supported in MARSSx86")
     Return('error_str')
 
 obj_files = "monitor.c loader.c dma-helpers.c"
@@ -274,7 +274,7 @@ if target_base_arch == "i386":
     env.Append(CPPFLAGS = " -DHAS_AUDIO -DHAS_AUDIO_CHOICE")
 else:
     print("ERROR: Unsupported arch.")
-    print("PQRS Only supports x86_64 architecture")
+    print("MARSSx86 Only supports x86_64 architecture")
 
 if env['gdbstub']:
     obj_files += " gdbstub.c"

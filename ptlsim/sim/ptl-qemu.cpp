@@ -1,6 +1,6 @@
 
 /* 
- * PQRS : A Full System Computer-Architecture Simulator
+ * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -44,7 +44,7 @@ extern "C" {
 
 #include <cacheConstants.h>
 
-#define __INSIDE_PTLSIM_QEMU__
+#define __INSIDE_MARSS_QEMU__
 #include <ptlcalls.h>
 
 /*
@@ -110,7 +110,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 				}
 				command_str[i] = '\0';
 
-				cout << "PQRS::Command received : ", command_str, endl;
+				cout << "MARSSx86::Command received : ", command_str, endl;
                 /*
 				 * Stop the QEMU vm and change ptlsim configuration
 				 * QEMU will be automatically started in simulation mode
@@ -146,8 +146,8 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 					pending_call_arg3 = arg3;
 
 				} else {
-					cout << "PQRS::Reached to Chekpoint location..\n";
-					cout << "PQRS::Now you can create your checkpont..\n";
+					cout << "MARSSx86::Reached to Chekpoint location..\n";
+					cout << "MARSSx86::Now you can create your checkpont..\n";
 					break;
 				}
 
@@ -162,11 +162,11 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 					case PTLCALL_CHECKPOINT_AND_PAUSE:
 						break;
 					case PTLCALL_CHECKPOINT_AND_REBOOT:
-						cout << "PQRS::Rebooting system\n";
+						cout << "MARSSx86::Rebooting system\n";
 						qemu_system_reset_request();
 						break;
 					default:
-						cout << "PQRS::Unkonw Action\n";
+						cout << "MARSSx86::Unkonw Action\n";
 						break;
 				}
 
@@ -365,20 +365,20 @@ void ptl_check_ptlcall_queue() {
 		switch(pending_call_type) {
 			case PTLCALL_CHECKPOINT:
 				{
-					cout << "PQRS::Creating checkpoint ", 
+					cout << "MARSSx86::Creating checkpoint ", 
 						 pending_command_str, endl;
 
 					do_savevm(pending_command_str);
-					cout << "PQRS::Checkpoint ", pending_command_str,
+					cout << "MARSSx86::Checkpoint ", pending_command_str,
 						 " created\n";
 
 					switch(pending_call_arg3) {
 						case PTLCALL_CHECKPOINT_AND_SHUTDOWN:
-							cout << "PQRS::Shutdown requested\n";
+							cout << "MARSSx86::Shutdown requested\n";
 							exit(0);
 							break;
 						default:
-							cout << "PQRS::Unkonw Action\n";
+							cout << "MARSSx86::Unkonw Action\n";
 							break;
 					}
 				}

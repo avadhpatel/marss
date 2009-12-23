@@ -157,7 +157,7 @@ int main(int argc, char **argv)
 
 #include "exec-all.h"
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 #include <ptl-qemu.h>
 #endif
 
@@ -809,14 +809,14 @@ static int64_t cpu_ticks_prev;
 static int64_t cpu_ticks_offset;
 static int64_t cpu_clock_offset;
 static int cpu_ticks_enabled;
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 static int64_t cpu_sim_ticks_offset;
 #endif
 
 /* return the host CPU cycle counter and handle stop/restart */
 int64_t cpu_get_ticks(void)
 {
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 	if(in_simulation) {
 		return cpu_sim_ticks_offset + sim_cycle;
 	}
@@ -872,7 +872,7 @@ void cpu_disable_ticks(void)
     }
 }
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 #define PTLSIM_FREQ 2.4e9 // 2GHz Frequency of Simulated CPU
 #define freq_to_ns(freq) (PTLSIM_FREQ/freq)
 
@@ -1254,7 +1254,7 @@ int64_t qemu_get_clock(QEMUClock *clock)
         return get_clock() / 1000000;
     default:
     case QEMU_TIMER_VIRTUAL:
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 		if (in_simulation) {
 			return cpu_get_sim_clock();
 		} 
@@ -1379,7 +1379,7 @@ static void host_alarm_handler(int host_signum)
 #endif
         if (alarm_timer) alarm_timer->flags |= ALARM_FLAG_EXPIRED;
 
-//#ifdef PTLSIM_QEMU
+//#ifdef MARSS_QEMU
 //		if (in_simulation)
 //			update_progress();
 //		if (env && !in_simulation) {
@@ -1427,7 +1427,7 @@ static uint64_t qemu_next_deadline_dyntick(void)
     else
         delta = (qemu_next_deadline() + 999) / 1000;
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 	if (in_simulation)
 		delta = INT32_MAX;
 #endif
@@ -3824,7 +3824,7 @@ static int main_loop(void)
     cur_cpu = first_cpu;
     next_cpu = cur_cpu->next_cpu ?: first_cpu;
     for(;;) {
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 		if (start_simulation && !vm_running) {
 			in_simulation = 1;
 			cpu_set_sim_ticks();
@@ -3838,7 +3838,7 @@ static int main_loop(void)
 #endif
         if (vm_running) {
 
-//#ifdef PTLSIM_QEMU
+//#ifdef MARSS_QEMU
 //			uint8_t exception_pending = 0;
 //#endif
 
@@ -3867,7 +3867,7 @@ static int main_loop(void)
 #ifdef CONFIG_PROFILER
                 qemu_time += profile_getclock() - ti;
 #endif
-//#ifdef PTLSIM_QEMU
+//#ifdef MARSS_QEMU
 //				exception_pending = env->exception_index > 0 ? 1 : \
 //									exception_pending;
 //#endif
@@ -3885,7 +3885,7 @@ static int main_loop(void)
                     event_pending = 0;
                     break;
                 }
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 				if (in_simulation)
 					/* No need to run for other cpus */
 					break;
@@ -3969,7 +3969,7 @@ static int main_loop(void)
                 timeout = 0;
             }
 
-//#ifdef PTLSIM_QEMU
+//#ifdef MARSS_QEMU
 //			if(in_simulation && !exception_pending) {
 //				cpu_exec(first_cpu, 1);
 //				timeout = 0;

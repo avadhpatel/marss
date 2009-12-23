@@ -40,7 +40,7 @@
 #include "migration.h"
 #include "kvm.h"
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 #include <ptl-qemu.h>
 #endif
 
@@ -56,7 +56,7 @@
  * 'i'          32 bit integer
  * 'l'          target long (32 or 64 bit)
  * '/'          optional gdb-like print format (like "/10x")
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
  * 'W'			Whole string - pass it to the calling function
 #endif
  *
@@ -503,7 +503,7 @@ static void do_stop(void)
     vm_stop(EXCP_INTERRUPT);
 }
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 static void do_simulate(char* args)
 {
 	term_printf("simulation options received:%s\n", args);
@@ -1591,7 +1591,7 @@ static const term_cmd_t term_cmds[] = {
       "target", "request VM to change it's memory allocation (in MB)" },
     { "set_link", "ss", do_set_link,
       "name [up|down]", "change the link status of a network adapter" },
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 	{ "simulate", "W", do_simulate, "-help for all options", "Set various simulation options" },
 #endif
     { NULL, NULL, },
@@ -2378,7 +2378,7 @@ static void monitor_handle_command(const char *cmdline)
             break;
         typestr++;
         switch(c) {
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 		case 'W':
 			{
 				char* str;
