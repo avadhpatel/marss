@@ -975,7 +975,7 @@ extern "C" uint8_t ptl_simulate() {
 
 	statswriter.close();
 
-	if(config.kill) {
+	if(config.kill || config.kill_after_run) {
 		ptl_logfile << "Received simulation kill signal, stopped the simulation and killing the VM\n";
 		ptl_logfile.flush();
 		ptl_logfile.close();

@@ -2437,6 +2437,15 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(Memory::MemoryRequest *request)
 
 						  W64 sel = expand_8bit_to_64bit_lut[tmp_bytemask];
 						  data = mux64(sel, data, tmp_data);
+
+						  if(logable(6)) {
+							  ptl_logfile << "Load ", *rob.lsq, " forward from store: ", stq, " tmp: ",
+										  (void*)(tmp_data), " (", hexstring(tmp_bytemask, 8), ") ",
+										  " data: ", (void*)(data), endl;
+							  ptl_logfile << " load_addr: ", (void*)(rob.lsq->virtaddr),
+										  " st_addr: ", (void*)(stq.virtaddr), endl;
+						  }
+
 					  }
 				  }
 			  }
