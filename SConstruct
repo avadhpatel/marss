@@ -6,8 +6,23 @@ import os
 # Automatically set the -j option to No of available CPUs*2
 # This options gives the best compilation time.
 # user can override this by specifying -j option at runtime
-num_cpu = int(os.environ.get('NUM_CPU', 2))
-SetOption('num_jobs', num_cpu * 2)
+
+num_cpus = 1
+# For python 2.6+
+try:
+    import multiprocessing
+    num_cpus = multiprocessing.cpu_count()
+except (ImportError,NotImplementedError):
+    pass
+
+try:
+    res = int(os.sysconf('SC_NPROCESSORS_ONLN'))
+    if res > 0:
+        num_cpus = res
+except (AttributeError,ValueError):
+    pass
+
+SetOption('num_jobs', num_cpus * 2)
 print("running with -j%s" % GetOption('num_jobs'))
 
 # Our build order is as following:

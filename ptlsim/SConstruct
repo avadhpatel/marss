@@ -46,7 +46,7 @@ else:
 # enable PTLSIM_HYPERVISOR
 env.Append(CCFLAGS = '-DPTLSIM_HYPERVISOR -DNEED_CPU_H')
 env.Append(CCFLAGS = '-D__STDC_FORMAT_MACROS')
-env.Append(CCFLAGS = '-DPTLSIM_QEMU')
+env.Append(CCFLAGS = '-DMARSS_QEMU')
 
 # To use AMD ooocore file uncomment this
 # env.Append(CCFLAGS = '-DUSE_AMD_OOOCORE')

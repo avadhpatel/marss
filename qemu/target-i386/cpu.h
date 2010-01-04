@@ -892,7 +892,7 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
     *flags = env->hflags | (env->eflags & (IOPL_MASK | TF_MASK | VM_MASK));
 }
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 void set_cpu_env(CPUState* env1);
 #endif
 

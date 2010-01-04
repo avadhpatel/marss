@@ -6,7 +6,7 @@
 // Copyright 2003-2008 Matt T. Yourst <yourst@yourst.com>
 // Copyright 2006-2008 Hui Zeng <hzeng@cs.binghamton.edu>
 //
-// Modifications for PQRS
+// Modifications for MARSSx86
 // Copyright 2009 Avadh Patel <avadh4all@gmail.com>
 
 #include <globals.h>

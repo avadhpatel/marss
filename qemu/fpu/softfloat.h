@@ -95,7 +95,7 @@ typedef int64_t sbits64;
 #endif
 #endif /* !CONFIG_SOFTFLOAT */
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 #ifdef FLOATX80
 #undef FLOATX80
 #endif

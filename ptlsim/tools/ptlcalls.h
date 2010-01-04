@@ -11,11 +11,11 @@
 
 //
 // We exclude some definitions if we're compiling the PTLsim hypervisor itself
-// (i.e. __INSIDE_PTLSIM__ is defined) orQEMU (i.e. __INSIDE_PTLSIM_QEMU__),
+// (i.e. __INSIDE_PTLSIM__ is defined) orQEMU (i.e. __INSIDE_MARSS_QEMU__),
 // since these definitions would collide with ptlsim-kvm.h otherwise.
 //
 
-#if (!defined(__INSIDE_PTLSIM__)) && (!defined(__INSIDE_PTLSIM_QEMU__))
+#if (!defined(__INSIDE_PTLSIM__)) && (!defined(__INSIDE_MARSS_QEMU__))
 #define PTLCALLS_USERSPACE
 #define _GNU_SOURCE
 #endif

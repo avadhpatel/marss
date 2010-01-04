@@ -7,7 +7,7 @@
 //
 // Copyright 1997-2008 Matt T. Yourst <yourst@yourst.com>
 //
-// Modifications for PQRS
+// Modifications for MARSSx86
 // Copyright 2009 Avadh Patel <avadh4all@gmail.com>
 //
 // This program is free software; it is licensed under the

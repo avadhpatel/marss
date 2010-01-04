@@ -24,7 +24,7 @@
 #include "tcg.h"
 #include "kvm.h"
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 #include <ptl-qemu.h>
 #endif
 
@@ -210,7 +210,7 @@ static void cpu_handle_debug_exception(CPUState *env)
         debug_excp_handler(env);
 }
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 void set_cpu_env(CPUState* env1)
 {
 	env = env1;
@@ -263,7 +263,7 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 #error unsupported target CPU
 #endif
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 //	if(in_simulation && do_simulate) {
 //		env->exception_index = -1;
 //		printf("Going into simulation mode eip: %ld\n", env->eip);
@@ -371,7 +371,7 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
                 longjmp(env->jmp_env, 1);
             }
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 				if (in_simulation) {
 					interrupt_request = env->interrupt_request;
 					if (unlikely(interrupt_request)) {
@@ -753,7 +753,7 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
             } /* for(;;) */
         } else {
             env_to_regs();
-//#ifdef PTLSIM_QEMU
+//#ifdef MARSS_QEMU
 //			if(in_simulation) 
 //				break;
 //#endif
@@ -762,7 +762,7 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 
 
 #if defined(TARGET_I386)
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 	if(!in_simulation)
 #endif
 		/* restore flags in standard format */

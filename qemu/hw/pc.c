@@ -38,7 +38,7 @@
 #include "virtio-console.h"
 #include "hpet_emul.h"
 
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 #include <ptl-qemu.h>
 #endif
 
@@ -1074,7 +1074,7 @@ vga_bios_error:
 
     i8042_init(i8259[1], i8259[12], 0x60);
     DMA_init(0);
-#ifdef PTLSIM_QEMU
+#ifdef MARSS_QEMU
 	ptlsim_init();
 #endif
 #ifdef HAS_AUDIO
