@@ -161,6 +161,8 @@ void ptl_flush_bbcache(void);
  */
 void ptl_check_ptlcall_queue(void);
 
+extern uint8_t ptl_stable_state;
+
 #ifdef __cplusplus
 }
 #endif

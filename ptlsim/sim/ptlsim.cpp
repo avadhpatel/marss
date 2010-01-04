@@ -906,11 +906,18 @@ extern "C" uint8_t ptl_simulate() {
 		ctx.running = 1;
 	}
 
+	ptl_logfile << flush;
+	if(ptl_stable_state == 0) {
+		assert_fail(__STRING(ptl_stable_state == 1), __FILE__,
+			__LINE__, __PRETTY_FUNCTION__);
+	}
+
     /*
 	 * Set ret_qemu_env to null, it will be set at the exit of simulation 'run'
 	 * to the Context that has interrupts/exceptions pending 
      */
 	machine->ret_qemu_env = null;
+	ptl_stable_state = 0;
 
 	if(machine->stopped != 0)
 		machine->stopped = 0;
@@ -923,6 +930,8 @@ extern "C" uint8_t ptl_simulate() {
 	if (config.stop_at_user_insns <= total_user_insns_committed || config.kill == true) {
 		machine->stopped = 1;
 	}
+
+	ptl_stable_state = 1;
 
 	if (!machine->stopped) {
 		if(logable(1)) {

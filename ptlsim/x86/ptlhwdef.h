@@ -837,6 +837,7 @@ struct Context: public CPUX86State {
   W64 reg_fptos;
   W64 reg_fpstack;
   W64 page_fault_addr;
+  W64 exec_fault_addr;
 
   void change_runstate(int new_state) { running = new_state; }
 
@@ -900,7 +901,7 @@ struct Context: public CPUX86State {
 	  return eip;
   }
 
-  int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = false) ;
+  int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = true) ;
 
   CPUTLBEntry* get_tlb_entry(Waddr virtaddr) {
 	  int mmu_idx = cpu_mmu_index((CPUX86State*)this);

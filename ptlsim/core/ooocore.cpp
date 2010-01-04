@@ -660,7 +660,7 @@ bool OutOfOrderCore::runcycle() {
 		// Its a instruction page fault
 		rc = COMMIT_RESULT_EXCEPTION;
 		thread->ctx.exception = EXCEPTION_PageFaultOnExec;
-		thread->ctx.page_fault_addr = thread->ctx.eip;
+		thread->ctx.page_fault_addr = thread->ctx.exec_fault_addr;
 	}
 
     switch (rc) {
@@ -1152,7 +1152,7 @@ bool ThreadContext::handle_barrier() {
 	  flush_pipeline();
   }
 
-  if (logable(0)) {
+  if (logable(1)) {
     ptl_logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
       (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
       ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
@@ -1175,7 +1175,7 @@ bool ThreadContext::handle_barrier() {
 
   // Flush again, but restart at possibly modified rip
   if(flush_required) {
-	  if (logable(0)) ptl_logfile << " handle_barrier, flush_pipeline again.",endl;
+	  if (logable(6)) ptl_logfile << " handle_barrier, flush_pipeline again.",endl;
 	  flush_pipeline();
   } else {
 	  reset_fetch_unit(ctx.eip);

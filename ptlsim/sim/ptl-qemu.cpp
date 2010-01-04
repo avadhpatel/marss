@@ -57,6 +57,7 @@ using namespace Memory;
 
 uint8_t in_simulation = 0;
 uint8_t start_simulation = 0;
+uint8_t ptl_stable_state = 1;
 
 static char *pending_command_str = null;
 static int pending_call_type = -1;
@@ -443,7 +444,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 	int exception = 0;
 	int mmio = 0;
 	Waddr physaddr = check_and_translate(source, 0, 0, 0, exception,
-			mmio, pfec, 1);
+			mmio, pfec, forexec);
 	if (exception) {
 		int old_exception = exception_index;
 		int mmu_index = cpu_mmu_index((CPUState*)this);
@@ -458,12 +459,49 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 				ptl_logfile << "Unable to read code from ", 
 							hexstring(source, 64), endl;
 			setup_ptlsim_switch();
-            /*
+			/*
 			 * restore the exception index as it will be 
 			 * restore when we try to commit this entry from ROB
-             */
+			 */
 			exception_index = old_exception;
+			if likely (forexec)
+				exec_fault_addr = source;
+			faultaddr = source;
 			return -1;
+		}
+	}
+
+	Waddr start_page = (source & TARGET_PAGE_MASK);
+	Waddr end_page = ((source + bytes) & TARGET_PAGE_MASK);
+	
+	if(start_page != end_page) {
+		int diff_bytes = end_page - source;
+		Waddr physaddr = check_and_translate(source + diff_bytes, 0, 0, 0, exception,
+				mmio, pfec, 1);
+		if (exception) {
+			int old_exception = exception_index;
+			int mmu_index = cpu_mmu_index((CPUState*)this);
+			int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
+					source + diff_bytes, 2, mmu_index, 1);
+			if(logable(10))
+				ptl_logfile << "page fault while reading code fault:", fail, 
+							" source_addr:", (void*)(source), 
+							" eip:", (void*)(eip), endl;
+			if (fail) {
+				if(logable(10))
+					ptl_logfile << "Unable to read code from ", 
+								hexstring(source, 64), endl;
+				setup_ptlsim_switch();
+				/*
+				 * restore the exception index as it will be 
+				 * restore when we try to commit this entry from ROB
+				 */
+				exception_index = old_exception;
+				if likely (forexec)
+					exec_fault_addr = source + diff_bytes;
+				faultaddr = source + diff_bytes;
+				return -1;
+			}
 		}
 	}
 	
@@ -684,11 +722,13 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
 		ptl_logfile << "Propagating exception from simulation at eip: ",
 					this->eip, " cycle: ", sim_cycle, endl;
 	setup_qemu_switch_all_ctx(*this);
+	ptl_stable_state = 1;
 	if(errorcode) {
 		raise_exception_err((int)exception, (int)errorcode);
 	} else {
 		raise_exception((int)exception);
 	}
+	ptl_stable_state = 0;
 	setup_ptlsim_switch();
 }
 
@@ -843,16 +883,16 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
 
 	switch(sizeshift) {
 		case 0: // byte write
-			(kernel_mode) ? stb_kernel(virtaddr, data) : 
-				stb_user(virtaddr, data);
+			(kernel_mode) ? stb_kernel(virtaddr, (W8)data) : 
+				stb_user(virtaddr, (W8)data);
 			break;
 		case 1: // word write
-			(kernel_mode) ? stw_kernel(virtaddr, data) :
-				stw_user(virtaddr, data);
+			(kernel_mode) ? stw_kernel(virtaddr, (W16)data) :
+				stw_user(virtaddr, (W16)data);
 			break;
 		case 2: // double word write
-			(kernel_mode) ? stl_kernel(virtaddr, data) :
-				stl_user(virtaddr, data);
+			(kernel_mode) ? stl_kernel(virtaddr, (W32)data) :
+				stl_user(virtaddr, (W32)data);
 			break;
 		case 3: // quad word write
 		default:
@@ -863,6 +903,36 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
 	if(logable(10))
 		ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
 					"] data[", hexstring(data, 64), "]\n";
+//#define CHECK_STORE
+#ifdef CHECK_STORE
+	W64 data_r = 0;
+	switch(sizeshift) {
+		case 0: // byte write
+			(kernel_mode) ? data_r = (W64)ldub_kernel(virtaddr) : 
+				data_r = (W64)ldub_user(virtaddr);
+			break;
+		case 1: // word write
+			(kernel_mode) ? data_r = (W64)lduw_kernel(virtaddr) :
+				data_r = (W64)lduw_user(virtaddr);
+			break;
+		case 2: // double word write
+			(kernel_mode) ? data_r = (W64)ldul_kernel(virtaddr) :
+				data_r = (W64)ldul_user(virtaddr);
+			break;
+		case 3: // quad word write
+		default:
+			(kernel_mode) ? data_r = (W64)ldq_kernel(virtaddr) :
+				data_r = (W64)ldq_user(virtaddr);
+			break;
+	}
+	if((W64)data != data_r) {
+		ptl_logfile << "Stored data does not match..\n";
+		ptl_logfile << "Data: ", (void*)data, " Data_r: ", (void*)data_r, endl, flush;
+		assert_fail(__STRING(0), __FILE__, __LINE__, 
+			__PRETTY_FUNCTION__);
+	}
+	
+#endif
 	return data;
 }
 
@@ -892,7 +962,6 @@ W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
 		ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
 					"] data[", hexstring(merged_data, 64), "]\n";
 	stq_raw((uint8_t*)paddr, merged_data);
-#define CHECK_STORE
 #ifdef CHECK_STORE
 	W64 new_data = 0;
 	new_data = ldq_raw((uint8_t*)paddr);
@@ -917,8 +986,10 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
 	}
 
 	exception_is_int = 0;
+	ptl_stable_state = 1;
 	int mmu_index = cpu_mmu_index((CPUState*)this);
 	tlb_fill(virtaddr, is_write, mmu_index, null);
+	ptl_stable_state = 0;
 
 	if(kernel_mode) {
 		if(logable(5))

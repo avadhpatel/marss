@@ -230,16 +230,23 @@ bool assist_x87_fld80(Context& ctx) {
 //  ctx.setup_qemu_switch();
 //  helper_fldt_ST0(addr);
 
+//  X87Reg data;
 //  PageFaultErrorCode pfec;
-//  Waddr faultaddr;
-//  int bytes = ctx.copy_from_user(data, addr, sizeof(X87Reg), pfec, faultaddr);
+//  Waddr faultaddr = 0;
+//  int bytes = ctx.copy_from_user(data, addr, sizeof(X87Reg), pfec, faultaddr, false);
 //
-//  if (bytes < sizeof(X87Reg)) {
+//  if (bytes < sizeof(X87Reg) || faultaddr != 0) {
 //    ctx.eip = ctx.reg_selfrip;
-//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-//    return;
+//	if(logable(0)) ptl_logfile << "Page fault in assist fld80\n";
+//	ctx.handle_page_fault(faultaddr, 0);
+//    return false;
 //  }
 //
+//  // Push on stack
+//  W64& tos = ctx.reg_fptos;
+//  tos = (tos - 8) & FP_STACK_MASK;
+//  ctx.fpregs[tos >> 3].mmx.q = (W64)x87_fp_80bit_to_64bit(&data);
+//  ctx.fptags[tos] = 1;
 
   ctx.eip = ctx.reg_nextrip;
   return false;

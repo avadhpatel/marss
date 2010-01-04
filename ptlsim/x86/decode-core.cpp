@@ -1808,42 +1808,8 @@ bool assist_exec_page_fault(Context& ctx) {
   Waddr faultaddr = ctx.reg_ar1;
   PageFaultErrorCode pfec = ctx.reg_ar2;
 
-  // Avadh: In QEMU we have to check if we have valid page in TLB entry
-  // for the given faultaddr
-  W64 tlb_addr;
-  int mmu_idx = cpu_mmu_index((CPUX86State*)&ctx);
-  int index = (faultaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
-
-  bool page_now_valid;
-  tlb_addr = ctx.tlb_table[mmu_idx][index].addr_read;
-  if( (faultaddr & TARGET_PAGE_MASK) ==
-		  (tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK)) ) {
-	  page_now_valid = true;
-  } else {
-	  page_now_valid = false;
-  }
-
-//#ifdef PTLSIM_HYPERVISOR
-//  Level1PTE pte = ctx.virt_to_pte(faultaddr);
-//  bool page_now_valid = (pte.p & (!pte.nx) & ((!ctx.kernel_mode) ? pte.us : 1));
-//  if unlikely (!page_now_valid) ctx.flush_tlb_virt(faultaddr);
-//#else
-//  bool page_now_valid = asp.fastcheck((byte*)faultaddr, asp.execmap);
-//#endif
-  if unlikely (page_now_valid) {
-    if (logable(3)) {
-      ptl_logfile << "Spurious PageFaultOnExec detected at fault rip ",
-        (void*)(Waddr)ctx.reg_selfrip, " with faultaddr ",
-        (void*)faultaddr, " @ ", total_user_insns_committed, 
-        " user commits (", sim_cycle, " cycles)";
-    }
-    bbcache.invalidate(RIPVirtPhys(ctx.reg_selfrip).update(ctx), INVALIDATE_REASON_SPURIOUS);
-    ctx.eip = ctx.reg_selfrip;
-    return true;
-  }
-
   ctx.eip = ctx.reg_selfrip;
-  ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
+  ctx.handle_page_fault(faultaddr, 2);
 
   return true;
 }
@@ -1884,7 +1850,8 @@ bool TraceDecoder::invalidate() {
     } else {
       outcome = (faultaddr == bb.rip.rip) ? DECODE_OUTCOME_ENTRY_PAGE_FAULT : DECODE_OUTCOME_OVERLAP_PAGE_FAULT;
       print_invalid_insns(op, (const byte*)ripstart, (const byte*)rip, valid_byte_count, pfec, faultaddr);
-      abs_code_addr_immediate(REG_ar1, 3, faultaddr);
+      //abs_code_addr_immediate(REG_ar1, 3, faultaddr);
+      immediate(REG_ar1, 3, faultaddr);
       immediate(REG_ar2, 3, pfec);
       microcode_assist(ASSIST_EXEC_PAGE_FAULT, ripstart, faultaddr);
     }
@@ -2101,7 +2068,8 @@ bool TraceDecoder::translate() {
 
   if (invalid) {
 	  ptl_logfile << "Invalidating translation, valid_byte_count:",
-				  valid_byte_count, endl;
+				  valid_byte_count, " rip: ", (void*)(rip),
+				" bbrip: ", (void*)((W64)bb.rip), endl;
     invalidate();
     user_insn_count++;
     end_of_block = 1;
@@ -2157,7 +2125,7 @@ bool TraceDecoder::translate() {
   } else {
     // Block did not end with a branch: do we have more room for another x86 insn?
     if (// ((MAX_BB_UOPS - bb.count) < (MAX_TRANSOPS_PER_USER_INSN-2)) ||
-        ((rip - bb.rip) >= (insnbytes_bufsize-15)) ||
+        ((rip - bb.rip) >= (insnbytes_bufsize-10)) ||
         ((rip - bb.rip) >= valid_byte_count) ||
         (user_insn_count >= MAX_BB_X86_INSNS) ||
         (rip == stop_at_rip)) {
@@ -2225,9 +2193,9 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
   byte insnbuf[MAX_BB_BYTES];
 
   TraceDecoder trans(rvp);
-//  trans.fillbuf(ctx, insnbuf, sizeof(insnbuf));
+  //trans.fillbuf(ctx, insnbuf, sizeof(insnbuf));
   if(trans.fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
-	  return null;
+          return null;
   }
 
   if (logable(10) | log_code_page_ops) {

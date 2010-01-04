@@ -12,6 +12,7 @@
 #include <globals.h>
 #include <ptlsim.h>
 #include <datastore.h>
+#include <ptl-qemu.h>
 
 // This macro is used to call helper functions in QEMU
 // It calls the context setup function before and after
@@ -20,9 +21,12 @@
 // function in QEMU please add both setup functions as
 // written in the macro.
 #define ASSIST_IN_QEMU(func_name, ...) \
+	ctx.eip = ctx.reg_selfrip; \
+    ptl_stable_state = 1; \
 	setup_qemu_switch_all_ctx(ctx); \
 	func_name(__VA_ARGS__);		\
-	ctx.setup_ptlsim_switch();
+	ctx.setup_ptlsim_switch(); \
+    ptl_stable_state = 0; 
 
 struct RexByte { 
   // a.k.a., b, x, r, w
