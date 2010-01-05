@@ -29,6 +29,13 @@ else:
     env.Append(CCFLAGS = '-g3')
     env.Append(CCFLAGS = '-O2')
 
+google_perftools = ARGUMENTS.get('gpref', 0)
+if google_perftools != None:
+    env.Append(LIBS = 'tcmalloc_minimal')
+    env.Append(LIBPATH = google_perftools)
+    env.Append(LINKFLAGS = '-Wl,-L%s' % google_perftools)
+
+
 error_str = "failure"
 
 # if compiling with g++ add -x c flag
