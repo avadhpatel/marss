@@ -1545,7 +1545,8 @@ static const bool log_code_page_ops = 0;
 bool BasicBlockCache::invalidate(BasicBlock* bb, int reason) {
   BasicBlockChunkList* pagelist;
   if unlikely (bb->refcount) {
-    ptl_logfile << "Warning: basic block ", bb, " ", *bb, " is still in use somewhere (refcount ", bb->refcount, ")", endl;
+	  if(logable(4))
+		  ptl_logfile << "Warning: basic block ", bb, " ", *bb, " is still in use somewhere (refcount ", bb->refcount, ")", endl;
     return false;
   }
 
@@ -1761,7 +1762,7 @@ int BasicBlockCache::reclaim(size_t bytesreq, int urgency) {
 // All basic blocks are flushed: no remaining
 // references are allowed.
 //
-void BasicBlockCache::flush() {
+void BasicBlockCache::flush(int8_t context_id) {
   bool DEBUG = 1;
 
   if (logable(1)) 
@@ -1773,7 +1774,8 @@ void BasicBlockCache::flush() {
     Iterator iter(this);
     BasicBlock* bb;
     while (bb = iter.next()) {
-      invalidate(bb, INVALIDATE_REASON_RECLAIM);
+		if(bb->context_id == context_id || context_id == -1)
+			invalidate(bb, INVALIDATE_REASON_RECLAIM);
     }
   }
 
@@ -1850,8 +1852,7 @@ bool TraceDecoder::invalidate() {
     } else {
       outcome = (faultaddr == bb.rip.rip) ? DECODE_OUTCOME_ENTRY_PAGE_FAULT : DECODE_OUTCOME_OVERLAP_PAGE_FAULT;
       print_invalid_insns(op, (const byte*)ripstart, (const byte*)rip, valid_byte_count, pfec, faultaddr);
-      //abs_code_addr_immediate(REG_ar1, 3, faultaddr);
-      immediate(REG_ar1, 3, faultaddr);
+	  abs_code_addr_immediate(REG_ar1, 3, faultaddr);
       immediate(REG_ar2, 3, pfec);
       microcode_assist(ASSIST_EXEC_PAGE_FAULT, ripstart, faultaddr);
     }
@@ -2282,6 +2283,8 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     ptl_logfile << "End of basic block: rip ", trans.bb.rip, " -> taken rip 0x", (void*)(Waddr)trans.bb.rip_taken, ", not taken rip 0x", (void*)(Waddr)trans.bb.rip_not_taken, endl;
   }
 
+  bb->context_id = ctx.cpu_index;
+
   translate_timer.stop();
 
   bb->release();
@@ -2394,10 +2397,10 @@ void init_decode() {
 }
 
 void shutdown_decode() {
-  bbcache.flush();
+  bbcache.flush(0);
   if (bbcache_dump_file) bbcache_dump_file.close();
 }
 
-extern "C" void ptl_flush_bbcache() {
-  bbcache.flush();
+extern "C" void ptl_flush_bbcache(int8_t context_id) {
+  bbcache.flush(context_id);
 }

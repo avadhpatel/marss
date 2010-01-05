@@ -555,8 +555,12 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif
 
-  if(first_time && config.run && !config.kill) {
+  if(config.run && !config.kill) {
 	  start_simulation = 1;
+  }
+
+  if((start_simulation || in_simulation) && config.stop) {
+	  in_simulation = 0;
   }
 
   if(config.kill) {
@@ -927,7 +931,8 @@ extern "C" uint8_t ptl_simulate() {
 
 	machine->run(config);
 
-	if (config.stop_at_user_insns <= total_user_insns_committed || config.kill == true) {
+	if (config.stop_at_user_insns <= total_user_insns_committed || config.kill == true
+			|| config.stop == true) {
 		machine->stopped = 1;
 	}
 

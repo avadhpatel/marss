@@ -600,6 +600,7 @@ void BasicBlock::reset() {
   mfnlo_loc.reset();
   mfnhi_loc.reset();
   type = BB_TYPE_COND;
+  context_id = 0;
 }
 
 void BasicBlock::reset(const RIPVirtPhys& rip) {
@@ -607,6 +608,7 @@ void BasicBlock::reset(const RIPVirtPhys& rip) {
   this->rip = rip;
   rip_taken = rip;
   rip_not_taken = rip;
+  context_id = 0;
 }
 
 //

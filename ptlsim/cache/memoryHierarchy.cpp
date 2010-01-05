@@ -54,15 +54,9 @@ using namespace Memory;
 
 MemoryHierarchy::MemoryHierarchy(OutOfOrderMachine& machine) :
 	machine_(machine)
-	, coreNo_(config.number_of_cores)
+	, coreNo_(NUMBER_OF_CORES)
     , someStructIsFull_(false)
 {
-//	eventHead_ = null;
-//	eventTail_ = null;
-
-	assert(NUMBER_OF_CORES == config.number_of_cores);
-	assert(NUMBER_OF_CORES_PER_L2 == config.cores_per_L2);
-
 	setup_topology();
 }
 
@@ -78,28 +72,30 @@ void MemoryHierarchy::setup_topology()
     }
 }
 
-// A Shared L2 Configuration with Simple WT Cache:
-// --------------   --------------       --------------
-// |    CPU.C   |   |    CPU.C   |       |    CPU.C   |
-// --------------   --------------       --------------
-//   ||      ||       ||      ||           ||      ||
-//   P2P     P2P      P2P     P2P          P2P     P2P
-//   ||      ||       ||      ||    ...    ||      ||
-// ------- ------   ------- ------       ------- ------
-// | L1I | | L1D|   | L1I | | L1D|       | L1I | | L1D|
-// ------- ------   ------- ------       ------- ------
-//   ||      ||       ||      ||           ||      ||
-//   ------------ BUS -------------- ... -------------
-//                     ||
-//                -------------
-//                | Shared L2 |
-//                -------------
-//                     ||
-//                     P2P
-//                     ||
-//               ---------------
-//               | Main Memory |
-//               ---------------
+/*
+ * A Shared L2 Configuration with Simple WT Cache:
+ * --------------   --------------       --------------
+ * |    CPU.C   |   |    CPU.C   |       |    CPU.C   |
+ * --------------   --------------       --------------
+ *   ||      ||       ||      ||           ||      ||
+ *   P2P     P2P      P2P     P2P          P2P     P2P
+ *   ||      ||       ||      ||    ...    ||      ||
+ * ------- ------   ------- ------       ------- ------
+ * | L1I | | L1D|   | L1I | | L1D|       | L1I | | L1D|
+ * ------- ------   ------- ------       ------- ------
+ *   ||      ||       ||      ||           ||      ||
+ *   ------------ BUS -------------- ... -------------
+ *                     ||
+ *                -------------
+ *                | Shared L2 |
+ *                -------------
+ *                     ||
+ *                     P2P
+ *                     ||
+ *               ---------------
+ *               | Main Memory |
+ *               ---------------
+ */
 void MemoryHierarchy::shared_L2_configuration()
 {
 	memdebug("Setting up shared L2 Configuration\n");
@@ -195,7 +191,6 @@ void MemoryHierarchy::shared_L2_configuration()
 	interconnectsFullFlags_.resize(allInterconnects_.count(), false);
 }
 
-#define SINGLE_CORE_MEM_CONFIG
 
 void MemoryHierarchy::private_L2_configuration()
 {
@@ -206,7 +201,6 @@ void MemoryHierarchy::private_L2_configuration()
 
 #ifdef SINGLE_CORE_MEM_CONFIG
 	using namespace Memory::SimpleWTCache;
-	// using namespace Memory::MESICache;
 #else
 	using namespace Memory::MESICache;
 #endif
@@ -216,7 +210,6 @@ void MemoryHierarchy::private_L2_configuration()
 	P2PInterconnect *l2p2p = new P2PInterconnect(l2p2p_name->buf, this);
 #else
 	GET_STRINGBUF_PTR(bus_name, "Bus");
-	//BusInterconnect *bus = new BusInterconnect(bus_name->buf, this);
 	MESICache::BusInterconnect *bus = new 
 		MESICache::BusInterconnect(bus_name->buf, this);
 #endif
@@ -383,24 +376,12 @@ void MemoryHierarchy::clock()
 		event = eventQueue_.head();
 		if(event->get_clock() <= sim_cycle) {
 			memdebug("Executing event: ", *event);
-			//ptl_logfile << "Executing event: ", *event,endl;
 			eventQueue_.free(event);
 			assert(event->execute());
 		} else {
 			break;
 		}
 	}
-//	while(eventQueue_.head != null && eventQueue_.count > 0) {
-//		event = eventQueue_.head->data;
-//		if(event->get_clock() <= sim_cycle) {
-//			memdebug("Executing event: ", *event);
-//			eventQueue_.free(event);
-//			assert(event->execute());
-//
-//		} else {
-//			break;
-//		}
-//	}
 }
 
 void MemoryHierarchy::reset()

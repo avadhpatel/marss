@@ -367,6 +367,13 @@ W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	current_flags |= IF_MASK;
 	flags = current_flags;
 
+	// Update in QEMU's flags
+	ctx.setup_qemu_switch();
+	helper_sti();
+	ctx.setup_ptlsim_switch();
+
+	if(logable(4)) ptl_logfile << "sti called rip ", (void*)ctx.eip, endl;
+
 	return 0;
 }
 
@@ -382,6 +389,13 @@ W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	W16 current_flags = (W16)ra;
 	current_flags &= ~IF_MASK;
 	flags = current_flags;
+	
+	// Update in QEMU's flags
+	ctx.setup_qemu_switch();
+	helper_cli();
+	ctx.setup_ptlsim_switch();
+
+	if(logable(4)) ptl_logfile << "cli called at rip ", (void*)ctx.eip, endl;
 
 	return 0;
 }
@@ -638,14 +652,18 @@ W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
 	// RA contains the latest flags contains ZAPS, CF, OF and IF
-	ctx.setup_qemu_switch();
-	W64 stable_flags = helper_read_eflags();
-	ctx.setup_ptlsim_switch();
+	W64 stable_flags = ctx.eflags | (ctx.df & DF_MASK);
+	stable_flags |= ctx.eflags & ~(VM_MASK | RF_MASK);
 
 	W64 flagmask = (setflags_to_x86_flags[7] | FLAG_IF);
 	stable_flags |= (ra & flagmask);
-	flags = (W16)ra;
+	flags = (W16)(ra | (stable_flags & FLAG_IF));
 	
+	if(logable(4)) 
+		ptl_logfile << "push stable_flags: ", hexstring(stable_flags, 64), 
+					" flags: ", hexstring(flags, 16), " at rip: ",
+				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
+
 	return stable_flags;
 }
 
@@ -662,7 +680,7 @@ bool assist_popf(Context& ctx) {
 	  mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK);
   }
   // bit 1 is always '1', and bits {3, 5, 15} are always '0':
-//  flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
+// flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
 //  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
 //  ctx.eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
   ASSIST_IN_QEMU(helper_write_eflags, flags , mask);
@@ -686,10 +704,15 @@ W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	} else {
 		mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK);
 	}
-	W64 stable_flags = (ra & mask);
+	W64 stable_flags = ra;
+
+	if(logable(4)) 
+		ptl_logfile << "pop stable_flags: ", hexstring(stable_flags, 64), " at rip: ",
+				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
 
 	W64 flagmask = (setflags_to_x86_flags[7] | FLAG_IF);
 	flags = (W16)(ra & flagmask);
+
 	return stable_flags;
 }
 
@@ -1248,6 +1271,10 @@ W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 
 	value = x86_merge(old_eax, value, sizeshift);
 
+	if(logable(4)) 
+		ptl_logfile << "ioport in value: ", hexstring(value, 64), " at rip: ",
+				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
+
 	return value;
 }
 
@@ -1303,6 +1330,10 @@ W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		helper_outl(port, value);
 	}
 	ctx.setup_ptlsim_switch();
+
+	if(logable(4)) 
+		ptl_logfile << "ioport out value: ", hexstring(value, 64), " at rip: ",
+				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
 
 	// Set flags to -1 so it will be ignored at commit time
 	// flags = -1;
@@ -1649,7 +1680,6 @@ bool TraceDecoder::decode_complex() {
 	ast.riptaken = L_ASSIST_POPF;
 	this << ast;
 
-    TransOp stp(OP_st, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof_t(Context, internal_eflags)); stp.internal = 1; this << stp;
     break;
   }
 

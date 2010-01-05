@@ -54,6 +54,7 @@ static const int NUMBER_OF_CORES_PER_L2 = 1;
 
 #endif
 
+#define SINGLE_CORE_MEM_CONFIG
 // Enable/Disable L3 cache
 // #define ENABLE_L3_ACHE
 

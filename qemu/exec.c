@@ -615,7 +615,7 @@ void tb_flush(CPUState *env1)
 
 #ifdef MARSS_QEMU
 	if(in_simulation)
-		ptl_flush_bbcache();
+		ptl_flush_bbcache(-1);
 #endif
 }
 
@@ -1740,7 +1740,7 @@ void tlb_flush(CPUState *env, int flush_global)
     memset (env->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof (void *));
 #ifdef MARSS_QEMU
 	if(in_simulation)
-		ptl_flush_bbcache();
+		ptl_flush_bbcache(env->cpu_index);
 #endif
 
 #ifdef USE_KQEMU

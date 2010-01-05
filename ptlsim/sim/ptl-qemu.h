@@ -150,9 +150,11 @@ int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
 
 /*
  * ptl_flush_bbcache
+ * context_id	: ID of the context of which the BasicBlockCache will be
+ *				  flushed
  * working		: Flush all the decoded cache on tlb flush
  */
-void ptl_flush_bbcache(void);
+void ptl_flush_bbcache(int8_t context_id);
 
 /*
  * ptl_check_ptlcall_queue

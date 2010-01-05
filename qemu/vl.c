@@ -3828,9 +3828,7 @@ static int main_loop(void)
 		if (start_simulation && !vm_running) {
 			in_simulation = 1;
 			cpu_set_sim_ticks();
-			if (!vm_running) {
-				vm_start();
-			}
+			vm_start();
 			start_simulation = 0;
 		}
 

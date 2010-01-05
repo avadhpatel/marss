@@ -2053,6 +2053,8 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  cores[cur_core]->reset();
 	  }
 	  Context& ctx = cores[cur_core]->threads[0]->ctx;
+	  if(logable(4))
+		  ptl_logfile << " Ctx[", cur_core, "] eflags: ", (void*)ctx.eflags, endl;
 	  if(ctx.eip != ctx.old_eip) {
 		  if(logable(5))
 			  ptl_logfile << "Old_eip: ", (void*)(ctx.old_eip), " New_eip: " ,
