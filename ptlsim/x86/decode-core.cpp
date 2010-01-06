@@ -1545,7 +1545,7 @@ static const bool log_code_page_ops = 0;
 bool BasicBlockCache::invalidate(BasicBlock* bb, int reason) {
   BasicBlockChunkList* pagelist;
   if unlikely (bb->refcount) {
-	  if(logable(4))
+	  if(logable(0))
 		  ptl_logfile << "Warning: basic block ", bb, " ", *bb, " is still in use somewhere (refcount ", bb->refcount, ")", endl;
     return false;
   }
@@ -1774,7 +1774,7 @@ void BasicBlockCache::flush(int8_t context_id) {
     Iterator iter(this);
     BasicBlock* bb;
     while (bb = iter.next()) {
-		if(bb->context_id == context_id || context_id == -1)
+		// if(bb->context_id == context_id || context_id == -1)
 			invalidate(bb, INVALIDATE_REASON_RECLAIM);
     }
   }
@@ -2185,9 +2185,11 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
   */
 
   BasicBlock* bb = get(rvp);
-  if likely (bb) {
+  if likely (bb && bb->context_id == ctx.cpu_index) {
 	  return bb;
   }
+  
+  bb = null;
 
   translate_timer.start();
 
@@ -2399,6 +2401,15 @@ void init_decode() {
 void shutdown_decode() {
   bbcache.flush(0);
   if (bbcache_dump_file) bbcache_dump_file.close();
+}
+
+void dump_bbcache_to_logfile() {
+    BasicBlockCache::Iterator iter(&bbcache);
+    BasicBlock* bb;
+    while (bb = iter.next()) {
+        ptl_logfile << "BasicBlock: ", *bb, endl;
+    }
+    ptl_logfile << flush;
 }
 
 extern "C" void ptl_flush_bbcache(int8_t context_id) {

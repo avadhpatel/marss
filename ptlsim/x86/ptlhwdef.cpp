@@ -644,6 +644,7 @@ BasicBlock* BasicBlock::clone() {
 ostream& operator <<(ostream& os, const BasicBlock& bb) {
   os << "BasicBlock ", (void*)(Waddr)bb.rip, " of type ", branch_type_names[bb.brtype], ": ", bb.bytes, " bytes, ", bb.count, " transops (", bb.tagcount, "t ", bb.memcount, "m ", bb.storecount, "s";
   if (bb.repblock) os << " rep";
+  os << ", cpu_id[", bb.context_id, "]";
   os << ", uses ", bitstring(bb.usedregs, 64, true), "), ";
   os << bb.refcount, " refs, ", (void*)(Waddr)bb.rip_taken, " taken, ", (void*)(Waddr)bb.rip_not_taken, " not taken:", endl;
   Waddr rip = bb.rip;
