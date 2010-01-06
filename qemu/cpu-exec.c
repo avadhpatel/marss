@@ -59,6 +59,10 @@ void cpu_loop_exit(void)
 {
     /* NOTE: the register at this point must be saved by hand because
        longjmp restore them */
+#ifdef MARSS_QEMU
+	if(in_simulation)
+		env = first_cpu;
+#endif
     regs_to_env();
     longjmp(env->jmp_env, 1);
 }
@@ -217,6 +221,147 @@ void set_cpu_env(CPUState* env1)
 	cpu_single_env = env1;
 	env_to_regs();
 }
+
+int sim_cpu_exec(void)
+{
+#define DECLARE_HOST_REGS 1
+#include "hostregs_helper.h"
+    int ret, interrupt_request;
+	CPUState *env1;
+
+	for(env1 = first_cpu; env1 != NULL; env1 = env1->next_cpu)
+		if (cpu_halted(env1) == EXCP_HALTED)
+			return EXCP_HALTED;
+
+    /* first we save global registers */
+#define SAVE_HOST_REGS 1
+#include "hostregs_helper.h"
+    /* env = env1; */
+
+    /* env_to_regs(); */
+#if defined(TARGET_I386)
+	for(env = first_cpu; env != NULL; env = env->next_cpu) {
+		/* put eflags in CPU temporary format */
+		env_to_regs();
+		CC_SRC = env->eflags & (CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
+		DF = 1 - (2 * ((env->eflags >> 10) & 1));
+		CC_OP = CC_OP_EFLAGS;
+		env->eflags &= ~(DF_MASK | CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
+		env->exception_index = -1;
+	}
+#endif
+
+
+	for(;;) {
+		for(env = first_cpu; env != NULL; env = env->next_cpu) {
+			cpu_single_env = env;
+			env_to_regs();
+			if (setjmp(env->jmp_env) == 0) {
+				env->current_tb = NULL;
+				/* if an exception is pending, we execute it here */
+				if (env->exception_index >= 0) {
+					if (env->exception_index >= EXCP_INTERRUPT) {
+						/* exit request from the cpu execution loop */
+						ret = env->exception_index;
+						if (ret == EXCP_DEBUG)
+							cpu_handle_debug_exception(env);
+						goto exit_loop;
+					} else {
+#if defined(TARGET_I386)
+						/* simulate a real cpu exception. On i386, it can
+						   trigger new exceptions, but we do not handle
+						   double or triple faults yet. */
+						do_interrupt(env->exception_index,
+								env->exception_is_int,
+								env->error_code,
+								env->exception_next_eip, 0);
+						/* successfully delivered */
+						env->old_exception = -1;
+#endif
+					}
+					env->exception_index = -1;
+				}
+
+				interrupt_request = env->interrupt_request;
+				if (unlikely(interrupt_request)) {
+					if (unlikely(env->singlestep_enabled & SSTEP_NOIRQ)) {
+						/* Mask out external interrupts for this step. */
+						interrupt_request &= ~(CPU_INTERRUPT_HARD |
+								CPU_INTERRUPT_FIQ |
+								CPU_INTERRUPT_SMI |
+								CPU_INTERRUPT_NMI);
+					}
+					if (interrupt_request & CPU_INTERRUPT_DEBUG) {
+						env->interrupt_request &= ~CPU_INTERRUPT_DEBUG;
+						env->exception_index = EXCP_DEBUG;
+						cpu_loop_exit();
+					}
+#if defined(TARGET_I386)
+					if (env->hflags2 & HF2_GIF_MASK) {
+						if ((interrupt_request & CPU_INTERRUPT_SMI) &&
+								!(env->hflags & HF_SMM_MASK)) {
+							svm_check_intercept(SVM_EXIT_SMI);
+							env->interrupt_request &= ~CPU_INTERRUPT_SMI;
+							do_smm_enter();
+						} else if ((interrupt_request & CPU_INTERRUPT_NMI) &&
+								!(env->hflags2 & HF2_NMI_MASK)) {
+							env->interrupt_request &= ~CPU_INTERRUPT_NMI;
+							env->hflags2 |= HF2_NMI_MASK;
+							do_interrupt(EXCP02_NMI, 0, 0, 0, 1);
+						} else if ((interrupt_request & CPU_INTERRUPT_HARD) &&
+								(((env->hflags2 & HF2_VINTR_MASK) && 
+								  (env->hflags2 & HF2_HIF_MASK)) ||
+								 (!(env->hflags2 & HF2_VINTR_MASK) && 
+								  (env->eflags & IF_MASK && 
+								   !(env->hflags & HF_INHIBIT_IRQ_MASK))))) {
+							int intno;
+							svm_check_intercept(SVM_EXIT_INTR);
+							env->interrupt_request &= ~(CPU_INTERRUPT_HARD | CPU_INTERRUPT_VIRQ);
+							intno = cpu_get_pic_interrupt(env);
+							qemu_log_mask(CPU_LOG_TB_IN_ASM, "Servicing hardware INT=0x%02x\n", intno);
+							do_interrupt(intno, 0, 0, 0, 1);
+							/* ensure that no TB jump will be modified as
+							   the program flow was changed */
+#if !defined(CONFIG_USER_ONLY)
+						} else if ((interrupt_request & CPU_INTERRUPT_VIRQ) &&
+								(env->eflags & IF_MASK) && 
+								!(env->hflags & HF_INHIBIT_IRQ_MASK)) {
+							int intno;
+							/* FIXME: this should respect TPR */
+							svm_check_intercept(SVM_EXIT_VINTR);
+							intno = ldl_phys(env->vm_vmcb + offsetof(struct vmcb, control.int_vector));
+							qemu_log_mask(CPU_LOG_TB_IN_ASM, "Servicing virtual hardware INT=0x%02x\n", intno);
+							do_interrupt(intno, 0, 0, 0, 1);
+							env->interrupt_request &= ~CPU_INTERRUPT_VIRQ;
+#endif
+#endif
+						}
+					}
+				}
+			/* } else { */
+				/* goto exit_loop; */
+			}
+		}
+
+		if(setjmp(first_cpu->jmp_env) == 0) {
+			env = first_cpu;
+			cpu_single_env = env;
+			in_simulation = ptl_simulate();
+
+			for(env = first_cpu; env != NULL; env = env->next_cpu) {
+				if (env->exit_request && env->exception_index == -1) {
+					env->exit_request = 0;
+					env->exception_index = EXCP_INTERRUPT;
+				}
+			}
+		}
+
+	}
+
+exit_loop:
+	return ret;
+}
+
 #endif
 
 /* main execution loop */
@@ -263,23 +408,7 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
 #error unsupported target CPU
 #endif
 
-#ifdef MARSS_QEMU
-//	if(in_simulation && do_simulate) {
-//		env->exception_index = -1;
-//		printf("Going into simulation mode eip: %ld\n", env->eip);
-//		in_simulation = ptl_simulate();
-//		printf("Back from simulation mode eip: %ld\n", env->eip);
-//		return 0;
-//	}
-//	if(!do_simulate){
-		// We dont clear exception_index in PTLQEMU mode
-		// because we might have pending exception from 
-		// simulation mode
-		env->exception_index = -1;
-//	}
-#else
     env->exception_index = -1;
-#endif
 
 
     /* prepare setjmp context for exception handling */
@@ -371,76 +500,6 @@ int cpu_exec(CPUState *env1, uint8_t do_simulate)
                 longjmp(env->jmp_env, 1);
             }
 
-#ifdef MARSS_QEMU
-				if (in_simulation) {
-					interrupt_request = env->interrupt_request;
-					if (unlikely(interrupt_request)) {
-						if (unlikely(env->singlestep_enabled & SSTEP_NOIRQ)) {
-							/* Mask out external interrupts for this step. */
-							interrupt_request &= ~(CPU_INTERRUPT_HARD |
-									CPU_INTERRUPT_FIQ |
-									CPU_INTERRUPT_SMI |
-									CPU_INTERRUPT_NMI);
-						}
-						if (interrupt_request & CPU_INTERRUPT_DEBUG) {
-							env->interrupt_request &= ~CPU_INTERRUPT_DEBUG;
-							env->exception_index = EXCP_DEBUG;
-							cpu_loop_exit();
-						}
-#if defined(TARGET_I386)
-						if (env->hflags2 & HF2_GIF_MASK) {
-							if ((interrupt_request & CPU_INTERRUPT_SMI) &&
-									!(env->hflags & HF_SMM_MASK)) {
-								svm_check_intercept(SVM_EXIT_SMI);
-								env->interrupt_request &= ~CPU_INTERRUPT_SMI;
-								do_smm_enter();
-							} else if ((interrupt_request & CPU_INTERRUPT_NMI) &&
-									!(env->hflags2 & HF2_NMI_MASK)) {
-								env->interrupt_request &= ~CPU_INTERRUPT_NMI;
-								env->hflags2 |= HF2_NMI_MASK;
-								do_interrupt(EXCP02_NMI, 0, 0, 0, 1);
-							} else if ((interrupt_request & CPU_INTERRUPT_HARD) &&
-									(((env->hflags2 & HF2_VINTR_MASK) && 
-									  (env->hflags2 & HF2_HIF_MASK)) ||
-									 (!(env->hflags2 & HF2_VINTR_MASK) && 
-									  (env->eflags & IF_MASK && 
-									   !(env->hflags & HF_INHIBIT_IRQ_MASK))))) {
-								int intno;
-								svm_check_intercept(SVM_EXIT_INTR);
-								env->interrupt_request &= ~(CPU_INTERRUPT_HARD | CPU_INTERRUPT_VIRQ);
-								intno = cpu_get_pic_interrupt(env);
-								qemu_log_mask(CPU_LOG_TB_IN_ASM, "Servicing hardware INT=0x%02x\n", intno);
-								do_interrupt(intno, 0, 0, 0, 1);
-								/* ensure that no TB jump will be modified as
-								   the program flow was changed */
-#if !defined(CONFIG_USER_ONLY)
-							} else if ((interrupt_request & CPU_INTERRUPT_VIRQ) &&
-									(env->eflags & IF_MASK) && 
-									!(env->hflags & HF_INHIBIT_IRQ_MASK)) {
-								int intno;
-								/* FIXME: this should respect TPR */
-								svm_check_intercept(SVM_EXIT_VINTR);
-								intno = ldl_phys(env->vm_vmcb + offsetof(struct vmcb, control.int_vector));
-								qemu_log_mask(CPU_LOG_TB_IN_ASM, "Servicing virtual hardware INT=0x%02x\n", intno);
-								do_interrupt(intno, 0, 0, 0, 1);
-								env->interrupt_request &= ~CPU_INTERRUPT_VIRQ;
-#endif
-#endif
-							}
-						}
-					}
-					if (unlikely(env->exit_request)) {
-						env->exit_request = 0;
-						env->exception_index = EXCP_INTERRUPT;
-						longjmp(env->jmp_env, 1);
-					}
-
-					in_simulation = ptl_simulate();
-//					printf("Back from simulation mode eip: %ld\n", env->eip);
-
-					longjmp(env->jmp_env, 1);
-				}
-#endif
 
             next_tb = 0; /* force lookup of first TB */
             for(;;) {

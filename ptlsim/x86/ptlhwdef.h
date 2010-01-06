@@ -867,6 +867,7 @@ struct Context: public CPUX86State {
 
   void setup_ptlsim_switch() {
 
+	  set_cpu_env((CPUX86State*)this);
 	  W64 flags = compute_eflags();
 
 	  // Clear the 2nd and 3rd bit as its used by PTLSim to indicate if 

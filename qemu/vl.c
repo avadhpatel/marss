@@ -3836,9 +3836,12 @@ static int main_loop(void)
 #endif
         if (vm_running) {
 
-//#ifdef MARSS_QEMU
-//			uint8_t exception_pending = 0;
-//#endif
+#ifdef MARSS_QEMU
+			if(in_simulation) {
+				ret = sim_cpu_exec();
+				cur_cpu = first_cpu;
+			} else {
+#endif
 
             for(;;) {
                 /* get next cpu */
@@ -3877,17 +3880,17 @@ static int main_loop(void)
                     env->icount_decr.u32 = 0;
                     env->icount_extra = 0;
                 }
+#ifdef MARSS_QEMU
+				if (in_simulation)
+					/* No need to run for other cpus */
+					break;
+#endif
                 next_cpu = env->next_cpu ?: first_cpu;
                 if (event_pending && likely(ret != EXCP_DEBUG)) {
                     ret = EXCP_INTERRUPT;
                     event_pending = 0;
                     break;
                 }
-#ifdef MARSS_QEMU
-				if (in_simulation)
-					/* No need to run for other cpus */
-					break;
-#endif
                 if (ret == EXCP_HLT) {
                     /* Give the next CPU a chance to run.  */
                     cur_cpu = env;
@@ -3900,6 +3903,10 @@ static int main_loop(void)
                     break;
             }
             cur_cpu = env;
+
+#ifdef MARSS_QEMU
+			}
+#endif
 
             if (shutdown_requested) {
                 ret = EXCP_INTERRUPT;
@@ -3967,14 +3974,6 @@ static int main_loop(void)
                 timeout = 0;
             }
 
-//#ifdef MARSS_QEMU
-//			if(in_simulation && !exception_pending) {
-//				cpu_exec(first_cpu, 1);
-//				timeout = 0;
-//				printf("Going into simulation mode\n");
-//				in_simulation = ptl_simulate();
-//			}
-//#endif
         } else {
             if (shutdown_requested) {
                 ret = EXCP_INTERRUPT;

@@ -356,7 +356,8 @@ bool Context::check_events() const {
 	if(exit_request)// && (eflags & IF_MASK))
 		return true;
 	if(eflags & IF_MASK)
-		return ((exception_index >= 0) || (interrupt_request > 0));
+		return (interrupt_request > 0);
+		// return ((exception_index >= 0) || (interrupt_request > 0));
 	return false;
 //	return ((interrupt_request | exception_index) > 0 ? true : false);
 }

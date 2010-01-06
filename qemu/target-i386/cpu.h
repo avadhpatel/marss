@@ -894,6 +894,7 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
 
 #ifdef MARSS_QEMU
 void set_cpu_env(CPUState* env1);
+int sim_cpu_exec(void);
 #endif
 
 #endif /* CPU_I386_H */

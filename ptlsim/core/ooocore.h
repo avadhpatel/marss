@@ -1430,7 +1430,7 @@ namespace OutOfOrderModel {
   // How many bytes of x86 code to fetch into decode buffer at once
   static const int ICACHE_FETCH_GRANULARITY = 16;
   // Deadlock timeout: if nothing dispatches for this many cycles, flush the pipeline
-  static const int DISPATCH_DEADLOCK_COUNTDOWN_CYCLES = 10*2048; //256;
+  static const int DISPATCH_DEADLOCK_COUNTDOWN_CYCLES = 4096; //256;
   // Size of unaligned predictor Bloom filter
   static const int UNALIGNED_PREDICTOR_SIZE = 4096;
 

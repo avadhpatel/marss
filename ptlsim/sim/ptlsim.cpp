@@ -926,8 +926,13 @@ extern "C" uint8_t ptl_simulate() {
 	if(machine->stopped != 0)
 		machine->stopped = 0;
 
-	if(logable(1))
-		ptl_logfile << "Starting simulation at rip: ", (void*)contextof(0).get_cs_eip(), " kernel_mode: ", contextof(0).kernel_mode, endl;
+	if(logable(1)) {
+		ptl_logfile << "Starting simulation at rip: ";
+		foreach(i, contextcount) {
+			ptl_logfile  << "[cpu ", i, "]", (void*)(contextof(i).eip), " ";
+		}
+	   	ptl_logfile << endl;
+	}
 
 	machine->run(config);
 

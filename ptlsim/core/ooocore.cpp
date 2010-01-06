@@ -700,7 +700,7 @@ bool OutOfOrderCore::runcycle() {
     case COMMIT_RESULT_EXCEPTION: {
 	  if (logable(3) && thread->current_basic_block && 
 			  thread->current_basic_block->rip) {
-		  ptl_logfile << " [vcpu ", i, "] in exception handling at rip ", thread->current_basic_block->rip, endl, flush;
+		  ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in exception handling at rip ", thread->current_basic_block->rip, endl, flush;
 	  }
       exiting = !thread->handle_exception();
       break;
@@ -708,7 +708,7 @@ bool OutOfOrderCore::runcycle() {
     case COMMIT_RESULT_BARRIER: {
 	  if (logable(3) && thread->current_basic_block &&
 			  thread->current_basic_block->rip) {
-		  ptl_logfile << " [vcpu ", i, "] in barrier handling at rip ", thread->current_basic_block->rip, endl, flush;
+		  ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in barrier handling at rip ", thread->current_basic_block->rip, endl, flush;
 	  }
       exiting = !thread->handle_barrier();
       break;
@@ -716,7 +716,7 @@ bool OutOfOrderCore::runcycle() {
     case COMMIT_RESULT_INTERRUPT: {
 	  if (logable(3) && thread->current_basic_block &&
 			  thread->current_basic_block->rip) {
-		  ptl_logfile << " [vcpu ", i, "] in interrupt handling at rip ", thread->current_basic_block->rip, endl, flush;
+		  ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in interrupt handling at rip ", thread->current_basic_block->rip, endl, flush;
 	  }
       exiting = 1;
       // machine.stopped[thread->ctx.cpu_index] = 1;
