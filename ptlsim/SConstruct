@@ -42,6 +42,12 @@ else:
     env.Append(CCFLAGS = '-DDISABLE_LOGGING')
     env.Append(CCFLAGS = optimization_defs)
 
+num_sim_cores = ARGUMENTS.get('c', 1)
+env.Append(CCFLAGS = '-DNUM_SIM_CORES=%d' % int(num_sim_cores))
+if int(num_sim_cores) == 1:
+    env.Append(CCFLAGS = '-DSINGLE_CORE_MEM_CONFIG')
+
+
 # Set all the -D flags
 # enable PTLSIM_HYPERVISOR
 env.Append(CCFLAGS = '-DPTLSIM_HYPERVISOR -DNEED_CPU_H')

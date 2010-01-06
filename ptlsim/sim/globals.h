@@ -41,7 +41,7 @@ extern "C" {
 #ifdef ENABLE_SMT
 #define MAX_CONTEXTS 4
 static const int MAX_THREADS_PER_CORE = 1;
-static const int NUMBER_OF_CORES = 1;
+static const int NUMBER_OF_CORES = NUM_SIM_CORES;
 static const int NUMBER_OF_THREAD_PER_CORE = 1;
 static const int NUMBER_OF_CORES_PER_L2 = 1;
 
@@ -54,7 +54,7 @@ static const int NUMBER_OF_CORES_PER_L2 = 1;
 
 #endif
 
-#define SINGLE_CORE_MEM_CONFIG
+// #define SINGLE_CORE_MEM_CONFIG
 // Enable/Disable L3 cache
 // #define ENABLE_L3_ACHE
 
