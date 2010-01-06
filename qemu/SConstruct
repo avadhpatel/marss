@@ -29,7 +29,7 @@ else:
     env.Append(CCFLAGS = '-g3')
     env.Append(CCFLAGS = '-O2')
 
-google_perftools = ARGUMENTS.get('gpref', 0)
+google_perftools = ARGUMENTS.get('gperf', None)
 if google_perftools != None:
     env.Append(LIBS = 'tcmalloc_minimal')
     env.Append(LIBPATH = google_perftools)
