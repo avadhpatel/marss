@@ -1346,6 +1346,14 @@ W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	return 0;
 }
 
+W64 l_assist_pause(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
+		W16 rbflags, W16 rcflags, W16& flags) {
+	// Pause is a dummy assist. ThreadContext issue_ast will look at
+	// the L_ASSIST_ID and if its L_ASSIST_PAUSE it will pause the
+	// thread for fix cycles.
+	return 0;
+}
+
 #else
 bool assist_ioport_in(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
@@ -2374,13 +2382,15 @@ bool TraceDecoder::decode_complex() {
     // 0x90 (xchg eax,eax) is a NOP and in x86-64 is treated as such (i.e. does not zero upper 32 bits as usual)
     EndOfDecode();
 	// If it has rep prefix then do SVM_EXIT
-	if(prefixes & PFX_REPZ) {
-		if(svm_check_intercept(*this, SVM_EXIT_PAUSE)) 
-			break;
-//		microcode_assist(ASSIST_PAUSE, ripstart, rip);
-//		break;
-	} 
-	this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
+//	if(prefixes & PFX_REPZ) {
+//		if(svm_check_intercept(*this, SVM_EXIT_PAUSE))
+//			break;
+//	}
+//	this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
+	TransOp ast(OP_ast, REG_temp1, REG_zero, REG_zero, REG_zero, 3);
+	ast.riptaken = L_ASSIST_PAUSE;
+	ast.nouserflags = 1;
+	this << ast;
     break;
   }
 

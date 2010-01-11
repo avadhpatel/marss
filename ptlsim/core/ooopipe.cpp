@@ -2231,6 +2231,7 @@ int ReorderBufferEntry::commit() {
 //		  thread.core.dump_smt_state(ptl_logfile);
 //		  assert(0);
 //	  }
+	  assert(physreg->data);
       ctx.eip = physreg->data;
 //      ctx.eip = (physreg->data - ctx.segs[R_CS].base);
     } else {

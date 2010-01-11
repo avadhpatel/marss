@@ -135,6 +135,8 @@ void ThreadContext::reset() {
   unaligned_ldst_buf.reset();
   consecutive_commits_inside_spinlock = 0;
 
+  pause_counter = 0;
+
   total_uops_committed = 0;
   total_insns_committed = 0;
   dispatch_deadlock_countdown = 0;    
@@ -500,6 +502,12 @@ bool OutOfOrderCore::runcycle() {
     int tid = add_index_modulo(round_robin_tid, +permute, threadcount);
     ThreadContext* thread = threads[tid];
     if unlikely (!thread->ctx.running) continue;
+
+	if (thread->pause_counter > 0) {
+		thread->pause_counter--;
+		commitrc[tid] = COMMIT_RESULT_OK;
+		continue;
+	}
 
     commitrc[tid] = thread->commit();
     for_each_cluster(j) thread->writeback(j);

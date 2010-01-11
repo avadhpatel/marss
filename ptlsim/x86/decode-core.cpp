@@ -193,6 +193,7 @@ const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT] = {
 	l_assist_popf,
 	l_assist_ioport_in,
 	l_assist_ioport_out,
+	l_assist_pause,
 };
 
 int light_assist_index(light_assist_func_t assist) {

@@ -77,7 +77,11 @@ static uint32_t hpet_time_after(uint64_t a, uint64_t b)
 
 static uint32_t hpet_time_after64(uint64_t a, uint64_t b)
 {
+#ifdef MARSS_QEMU
+    return ((int64_t)(b) - (int64_t)(a) <= 0);
+#else
     return ((int64_t)(b) - (int64_t)(a) < 0);
+#endif
 }
 
 static uint64_t ticks_to_ns(uint64_t value)

@@ -1434,6 +1434,8 @@ namespace OutOfOrderModel {
   // Size of unaligned predictor Bloom filter
   static const int UNALIGNED_PREDICTOR_SIZE = 4096;
 
+  static const int THREAD_PAUSE_CYCLES = 20;
+
   struct ThreadContext {
     OutOfOrderCore& core;
     OutOfOrderCore& getcore() const { return core; }
@@ -1501,6 +1503,7 @@ namespace OutOfOrderModel {
     W64 load_to_store_parallel_forwarding_buffer[LOAD_FU_COUNT];
 
     W64 consecutive_commits_inside_spinlock;
+	W16 pause_counter;
 
     // statistics:
     W64 total_uops_committed;
@@ -2065,6 +2068,7 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
 
   W64 interrupt_requests;
   W64 cpu_exit_requests;
+  W64 cycles_in_pause;
 };
 
 //

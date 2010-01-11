@@ -546,6 +546,7 @@ enum {
 	L_ASSIST_POPF,
 	L_ASSIST_IOPORT_IN,
 	L_ASSIST_IOPORT_OUT,
+	L_ASSIST_PAUSE,
 	L_ASSIST_COUNT
 };
 
@@ -558,6 +559,7 @@ static const char* light_assist_names[L_ASSIST_COUNT] = {
 	"l_popf",
 	"l_io_in",
 	"l_io_out",
+	"l_pause",
 };
 
 //
@@ -683,6 +685,7 @@ W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflag
 W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
 W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
 W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
+W64 l_assist_pause(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
 
 //
 // Global functions

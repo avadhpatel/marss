@@ -38,7 +38,7 @@ if int(debug):
 else:
     env.Append(CCFLAGS = '-g3')
     env.Append(CCFLAGS = '-O')
-    env.Append(CCFLAGS = '-DDISABLE_ASSERT')
+    # env.Append(CCFLAGS = '-DDISABLE_ASSERT')
     env.Append(CCFLAGS = '-DDISABLE_LOGGING')
     env.Append(CCFLAGS = optimization_defs)
 

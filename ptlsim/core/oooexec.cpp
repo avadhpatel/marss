@@ -2020,6 +2020,12 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra, 
 		W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags) {
 
+	// If the Assist is Pause then pause the thread for Fix cycles
+	if(assistid == L_ASSIST_PAUSE) {
+		getthread().pause_counter = THREAD_PAUSE_CYCLES;
+		per_context_ooocore_stats_update(threadid, cycles_in_pause += THREAD_PAUSE_CYCLES);
+	}
+
 	// Get the ast function ID from 
 	light_assist_func_t assist_func = light_assistid_to_func[assistid];
 	assert(assist_func != null);
