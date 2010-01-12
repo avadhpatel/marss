@@ -282,6 +282,19 @@ int sim_cpu_exec(void)
 					env->exception_index = -1;
 				}
 
+			/* } else { */
+				/* goto exit_loop; */
+			}
+		}
+
+		if(setjmp(first_cpu->jmp_env) == 0) {
+			env = first_cpu;
+			cpu_single_env = env;
+			in_simulation = ptl_simulate();
+
+			for(env = first_cpu; env != NULL; env = env->next_cpu) {
+				cpu_single_env = env;
+				env_to_regs();
 				interrupt_request = env->interrupt_request;
 				if (unlikely(interrupt_request)) {
 					if (unlikely(env->singlestep_enabled & SSTEP_NOIRQ)) {
@@ -338,17 +351,6 @@ int sim_cpu_exec(void)
 						}
 					}
 				}
-			/* } else { */
-				/* goto exit_loop; */
-			}
-		}
-
-		if(setjmp(first_cpu->jmp_env) == 0) {
-			env = first_cpu;
-			cpu_single_env = env;
-			in_simulation = ptl_simulate();
-
-			for(env = first_cpu; env != NULL; env = env->next_cpu) {
 				if (env->exit_request && env->exception_index == -1) {
 					env->exit_request = 0;
 					env->exception_index = EXCP_INTERRUPT;

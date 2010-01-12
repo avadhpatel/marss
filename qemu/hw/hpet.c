@@ -72,7 +72,11 @@ static uint32_t timer_enabled(HPETTimer *t)
 
 static uint32_t hpet_time_after(uint64_t a, uint64_t b)
 {
+#ifdef MARSS_QEMU
+    return ((int32_t)(b) - (int32_t)(a) <= 0);
+#else
     return ((int32_t)(b) - (int32_t)(a) < 0);
+#endif
 }
 
 static uint32_t hpet_time_after64(uint64_t a, uint64_t b)

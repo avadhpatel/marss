@@ -391,6 +391,15 @@ int ReorderBufferEntry::issue() {
   PhysicalRegister& rb = *operands[RB];
   PhysicalRegister& rc = *operands[RC];
 
+  // FIXME : Failsafe operation. Sometimes an entry is issed even though its
+  // operands are not yet ready, so in this case simply replay the issue
+  //
+  if(!ra.ready() || !rb.ready()) {
+	  if(logable(0)) ptl_logfile << "Invalid Issue..\n";
+	  issueq_operation_on_cluster(core, cluster, replay(iqslot));
+	  return ISSUE_NEEDS_REPLAY;
+  }
+
   //
   // Check if any other resources are missing that we didn't
   // know about earlier, and replay like we did above if
@@ -2010,6 +2019,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   
       cycles_left = 0;
       changestate(thread.rob_cache_miss_list); // TODO: change to cache access waiting list
+	  physreg->changestate(PHYSREG_WAITING);
       if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_LOAD_MISS, this, sfra, addr);
     
   }
