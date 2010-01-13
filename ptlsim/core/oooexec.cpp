@@ -234,10 +234,12 @@ bool IssueQueue<size, operandcount>::broadcast(tag_t uopid) {
 // before the next uop can be processed in any way.
 //
 template <int size, int operandcount>
-int IssueQueue<size, operandcount>::issue() {
+int IssueQueue<size, operandcount>::issue(int previd) {
   if (!allready) return -1;
-  int slot = allready.lsb();
-  issued[slot] = 1;
+  // int slot = allready.lsb();
+  int slot = allready.nextlsb(previd);
+  if(slot >= 0)
+	  issued[slot] = 1;
   return slot;
 }
 
@@ -395,9 +397,9 @@ int ReorderBufferEntry::issue() {
   // operands are not yet ready, so in this case simply replay the issue
   //
   if(!ra.ready() || !rb.ready()) {
-	  if(logable(0)) ptl_logfile << "Invalid Issue..\n";
-	  issueq_operation_on_cluster(core, cluster, replay(iqslot));
-	  return ISSUE_NEEDS_REPLAY;
+         if(logable(0)) ptl_logfile << "Invalid Issue..\n";
+         issueq_operation_on_cluster(core, cluster, replay(iqslot));
+         return ISSUE_NEEDS_REPLAY;
   }
 
   //
@@ -2707,11 +2709,11 @@ int OutOfOrderCore::issue(int cluster) {
 
   int maxwidth = clusters[cluster].issue_width;
 
-//  int prev_robid = -1;
+  int last_issue_id = -1;
   while (issuecount < maxwidth) {
-    int iqslot;
-    issueq_operation_on_cluster_with_result(getcore(), cluster, iqslot, issue());
-  
+    int iqslot; 
+    issueq_operation_on_cluster_with_result(getcore(), cluster, iqslot, issue(last_issue_id));
+
     // Is anything ready?
     if unlikely (iqslot < 0) break;
 
@@ -2728,12 +2730,14 @@ int OutOfOrderCore::issue(int cluster) {
     ReorderBufferEntry& rob = thread->ROB[idx];
 
     rob.iqslot = iqslot;
-//	assert(idx != prev_robid);
     int rc = rob.issue();
-//	prev_robid = idx;
-    // Stop issuing from this cluster once something replays or has a mis-speculation
+	switch(rc) {
+		case ISSUE_NEEDS_REPLAY:
+			last_issue_id = iqslot;
+		default:
+			break;
+	}
     issuecount++;
-    if unlikely (rc <= 0) break;
   }
 
   //  per_cluster_stats_update(stats.ooocore.issue.width, cluster, [min(issuecount, MAX_ISSUE_WIDTH)]++);

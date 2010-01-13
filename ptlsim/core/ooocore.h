@@ -499,7 +499,7 @@ namespace OutOfOrderModel {
     void clock();
     bool insert(tag_t uopid, const tag_t* operands, const tag_t* preready);
     bool broadcast(tag_t uopid);
-    int issue();
+    int issue(int previd = -1);
     bool replay(int slot, const tag_t* operands, const tag_t* preready);
     bool switch_to_end(int slot, const tag_t* operands, const tag_t* preready);
     bool remove(int slot);

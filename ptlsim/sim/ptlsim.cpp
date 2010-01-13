@@ -1002,7 +1002,6 @@ extern "C" uint8_t ptl_simulate() {
 		ptl_rip_trace.flush();
 		ptl_rip_trace.close();
 #endif
-//		in_simulation = 0;
 		exit(0);
 	}
 
