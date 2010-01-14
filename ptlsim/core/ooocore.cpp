@@ -308,6 +308,22 @@ void PhysicalRegisterFile::reset(W8 threadid) {
   }
 }
 
+bool PhysicalRegisterFile::cleanup() {
+	int freed = 0;
+    PhysicalRegister* physreg;
+    StateList& statelist = this->states[PHYSREG_PENDINGFREE];
+
+	foreach_list_mutable(statelist, physreg, entry, nextentry) {
+		if unlikely (!physreg->referenced()) {
+			physreg->free();
+			freed++;
+		}
+	}
+
+	per_ooo_core_stats_update(coreid, commit.free_regs_recycled += freed);
+	return (freed > 0);
+}
+
 void PhysicalRegisterFile::reset() {
   foreach (i, MAX_PHYSREG_STATE) {
     states[i].reset();

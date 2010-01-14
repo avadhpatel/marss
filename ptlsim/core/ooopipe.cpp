@@ -1676,22 +1676,24 @@ int ThreadContext::commit() {
   //
   // Recycle physical registers for which all references have been dropped
   //
-  foreach (rfid, PHYS_REG_FILE_COUNT) {
-    StateList& statelist = core.physregfiles[rfid].states[PHYSREG_PENDINGFREE];
-    PhysicalRegister* physreg;
-    foreach_list_mutable(statelist, physreg, entry, nextentry) {
-      if unlikely (!physreg->referenced()) {
-        if unlikely (config.event_log_enabled) {
-          OutOfOrderCoreEvent* event = core.eventlog.add(EVENT_RECLAIM_PHYSREG);
-          event->physreg = physreg->index();
-          event->threadid = physreg->threadid;
-        }
-        physreg->free();
-        //        stats.ooocore.commit.free_regs_recycled++;
-        per_ooo_core_stats_update(coreid, commit.free_regs_recycled++);
-      }
-    }
-  }
+  /*
+   * foreach (rfid, PHYS_REG_FILE_COUNT) {
+   *   StateList& statelist = core.physregfiles[rfid].states[PHYSREG_PENDINGFREE];
+   *   PhysicalRegister* physreg;
+   *   foreach_list_mutable(statelist, physreg, entry, nextentry) {
+   *     if unlikely (!physreg->referenced()) {
+   *       if unlikely (config.event_log_enabled) {
+   *         OutOfOrderCoreEvent* event = core.eventlog.add(EVENT_RECLAIM_PHYSREG);
+   *         event->physreg = physreg->index();
+   *         event->threadid = physreg->threadid;
+   *       }
+   *       physreg->free();
+   *       //        stats.ooocore.commit.free_regs_recycled++;
+   *       per_ooo_core_stats_update(coreid, commit.free_regs_recycled++);
+   *     }
+   *   }
+   * }
+   */
 
   //
   // Commit ROB entries *in program order*, stopping at the first ROB that is 

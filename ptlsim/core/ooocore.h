@@ -969,9 +969,17 @@ namespace OutOfOrderModel {
       init(name, coreid, rfid, size); reset(); return *this;
     }
 
+	bool cleanup();
+
     void init(const char* name, W8 coreid, int rfid, int size);
-    bool remaining() const { return (!states[PHYSREG_FREE].empty()); }
-   
+    // bool remaining() const { return (!states[PHYSREG_FREE].empty()); }
+	bool remaining() {
+		if unlikely (states[PHYSREG_FREE].empty()) {
+			return cleanup();
+		}
+		return true;
+	}
+
     PhysicalRegister* alloc(W8 threadid, int r = -1);
     void reset(W8 threadid);
     ostream& print(ostream& os) const;
@@ -980,6 +988,7 @@ namespace OutOfOrderModel {
 
   private:
     void reset();
+   
   };
 
   static inline ostream& operator <<(ostream& os, const PhysicalRegisterFile& physregs) {

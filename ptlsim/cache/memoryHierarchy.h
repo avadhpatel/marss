@@ -260,7 +260,7 @@ namespace Memory {
 	FixStateList<Message, 128> messageQueue_;
 
 	// Event Queue
-	FixStateList<Event, 256> eventQueue_;
+	FixStateList<Event, 1024> eventQueue_;
 
 	void sort_event_queue(Event *event);
 
