@@ -179,7 +179,7 @@ bool TraceDecoder::decode_fast() {
 
     EndOfDecode();
 
-    alu_reg_or_mem(OP_mull, rd, ra, FLAG_CF|FLAG_OF, REG_imm, false, false, true, rimm.imm.imm);
+    alu_reg_or_mem(OP_mull, rd, ra, SETFLAG_CF|SETFLAG_OF, REG_imm, false, false, true, rimm.imm.imm);
     break;
   }
 
@@ -193,7 +193,7 @@ bool TraceDecoder::decode_fast() {
 
     int rdreg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     int rdshift = reginfo[rd.reg.reg].sizeshift;
-    alu_reg_or_mem(OP_mull, rd, ra, FLAG_CF|FLAG_OF, (rdshift < 2) ? rdreg : REG_zero);
+    alu_reg_or_mem(OP_mull, rd, ra, SETFLAG_CF|SETFLAG_OF, (rdshift < 2) ? rdreg : REG_zero);
     break;
   }
 
