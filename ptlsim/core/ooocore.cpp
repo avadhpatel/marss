@@ -1011,6 +1011,7 @@ void OutOfOrderCore::print_smt_state(ostream& os) {
 
 void ThreadContext::dump_smt_state(ostream& os) {
   os << "SMT per-thread state for t", threadid, ":", endl;
+  os << "Fetchrip: ", hexstring(fetchrip, 64), endl;
 
   print_rename_tables(os);
   print_rob(os);

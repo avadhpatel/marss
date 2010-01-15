@@ -767,7 +767,6 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 	  ptl_logfile << " at uop: ", uop, " at rip: ",
 				 hexstring(uop.rip.rip, 64), endl;
   }
-  state.virtaddr = addr;
 
   //
   // x86-64 requires virtual addresses to be canonical: if bit 47 is set, 
@@ -779,6 +778,7 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
   origaddr = addr;
   annul = 0;
 
+  state.virtaddr = addr;
   uop.ld_st_truly_unaligned = (lowbits(origaddr, sizeshift) != 0);
 
   switch (aligntype) {

@@ -1062,6 +1062,12 @@ extern "C" void update_progress() {
 
 }
 
+void dump_all_info() {
+	if(curr_ptl_machine) {
+		curr_ptl_machine->dump_state(ptl_logfile);
+		ptl_logfile.flush();
+	}
+}
 
 
 bool simulate(const char* machinename) {
