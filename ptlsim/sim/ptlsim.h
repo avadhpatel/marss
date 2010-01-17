@@ -70,6 +70,7 @@ struct PTLsimMachine {
 
 void setup_qemu_switch_all_ctx(Context& last_ctx);
 void setup_qemu_switch_except_ctx(const Context& const_ctx);
+void setup_ptlsim_switch_all_ctx(Context& const_ctx);
 
 inline Context& contextof(W8 i) {
 	return *ptl_contexts[i];

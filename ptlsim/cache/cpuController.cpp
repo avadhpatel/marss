@@ -77,9 +77,9 @@ bool CPUController::handle_interconnect_cb(void *arg)
 
 	CPUControllerQueueEntry *queueEntry = find_entry(message->request);
 	if(queueEntry == null) {
-		ptl_logfile << "Message received that is not for this queue\n";
-		ptl_logfile << "Message: ", *message, endl;
-		ptl_logfile << "Controler: " << get_name(), endl;
+		// ptl_logfile << "Message received that is not for this queue\n";
+		// ptl_logfile << "Message: ", *message, endl;
+		// ptl_logfile << "Controler: " << get_name(), endl;
 		// assert(0);
 		return true;
 	}
@@ -107,13 +107,26 @@ void CPUController::annul_request(MemoryRequest *request)
 	CPUControllerQueueEntry *entry;
 	foreach_list_mutable(pendingRequests_.list(), entry,
 			entry_t, nextentry_t) {
-		if(entry->request == request) {
-			ptl_logfile << "Annuling a CPU Controller request: ";
-			ptl_logfile << *entry << endl;
+		// if(entry->request == request) {
+		if(entry->request->is_same(request)) {
 			entry->annuled = true;
+			entry->request->decRefCounter();
 			pendingRequests_.free(entry);
 		}
 	}
+}
+
+int CPUController::flush()
+{
+	CPUControllerQueueEntry *entry;
+	foreach_list_mutable(pendingRequests_.list(), entry,
+			entry_t, nextentry_t) {
+		if(entry->annuled) continue;
+		entry->annuled = true;
+		entry->request->decRefCounter();
+		pendingRequests_.free(entry);
+	}
+	return 4;
 }
 
 bool CPUController::is_icache_buffer_hit(MemoryRequest *request) 
@@ -219,11 +232,10 @@ CPUControllerQueueEntry* CPUController::find_dependency(
 {
 	W64 requestLineAddr = get_line_address(request);
 
-//	foreach_queuelink(pendingRequests_, queueEntry, CPUControllerQueueEntry) {
 	CPUControllerQueueEntry* queueEntry;
 	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry_t, 
 			prev_t) {
-		memdebug("In find_dependency\n", flush);
+		memdebug("In find_dependency\n");
 		assert(queueEntry);
 		if unlikely (request == queueEntry->request)
 			continue;

@@ -95,6 +95,7 @@ class MemoryRequest: public selfqueuelink
 				W64 physaddr,
 				bool is_icache,
 				bool is_write);
+		bool is_same(MemoryRequest *request);
 
 		void init(MemoryRequest *request);
 

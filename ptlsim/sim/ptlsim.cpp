@@ -863,6 +863,17 @@ void setup_qemu_switch_except_ctx(const Context& const_ctx) {
 	}
 }
 
+void setup_ptlsim_switch_all_ctx(Context& last_ctx) {
+	foreach(c, contextcount) {
+		Context& ctx = contextof(c);
+		if(&ctx != &last_ctx)
+			ctx.setup_ptlsim_switch();
+	}
+
+	/* last_ctx must setup after all other ctx are set */
+	last_ctx.setup_ptlsim_switch();
+}
+
 extern "C" uint8_t ptl_simulate() {
 	PTLsimMachine* machine = null;
 	char* machinename = config.core_name;

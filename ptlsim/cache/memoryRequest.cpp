@@ -110,6 +110,19 @@ bool MemoryRequest::is_same(W8 coreid,
 	return false;
 }
 
+bool MemoryRequest::is_same(MemoryRequest *request)
+{
+	if(coreId_ == request->coreId_ &&
+			threadId_ == request->threadId_ &&
+			robId_ == request->robId_ &&
+			physicalAddress_ == request->physicalAddress_ &&
+			isData_ == request->isData_ &&
+			opType_ == request->opType_)
+		return true;
+	return false;
+}
+
+
 RequestPool::RequestPool()
 {
 	size_ = REQUEST_POOL_SIZE;

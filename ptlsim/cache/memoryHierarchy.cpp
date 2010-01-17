@@ -389,10 +389,20 @@ void MemoryHierarchy::reset()
 	eventQueue_.reset();
 }
 
-int MemoryHierarchy::flush()
+int MemoryHierarchy::flush(uint8_t coreid)
 {
-	assert(0);
-	return -1;
+	int delay = 0;
+
+	if(coreid == -1) {
+		/* Here delay is not added because all the CPU Controllers 
+		 * can be flushed in parallel */
+		foreach(i, cpuControllers_.count()) {
+			delay = cpuControllers_[i]->flush();
+		}
+	} else {
+		delay = cpuControllers_[coreid]->flush();
+	}
+	return delay;
 }
 
 void MemoryHierarchy::set_controller_full(Controller* controller, 
@@ -611,10 +621,18 @@ void MemoryHierarchy::annul_request(W8 coreid,
      */
 	// First find the corresponding memory request
 	// in the rquest pool
+	MemoryRequest* memRequest = get_free_request();
+	memRequest->init(coreid, threadid, physaddr, robid, sim_cycle, is_icache,
+			-1, -1, (is_write ? MEMORY_OP_WRITE : MEMORY_OP_READ));
+	cpuControllers_[coreid]->annul_request(memRequest);
+	foreach(i, allControllers_.count()) {
+		allControllers_[i]->annul_request(memRequest);
+	}
+	memRequest->set_ref_counter(0);
 /*
- *     MemoryRequest* memRequest;
  *     foreach_list_mutable(requestPool_.used_list(), memRequest,
  *             entry, nextentry) {
+ *         if likely (!memRequest->get_ref_counter()) continue;
  *         if(memRequest->is_same(coreid, threadid, robid,
  *                     physaddr, is_icache, is_write)) {
  *             annul_request = memRequest;
@@ -623,13 +641,13 @@ void MemoryHierarchy::annul_request(W8 coreid,
  *             foreach(i, cpuControllers_.count()) {
  *                 cpuControllers_[i]->annul_request(annul_request);
  *             }
- *             foreach(j, allControllers_.count()) {
- *                 allControllers_[j]->annul_request(annul_request);
- *             }
- *             foreach(k, allInterconnects_.count()) {
- *                 allInterconnects_[k]->annul_request(annul_request);
- *             }
- *             annul_request->set_ref_counter(0);
+ *             // foreach(j, allControllers_.count()) {
+ *                 // allControllers_[j]->annul_request(annul_request);
+ *             // }
+ *             // foreach(k, allInterconnects_.count()) {
+ *                 // allInterconnects_[k]->annul_request(annul_request);
+ *             // }
+ *             // annul_request->set_ref_counter(0);
  * 
  *         }
  *     }

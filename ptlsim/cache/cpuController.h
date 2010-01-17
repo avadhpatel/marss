@@ -147,6 +147,7 @@ class CPUController : public Controller
 		void print(ostream& os) const;
 		bool is_cache_availabe(bool is_icache);
 		void annul_request(MemoryRequest *request);
+		int flush();
 
 		int access(MemoryRequest *request) {
 			return access_fast_path(null, request);

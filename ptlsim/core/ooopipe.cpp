@@ -116,6 +116,7 @@ void OutOfOrderCore::flush_pipeline_all() {
     ThreadContext* thread = threads[i];
     thread->flush_pipeline();
   }
+  machine.memoryHierarchyPtr->flush(-1);
   // Clear out everything global:
   setzero(robs_on_fu);
 }
@@ -128,14 +129,15 @@ void ThreadContext::flush_pipeline() {
   if(config.verify_cache && !config.comparing_cache){ //if we rely on cache data only: we have to flush the cache so we can get correct data:
     // flush cache:
     int cycle_in_flush_cache;
-    if(core.machine.memoryHierarchyPtr){
-      cycle_in_flush_cache = core.machine.memoryHierarchyPtr->flush();
-      core.machine.memoryHierarchyPtr->reset();
-      cerr << " flush memoryHierarchy. use cycles: ", cycle_in_flush_cache, endl;
-      cerr << " size of int ", sizeof(int), " size of long ", sizeof(long), " size of pointer ", sizeof (void*), " float ", sizeof(float), endl;
-      assert(0);
-    }
+    // if(core.machine.memoryHierarchyPtr){
+      // cycle_in_flush_cache = core.machine.memoryHierarchyPtr->flush();
+      // core.machine.memoryHierarchyPtr->reset();
+      // cerr << " flush memoryHierarchy. use cycles: ", cycle_in_flush_cache, endl;
+      // cerr << " size of int ", sizeof(int), " size of long ", sizeof(long), " size of pointer ", sizeof (void*), " float ", sizeof(float), endl;
+      // assert(0);
+    // }
   }
+  core.machine.memoryHierarchyPtr->flush(core.coreid);
 #endif
 
   //CPUController 

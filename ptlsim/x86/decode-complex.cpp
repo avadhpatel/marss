@@ -748,17 +748,17 @@ bool assist_write_segreg(Context& ctx) {
   W16 selector = ctx.reg_ar1;
   byte segid = ctx.reg_ar2;
 
-//  ASSIST_IN_QEMU(helper_load_seg, segid , selector);
-  setup_qemu_switch_except_ctx(ctx);
-  ctx.setup_qemu_switch();
+ ASSIST_IN_QEMU(helper_load_seg, segid , selector);
+  // setup_qemu_switch_except_ctx(ctx);
+  // ctx.setup_qemu_switch();
 
   // Before calling helper_load_seg we have to set the 
   // correct eip because in case of fault this function
   // will not return so we have to make sure that our
   //
-  ctx.eip = ctx.reg_selfrip - ctx.segs[R_CS].base;
-  helper_load_seg(segid , selector);
-  ctx.setup_ptlsim_switch();
+  // ctx.eip = ctx.reg_selfrip - ctx.segs[R_CS].base;
+  // helper_load_seg(segid , selector);
+  // ctx.setup_ptlsim_switch();
 
 //  int exception = ctx.write_segreg(segid, selector);
 //
@@ -1273,7 +1273,8 @@ W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	} else {
 		value = helper_inl(port);
 	}
-	ctx.setup_ptlsim_switch();
+	// ctx.setup_ptlsim_switch();
+	setup_ptlsim_switch_all_ctx(ctx);
 
 	value = x86_merge(old_eax, value, sizeshift);
 
@@ -1335,7 +1336,8 @@ W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	} else {
 		helper_outl(port, value);
 	}
-	ctx.setup_ptlsim_switch();
+	// ctx.setup_ptlsim_switch();
+	setup_ptlsim_switch_all_ctx(ctx);
 
 	if(logable(4)) 
 		ptl_logfile << "ioport out value: ", hexstring(value, 64), " at rip: ",

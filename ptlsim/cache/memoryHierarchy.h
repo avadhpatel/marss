@@ -206,7 +206,7 @@ namespace Memory {
     void reset(); 
 
 	// return the number of cycle used to flush the caches
-    int flush(); 
+    int flush(uint8_t coreid); 
 
 	// for debugging
     void dump_info(ostream& os); 

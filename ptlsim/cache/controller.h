@@ -109,6 +109,10 @@ class Controller
 		virtual bool is_full(bool fromInterconnect = false) const = 0;
 		virtual void annul_request(MemoryRequest* request) = 0;
 
+		int flush() {
+			return 0;
+		}
+
 		int get_no_pending_request(W8 coreid) { assert(0); return 0; }
 
 		Signal* get_interconnect_signal() {

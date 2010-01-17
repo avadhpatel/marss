@@ -25,8 +25,9 @@
     ptl_stable_state = 1; \
 	setup_qemu_switch_all_ctx(ctx); \
 	func_name(__VA_ARGS__);		\
-	ctx.setup_ptlsim_switch(); \
+	setup_ptlsim_switch_all_ctx(ctx); \
     ptl_stable_state = 0; 
+	/* ctx.setup_ptlsim_switch(); \ */
 
 struct RexByte { 
   // a.k.a., b, x, r, w
