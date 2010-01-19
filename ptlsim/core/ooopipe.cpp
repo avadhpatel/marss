@@ -488,13 +488,14 @@ bool ThreadContext::fetch() {
 	  if(logable(10))
 		  ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
 
-      if(fetch_or_translate_basic_block(fetchrip) == null) {
-		  if(fetchrip.rip == ctx.eip) {
-			  if(logable(10)) ptl_logfile << "Exception in Code page\n";
-			  return false;
-		  }
-		  break;
-	  }
+	  fetch_or_translate_basic_block(fetchrip);
+      // if(fetch_or_translate_basic_block(fetchrip) == null) {
+		  // if(fetchrip.rip == ctx.eip) {
+			  // if(logable(10)) ptl_logfile << "Exception in Code page\n";
+			  // return false;
+		  // }
+		  // break;
+	  // }
     }
 
     if unlikely (current_basic_block->invalidblock) {
@@ -743,7 +744,7 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
     current_basic_block = bb;
   } else {
     current_basic_block = bbcache.translate(ctx, rvp);
-	if (current_basic_block == null) return null;
+	// if (current_basic_block == null) return null;
     assert(current_basic_block);
     if unlikely (config.event_log_enabled) {
       OutOfOrderCoreEvent* event = core.eventlog.add(EVENT_FETCH_TRANSLATE, rvp);

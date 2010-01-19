@@ -1812,6 +1812,7 @@ bool assist_exec_page_fault(Context& ctx) {
   PageFaultErrorCode pfec = ctx.reg_ar2;
 
   ctx.eip = ctx.reg_selfrip;
+  bbcache.invalidate(RIPVirtPhys(ctx.eip).update(ctx), INVALIDATE_REASON_SPURIOUS);
   ctx.handle_page_fault(faultaddr, 2);
 
   return true;
@@ -2197,10 +2198,10 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
   byte insnbuf[MAX_BB_BYTES];
 
   TraceDecoder trans(rvp);
-  //trans.fillbuf(ctx, insnbuf, sizeof(insnbuf));
-  if(trans.fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
-          return null;
-  }
+  trans.fillbuf(ctx, insnbuf, sizeof(insnbuf));
+  // if(trans.fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
+          // return null;
+  // }
 
   if (logable(10) | log_code_page_ops) {
     ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;

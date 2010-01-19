@@ -652,12 +652,16 @@ W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
 	// RA contains the latest flags contains ZAPS, CF, OF and IF
-	W64 stable_flags = ctx.eflags | (ctx.df & DF_MASK);
-	stable_flags |= ctx.eflags & ~(VM_MASK | RF_MASK);
+	ctx.setup_qemu_switch();
+	W64 stable_flags = helper_read_eflags();
+	ctx.setup_ptlsim_switch();
+	// W64 stable_flags = ctx.eflags | (ctx.df & DF_MASK);
+	// stable_flags |= ctx.eflags & ~(VM_MASK | RF_MASK);
 
 	W64 flagmask = (setflags_to_x86_flags[7] | FLAG_IF);
 	stable_flags |= (ra & flagmask);
-	flags = (W16)(ra | (stable_flags & FLAG_IF));
+	flags = (W16)ra;
+	// flags = (W16)(ra | (stable_flags & FLAG_IF));
 	
 	if(logable(4)) 
 		ptl_logfile << "[cpu ", ctx.cpu_index, "]push stable_flags: ", hexstring(stable_flags, 64), 
@@ -700,21 +704,21 @@ W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 
 	W32 mask = 0;
 	if(ctx.kernel_mode) {
-		mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK  | IOPL_MASK);
+		mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK | IOPL_MASK);
 	} else {
-		mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK );
+		mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK);
 	}
-	W64 stable_flags = ra;
+	W64 stable_flags = (ra & mask);
 
 	// Update the eflags in QEMU
-	ctx.setup_qemu_switch();
-	helper_write_eflags(ra, mask);
-	ctx.setup_ptlsim_switch();
+	// ctx.setup_qemu_switch();
+	// helper_write_eflags(ra, mask);
+	// ctx.setup_ptlsim_switch();
 
-	if(logable(4)) 
-		ptl_logfile << "[cpu ", ctx.cpu_index, "]pop stable_flags: ", 
-					hexstring(stable_flags, 64), " at rip: ",
-				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
+	// if(logable(4)) 
+		// ptl_logfile << "[cpu ", ctx.cpu_index, "]pop stable_flags: ", 
+					// hexstring(stable_flags, 64), " at rip: ",
+				   // (void*)ctx.eip, " cycle: ", sim_cycle, endl;
 
 	W64 flagmask = (setflags_to_x86_flags[7] | FLAG_IF);
 	flags = (W16)(ra & flagmask);
@@ -1695,6 +1699,8 @@ bool TraceDecoder::decode_complex() {
 	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3);
 	ast.riptaken = L_ASSIST_POPF;
 	this << ast;
+
+	TransOp stp(OP_st, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof_t(Context, internal_eflags)); stp.internal = 1; this << stp;
 
     break;
   }

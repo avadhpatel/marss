@@ -406,6 +406,8 @@ RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
   df = ((ctx.internal_eflags & FLAG_DF) != 0);
   padlo = 0;
   padhi = 0;
+  mfnlo = 0;
+  mfnhi = 0;
 
   int exception = 0;
   PageFaultErrorCode pfec = 0;
@@ -467,46 +469,95 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 			if likely (forexec)
 				exec_fault_addr = source;
 			faultaddr = source;
-			return -1;
+			pfec = 1;
+			return 0;
 		}
 	}
 
-	Waddr start_page = (source & TARGET_PAGE_MASK);
-	Waddr end_page = ((source + bytes) & TARGET_PAGE_MASK);
+	// Waddr start_page = (source & TARGET_PAGE_MASK);
+	// Waddr end_page = ((source + bytes) & TARGET_PAGE_MASK);
 	
-	if(start_page != end_page) {
-		int diff_bytes = end_page - source;
-		Waddr physaddr = check_and_translate(source + diff_bytes, 0, 0, 0, exception,
-				mmio, pfec, 1);
-		if (exception) {
-			int old_exception = exception_index;
-			int mmu_index = cpu_mmu_index((CPUState*)this);
-			int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
-					source + diff_bytes, 2, mmu_index, 1);
-			if(logable(10))
-				ptl_logfile << "page fault while reading code fault:", fail, 
-							" source_addr:", (void*)(source), 
-							" eip:", (void*)(eip), endl;
-			if (fail) {
-				if(logable(10))
-					ptl_logfile << "Unable to read code from ", 
-								hexstring(source, 64), endl;
-				setup_ptlsim_switch();
+	// if(start_page != end_page) {
+		// int diff_bytes = end_page - source;
+		// Waddr physaddr = check_and_translate(source + diff_bytes, 0, 0, 0, exception,
+				// mmio, pfec, 1);
+		// if (exception) {
+			// int old_exception = exception_index;
+			// int mmu_index = cpu_mmu_index((CPUState*)this);
+			// int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
+					// source + diff_bytes, 2, mmu_index, 1);
+			// if(logable(10))
+				// ptl_logfile << "page fault while reading code fault:", fail, 
+							// " source_addr:", (void*)(source), 
+							// " eip:", (void*)(eip), endl;
+			// if (fail) {
+				// if(logable(10))
+					// ptl_logfile << "Unable to read code from ", 
+								// hexstring(source, 64), endl;
+				// setup_ptlsim_switch();
 				/*
 				 * restore the exception index as it will be 
 				 * restore when we try to commit this entry from ROB
 				 */
-				exception_index = old_exception;
-				if likely (forexec)
-					exec_fault_addr = source + diff_bytes;
-				faultaddr = source + diff_bytes;
-				return -1;
-			}
-		}
-	}
+				// exception_index = old_exception;
+				// if likely (forexec)
+					// exec_fault_addr = source + diff_bytes;
+				// faultaddr = source + diff_bytes;
+				// return -1;
+			// }
+		// }
+	// }
 	
+	int bytes_frm_first_page = min(4096 - lowbits(source, 12), (Waddr)bytes);
 	target_ulong source_b = source;
 	byte* target_b = (byte*)(target);
+	while(n < bytes_frm_first_page) {
+		char data = ldub_code(source_b);
+		if(logable(109)) {
+			ptl_logfile << "[", hexstring((W8)(data), 8),
+						"-", hexstring((W8)(ldub_code(source_b)), 8), 
+						"@", (void*)(source_b), "] ";
+		}
+		target_b[n] = data;
+		source_b++;
+		n++;
+	}
+
+	if(n == bytes) return n;
+
+	// If we need to access second page, check if its present in TLB or PTE
+	exception = 0;
+	mmio = 0;
+
+	physaddr = check_and_translate(source + n, 0, 0, 0, exception,
+			mmio, pfec, forexec);
+	if (exception) {
+		int old_exception = exception_index;
+		int mmu_index = cpu_mmu_index((CPUState*)this);
+		int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
+				source + n, 2, mmu_index, 1);
+		if(logable(10))
+			ptl_logfile << "page fault while reading code fault:", fail, 
+						" source_addr:", (void*)(source + n), 
+						" eip:", (void*)(eip), endl;
+		if (fail) {
+			if(logable(10))
+				ptl_logfile << "Unable to read code from ", 
+							hexstring(source + n, 64), endl;
+			setup_ptlsim_switch();
+			/*
+			 * restore the exception index as it will be 
+			 * restore when we try to commit this entry from ROB
+			 */
+			exception_index = old_exception;
+			if likely (forexec)
+				exec_fault_addr = source + n;
+			faultaddr = source + n;
+			pfec = 1;
+			return n;
+		}
+	}
+
 	while(n < bytes) {
 		char data = ldub_code(source_b);
 		if(logable(109)) {
@@ -883,16 +934,16 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
 
 	switch(sizeshift) {
 		case 0: // byte write
-			(kernel_mode) ? stb_kernel(virtaddr, (W8)data) : 
-				stb_user(virtaddr, (W8)data);
+			(kernel_mode) ? stb_kernel(virtaddr, data) : 
+				stb_user(virtaddr, data);
 			break;
 		case 1: // word write
-			(kernel_mode) ? stw_kernel(virtaddr, (W16)data) :
-				stw_user(virtaddr, (W16)data);
+			(kernel_mode) ? stw_kernel(virtaddr, data) :
+				stw_user(virtaddr, data);
 			break;
 		case 2: // double word write
-			(kernel_mode) ? stl_kernel(virtaddr, (W32)data) :
-				stl_user(virtaddr, (W32)data);
+			(kernel_mode) ? stl_kernel(virtaddr, data) :
+				stl_user(virtaddr, data);
 			break;
 		case 3: // quad word write
 		default:

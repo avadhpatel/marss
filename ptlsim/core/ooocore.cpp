@@ -1168,6 +1168,10 @@ bool ThreadContext::handle_barrier() {
   core_to_external_state();
 //  if (logable(3)) ptl_logfile << " handle_barrier, flush_pipeline.",endl;
 //  flush_pipeline();
+  if(current_basic_block) {
+	  current_basic_block->release();
+	  current_basic_block = null;
+  }
 
   int assistid = ctx.eip;
   assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
