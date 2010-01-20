@@ -483,19 +483,20 @@ bool ThreadContext::fetch() {
     if unlikely ((!current_basic_block) || (current_basic_block_transop_index >= current_basic_block->count)) {
       fetch_bb_address_ringbuf[fetch_bb_address_ringbuf_head] = fetchrip;
       fetch_bb_address_ringbuf_head = add_index_modulo(fetch_bb_address_ringbuf_head, +1, lengthof(fetch_bb_address_ringbuf));
-	  assert((W64)(fetchrip) != 0);
+	  // assert((W64)(fetchrip) != 0);
 	  
 	  if(logable(10))
 		  ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
 
-	  fetch_or_translate_basic_block(fetchrip);
-      // if(fetch_or_translate_basic_block(fetchrip) == null) {
-		  // if(fetchrip.rip == ctx.eip) {
-			  // if(logable(10)) ptl_logfile << "Exception in Code page\n";
-			  // return false;
-		  // }
-		  // break;
-	  // }
+      fetchrip.update(ctx);
+	  // fetch_or_translate_basic_block(fetchrip);
+      if(fetch_or_translate_basic_block(fetchrip) == null) {
+          if(fetchrip.rip == ctx.eip) {
+              if(logable(10)) ptl_logfile << "Exception in Code page\n";
+              return false;
+          }
+          break;
+      }
     }
 
     if unlikely (current_basic_block->invalidblock) {
@@ -668,8 +669,7 @@ bool ThreadContext::fetch() {
       transop.predinfo.ctxid = 0;
       transop.predinfo.ripafter = fetchrip + transop.bytes;
       predrip = branchpred.predict(transop.predinfo, transop.predinfo.bptype, transop.predinfo.ripafter, transop.riptaken);
-	  if (predrip)
-		  redirectrip = 1;
+      redirectrip = 1;
       per_context_ooocore_stats_update(threadid, branchpred.predictions++);
     }
 
@@ -687,10 +687,10 @@ bool ThreadContext::fetch() {
         swap(transop.riptaken, transop.ripseq);
       }
     } 
-//	else if unlikely (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)) {
-//      transop.riptaken = predrip;
-//      transop.ripseq = predrip;
-//    }
+    else if unlikely (isclass(transop.opcode, OPCLASS_INDIR_BRANCH)) {
+     transop.riptaken = predrip;
+     transop.ripseq = predrip;
+   }
 
     per_context_ooocore_stats_update(threadid, fetch.opclass[opclassof(transop.opcode)]++);
 
@@ -744,7 +744,7 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
     current_basic_block = bb;
   } else {
     current_basic_block = bbcache.translate(ctx, rvp);
-	// if (current_basic_block == null) return null;
+    if (current_basic_block == null) return null;
     assert(current_basic_block);
     if unlikely (config.event_log_enabled) {
       OutOfOrderCoreEvent* event = core.eventlog.add(EVENT_FETCH_TRANSLATE, rvp);
@@ -2030,7 +2030,7 @@ int ReorderBufferEntry::commit() {
   // becomes visible after the store has committed.
   //
   bool page_crossing = ((lowbits(uop.rip.rip, 12) + (uop.bytes-1)) >> 12);
-  if unlikely (thread.ctx.smc_isdirty(uop.rip.physaddr)) {
+  if unlikely (thread.ctx.smc_isdirty(uop.rip.mfnlo)) {
     if unlikely (config.event_log_enabled) core.eventlog.add_commit(EVENT_COMMIT_SMC_DETECTED, this);
 
     //

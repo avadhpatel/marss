@@ -235,7 +235,6 @@ CPUControllerQueueEntry* CPUController::find_dependency(
 	CPUControllerQueueEntry* queueEntry;
 	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry_t, 
 			prev_t) {
-		memdebug("In find_dependency\n");
 		assert(queueEntry);
 		if unlikely (request == queueEntry->request)
 			continue;

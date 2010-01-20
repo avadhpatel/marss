@@ -368,9 +368,9 @@ W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	flags = current_flags;
 
 	// Update in QEMU's flags
-	ctx.setup_qemu_switch();
-	helper_sti();
-	ctx.setup_ptlsim_switch();
+    ctx.setup_qemu_switch();
+    helper_sti();
+    ctx.setup_ptlsim_switch();
 
 	if(logable(4)) ptl_logfile << "[cpu ", ctx.cpu_index, "]sti called rip ", (void*)ctx.eip, endl;
 
@@ -391,9 +391,9 @@ W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	flags = current_flags;
 	
 	// Update in QEMU's flags
-	ctx.setup_qemu_switch();
-	helper_cli();
-	ctx.setup_ptlsim_switch();
+    ctx.setup_qemu_switch();
+    helper_cli();
+    ctx.setup_ptlsim_switch();
 
 	if(logable(4)) ptl_logfile << "[cpu ", ctx.cpu_index, "]cli called at rip ", (void*)ctx.eip, endl;
 

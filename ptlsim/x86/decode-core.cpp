@@ -536,6 +536,7 @@ void TraceDecoder::reset() {
   hflags = 0;
   pe = 0;
   vm86 = 0;
+  handle_exec_fault = 0;
 }
 
 TraceDecoder::TraceDecoder(const RIPVirtPhys& rvp) {
@@ -544,12 +545,8 @@ TraceDecoder::TraceDecoder(const RIPVirtPhys& rvp) {
   rip = rvp;
   ripstart = rvp;
   use64 = rvp.use64;
-  use32 = rvp.use32;
-  ss32 = rvp.ss32;
   kernel = rvp.kernel;
   dirflag = rvp.df;
-  hflags = rvp.hflags;
-  cs_base = rvp.cs_base;
 }
 
 TraceDecoder::TraceDecoder(Waddr rip, bool use64, bool kernel, bool df) {
@@ -558,8 +555,6 @@ TraceDecoder::TraceDecoder(Waddr rip, bool use64, bool kernel, bool df) {
   setzero(bb.rip);
   bb.rip.rip = rip;
   bb.rip.use64 = use64;
-  bb.rip.use32 = use32;
-  bb.rip.ss32 = ss32;
   bb.rip.kernel = kernel;
   bb.rip.df = df;
   this->rip = rip;
@@ -1114,23 +1109,6 @@ void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, c
 
   bool locked = ((prefixes & PFX_LOCK) != 0);
 
-  // check if we are in 16 bit addressing mode or not
-  if (use32 | use64 == 0) {
-	  // 16 bit addressing mode
-	  // [basereg + indexreg] + offset 
-	  this << TransOp(OP_add, REG_temp8, basereg, REG_imm, indexreg, 3, offset);
-	  TransOp ldst(opcode, destreg, REG_temp8, REG_zero, REG_zero, memref.mem.size);
-	  if (memop) {
-		  ldst.datatype = datatype;
-		  ldst.cachelevel = cachelevel;
-		  ldst.locked = locked;
-		  ldst.extshift = 0; // rmw;
-	  }
-
-	  this << ldst;
-	  return;
-  }
-
   if (basereg == REG_rip) {
     // [rip + imm32]: index always is zero and scale is 1
     // This mode is only possible in x86-64 code
@@ -1579,6 +1557,7 @@ bool BasicBlockCache::invalidate(BasicBlock* bb, int reason) {
 
 bool BasicBlockCache::invalidate(const RIPVirtPhys& rvp, int reason) {
   BasicBlock* bb = get(rvp);
+  // BasicBlock* bb = get(rvp.rip);
   if (!bb) return true;
   return invalidate(bb, reason);
 }
@@ -1809,10 +1788,10 @@ bool assist_exec_page_fault(Context& ctx) {
   // cut-off instruction's starting byte.
   //
   Waddr faultaddr = ctx.reg_ar1;
-  PageFaultErrorCode pfec = ctx.reg_ar2;
+  Waddr bbcache_rip = ctx.reg_ar2;
 
   ctx.eip = ctx.reg_selfrip;
-  bbcache.invalidate(RIPVirtPhys(ctx.eip).update(ctx), INVALIDATE_REASON_SPURIOUS);
+  assert(bbcache.invalidate(RIPVirtPhys(bbcache_rip).update(ctx), INVALIDATE_REASON_SPURIOUS));
   ctx.handle_page_fault(faultaddr, 2);
 
   return true;
@@ -1852,11 +1831,7 @@ bool TraceDecoder::invalidate() {
       split_before();
       return false;
     } else {
-      outcome = (faultaddr == bb.rip.rip) ? DECODE_OUTCOME_ENTRY_PAGE_FAULT : DECODE_OUTCOME_OVERLAP_PAGE_FAULT;
-      print_invalid_insns(op, (const byte*)ripstart, (const byte*)rip, valid_byte_count, pfec, faultaddr);
-	  abs_code_addr_immediate(REG_ar1, 3, faultaddr);
-      immediate(REG_ar2, 3, pfec);
-      microcode_assist(ASSIST_EXEC_PAGE_FAULT, ripstart, faultaddr);
+        handle_exec_fault = 1;
     }
   } else {
     // The instruction-specific decoder may have already set the outcome type
@@ -2016,6 +1991,24 @@ bool TraceDecoder::translate() {
   first_uop_in_insn = 1;
   ripstart = rip;
 
+  // if unlikely(faultaddr) {
+      // if(rip == faultaddr) {
+          // is_sse = 0;
+          // is_x87 = 0;
+          // ptl_logfile << "################# Exec-Page fault at start ##########";
+          // ptl_logfile << " faultaddr: ", (void*)(faultaddr), " rip: ", (void*)rip, endl;
+          // abs_code_addr_immediate(REG_ar1, 3, faultaddr);
+          // abs_code_addr_immediate(REG_ar2, 3, bb.rip.rip);
+          // // immediate(REG_ar2, 3, pfec);
+          // microcode_assist(ASSIST_EXEC_PAGE_FAULT, ripstart, faultaddr);
+          // user_insn_count++;
+          // end_of_block = 1;
+          // bb.invalidblock = 1;
+          // flush();
+          // return false;
+      // }
+  // }
+
   decode_prefixes();
 
 #if 0
@@ -2128,7 +2121,7 @@ bool TraceDecoder::translate() {
   } else {
     // Block did not end with a branch: do we have more room for another x86 insn?
     if (// ((MAX_BB_UOPS - bb.count) < (MAX_TRANSOPS_PER_USER_INSN-2)) ||
-        ((rip - bb.rip) >= (insnbytes_bufsize-10)) ||
+        ((rip - bb.rip) >= (insnbytes_bufsize-15)) ||
         ((rip - bb.rip) >= valid_byte_count) ||
         (user_insn_count >= MAX_BB_X86_INSNS) ||
         (rip == stop_at_rip)) {
@@ -2198,10 +2191,9 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
   byte insnbuf[MAX_BB_BYTES];
 
   TraceDecoder trans(rvp);
-  trans.fillbuf(ctx, insnbuf, sizeof(insnbuf));
-  // if(trans.fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
-          // return null;
-  // }
+  if(trans.fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
+      return null;
+  }
 
   if (logable(10) | log_code_page_ops) {
     ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;
@@ -2219,6 +2211,10 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
   for (;;) {
     // if (DEBUG) ptl_logfile << "rip ", (void*)trans.rip, ", relrip = ", (void*)(trans.rip - trans.bb.rip), endl;
     if (!trans.translate()) break;
+  }
+
+  if(trans.handle_exec_fault) {
+      return null;
   }
 
   trans.bb.hitcount = 0;

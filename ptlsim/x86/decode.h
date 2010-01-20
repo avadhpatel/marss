@@ -209,6 +209,7 @@ struct TraceDecoder {
   int outcome;
   bool pe;
   bool vm86;
+  bool handle_exec_fault;
 
   Level1PTE ptelo;
   Level1PTE ptehi;

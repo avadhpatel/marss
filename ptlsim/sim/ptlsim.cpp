@@ -922,11 +922,11 @@ extern "C" uint8_t ptl_simulate() {
 	}
 
 	ptl_logfile << flush;
-	if(ptl_stable_state == 0) {
-		machine->dump_state(ptl_logfile);
-		assert_fail(__STRING(ptl_stable_state == 1), __FILE__,
-			__LINE__, __PRETTY_FUNCTION__);
-	}
+    if(ptl_stable_state == 0) {
+        machine->dump_state(ptl_logfile);
+        assert_fail(__STRING(ptl_stable_state == 1), __FILE__,
+            __LINE__, __PRETTY_FUNCTION__);
+    }
 
     /*
 	 * Set ret_qemu_env to null, it will be set at the exit of simulation 'run'
@@ -938,13 +938,14 @@ extern "C" uint8_t ptl_simulate() {
 	if(machine->stopped != 0)
 		machine->stopped = 0;
 
-	if(logable(1)) {
+    if(logable(1)) {
 		ptl_logfile << "Starting simulation at rip: ";
 		foreach(i, contextcount) {
 			ptl_logfile  << "[cpu ", i, "]", (void*)(contextof(i).eip), " ";
 		}
+        ptl_logfile << " sim_cycle: ", sim_cycle;
 	   	ptl_logfile << endl;
-	}
+    }
 
 	machine->run(config);
 
@@ -956,11 +957,13 @@ extern "C" uint8_t ptl_simulate() {
 	ptl_stable_state = 1;
 
 	if (!machine->stopped) {
-		if(logable(1)) {
+        if(logable(1)) {
 			ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).exception_index,
 						" ex: ", contextof(0).exception, " running: ",
-						contextof(0).running, endl, flush;
-		}
+						contextof(0).running;
+            ptl_logfile << " sim_cycle: ", sim_cycle;
+            ptl_logfile << endl, flush;
+        }
 
 		setup_qemu_switch_all_ctx(*machine->ret_qemu_env);
 

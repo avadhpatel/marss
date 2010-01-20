@@ -578,8 +578,7 @@ ostream& operator <<(ostream& os, const TransOpBase& op) {
 ostream& RIPVirtPhysBase::print(ostream& os) const {
 #ifdef PTLSIM_HYPERVISOR
   os << "[", (void*)(Waddr)rip;
-  os << (use64 ? " 64b" : (use32 ? " 32b" : " 16b"));
-  os << (use64 ? " ss64" : (ss32 ? " ss32" : " ss16"));
+  os << (use64 ? " ss64" : "");
   os << (kernel ? " krn" : "");
   os << (df ? " df" : "");
   os << " mfn ";

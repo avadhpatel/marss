@@ -678,14 +678,14 @@ bool OutOfOrderCore::runcycle() {
 	}
 
     if likely ((rc == COMMIT_RESULT_OK) | (rc == COMMIT_RESULT_NONE)) {
-		if(fetch_exception[i])
-			continue;
+        if(fetch_exception[i])
+            continue;
 
-		// Its a instruction page fault
-		rc = COMMIT_RESULT_EXCEPTION;
-		thread->ctx.exception = EXCEPTION_PageFaultOnExec;
-		thread->ctx.page_fault_addr = thread->ctx.exec_fault_addr;
-	}
+        // Its a instruction page fault
+        rc = COMMIT_RESULT_EXCEPTION;
+        thread->ctx.exception = EXCEPTION_PageFaultOnExec;
+        thread->ctx.page_fault_addr = thread->ctx.exec_fault_addr;
+    }
 
     switch (rc) {
     case COMMIT_RESULT_SMC: {
@@ -1222,6 +1222,7 @@ bool ThreadContext::handle_barrier() {
 bool ThreadContext::handle_exception() {
   // Release resources of everything in the pipeline:
   core_to_external_state();
+  assert(ctx.page_fault_addr != 0);
   if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline.",endl;
   flush_pipeline();
 
