@@ -1937,7 +1937,7 @@ int ReorderBufferEntry::commit() {
 
   all_ready_to_commit &= found_eom;
 
-  if unlikely (!all_ready_to_commit) {
+  if unlikely (!all_ready_to_commit && cant_commit_subrob != null) {
     per_context_ooocore_stats_update(threadid, commit.result.none++);
 
 	if(cant_commit_subrob->current_state_list == &getthread().rob_free_list) {
