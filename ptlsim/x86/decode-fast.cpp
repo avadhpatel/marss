@@ -277,7 +277,7 @@ bool TraceDecoder::decode_fast() {
     int destreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     int sizeshift = reginfo[rd.reg.reg].sizeshift;
 
-    ra.mem.size = sizeshift;
+    ra.mem.size = (addrsize_prefix) ? 2 : sizeshift;
 
     address_generate_and_load_or_store(destreg, REG_zero, ra, OP_add);
     break;
@@ -310,8 +310,6 @@ bool TraceDecoder::decode_fast() {
     // move in value
     this << TransOp(OP_mov, REG_rdx, (rashift < 2) ? REG_rdx : REG_zero, REG_temp0, REG_zero, rashift);
 
-    // zero out high bits of rax since technically both rdx and rax are modified:
-    if (rashift == 2) this << TransOp(OP_mov, REG_rax, REG_zero, REG_rax, REG_zero, 2);
     break;
   }
 
@@ -518,23 +516,29 @@ bool TraceDecoder::decode_fast() {
     DECODE(iform, ra, b_mode);
     int bytes = (W16)rd.imm.imm;
     int level = (byte)ra.imm.imm;
-    // we only support nesting level 0
-    if (level != 0) invalid |= true;
 
     EndOfDecode();
 
     int sizeshift = (use64) ? (opsize_prefix ? 1 : 3) : (opsize_prefix ? 1 : 2);
 
-    // Exactly equivalent to:
-    // push %rbp
-    // mov %rbp,%rsp
-    // sub %rsp,imm8
+    if (level != 0) {
+        this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 3, bytes);
+        this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, (sizeshift << 8 ) | level);
+        end_of_block = 1;
+        microcode_assist(ASSIST_ENTER, ripstart, rip);
+    } else {
 
-    this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_rbp, sizeshift, -(1 << sizeshift));
-    this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, (1 << sizeshift));
+        // Exactly equivalent to:
+        // push %rbp
+        // mov %rbp,%rsp
+        // sub %rsp,imm8
 
-    this << TransOp(OP_mov, REG_rbp, REG_zero, REG_rsp, REG_zero, sizeshift);
-    this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, sizeshift, bytes);
+        this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_rbp, sizeshift, -(1 << sizeshift));
+        this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, (1 << sizeshift));
+
+        this << TransOp(OP_mov, REG_rbp, REG_zero, REG_rsp, REG_zero, sizeshift);
+        this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, sizeshift, bytes);
+    }
     break;
   }
 
@@ -831,8 +835,9 @@ bool TraceDecoder::decode_fast() {
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     
+    int sizeshift = reginfo[ra.reg.reg].sizeshift;
     // bt has no output - just flags:
-    this << TransOp(opcode, (opcode == OP_bt) ? REG_temp0 : rdreg, rdreg, rareg, REG_zero, 3, 0, 0, SETFLAG_CF);
+    this << TransOp(opcode, (opcode == OP_bt) ? REG_temp0 : rdreg, rdreg, rareg, REG_zero, sizeshift, 0, 0, SETFLAG_CF);
     if unlikely (no_partial_flag_updates_per_insn) this << TransOp(OP_collcc, REG_temp10, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
     break;
   }

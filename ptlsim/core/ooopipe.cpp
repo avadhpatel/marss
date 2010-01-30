@@ -290,7 +290,18 @@ void ThreadContext::external_to_core_state() {
   // they are written for the first time:
   //
   for (int i = ARCHREG_COUNT; i < TRANSREG_COUNT; i++) {
-    commitrrt[i] = zeroreg;
+      if(i <= REG_fpstack) {
+          int rfid = core.PHYS_REG_FILE_FP;
+          PhysicalRegisterFile& rf = core.physregfiles[rfid];
+          PhysicalRegister* physreg = (i == REG_zero) ? zeroreg : rf.alloc(threadid);
+          assert(physreg); /// need increase rf size if failed.
+          physreg->archreg = i;
+          physreg->data = ctx.get(i);
+          physreg->flags = 0;
+          commitrrt[i] = physreg;
+      } else {
+          commitrrt[i] = zeroreg;
+      }
   }
 
   //
@@ -1980,7 +1991,9 @@ int ReorderBufferEntry::commit() {
   if(logable(5)) {
 	  ptl_logfile << "Committing ROB entry: ", *this, 
 				  " destreg_value:", hexstring(physreg->data, 64),
-				  endl, superstl::flush;
+                  " destflags: ", hexstring(physreg->flags, 16),
+                  " flagmask: ", hexstring(uop.setflags, 16),
+				  endl;
   }
 
   PhysicalRegister* oldphysreg = thread.commitrrt[uop.rd];

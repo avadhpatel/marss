@@ -81,6 +81,12 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
     assist_x87_finit,
     assist_x87_fclex,
     assist_x87_fxch,
+    assist_x87_fnstenv,
+    assist_x87_fldenv,
+    assist_x87_fbstp,
+    assist_x87_fbld,
+    assist_x87_fnsave,
+    assist_x87_fldcw,
     // SSE save/restore
     assist_ldmxcsr,
     assist_fxsave,
@@ -97,6 +103,7 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
     assist_iret64,
     assist_sti,
     assist_cli,
+    assist_enter,
     // Control register updates
     assist_cpuid,
     assist_rdtsc,
@@ -1238,7 +1245,16 @@ void TraceDecoder::alu_reg_or_mem(int opcode, const DecodedOperand& rd, const De
         } else {
             if (isnegop) { rbreg = rareg; rareg = REG_zero; }
             if (ra_rb_imm_form) {
-                this << TransOp(opcode, destreg, srcreg, REG_imm, (sizeshift >= 2) ? REG_zero : destreg, sizeshift, ra_rb_imm_form_rbimm, 0, setflags);
+                if (opcode == OP_mull) {
+                    this << TransOp(opcode, REG_temp0, srcreg, REG_imm, (sizeshift >= 2) ? REG_zero : destreg, sizeshift, ra_rb_imm_form_rbimm, 0, setflags);
+                    this << TransOp(OP_mov, destreg, destreg, REG_temp0, REG_zero, sizeshift);
+                } else {
+                    this << TransOp(opcode, destreg, srcreg, REG_imm, (sizeshift >= 2) ? REG_zero : destreg, sizeshift, ra_rb_imm_form_rbimm, 0, setflags);
+                }
+            } else if (isnegop && sizeshift < 3) {
+                this << TransOp(opcode, REG_temp2, rareg, rbreg, rcreg, sizeshift,
+                        (isimm) ? ra.imm.imm : 0, 0, setflags);
+                this << TransOp(OP_mov, destreg, destreg, REG_temp2, REG_zero, sizeshift);
             } else {
                 this << TransOp(opcode, (rdhigh) ? REG_temp2 : destreg, rareg, rbreg, rcreg, sizeshift,
                         (isimm) ? ra.imm.imm : 0, 0, setflags);

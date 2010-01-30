@@ -36,7 +36,7 @@
 #include <controller.h>
 #include <interconnect.h>
 
-#define DEBUG_MEMORY
+// #define DEBUG_MEMORY
 //#define DEBUG_WITH_FILE_NAME
 #define ENABLE_CHECKS
 

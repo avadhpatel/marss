@@ -1432,10 +1432,10 @@ void test_misc(void)
     char table[256];
     long res, i;
 
-    for(i=0;i<256;i++) table[i] = 256 - i;
-    res = 0x12345678;
-    asm ("xlat" : "=a" (res) : "b" (table), "0" (res));
-    printf("xlat: EAX=" FMTLX "\n", res);
+	for(i=0;i<256;i++) table[i] = 256 - i;
+	res = 0x12345678;
+    /*asm ("xlat" : "=a" (res) : "b" (table), "0" (res));*/
+    /*printf("xlat: EAX=" FMTLX "\n", res);*/
 
 #if defined(__x86_64__)
 #if 0
@@ -2095,10 +2095,10 @@ static void test_enter(void)
     TEST_ENTER("l", uint32_t, 31);
 #endif
 
-    TEST_ENTER("w", uint16_t, 0);
-    TEST_ENTER("w", uint16_t, 1);
-    TEST_ENTER("w", uint16_t, 2);
-    TEST_ENTER("w", uint16_t, 31);
+    /*TEST_ENTER("w", uint16_t, 0);*/
+    /*TEST_ENTER("w", uint16_t, 1);*/
+    /*TEST_ENTER("w", uint16_t, 2);*/
+    /*TEST_ENTER("w", uint16_t, 31);*/
 }
 
 #ifdef TEST_SSE
@@ -2149,15 +2149,15 @@ static uint64_t __attribute__((aligned(16))) test_values[4][2] = {
     for(i=0;i<2;i++) {\
     a.q[0] = test_values[2*i][0];\
     b.q[0] = test_values[2*i+1][0];\
-    asm volatile (#op " %2, %0" : "=y" (r.q[0]) : "0" (a.q[0]), "y" (b.q[0]));\
-    printf("%-9s: a=" FMT64X " b=" FMT64X " r=" FMT64X "\n",\
-           #op,\
-           a.q[0],\
-           b.q[0],\
-           r.q[0]);\
     }\
     SSE_OP2(op);\
 }
+    /*asm volatile (#op " %2, %0" : "=y" (r.q[0]) : "0" (a.q[0]), "y" (b.q[0]));\*/
+    /*printf("%-9s: a=" FMT64X " b=" FMT64X " r=" FMT64X "\n",\*/
+           /*#op,\*/
+           /*a.q[0],\*/
+           /*b.q[0],\*/
+           /*r.q[0]);\*/
 
 #define SHUF_OP(op, ib)\
 {\
@@ -2444,7 +2444,7 @@ void test_sse(void)
     MMX_OP2(pavgb);
     MMX_OP2(pavgw);
 
-    asm volatile ("pinsrw $1, %1, %0" : "=y" (r.q[0]) : "r" (0x12345678));
+    /*asm volatile ("pinsrw $1, %1, %0" : "=y" (r.q[0]) : "r" (0x12345678));*/
     printf("%-9s: r=" FMT64X "\n", "pinsrw", r.q[0]);
 
     asm volatile ("pinsrw $5, %1, %0" : "=x" (r.dq) : "r" (0x12345678));
@@ -2452,13 +2452,13 @@ void test_sse(void)
 
     a.q[0] = test_values[0][0];
     a.q[1] = test_values[0][1];
-    asm volatile ("pextrw $1, %1, %0" : "=r" (r.l[0]) : "y" (a.q[0]));
+    /*asm volatile ("pextrw $1, %1, %0" : "=r" (r.l[0]) : "y" (a.q[0]));*/
     printf("%-9s: r=%08x\n", "pextrw", r.l[0]);
 
     asm volatile ("pextrw $5, %1, %0" : "=r" (r.l[0]) : "x" (a.dq));
     printf("%-9s: r=%08x\n", "pextrw", r.l[0]);
 
-    asm volatile ("pmovmskb %1, %0" : "=r" (r.l[0]) : "y" (a.q[0]));
+    /*asm volatile ("pmovmskb %1, %0" : "=r" (r.l[0]) : "y" (a.q[0]));*/
     printf("%-9s: r=%08x\n", "pmovmskb", r.l[0]);
 
     asm volatile ("pmovmskb %1, %0" : "=r" (r.l[0]) : "x" (a.dq));
@@ -2472,22 +2472,22 @@ void test_sse(void)
         a.q[1] = test_values[0][1];
         b.q[0] = test_values[1][0];
         b.q[1] = test_values[1][1];
-        asm volatile("maskmovq %1, %0" :
-                     : "y" (a.q[0]), "y" (b.q[0]), "D" (&r)
-                     : "memory");
-        printf("%-9s: r=" FMT64X " a=" FMT64X " b=" FMT64X "\n",
-               "maskmov",
-               r.q[0],
-               a.q[0],
-               b.q[0]);
-        asm volatile("maskmovdqu %1, %0" :
-                     : "x" (a.dq), "x" (b.dq), "D" (&r)
-                     : "memory");
-        printf("%-9s: r=" FMT64X "" FMT64X " a=" FMT64X "" FMT64X " b=" FMT64X "" FMT64X "\n",
-               "maskmov",
-               r.q[1], r.q[0],
-               a.q[1], a.q[0],
-               b.q[1], b.q[0]);
+        /*asm volatile("maskmovq %1, %0" :*/
+                     /*: "y" (a.q[0]), "y" (b.q[0]), "D" (&r)*/
+                     /*: "memory");*/
+        /*printf("%-9s: r=" FMT64X " a=" FMT64X " b=" FMT64X "\n",*/
+               /*"maskmov",*/
+               /*r.q[0],*/
+               /*a.q[0],*/
+               /*b.q[0]);*/
+        /*asm volatile("maskmovdqu %1, %0" :*/
+                     /*: "x" (a.dq), "x" (b.dq), "D" (&r)*/
+                     /*: "memory");*/
+        /*printf("%-9s: r=" FMT64X "" FMT64X " a=" FMT64X "" FMT64X " b=" FMT64X "" FMT64X "\n",*/
+               /*"maskmov",*/
+               /*r.q[1], r.q[0],*/
+               /*a.q[1], a.q[0],*/
+               /*b.q[1], b.q[0]);*/
     }
 
     asm volatile ("emms");
@@ -2620,8 +2620,8 @@ void test_sse(void)
     a.s[3] = -6.3;
     CVT_OP_XMM(cvtps2pd);
     CVT_OP_XMM(cvtss2sd);
-    CVT_OP_XMM2MMX(cvtps2pi);
-    CVT_OP_XMM2MMX(cvttps2pi);
+    /*CVT_OP_XMM2MMX(cvtps2pi);*/
+    /*CVT_OP_XMM2MMX(cvttps2pi);*/
     CVT_OP_XMM2REG(cvtss2si);
     CVT_OP_XMM2REG(cvttss2si);
     CVT_OP_XMM(cvtps2dq);
@@ -2631,24 +2631,24 @@ void test_sse(void)
     a.d[1] = -3.4;
     CVT_OP_XMM(cvtpd2ps);
     CVT_OP_XMM(cvtsd2ss);
-    CVT_OP_XMM2MMX(cvtpd2pi);
-    CVT_OP_XMM2MMX(cvttpd2pi);
+    /*CVT_OP_XMM2MMX(cvtpd2pi);*/
+    /*CVT_OP_XMM2MMX(cvttpd2pi);*/
     CVT_OP_XMM2REG(cvtsd2si);
     CVT_OP_XMM2REG(cvttsd2si);
     CVT_OP_XMM(cvtpd2dq);
     CVT_OP_XMM(cvttpd2dq);
 
     /* sse/mmx moves */
-    CVT_OP_XMM2MMX(movdq2q);
-    CVT_OP_MMX2XMM(movq2dq);
+    /*CVT_OP_XMM2MMX(movdq2q);*/
+    /*CVT_OP_MMX2XMM(movq2dq);*/
 
     /* int to float */
     a.l[0] = -6;
     a.l[1] = 2;
     a.l[2] = 100;
     a.l[3] = -60000;
-    CVT_OP_MMX2XMM(cvtpi2ps);
-    CVT_OP_MMX2XMM(cvtpi2pd);
+    /*CVT_OP_MMX2XMM(cvtpi2ps);*/
+    /*CVT_OP_MMX2XMM(cvtpi2pd);*/
     CVT_OP_REG2XMM(cvtsi2ss);
     CVT_OP_REG2XMM(cvtsi2sd);
     CVT_OP_XMM(cvtdq2ps);

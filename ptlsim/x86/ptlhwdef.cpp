@@ -848,11 +848,7 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   }
   os << "  ", padstring(arch_reg_names[48], -6), " 0x", hexstring(ctx.reg_fptos, 64);
   os << "  ", padstring(arch_reg_names[49], -6), " 0x", hexstring(ctx.fpus, 64);
-  W64 t_fptag = 0;
-  foreach(j, 8) {
-	  t_fptag |= ((W64(ctx.fptags[i])) << 8 * i);
-  }
-  os << "  ", padstring(arch_reg_names[50], -6), " 0x", hexstring(t_fptag, 64);
+  os << "  ", padstring(arch_reg_names[50], -6), " 0x", hexstring(ctx.reg_fptag, 64);
   os << "  ", padstring(arch_reg_names[51], -6), " 0x", hexstring(ctx.reg_fpstack, 64), endl;
   os << "  ", padstring(arch_reg_names[52], -6), " 0x", hexstring(ctx.invalid_reg, 64);
   os << "  ", padstring(arch_reg_names[53], -6), " 0x", hexstring(ctx.invalid_reg, 64);

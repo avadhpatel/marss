@@ -400,6 +400,33 @@ W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	return 0;
 }
 
+bool assist_enter(Context& ctx) {
+
+    int ot, opsize, esp_addend, level;
+    W64 tmp1;
+
+    esp_addend = ctx.reg_ar1;
+    level = ctx.reg_ar2 & 0x1f;
+    opsize = 1 << (ctx.reg_ar2 >> 8);
+
+    tmp1 = ctx.regs[REG_rsp] - opsize;
+    ctx.storemask_virt(tmp1, ctx.regs[REG_rbp], 0xff, 3);
+
+    if(level) {
+        // FIXME : We assume that we are always operating in 64 bit mode
+        // in future if we need 32 bit or 16 bit mode, change this part of code
+        ASSIST_IN_QEMU(helper_enter64_level, level, 1, tmp1);
+    }
+
+    ctx.regs[REG_rbp] = tmp1;
+    // ctx.regs[REG_rsp] -= (esp_addend - (opsize * level));
+    ctx.regs[REG_rsp] = tmp1 + (-esp_addend + (-opsize * level));
+
+    ctx.eip = ctx.reg_nextrip;
+
+    return true;
+}
+
 bool assist_ud2a(Context& ctx) {
 	// This instruction should never occur in simulation.
 	// Linux Kernel uses ud2a to trigger Bug in the code or
@@ -818,7 +845,7 @@ bool assist_fxsave(Context& ctx) {
 //    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
 //    return;
 //  }
-  Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
+  Waddr target = ctx.reg_ar1;
   ASSIST_IN_QEMU(helper_fxsave, target, 1);
 //  ctx.setup_qemu_switch();
 //  helper_fxsave(target, 1);
@@ -845,10 +872,10 @@ bool assist_fxrstor(Context& ctx) {
 //
 //  // We can't have exceptions going on inside PTLsim: virtualize this feature in uopimpl code
 //  // Everything else will be used by real SSE insns inside uopimpls. 
-//  W32 mxcsr = ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
-//  x86_set_mxcsr(mxcsr);
   Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
   ASSIST_IN_QEMU(helper_fxrstor, target, 1);
+  W32 mxcsr = ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
+  x86_set_mxcsr(mxcsr);
 //  ctx.setup_qemu_switch();
 //  helper_fxrstor(target, 1);
   ctx.eip = ctx.reg_nextrip;
@@ -1666,12 +1693,8 @@ bool TraceDecoder::decode_complex() {
     int sizeshift = (opsize_prefix) ? 1 : ((use64) ? 3 : 2);
     int size = (1 << sizeshift);
 
-    if (last_flags_update_was_atomic) {
-      this << TransOp(OP_movccr, REG_temp0, REG_zero, REG_zf, REG_zero, 3);
-    } else {
-      this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
-      this << TransOp(OP_movccr, REG_temp0, REG_zero, REG_temp0, REG_zero, 3);
-    }
+    this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
+    this << TransOp(OP_movccr, REG_temp0, REG_zero, REG_temp0, REG_zero, 3);
 
     TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof_t(Context, internal_eflags)); ldp.internal = 1; this << ldp;
     this << TransOp(OP_or, REG_temp1, REG_temp1, REG_temp0, REG_zero, 2); // merge in standard flags
@@ -1696,7 +1719,7 @@ bool TraceDecoder::decode_complex() {
     this << TransOp(OP_ld, REG_temp0, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
     this << TransOp(OP_add, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
 
-	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3);
+	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3, 0, 0, FLAGS_DEFAULT_ALU);
 	ast.riptaken = L_ASSIST_POPF;
 	this << ast;
 
@@ -2051,27 +2074,43 @@ bool TraceDecoder::decode_complex() {
     end_of_block = 1;
     EndOfDecode();
 
-    int sizeshift = (rex.mode64) ? (addrsize_prefix ? 2 : 3) : (addrsize_prefix ? 1 : 2);
+    int sizeshift = (use64) ? (addrsize_prefix ? 2 : 3) : (addrsize_prefix ? 1 : 2);
 
-    TransOp testop(OP_and, REG_temp1, REG_rcx, REG_rcx, REG_zero, sizeshift, 0, 0, FLAGS_DEFAULT_ALU);
+    // Decrement the RCX by 1 and save to REG_temp1
+    TransOp subop(OP_sub, REG_temp0, REG_rcx, REG_imm, REG_zero, sizeshift, 1);
+    subop.nouserflags = 1;
+    this << subop;
+
+    TransOp testop(OP_and, REG_temp1, REG_temp0, REG_temp0, REG_zero, sizeshift, 0, 0, FLAGS_DEFAULT_ALU);
     testop.nouserflags = 1;
     this << testop;
 
     // ornotcc: raflags | (~rbflags)
     if ((op == 0xe0) | (op == 0xe1)) {
-      TransOp mergeop((op == 0xe0) ? OP_ornotcc : OP_orcc, REG_temp1, REG_temp1, REG_zf, REG_zero, 3, 0, 0, FLAGS_DEFAULT_ALU);
-      mergeop.nouserflags = 1;
-      this << mergeop;
+        TransOp mergeop((op == 0xe0) ? OP_orcc : OP_ornotcc, REG_temp1, REG_temp1, REG_zf, REG_zero, 3, 0, 0, FLAGS_DEFAULT_ALU);
+        mergeop.nouserflags = 1;
+        this << mergeop;
+
+        if (!last_flags_update_was_atomic)
+            this << TransOp(OP_collcc, REG_temp5, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
+
+        TransOp transop(OP_br, REG_rip, REG_temp1, REG_zero, REG_zero, sizeshift, 0);
+        transop.cond = COND_e;
+        transop.riptaken = (Waddr)rip;
+        transop.ripseq = (Waddr)rip + ra.imm.imm;
+        this << transop;
+
+    } else {
+
+        if (!last_flags_update_was_atomic)
+            this << TransOp(OP_collcc, REG_temp5, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
+
+        TransOp transop(OP_br, REG_rip, REG_temp1, REG_zero, REG_zero, sizeshift, 0);
+        transop.cond = COND_ne;
+        transop.riptaken = (Waddr)rip + ra.imm.imm;
+        transop.ripseq = (Waddr)rip;
+        this << transop;
     }
-
-    if (!last_flags_update_was_atomic)
-      this << TransOp(OP_collcc, REG_temp5, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
-
-    TransOp transop(OP_br, REG_rip, REG_temp1, REG_zero, REG_zero, 3, 0);
-    transop.cond = COND_e;
-    transop.riptaken = (Waddr)rip + ra.imm.imm;
-    transop.ripseq = (Waddr)rip;
-    this << transop;
 
     break;
   };
@@ -2086,7 +2125,7 @@ bool TraceDecoder::decode_complex() {
     end_of_block = 1;
     EndOfDecode();
 
-    int sizeshift = (use64) ? (opsize_prefix ? 2 : 3) : (opsize_prefix ? 1 : 2);
+    int sizeshift = (use64) ? (addrsize_prefix ? 2 : 3) : (addrsize_prefix ? 1 : 2);
 
     TransOp testop(OP_and, REG_temp1, REG_rcx, REG_rcx, REG_zero, sizeshift, 0, 0, FLAGS_DEFAULT_ALU);
     testop.nouserflags = 1;
@@ -2272,7 +2311,8 @@ bool TraceDecoder::decode_complex() {
         // edx:eax = eax * src
         // rdx:rax = rax * src
         this << TransOp(OP_mov,  REG_temp0, REG_zero, srcreg, REG_zero, 3);
-        this << TransOp(highop, REG_rdx, REG_rax, REG_temp0, REG_zero, size, 0, 0, SETFLAG_CF|SETFLAG_OF);
+        this << TransOp(highop, REG_temp1, REG_rax, REG_temp0, REG_zero, size, 0, 0, SETFLAG_CF|SETFLAG_OF);
+        this << TransOp(OP_mov, REG_rdx, REG_rdx, REG_temp1, REG_zero, size);
         this << TransOp(OP_mull, REG_rax, REG_rax, REG_temp0, REG_zero, size);
       }
       if unlikely (no_partial_flag_updates_per_insn) this << TransOp(OP_collcc, REG_temp10, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
@@ -3050,8 +3090,9 @@ bool TraceDecoder::decode_complex() {
       int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
       int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
 
+      int sizeshift = reginfo[ra.reg.reg].sizeshift;
       // bt has no output - just flags:
-      this << TransOp(opcode, (opcode == OP_bt) ? REG_temp0 : rdreg, rdreg, rareg, REG_zero, 3, 0, 0, SETFLAG_CF);
+      this << TransOp(opcode, (opcode == OP_bt) ? REG_temp0 : rdreg, rdreg, rareg, REG_zero, sizeshift, 0, 0, SETFLAG_CF);
       if unlikely (no_partial_flag_updates_per_insn) this << TransOp(OP_collcc, REG_temp10, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
       break;
     } else {
@@ -3249,6 +3290,7 @@ bool TraceDecoder::decode_complex() {
 
     int sizeshift = reginfo[ra.reg.reg].sizeshift;
     int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
+    int rdreg = (rd.type == OPTYPE_MEM) ? -1 : arch_pseudo_reg_to_arch_reg[rd.reg.reg];
 
     /*
       
@@ -3273,7 +3315,11 @@ bool TraceDecoder::decode_complex() {
 
     if likely (rd.type == OPTYPE_MEM) { if (memory_fence_if_locked(0)) break; }
 
-    operand_load(REG_temp0, rd, OP_ld, 1);
+    if likely (rd.type == OPTYPE_MEM) {
+        operand_load(REG_temp0, rd, OP_ld, 1);
+    } else {
+        this << TransOp(OP_mov, REG_temp0, REG_zero, rdreg, REG_zero, sizeshift);
+    }
 
     this << TransOp(OP_sub, REG_temp1, REG_rax, REG_temp0, REG_zero, sizeshift, 0, 0, FLAGS_DEFAULT_ALU);
 
@@ -3286,6 +3332,7 @@ bool TraceDecoder::decode_complex() {
     this << selreg;
 
     if likely (rd.type == OPTYPE_MEM) result_store(REG_temp2, REG_temp0, rd);
+    else this << TransOp(OP_mov, rdreg, rdreg, REG_temp2, REG_zero, sizeshift);
 
     if likely (rd.type == OPTYPE_MEM) { if (memory_fence_if_locked(1)) break; }
 
@@ -3347,12 +3394,13 @@ bool TraceDecoder::decode_complex() {
   case 0x1c0 ... 0x1c1: {
     // xadd
     // If the LOCK prefix is present, ld.acq and st.rel are used
-    DECODE(eform, rd, bit(op, 0) ? v_mode : b_mode);
-    DECODE(gform, ra, bit(op, 0) ? v_mode : b_mode);
+    DECODE(eform, rd, bit(op, 0) ? (opsize_prefix ? w_mode : v_mode) : b_mode);
+    DECODE(gform, ra, bit(op, 0) ? (opsize_prefix ? w_mode : v_mode) : b_mode);
     EndOfDecode();
 
     int sizeshift = reginfo[ra.reg.reg].sizeshift;
     int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
+    int rdreg = (rd.type == OPTYPE_MEM ? -1 : arch_pseudo_reg_to_arch_reg[rd.reg.reg]);
 
     /*
       
@@ -3377,10 +3425,18 @@ bool TraceDecoder::decode_complex() {
 
     if likely (rd.type == OPTYPE_MEM) { if (memory_fence_if_locked(0)) break; }
 
-    operand_load(REG_temp0, rd, OP_ld, 1);
+    if likely (rd.type == OPTYPE_MEM) {
+        operand_load(REG_temp0, rd, OP_ld, 1);
+    } else {
+        this << TransOp(OP_mov, REG_temp0, REG_zero, rdreg, REG_zero, sizeshift);
+    }
     this << TransOp(OP_add, REG_temp1, REG_temp0, rareg, REG_zero, sizeshift, 0, 0, FLAGS_DEFAULT_ALU);
-    result_store(REG_temp1, REG_temp2, rd);
     this << TransOp(OP_mov, rareg, rareg, REG_temp0, REG_zero, sizeshift);
+    if likely (rd.type == OPTYPE_MEM) {
+        result_store(REG_temp1, REG_temp2, rd);
+    } else {
+        this << TransOp(OP_mov, rdreg, rdreg, REG_temp1, REG_zero, sizeshift);
+    }
 
     if likely (rd.type == OPTYPE_MEM) { if (memory_fence_if_locked(1)) break; }
 
@@ -3425,8 +3481,6 @@ bool TraceDecoder::decode_complex() {
       EndOfDecode();
       is_sse = 1;
 
-      ra.type = OPTYPE_REG;
-      ra.reg.reg = 0; // get the requested mxcsr into ar1
       operand_load(REG_ar1, ra);
       //
       // LDMXCSR needs to flush the pipeline since future FP instructions will

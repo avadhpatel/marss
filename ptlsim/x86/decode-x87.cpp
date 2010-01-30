@@ -24,14 +24,14 @@ bool assist_x87_fprem(Context& ctx) {
 //	helper_fprem();
 //  assert(false);
   ctx.eip = ctx.reg_nextrip;
-  return false;
+  return true;
 }
 
 #define make_two_input_x87_func_with_pop(name, expr) \
 bool assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
 	ctx.eip = ctx.reg_nextrip; \
-  return false; \
+  return true; \
 }
 //  W64& tos = (W64&)ctx.fpstt; \
 //  W64& st0 = (W64&)ctx.fpregs[tos >> 3]; \
@@ -98,7 +98,7 @@ bool assist_x87_fscale(Context& ctx) {
 //  sw->c1 = 0; sw->c2 = 0;
 	ASSIST_IN_QEMU(helper_fscale);
   ctx.eip = ctx.reg_nextrip;
-  return false;
+  return true;
 }
 
 #define log2 old_log2
@@ -107,7 +107,7 @@ bool assist_x87_fscale(Context& ctx) {
 bool assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
 	ctx.eip = ctx.reg_nextrip; \
-  return false; \
+  return true; \
 }
 //  W64& r = (W64&)ctx.fpregs[ctx.fpstt >> 3]; \
 //  SSEType ra(r); ra.d = (expr); r = ra.w64; \
@@ -126,7 +126,7 @@ bool assist_x87_frndint(Context& ctx) {
 //	ctx.setup_qemu_switch();
 //	helper_frndint();
     ctx.eip = ctx.reg_nextrip;
-  return false;
+  return true;
 }
 //  W64& r = (W64&)ctx.fpregs[ctx.fpstt >> 3];
 //  SSEType ra(r);
@@ -151,7 +151,7 @@ bool assist_x87_frndint(Context& ctx) {
 bool assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
 	ctx.eip = ctx.reg_nextrip; \
-  return false; \
+  return true; \
 }
 //  W64& tos = ctx.fpstt; \
 //  W64& st0 = ctx.fpregs[tos >> 3]; \
@@ -180,7 +180,7 @@ bool assist_x87_fprem1(Context& ctx) {
 //	ctx.setup_qemu_switch();
 //	helper_fprem1();
 	ctx.eip = ctx.reg_nextrip;
-  return false;
+  return true;
 }
 //  W64& tos = ctx.fpstt;
 //  W64& st0 = ctx.fpregs[tos >> 3];
@@ -200,11 +200,11 @@ bool assist_x87_fprem1(Context& ctx) {
 //}
 
 bool assist_x87_fxam(Context& ctx) {
-	ASSIST_IN_QEMU(helper_fxam_ST0);
+    ASSIST_IN_QEMU(helper_fxam_ST0);
 //	ctx.setup_qemu_switch();
 //	helper_fxam_ST0();
 	ctx.eip = ctx.reg_nextrip;
-  return false;
+  return true;
 }
 //  W64& r = ctx.fpregs[ctx.fpstt >> 3];
 //  SSEType ra(r);
@@ -254,7 +254,7 @@ bool assist_x87_fld80(Context& ctx) {
 
 bool assist_x87_fstp80(Context& ctx) {
   // Store and pop from stack
-//  W64& tos = ctx.fpstt;
+ W64& tos = ctx.reg_fptos;
 //  CPU86_LDoubleU data;
 //  x87_fp_64bit_to_80bit((X87Reg*)&data, ctx.fpregs[tos >> 3]);
 
@@ -262,6 +262,7 @@ bool assist_x87_fstp80(Context& ctx) {
   Waddr addr = ctx.reg_ar1;
 
   ASSIST_IN_QEMU(helper_fstt_ST0, addr);
+  // ASSIST_IN_QEMU(helper_fpop);
 //  ctx.setup_qemu_switch();
 //  helper_fstt_ST0(addr);
 
@@ -275,25 +276,28 @@ bool assist_x87_fstp80(Context& ctx) {
 //    return;
 //  }
 
-//  clearbit(ctx.commitarf[REG_fptags], tos);
-//  ctx.fptags[tos] = 0; 
-//  tos = (tos + 8) & FP_STACK_MASK;
+ clearbit(ctx.reg_fptag, tos);
+ // ctx.fptags[tos] = 0;
+ tos = (tos + 8) & FP_STACK_MASK;
   ctx.eip = ctx.reg_nextrip;
-  return false;
+  return true;
 }
 
 bool assist_x87_fsave(Context& ctx) {
   //++MTY TODO
   ctx.eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-  return false;
+  return true;
 }
 
 bool assist_x87_frstor(Context& ctx) {
-  //++MTY TODO
-  ctx.eip = ctx.reg_selfrip;
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-  return false;
+
+    Waddr ptr = ctx.reg_ar1;
+    int data32 = ctx.reg_ar2;
+    ASSIST_IN_QEMU(helper_frstor, ptr, data32);
+    ctx.eip = ctx.reg_nextrip;
+
+    return true;
 }
 
 bool assist_x87_fclex(Context& ctx) {
@@ -301,7 +305,7 @@ bool assist_x87_fclex(Context& ctx) {
 //	ctx.setup_qemu_switch();
 //	helper_fclex();
 	ctx.eip = ctx.reg_nextrip;
-  return false;
+  return true;
 }
 //  X87StatusWord fpsw = ctx.fpus;
 //  fpsw.pe = 0;
@@ -320,12 +324,9 @@ bool assist_x87_fclex(Context& ctx) {
 bool assist_x87_finit(Context& ctx) {
   ctx.fpuc = 0x037f;
   ctx.fpus = 0;
-//  ctx.commitarf[REG_fptags] = 0;
-  foreach(i, 8) {
-	  ctx.fptags[i] = 0;
-  }
+  ctx.reg_fptag = 0;
   ctx.eip = ctx.reg_nextrip;
-  return false;
+  return true;
 }
 
 bool assist_x87_fxch(Context& ctx) {
@@ -334,7 +335,72 @@ bool assist_x87_fxch(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fxchg_ST0_STN, reg);
 
 	ctx.eip = ctx.reg_nextrip;
-  return false;
+  return true;
+}
+
+bool assist_x87_fnstenv(Context& ctx) {
+
+    Waddr ptr = ctx.reg_ar1;
+    int data32 = ctx.reg_ar2;
+    ASSIST_IN_QEMU(helper_fstenv, ptr, data32);
+    ctx.eip = ctx.reg_nextrip;
+
+    return true;
+}
+
+bool assist_x87_fldenv(Context& ctx) {
+
+    Waddr ptr = ctx.reg_ar1;
+    int data32 = ctx.reg_ar2;
+    ASSIST_IN_QEMU(helper_fldenv, ptr, data32);
+    ctx.eip = ctx.reg_nextrip;
+
+    return true;
+}
+
+bool assist_x87_fbstp(Context& ctx) {
+
+    Waddr ptr = ctx.reg_ar1;
+    ASSIST_IN_QEMU(helper_fbst_ST0, ptr);
+    ASSIST_IN_QEMU(helper_fpop);
+    ctx.eip = ctx.reg_nextrip;
+
+    return true;
+}
+
+bool assist_x87_fbld(Context& ctx) {
+
+    Waddr ptr = ctx.reg_ar1;
+    ASSIST_IN_QEMU(helper_fbld_ST0, ptr);
+    ctx.eip = ctx.reg_nextrip;
+
+    return true;
+}
+
+bool assist_x87_fnsave(Context& ctx) {
+
+    Waddr ptr = ctx.reg_ar1;
+    int data32 = ctx.reg_ar2;
+    ASSIST_IN_QEMU(helper_fsave, ptr, data32);
+    ctx.eip = ctx.reg_nextrip;
+
+    return true;
+}
+
+bool assist_x87_fldcw(Context& ctx) {
+
+    W16 val = ctx.reg_ar1;
+    ASSIST_IN_QEMU(helper_fldcw, val);
+
+    // Update the rounding control from fpcw to mxcsr
+    int rounding = (ctx.fpuc >> 10) & 3;
+    W32 mxcsr = (W32)ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
+    mxcsr = (mxcsr & ~(0x6000)) | (rounding << 13);
+    x86_set_mxcsr(mxcsr);
+
+    ctx.eip = ctx.reg_nextrip;
+
+    return true;
 }
 
 //
@@ -520,21 +586,35 @@ bool TraceDecoder::decode_x87() {
   }
 
   case 0x654 ... 0x655: { // 0xdd xx: fpflags = st(0) fucom st(modrm.rm); optional pop
-    if (modrm.mod != 3) MakeInvalid();
-    EndOfDecode();
+    if (modrm.mod != 3) {
+        if(modrm.reg == 4) { // frstor
+            DECODE(eform, ra, q_mode);
+            EndOfDecode();
 
-    bool pop = bit(op, 0);
+            address_generate_and_load_or_store(REG_ar1, REG_zero, ra, OP_add);
+            this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, (opsize_prefix ? 0 : 1));
+            microcode_assist(ASSIST_X87_FRSTOR, ripstart, rip);
+            end_of_block = 1;
+        } else {
+            MakeInvalid();
+        }
+    } else { // fucom
+        if (modrm.mod != 3) MakeInvalid();
+        EndOfDecode();
 
-    x87_load_stack(REG_temp0, REG_fptos);
-    this << TransOp(OP_addm, REG_temp2, REG_fptos, REG_imm, REG_imm, 3, 8*modrm.rm, FP_STACK_MASK);
-    x87_load_stack(REG_temp1, REG_temp2);
-    this << TransOp(OP_fcmpcc, REG_temp0, REG_temp0, REG_temp1, REG_zero, 2);
-    TransOp ldpxlate(OP_ld, REG_temp0, REG_temp0, REG_imm, REG_zero, 0, (Waddr)&translate_fcmpcc_to_x87); ldpxlate.internal = 1; this << ldpxlate;
-    this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_temp0, REG_imm, 3, 0, MaskControlInfo((64-8), 3, (64-8)));
-    this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_temp0, REG_imm, 3, 0, MaskControlInfo((64-14), 1, (64-11)));
-    // FCOMP requires pop from stack
-    if (op == 0x655) {
-      x87_pop_stack();
+        bool pop = bit(op, 0);
+
+        x87_load_stack(REG_temp0, REG_fptos);
+        this << TransOp(OP_addm, REG_temp2, REG_fptos, REG_imm, REG_imm, 3, 8*modrm.rm, FP_STACK_MASK);
+        x87_load_stack(REG_temp1, REG_temp2);
+        this << TransOp(OP_fcmpcc, REG_temp0, REG_temp0, REG_temp1, REG_zero, 2);
+        TransOp ldpxlate(OP_ld, REG_temp0, REG_temp0, REG_imm, REG_zero, 0, (Waddr)&translate_fcmpcc_to_x87); ldpxlate.internal = 1; this << ldpxlate;
+        this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_temp0, REG_imm, 3, 0, MaskControlInfo((64-8), 3, (64-8)));
+        this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_temp0, REG_imm, 3, 0, MaskControlInfo((64-14), 1, (64-11)));
+        // FCOMP requires pop from stack
+        if (op == 0x655) {
+            x87_pop_stack();
+        }
     }
     break;
   }
@@ -565,24 +645,35 @@ bool TraceDecoder::decode_x87() {
   }
 
   case 0x616: { // misc functions
-    if (modrm.mod != 3) MakeInvalid();
-    EndOfDecode();
-    int subop = modrm.rm;
-    if (inrange(subop, 0, 5)) {
-      static const int subop_to_assistid[6] = { ASSIST_X87_F2XM1, ASSIST_X87_FYL2X, ASSIST_X87_FPTAN, ASSIST_X87_FPATAN, ASSIST_X87_FXTRACT, ASSIST_X87_FPREM1 };
-      microcode_assist(subop_to_assistid[subop], ripstart, rip); end_of_block = 1;
+    if (modrm.mod != 3 && modrm.reg == 6) { // fnstenv
+        DECODE(eform, ra, q_mode);
+        EndOfDecode();
+        address_generate_and_load_or_store(REG_ar1, REG_zero, ra, OP_add);
+        this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, (opsize_prefix ? 0 : 1));
+        microcode_assist(ASSIST_X87_FNSTENV, ripstart, rip);
+        end_of_block = 1;
+    } else if(modrm.mod == 3) {
+        EndOfDecode();
+        int subop = modrm.rm;
+        if (inrange(subop, 0, 5)) {
+            static const int subop_to_assistid[6] = { ASSIST_X87_F2XM1, ASSIST_X87_FYL2X, ASSIST_X87_FPTAN, ASSIST_X87_FPATAN, ASSIST_X87_FXTRACT, ASSIST_X87_FPREM1 };
+            microcode_assist(subop_to_assistid[subop], ripstart, rip); end_of_block = 1;
+        } else {
+            // fdecstp or fincstp
+            this << TransOp((subop == 6) ? OP_subm : OP_addm, REG_fptos, REG_fptos, REG_imm, REG_imm, 3, 8, FP_STACK_MASK);
+        }
     } else {
-      // fdecstp or fincstp
-      this << TransOp((subop == 6) ? OP_subm : OP_addm, REG_fptos, REG_fptos, REG_imm, REG_imm, 3, 8, FP_STACK_MASK);
+        MakeInvalid();
     }
     break;
   };
 
   case 0x650: { // fld mem64 or ffree
     if (modrm.mod == 3) {
-      // ffree (just clear tag bit)
+      // ffree st(i) (just clear tag bit)
       EndOfDecode();
-      this << TransOp(OP_btr, REG_fptags, REG_fptags, REG_fptos, REG_zero, 3);
+      this << TransOp(OP_addm, REG_temp1, REG_fptos, REG_imm, REG_imm, 3, 8*modrm.rm, FP_STACK_MASK);
+      this << TransOp(OP_btr, REG_fptags, REG_fptags, REG_temp1, REG_zero, 3);
     } else {
       // load from memory
       // ldq          t0 = [mem]
@@ -669,6 +760,23 @@ bool TraceDecoder::decode_x87() {
     break;
   }
 
+  case 0x656: {
+    if (modrm.mod != 3 && modrm.reg == 6) {
+        // fnsave
+        // int bytemode = (modrm.mod == 2 ? v_mode : b_mode);
+        DECODE(eform, ra, q_mode);
+        EndOfDecode();
+
+        address_generate_and_load_or_store(REG_ar1, REG_zero, ra, OP_add);
+        this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, (opsize_prefix ? 0 : 1));
+        microcode_assist(ASSIST_X87_FNSAVE, ripstart, rip);
+        end_of_block = 1;
+    } else {
+        MakeInvalid();
+    }
+    break;
+  }
+
   case 0x657: { // fstsw mem16
     //
     // FPSW format:
@@ -688,27 +796,32 @@ bool TraceDecoder::decode_x87() {
     break;
   }
 
-  case 0x674: { // fstsw ax
-    if ((modrm.mod != 3) | (modrm.rm != 0)) MakeInvalid();
-    EndOfDecode();
-    this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_fptos, REG_imm, 3, 0, MaskControlInfo((64-11), 3, (64-(11-3))));
-    this << TransOp(OP_mov, REG_rax, REG_rax, REG_fpsw, REG_zero, 1);
+  case 0x674: {
+    if (modrm.mod != 3 && modrm.reg == 4) { // fbld
+        DECODE(eform, ra, b_mode);
+        EndOfDecode();
+        address_generate_and_load_or_store(REG_ar1, REG_zero, ra, OP_add);
+        microcode_assist(ASSIST_X87_FBLD, ripstart, rip);
+        end_of_block = 1;
+    } else if (modrm.mod == 3) { // fstsw ax
+        EndOfDecode();
+        this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_fptos, REG_imm, 3, 0, MaskControlInfo((64-11), 3, (64-(11-3))));
+        this << TransOp(OP_mov, REG_rax, REG_rax, REG_fpsw, REG_zero, 1);
+    } else {
+        MakeInvalid();
+    }
     break;
   }
 
   case 0x611: { // fxch
     if (modrm.mod == 0x3) {
       EndOfDecode();
-	  // Call fxch assist
-	  this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero,
-			  3, modrm.rm);
-	  microcode_assist(ASSIST_X87_FXCH, ripstart, rip);
       // load from FP stack register
-//      this << TransOp(OP_addm, REG_temp2, REG_fptos, REG_imm, REG_imm, 3, 8*modrm.rm, FP_STACK_MASK);
-//      x87_load_stack(REG_temp0, REG_fptos);
-//      x87_load_stack(REG_temp1, REG_temp2);
-//      x87_store_stack(REG_fptos, REG_temp1);
-//      x87_store_stack(REG_temp2, REG_temp0);
+      this << TransOp(OP_addm, REG_temp2, REG_fptos, REG_imm, REG_imm, 3, 8*modrm.rm, FP_STACK_MASK);
+      x87_load_stack(REG_temp0, REG_fptos);
+      x87_load_stack(REG_temp1, REG_temp2);
+      x87_store_stack(REG_fptos, REG_temp1);
+      x87_store_stack(REG_temp2, REG_temp0);
     } else {
       MakeInvalid();
     }
@@ -726,11 +839,11 @@ bool TraceDecoder::decode_x87() {
       x87_store_stack(REG_fptos, REG_temp0);
     } else {
       // fldcw
-      //++MTY TODO This should be a barrier assist!
       DECODE(eform, ra, w_mode);
       EndOfDecode();
-      operand_load(REG_temp1, ra, OP_ld);
-      TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, REG_temp1, 1, offsetof_t(Context, fpuc)); stp.internal = 1; this << stp;
+      operand_load(REG_ar1, ra, OP_ld);
+      microcode_assist(ASSIST_X87_FLDCW, ripstart, rip);
+      end_of_block = 1;
     }
     break;
   }
@@ -791,7 +904,7 @@ bool TraceDecoder::decode_x87() {
     DECODE(eform, rd, w_mode);
     EndOfDecode();
     x87_load_stack(REG_temp0, REG_fptos);
-    this << TransOp(OP_fcvt_d2i, REG_temp0, REG_zero, REG_temp0, REG_zero, (op == 0x671) ? 1 : 0);
+    this << TransOp(OP_fcvt_d2i, REG_temp0, REG_zero, REG_temp0, REG_zero, 0);
     result_store(REG_temp0, REG_temp1, rd);
 
     int x87op = modrm.rm;
@@ -802,38 +915,52 @@ bool TraceDecoder::decode_x87() {
   }
 
   case 0x614: { // fchs fabs ? ? ftst fxam ? ?
-    if (modrm.mod != 3) MakeInvalid();
-    EndOfDecode();
+    if (modrm.mod != 3 && modrm.reg == 4) { //fldenv
+        DECODE(eform, ra, q_mode);
+        EndOfDecode();
 
-    switch (modrm.rm) {
-    case 0: { // fchs
-      x87_load_stack(REG_temp0, REG_fptos);
-      this << TransOp(OP_xor, REG_temp0, REG_temp0, REG_imm, REG_zero, 3, (1LL << 63));
-      x87_store_stack(REG_fptos, REG_temp0);
-      break;
-    } 
-    case 1: { // fabs
-      x87_load_stack(REG_temp0, REG_fptos);
-      this << TransOp(OP_and, REG_temp0, REG_temp0, REG_imm, REG_zero, 3, ~(1LL << 63));
-      x87_store_stack(REG_fptos, REG_temp0);
-      break;
-    }
-    case 4: { // ftst: compare st(0) to 0.0
-      x87_load_stack(REG_temp0, REG_fptos);
-      this << TransOp(OP_fcmpcc, REG_temp0, REG_temp0, REG_zero, REG_zero, 2);
-      TransOp ldpxlate(OP_ld, REG_temp0, REG_temp0, REG_imm, REG_zero, 0, (Waddr)&translate_fcmpcc_to_x87); ldpxlate.internal = 1; this << ldpxlate;
-      this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_temp0, REG_imm, 3, 0, MaskControlInfo((64-8), 3, (64-8)));
-      this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_temp0, REG_imm, 3, 0, MaskControlInfo((64-14), 1, (64-11)));
-      break;
-    }
-    case 5: { // fxam
-      microcode_assist(ASSIST_X87_FXAM, ripstart, rip);
-      end_of_block = 1;
-      break;
-    }
-    default:
-      MakeInvalid();
-      break;
+        address_generate_and_load_or_store(REG_ar1, REG_zero, ra, OP_add);
+        this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, (opsize_prefix ? 0 : 1));
+        microcode_assist(ASSIST_X87_FLDENV, ripstart, rip);
+        end_of_block = 1;
+    } else if (modrm.mod == 3) {
+        EndOfDecode();
+        switch (modrm.rm) {
+            case 0:
+                { // fchs
+                    x87_load_stack(REG_temp0, REG_fptos);
+                    this << TransOp(OP_xor, REG_temp0, REG_temp0, REG_imm, REG_zero, 3, (1LL << 63));
+                    x87_store_stack(REG_fptos, REG_temp0);
+                    break;
+                }
+            case 1:
+                { // fabs
+                    x87_load_stack(REG_temp0, REG_fptos);
+                    this << TransOp(OP_and, REG_temp0, REG_temp0, REG_imm, REG_zero, 3, ~(1LL << 63));
+                    x87_store_stack(REG_fptos, REG_temp0);
+                    break;
+                }
+            case 4:
+                { // ftst
+                    x87_load_stack(REG_temp0, REG_fptos);
+                    this << TransOp(OP_fcmpcc, REG_temp0, REG_temp0, REG_zero, REG_zero, 2);
+                    TransOp ldpxlate(OP_ld, REG_temp0, REG_temp0, REG_imm, REG_zero, 0, (Waddr)&translate_fcmpcc_to_x87); ldpxlate.internal = 1; this << ldpxlate;
+                    this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_temp0, REG_imm, 3, 0, MaskControlInfo((64-8), 3, (64-8)));
+                    this << TransOp(OP_mask, REG_fpsw, REG_fpsw, REG_temp0, REG_imm, 3, 0, MaskControlInfo((64-14), 1, (64-11)));
+                    break;
+                }
+            case 5:
+                { // fxam
+                    microcode_assist(ASSIST_X87_FXAM, ripstart, rip);
+                    end_of_block = 1;
+                    break;
+                }
+            default:
+                MakeInvalid();
+                break;
+        }
+    } else {
+        MakeInvalid();
     }
     break;
   }
@@ -1020,58 +1147,64 @@ bool TraceDecoder::decode_x87() {
   case 0x636: // 0xdb fcomi
   case 0x637: // 0xdb fstp mem80
   case 0x675: // 0xdf fucomip
-  case 0x676: { // 0xdf fcomip
+  case 0x676: { // 0xdf fcomip or fbstp
     if (modrm.mod == 3) {
-      if (op == 0x637) MakeInvalid();
-      EndOfDecode();
-      //
-      // For fcmpcc, uop.size bits have following meaning:
-      // 00 = single precision ordered compare
-      // 01 = single precision unordered compare
-      // 10 = double precision ordered compare
-      // 11 = double precision unordered compare
-      //
-      this << TransOp(OP_addm, REG_temp1, REG_fptos, REG_imm, REG_imm, 3, 8*modrm.rm, FP_STACK_MASK);
-      x87_load_stack(REG_temp0, REG_fptos);
-      x87_load_stack(REG_temp1, REG_temp1);
-        
-      //
-      // comisX and ucomisX set {zf pf cf} according to the comparison,
-      // and always set {of sf af} to zero. The equivalent x87 version 
-      // is fucomi/fcomi/fucomip/fcomip:
-      //
-      bool unordered = bit(op, 0);
-      this << TransOp(OP_fcmpcc, REG_temp0, REG_temp0, REG_temp1, REG_zero, (unordered ? 3 : 2), 0, 0, FLAGS_DEFAULT_ALU);
+        if (op == 0x637) MakeInvalid();
+        EndOfDecode();
+        //
+        // For fcmpcc, uop.size bits have following meaning:
+        // 00 = single precision ordered compare
+        // 01 = single precision unordered compare
+        // 10 = double precision ordered compare
+        // 11 = double precision unordered compare
+        //
+        this << TransOp(OP_addm, REG_temp1, REG_fptos, REG_imm, REG_imm, 3, 8*modrm.rm, FP_STACK_MASK);
+        x87_load_stack(REG_temp0, REG_fptos);
+        x87_load_stack(REG_temp1, REG_temp1);
 
-      if ((op >> 4) == 0x67) {
-        x87_pop_stack();
-      }
+        //
+        // comisX and ucomisX set {zf pf cf} according to the comparison,
+        // and always set {of sf af} to zero. The equivalent x87 version
+        // is fucomi/fcomi/fucomip/fcomip:
+        //
+        bool unordered = bit(op, 0);
+        this << TransOp(OP_fcmpcc, REG_temp0, REG_temp0, REG_temp1, REG_zero, (unordered ? 3 : 2), 0, 0, FLAGS_DEFAULT_ALU);
+
+        if ((op >> 4) == 0x67) {
+            x87_pop_stack();
+        }
     } else {
-      if (op == 0x675) {
-        // fild mem64
-        // ldq          t0 = [mem]
-        // fcvt.q2d.lo  t0 = t0
-        // st.lm.p      [ctx + fptos],t0
-        // subm         fptos = fptos,8,0x3f
-        // bts          fptags = fptags,fptos
-        DECODE(eform, ra, q_mode);
-        EndOfDecode();
-        operand_load(REG_temp0, ra, OP_ld);
-        this << TransOp(OP_fcvt_q2d, REG_temp0, REG_zero, REG_temp0, REG_zero, 3);
-        this << TransOp(OP_subm, REG_fptos, REG_fptos, REG_imm, REG_imm, 3, 8, FP_STACK_MASK); // push stack
-        x87_store_stack(REG_fptos, REG_temp0);
-      } else if ((op == 0x635) | (op == 0x637)) {
-        // fld mem80 or fstp mem80
-        DECODE(eform, ra, q_mode);
-        EndOfDecode();
+        if (op == 0x675) {
+            // fild mem64
+            // ldq          t0 = [mem]
+            // fcvt.q2d.lo  t0 = t0
+            // st.lm.p      [ctx + fptos],t0
+            // subm         fptos = fptos,8,0x3f
+            // bts          fptags = fptags,fptos
+            DECODE(eform, ra, q_mode);
+            EndOfDecode();
+            operand_load(REG_temp0, ra, OP_ld);
+            this << TransOp(OP_fcvt_q2d, REG_temp0, REG_zero, REG_temp0, REG_zero, 3);
+            this << TransOp(OP_subm, REG_fptos, REG_fptos, REG_imm, REG_imm, 3, 8, FP_STACK_MASK); // push stack
+            x87_store_stack(REG_fptos, REG_temp0);
+        } else if ((op == 0x635) | (op == 0x637)) {
+            // fld mem80 or fstp mem80
+            DECODE(eform, ra, q_mode);
+            EndOfDecode();
 
-        address_generate_and_load_or_store(REG_ar1, REG_zero, ra, OP_add, 0, 0, true);
-        microcode_assist((op == 0x635) ? ASSIST_X87_FLD80 : ASSIST_X87_FSTP80, ripstart, rip);
-        end_of_block = 1;
-        break;
-      } else {
-        MakeInvalid();
-      }
+            address_generate_and_load_or_store(REG_ar1, REG_zero, ra, OP_add, 0, 0, true);
+            microcode_assist((op == 0x635) ? ASSIST_X87_FLD80 : ASSIST_X87_FSTP80, ripstart, rip);
+            end_of_block = 1;
+            break;
+        } else if (op == 0x676 && modrm.reg == 6) { // fbstp
+            DECODE(eform, ra, b_mode);
+            EndOfDecode();
+            address_generate_and_load_or_store(REG_ar1, REG_zero, ra, OP_add);
+            microcode_assist(ASSIST_X87_FBSTP, ripstart, rip);
+            end_of_block = 1;
+        } else {
+            MakeInvalid();
+        }
     }
     break;
   }

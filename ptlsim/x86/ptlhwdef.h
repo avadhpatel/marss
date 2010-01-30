@@ -850,7 +850,7 @@ struct Context: public CPUX86State {
 	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O | FLAG_IF));
 	  fpstt = reg_fptos >> 3;
 	  foreach(i, 8) {
-		  reg_fptag |= ((W64(fptags[i])) << (8*i));
+          fptags[i] = !((reg_fptag >> (8*i)) & 0x1);
 	  }
   }
 
@@ -870,9 +870,9 @@ struct Context: public CPUX86State {
 	  reg_fptos = fpstt << 3;
 	  reg_fpstack = ((W64)&(fpregs[0].mmx.q));
 	  reg_trace = 0;
-
+      reg_fptag = 0;
 	  foreach(i, 8) {
-		  fptags[i] = (reg_fptag >> (8*i)) & 0x1;
+          reg_fptag |= ((W64(!fptags[i])) << (8*i));
 	  }
   }
 

@@ -332,6 +332,12 @@ enum {
   ASSIST_X87_FINIT,
   ASSIST_X87_FCLEX,
   ASSIST_X87_FXCH,
+  ASSIST_X87_FNSTENV,
+  ASSIST_X87_FLDENV,
+  ASSIST_X87_FBSTP,
+  ASSIST_X87_FBLD,
+  ASSIST_X87_FNSAVE,
+  ASSIST_X87_FLDCW,
   // SSE save/restore
   ASSIST_LDMXCSR,
   ASSIST_FXSAVE,
@@ -348,6 +354,7 @@ enum {
   ASSIST_IRET64,
   ASSIST_STI,
   ASSIST_CLI,
+  ASSIST_ENTER,
   // Control register updates
   ASSIST_CPUID,
   ASSIST_RDTSC,
@@ -459,6 +466,12 @@ static const char* assist_names[ASSIST_COUNT] = {
   "x87_finit",
   "x87_fclex",
   "x87_fxch",
+  "x87_fnstenv",
+  "x87_fldenv",
+  "x87_fbstp",
+  "x87_fbld",
+  "x87_fnsave",
+  "x87_fldcw",
   // SSE save/restore
   "ldmxcsr",
   "fxsave",
@@ -475,6 +488,7 @@ static const char* assist_names[ASSIST_COUNT] = {
   "iret64",
   "sti",
   "cli",
+  "enter",
   // Control register updates
   "cpuid",
   "rdtsc",
@@ -602,6 +616,12 @@ bool assist_x87_frstor(Context& ctx);
 bool assist_x87_finit(Context& ctx);
 bool assist_x87_fclex(Context& ctx);
 bool assist_x87_fxch(Context& ctx);
+bool assist_x87_fnstenv(Context& ctx);
+bool assist_x87_fldenv(Context& ctx);
+bool assist_x87_fbstp(Context& ctx);
+bool assist_x87_fbld(Context& ctx);
+bool assist_x87_fnsave(Context& ctx);
+bool assist_x87_fldcw(Context& ctx);
 // SSE save/restore
 bool assist_ldmxcsr(Context& ctx);
 bool assist_fxsave(Context& ctx);
@@ -618,6 +638,7 @@ bool assist_iret32(Context& ctx);
 bool assist_iret64(Context& ctx);
 bool assist_sti(Context& ctx);
 bool assist_cli(Context& ctx);
+bool assist_enter(Context& ctx);
 // Control registe rupdates
 bool assist_cpuid(Context& ctx);
 bool assist_rdtsc(Context& ctx);

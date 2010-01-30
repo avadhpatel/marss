@@ -2071,7 +2071,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
   // All VCPUs are running:
   stopped = 0;
-  if unlikely (iterations >= config.start_log_at_iteration) {
+  if unlikely (config.start_log_at_iteration && iterations >= config.start_log_at_iteration) {
     if unlikely (!logenable) ptl_logfile << "Start logging at level ", config.loglevel, " in cycle ", iterations, endl, flush;
     logenable = 1;
   }
