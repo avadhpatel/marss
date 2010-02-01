@@ -467,7 +467,10 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
     target_ulong source_b = source;
     byte* target_b = (byte*)(target);
     while(n < bytes_frm_first_page) {
-        char data = ldub_code(source_b);
+        char data;
+        if(forexec) data = ldub_code(source_b);
+        else if(kernel_mode) data = ldub_kernel(source_b);
+        else data = ldub_user(source_b);
         if(logable(109)) {
             ptl_logfile << "[", hexstring((W8)(data), 8),
                         "-", hexstring((W8)(ldub_code(source_b)), 8),
@@ -514,7 +517,10 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
     }
 
     while(n < bytes) {
-        char data = ldub_code(source_b);
+        char data;
+        if(forexec) data = ldub_code(source_b);
+        else if(kernel_mode) data = ldub_kernel(source_b);
+        else data = ldub_user(source_b);
         if(logable(109)) {
             ptl_logfile << "[", hexstring((W8)(data), 8),
                         "-", hexstring((W8)(ldub_code(source_b)), 8),

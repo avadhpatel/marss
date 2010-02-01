@@ -836,11 +836,11 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
 
   int op_size = (1 << sizeshift );
-  int page_crossing = ((lowbits(addr, 12) + (op_size - 1)) >> 12);
+  int page_crossing = ((lowbits(origaddr, 12) + (op_size - 1)) >> 12);
   if unlikely (page_crossing && !annul) {
 	  int exception2 = 0;
 	  PageFaultErrorCode pfec2 = 0;
-	  ctx.check_and_translate(addr + (op_size - 1), uop.size - op_size, st,
+	  ctx.check_and_translate(state.virtaddr + (op_size - 1), uop.size - op_size, st,
 			  uop.internal, exception2, mmio, pfec2);
 	  if(exception2 != 0) {
 		  exception = exception2;
@@ -1015,9 +1015,11 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 	int size = (1 << uop.size);
 	int page_crossing = ((lowbits(origaddr, 12) + (size - 1)) >> 12);
 	if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
-		handled = thread.ctx.try_handle_fault(addr + (size-1), 1);
-		if(!handled)
+		handled = thread.ctx.try_handle_fault(origaddr + (size-1), 1);
+		if(!handled) {
+            origvirt = origaddr + (size - 1);
 			return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+        }
 	}
 
 	// else - regenerate the physical address as now tlb is filled
@@ -1482,9 +1484,11 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 	int size = (1 << uop.size);
 	int page_crossing = ((lowbits(origaddr, 12) + (size - 1)) >> 12);
 	if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
-		handled = thread.ctx.try_handle_fault(addr + (size-1), 0);
-		if(!handled)
+		handled = thread.ctx.try_handle_fault(origaddr + (size-1), 0);
+		if(!handled) {
+            origvirt = origaddr + (size - 1);
 			return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
+        }
 	}
 
 	// else - regenerate the physical address with new tlb entry

@@ -223,64 +223,70 @@ bool assist_x87_fxam(Context& ctx) {
 // We need a general purpose "copy from user virtual addresses" function
 
 bool assist_x87_fld80(Context& ctx) {
-  // Virtual address is in sr2
-  Waddr addr = ctx.reg_ar1;
+    // Virtual address is in sr2
+    Waddr addr = ctx.reg_ar1;
 
-  ASSIST_IN_QEMU(helper_fldt_ST0, addr);
-//  ctx.setup_qemu_switch();
-//  helper_fldt_ST0(addr);
+    // ASSIST_IN_QEMU(helper_fldt_ST0, addr);
+    //  ctx.setup_qemu_switch();
+    //  helper_fldt_ST0(addr);
 
-//  X87Reg data;
-//  PageFaultErrorCode pfec;
-//  Waddr faultaddr = 0;
-//  int bytes = ctx.copy_from_user(data, addr, sizeof(X87Reg), pfec, faultaddr, false);
-//
-//  if (bytes < sizeof(X87Reg) || faultaddr != 0) {
-//    ctx.eip = ctx.reg_selfrip;
-//	if(logable(0)) ptl_logfile << "Page fault in assist fld80\n";
-//	ctx.handle_page_fault(faultaddr, 0);
-//    return false;
-//  }
-//
-//  // Push on stack
-//  W64& tos = ctx.reg_fptos;
-//  tos = (tos - 8) & FP_STACK_MASK;
-//  ctx.fpregs[tos >> 3].mmx.q = (W64)x87_fp_80bit_to_64bit(&data);
-//  ctx.fptags[tos] = 1;
+    X87Reg data;
+    PageFaultErrorCode pfec;
+    Waddr faultaddr = 0;
+    int bytes = ctx.copy_from_user(data, addr, sizeof(X87Reg), pfec, faultaddr, false);
 
-  ctx.eip = ctx.reg_nextrip;
-  return false;
+    if (bytes < sizeof(X87Reg) || faultaddr != 0) {
+        ctx.eip = ctx.reg_selfrip;
+        if(logable(0)) ptl_logfile << "Page fault in assist fld80\n";
+        ctx.handle_page_fault(faultaddr, 0);
+        return false;
+    }
+
+    // Push on stack
+    W64& tos = ctx.reg_fptos;
+    tos = (tos - 8) & FP_STACK_MASK;
+    ctx.fpregs[tos >> 3].mmx.q = (W64)x87_fp_80bit_to_64bit(&data);
+    setbit(ctx.reg_fptag, tos);
+
+    ctx.eip = ctx.reg_nextrip;
+    return false;
 }
 
 bool assist_x87_fstp80(Context& ctx) {
-  // Store and pop from stack
- W64& tos = ctx.reg_fptos;
-//  CPU86_LDoubleU data;
-//  x87_fp_64bit_to_80bit((X87Reg*)&data, ctx.fpregs[tos >> 3]);
+    // Store and pop from stack
+    W64& tos = ctx.reg_fptos;
+    //  CPU86_LDoubleU data;
+    //  x87_fp_64bit_to_80bit((X87Reg*)&data, ctx.fpregs[tos >> 3]);
 
-  // Virtual address is in sr2
-  Waddr addr = ctx.reg_ar1;
+    // Virtual address is in sr2
+    Waddr addr = ctx.reg_ar1;
 
-  ASSIST_IN_QEMU(helper_fstt_ST0, addr);
-  // ASSIST_IN_QEMU(helper_fpop);
-//  ctx.setup_qemu_switch();
-//  helper_fstt_ST0(addr);
+    X87Reg data;
+    x87_fp_64bit_to_80bit(&data, ctx.fpregs[tos >> 3].mmx.q);
 
-//  PageFaultErrorCode pfec;
-//  Waddr faultaddr;
-//  int bytes = ctx.copy_to_user(addr, data, sizeof(X87Reg), pfec, faultaddr);
-//
-//  if (bytes < sizeof(X87Reg)) {
-//    ctx.eip = ctx.reg_selfrip;
-//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-//    return;
-//  }
+    setup_qemu_switch_all_ctx(ctx);
+    ptl_stable_state = 1;
+    foreach(i, 10) {
+        stb_user(addr++, data[i]);
+    }
+    ptl_stable_state = 0;
+    setup_ptlsim_switch_all_ctx(ctx);
 
- clearbit(ctx.reg_fptag, tos);
- // ctx.fptags[tos] = 0;
- tos = (tos + 8) & FP_STACK_MASK;
-  ctx.eip = ctx.reg_nextrip;
-  return true;
+    //  PageFaultErrorCode pfec;
+    //  Waddr faultaddr;
+    //  int bytes = ctx.copy_to_user(addr, data, sizeof(X87Reg), pfec, faultaddr);
+    //
+    //  if (bytes < sizeof(X87Reg)) {
+    //    ctx.eip = ctx.reg_selfrip;
+    //    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
+    //    return;
+    //  }
+
+    clearbit(ctx.reg_fptag, tos);
+    // ctx.fptags[tos] = 0;
+    tos = (tos + 8) & FP_STACK_MASK;
+    ctx.eip = ctx.reg_nextrip;
+    return true;
 }
 
 bool assist_x87_fsave(Context& ctx) {

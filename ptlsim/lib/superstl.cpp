@@ -78,8 +78,6 @@ W64 get_core_freq_hz() {
   while (!is.eof()) {
     char s[256];
 	is.getline(s, 256);
-	cout << "line: " << s << endl;
-    //is >> readline(s, sizeof(s));
     
     int mhz;
     int n = sscanf(s, "cpu MHz\t: %d\n", &mhz);

@@ -299,13 +299,15 @@ bool CacheController::handle_upper_interconnect(Message &message)
 	memdebug(get_name(),
 			" Received message from upper interconnect\n");
 
-	CacheQueueEntry *queueEntry = pendingRequests_.alloc();
 	//assert(queueEntry);
 
 	// set full flag if buffer is full
 	if(pendingRequests_.isFull()) {
 		memoryHierarchy_->set_controller_full(this, true);
+        return false;
 	}
+
+	CacheQueueEntry *queueEntry = pendingRequests_.alloc();
 
 	if(queueEntry == null) {
 		return false;
@@ -334,6 +336,8 @@ bool CacheController::handle_upper_interconnect(Message &message)
 	} else {
 		cache_access_cb(queueEntry);
 	}
+
+    ADD_HISTORY_ADD(queueEntry->request);
 
 	memdebug("Cache: ", get_name(), " added queue entry: ", 
 			*queueEntry, endl);
@@ -370,6 +374,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
 			newEntry->eventFlags[CACHE_ACCESS_EVENT]++;
 			memoryHierarchy_->add_event(&cacheAccess_, 0,
 					newEntry);
+            ADD_HISTORY_ADD(newEntry->request);
 		}
 	} else { // not lowestPrivate cache
 		if(queueEntry == null) {
@@ -385,6 +390,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
 				evictEntry->eventFlags[CACHE_ACCESS_EVENT]++;
 				memoryHierarchy_->add_event(&cacheAccess_, 1,
 						evictEntry);
+                ADD_HISTORY_ADD(evictEntry->request);
 			}
 		}
 	}
@@ -647,6 +653,7 @@ void CacheController::send_evict_message(CacheQueueEntry *queueEntry,
 	evictEntry->sendTo = upperInterconnect_;
 
 	memdebug("Created Evict message: ", *evictEntry, endl);
+    ADD_HISTORY_ADD(evictEntry->request);
 
 	queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
 	memoryHierarchy_->add_event(&waitInterconnect_, 1, evictEntry);
@@ -662,6 +669,7 @@ void CacheController::send_evict_message(CacheQueueEntry *queueEntry,
 		evictEntry2->sendTo = upperInterconnect2_;
 
 		memdebug("Created Evict message: ", *evictEntry2, endl);
+        ADD_HISTORY_ADD(evictEntry2->request);
 
 		queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
 		memoryHierarchy_->add_event(&waitInterconnect_, 1,
@@ -697,6 +705,7 @@ void CacheController::handle_cache_insert(CacheQueueEntry *queueEntry,
 		newEntry->request->incRefCounter();
 		newEntry->sender = null;
 		newEntry->sendTo = lowerInterconnect_;
+        ADD_HISTORY_ADD(newEntry->request);
 
 		queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
 		memoryHierarchy_->add_event(&waitInterconnect_,
@@ -1111,6 +1120,7 @@ bool CacheController::clear_entry_cb(void *arg)
 		}
 
 		queueEntry->request->decRefCounter();
+        ADD_HISTORY_REM(queueEntry->request);
 		if(!queueEntry->annuled)
 			pendingRequests_.free(queueEntry);
 

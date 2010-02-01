@@ -924,7 +924,7 @@ extern "C" uint8_t ptl_simulate() {
 	ptl_logfile << flush;
     if(ptl_stable_state == 0) {
         machine->dump_state(ptl_logfile);
-        assert_fail(__STRING(ptl_stable_state == 1), __FILE__,
+        assert_fail(__STRING(ptl_stable_state == 0), __FILE__,
             __LINE__, __PRETTY_FUNCTION__);
     }
 
