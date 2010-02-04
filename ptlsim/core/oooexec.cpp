@@ -381,7 +381,7 @@ int ReorderBufferEntry::issue() {
 			  if(rob.idx != thread.ROB.head) {
 				  // ptl_logfile << "ASSIST NOT AT HEAD :: Reissuing: ", *this, endl;
 				  issueq_operation_on_cluster(core, cluster, replay(iqslot));
-				  return ISSUE_NEEDS_REPLAY;
+				  return ISSUE_SKIPED;
 			  } else {
 				  break;
 			  }
@@ -2738,11 +2738,13 @@ int OutOfOrderCore::issue(int cluster) {
     int rc = rob.issue();
 	switch(rc) {
 		case ISSUE_NEEDS_REPLAY:
+        case ISSUE_SKIPED:
 			last_issue_id = iqslot;
 		default:
 			break;
 	}
-    issuecount++;
+    if(rc != ISSUE_SKIPED)
+        issuecount++;
   }
 
   //  per_cluster_stats_update(stats.ooocore.issue.width, cluster, [min(issuecount, MAX_ISSUE_WIDTH)]++);
