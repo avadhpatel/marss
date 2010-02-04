@@ -1222,7 +1222,6 @@ bool ThreadContext::handle_barrier() {
 bool ThreadContext::handle_exception() {
   // Release resources of everything in the pipeline:
   core_to_external_state();
-  assert(ctx.page_fault_addr != 0);
   if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline.",endl;
   flush_pipeline();
 
@@ -1283,14 +1282,7 @@ handle_page_fault: {
 		  ptl_logfile << "Page fault exception address: ",
 					  hexstring(exception_address, 64), 
 					  " is_write: ", write_exception, endl, ctx, endl;
-//	  if (exception_address < 0x10000) {
-//		  ptl_logfile << "Page address causing exception seems to be ",
-//					  "invalid so aborting..\n", endl;
-//		  ptl_logfile << ctx, endl;
-//		  dump_smt_state(ptl_logfile);
-//		  ptl_logfile << flush;
-//		  assert(0);
-//	  }
+      assert(ctx.page_fault_addr != 0);
 	  int old_exception = ctx.exception_index;
 	  ctx.handle_page_fault(exception_address, write_exception);
 	  // If we return here means the QEMU has fix the page fault
@@ -1303,7 +1295,6 @@ handle_page_fault: {
 	  return true;
 				   }
 	  break;
-//    ctx.exception_index = EXCEPTION_x86_page_fault; break;
   case EXCEPTION_FloatingPointNotAvailable:
     ctx.exception_index= EXCEPTION_x86_fpu_not_avail; break;
   case EXCEPTION_FloatingPoint:
@@ -1315,7 +1306,6 @@ handle_page_fault: {
 
   if (logable(4)) {
     ptl_logfile << ctx;
-//    ptl_logfile << sshinfo;
   }
 
   // We are not coming back from this call so flush the pipeline
