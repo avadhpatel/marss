@@ -115,6 +115,10 @@ custom_tests['CheckIovec'] = CheckIovec
 conf = Configure(env, custom_tests = custom_tests)
 
 # First check if C compiler works or not
+if not conf.CheckCXX():
+    print("ERROR: You do not have %s compiler installed!!" % env['CC'])
+    exit_with_error()
+
 compile_test_src = """
 int main(void) {return 0;}
 """
