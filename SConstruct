@@ -57,7 +57,8 @@ ptl_compile_script = "%s/SConstruct" % ptl_dir
 ptl_env = Environment()
 ptl_env.Decider('MD5-timestamp')
 ptl_env['CC'] = CC
-ptl_env['qemu_dir'] = qemu_dir
+ptl_env.SetDefault(qemu_dir = qemu_dir)
+ptl_env.SetDefault(RT_DIR = "%s" % curr_dir)
 
 Export('ptl_env')
 

@@ -1893,8 +1893,7 @@ int ReorderBufferEntry::commit() {
     }
 #endif
 
-    if unlikely (subrob.ready_to_commit() && 
-            (subrob.physreg->flags & FLAG_INV) &&
+    if unlikely ((subrob.physreg->flags & FLAG_INV) &&
 			(subrob.uop.opcode != OP_ast)) {
       //
       // The exception is definitely going to happen, since the
@@ -2316,8 +2315,8 @@ int ReorderBufferEntry::commit() {
 			Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
 			assert(request != null);
 
-			request->init(core.coreid, threadid, lsq->physaddr << 3, 0, 
-					sim_cycle, true, uop.rip.rip, uop.uuid, 
+			request->init(core.coreid, threadid, lsq->physaddr << 3, 0,
+					sim_cycle, false, uop.rip.rip, uop.uuid,
 					Memory::MEMORY_OP_WRITE);
 
 			assert(core.memoryHierarchy.access_cache(request));

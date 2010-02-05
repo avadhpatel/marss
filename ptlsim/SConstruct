@@ -16,7 +16,7 @@ except:
 	qemu_dir = "%s/../qemu" % os.getcwd()
 
 # Setup the environment
-env = Environment()
+# env = Environment()
 
 # Include all the subdirectories into the CCFLAGS
 env['CPPPATH'] = []
