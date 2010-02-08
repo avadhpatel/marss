@@ -1,0 +1,69 @@
+MARSS-x86 : Micro-Architecture & System Simulator for x86
+=========================================================
+
+Copyright 2010 Avadh Patel (apatel @ cs.binghamton.edu)
+
+Marss-x86 is a simulation tool for x86-64 based Computing Systems.  It is based
+on two independent open-source projects QEMU (http://www.qemu.org/) and
+PTLsim (http://www.ptlsim.org/).  Marss-x86 is developed at Computer
+Architecture Group of SUNY Binghamton by Avadh Patel and other group Members.
+
+You can find out more details about Marss go to (http://www.marss86.org/). 
+
+
+System Requirements
+-------------------
+To compile Marss on your system, you will need following:
+* 2.5GHz CPU with minimum 2GB RAM (4GB Preferred)
+* Standard C++ compiler, like g++ or icc
+* SCons tool for compiling Marss (Minimum version 1.2.0)
+* SDL Development Libraries (Required for QEMU)
+
+
+Compiling
+---------
+If you don't have SCons install, install it using your stanard application
+installation program like apt-get or yum.
+
+Once you have SCons install go to Marss directory and give following command:
+
+    $ scons -Q 
+
+Default compile disables debugging and logging functionalities, to compile with
+logging functions enable give following command:
+
+    $ scons -Q debug=1
+
+Default compile process compile simulator for single-core configuration.  To
+compile Marss for Multi-Core SMP configuration give following command:
+
+    $ scons -Q c=[num_cores]
+
+To clean your compilation:
+
+    $ scons -Q -c
+
+Running
+-------
+After successfull compilation, to run Marss you have to be in the root of Marss
+source directory.  Then give the following command:
+
+    $ qemu/qemu-system-x86_64 -m [memory_size] [path-to-qemu-disk-image]
+
+You can use all the regular QEMU command here, like start VM window in VNC give
+'vnc :10' etc.  Once the system is booted, you can switch to Monitor mode using
+'Ctrl-Alt-2' key and give following command to switch to simulation mode:
+
+    (qemu) simulate -run -stopinsns 100m -stats [stats-file-name]
+
+To get the list of available simulation options give following command:
+
+    (qemu) simulate
+
+It will print all the simulation options on STDOUT.
+
+
+For more information on using and modifying Marss please visit our website :
+    http://www.marss86.org/
+
+Happy Hacking.

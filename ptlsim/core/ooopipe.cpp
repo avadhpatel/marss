@@ -1893,7 +1893,8 @@ int ReorderBufferEntry::commit() {
     }
 #endif
 
-    if unlikely ((subrob.physreg->flags & FLAG_INV) &&
+    if unlikely (subrob.ready_to_commit() &&
+                (subrob.physreg->flags & FLAG_INV) &&
 			(subrob.uop.opcode != OP_ast)) {
       //
       // The exception is definitely going to happen, since the
