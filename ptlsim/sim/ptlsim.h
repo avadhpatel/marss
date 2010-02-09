@@ -188,6 +188,7 @@ struct PTLsimConfig {
   W64 mm_log_buffer_size;
   bool enable_inline_mm_logging;
   bool enable_mm_validate;
+  stringbuf screenshot_file;
 
   // Event Logging
   bool event_log_enabled;

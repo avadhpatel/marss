@@ -63,6 +63,13 @@ extern uint8_t in_simulation;
 extern uint8_t start_simulation;
 
 /*
+ * simulation_configured
+ * type     : bool
+ * working  : Indicates that simuation module is configured from monitor thread
+ */
+extern uint8_t simulation_configured;
+
+/*
  * inside_simulation
  * type		: bool
  * working	: Indicates if we are in simulation mode or not, implemented in
@@ -164,6 +171,14 @@ void ptl_flush_bbcache(int8_t context_id);
 void ptl_check_ptlcall_queue(void);
 
 extern uint8_t ptl_stable_state;
+
+/*
+ * qemu_take_screenshot
+ * filename     : Name of the file to store screenshot of VGA screen
+ * returns void
+ * working      : Takes a screenshot of VM window and save to a file
+ */
+void qemu_take_screenshot(char* filename);
 
 #ifdef __cplusplus
 }

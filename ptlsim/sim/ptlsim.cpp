@@ -84,6 +84,7 @@ void PTLsimConfig::reset() {
   mm_log_buffer_size = 16384;
   enable_inline_mm_logging = 0;
   enable_mm_validate = 0;
+  screenshot_file = "";
 
   event_log_enabled = 0;
   event_log_ring_buffer_size = 32768;
@@ -224,6 +225,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(mm_log_buffer_size,           "mm-logbuf-size",       "Size of PTLsim memory manager log buffer (in events, not bytes)");
   add(enable_inline_mm_logging,     "mm-log-inline",        "Print every memory manager request in the main log file");
   add(enable_mm_validate,           "mm-validate",          "Validate every memory manager request against internal structures (slow)");
+  add(screenshot_file,              "screenshot",           "Takes screenshot of VM window at the end of simulation");
 
   section("Event Ring Buffer Logging Control");
   add(event_log_enabled,            "ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
@@ -565,7 +567,7 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
       print_sysinfo(cerr);
 #ifdef PTLSIM_HYPERVISOR
       if (!(config.run | config.native | config.kill))
-        cerr << "PTLsim is now waiting for a command.", endl, flush;
+        cerr << "Simulator is now waiting for a 'run' command.", endl, flush;
 #endif
     }
     print_banner(ptl_logfile, stats, argc, argv);
@@ -913,6 +915,9 @@ extern "C" uint8_t ptl_simulate() {
 #endif
 	print_stats_in_log();
 
+    if(config.screenshot_file.buf != "") {
+        qemu_take_screenshot((char*)config.screenshot_file);
+    }
 
 	const char *final_name = "final";
     strncpy(stats.snapshot_name, final_name, sizeof(final_name));

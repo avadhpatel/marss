@@ -509,6 +509,7 @@ static void do_simulate(char* args)
 	term_printf("simulation options received:%s\n", args);
 	ptl_machine_init(args);
     vm_stop(0);
+    simulation_configured = 1;
 }
 #endif
 

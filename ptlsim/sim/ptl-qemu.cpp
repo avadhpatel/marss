@@ -57,6 +57,7 @@ using namespace Memory;
 
 uint8_t in_simulation = 0;
 uint8_t start_simulation = 0;
+uint8_t simulation_configured = 0;
 uint8_t ptl_stable_state = 1;
 
 static char *pending_command_str = null;
@@ -121,6 +122,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                 cpu_interrupt(cpu, CPU_INTERRUPT_EXIT);
                 if(in_simulation)
                     vm_start();
+                simulation_configured = 1;
                 break;
             }
         case PTLCALL_CHECKPOINT:
@@ -159,6 +161,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                     case PTLCALL_CHECKPOINT_AND_SHUTDOWN:
                         /* Let the shutdown handled by ptl_check_ptlcall_queue */
                         vm_start();
+                        simulation_configured = 1;
                         break;
                     case PTLCALL_CHECKPOINT_AND_PAUSE:
                         break;

@@ -891,6 +891,11 @@ static int64_t cpu_get_sim_clock(void)
 	sim_clock_t = cpu_sim_ticks_offset + (uint64_t)((float)(sim_cycle) * freq_to_ns(PTLSIM_FREQ));
 	return sim_clock_t;
 }
+
+void qemu_take_screenshot(char *filename)
+{
+    vga_hw_screen_dump(filename);
+}
 #endif
 
 /***********************************************************/
@@ -3825,10 +3830,14 @@ static int main_loop(void)
     next_cpu = cur_cpu->next_cpu ?: first_cpu;
     for(;;) {
 #ifdef MARSS_QEMU
-		if (start_simulation && !vm_running) {
+        if (!vm_running && simulation_configured) {
+            simulation_configured = 0;
+            vm_start();
+        }
+
+		if (start_simulation) {
 			in_simulation = 1;
 			cpu_set_sim_ticks();
-			vm_start();
 			start_simulation = 0;
 		}
 
