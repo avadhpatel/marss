@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef PTL_QEMU_H
@@ -82,13 +82,13 @@ extern uint8_t inside_ptlsim;
 void ptlsim_init(void);
 
 /*
- * ptl_machine_init 
+ * ptl_machine_init
  * config_str	: contains the configuration options of PTLsim
  * returns void :
  * working		: Setup the global variable config (type of PTLConfig) from the
  *                 configuration string passed in 'config_str' argument.  This
  *                 function is called when QEMU gets the ptlsim configuration
- *                 and its about to change to simulation mode 
+ *                 and its about to change to simulation mode
  */
 void ptl_machine_init(char* config_str);
 
@@ -96,7 +96,7 @@ void ptl_machine_init(char* config_str);
  * ptl_create_new_context
  * returns CPUX86Context*	: a pointer to newly created CPU Context
  * working					: This function will create a new CPU Context, add
- *                             it to the array of contexts in ptl_machine and 
+ *                             it to the array of contexts in ptl_machine and
  *                             returns the CPUX86Context* of that Context
  */
 struct CPUX86State;
@@ -141,7 +141,7 @@ void update_progress(void);
  * ebx			: value to return in ebx
  * ecx			: value to return in ecx
  * edx			: value to return in edx
- * return int	: 1 indicate if PTLsim has handled the cpuid and fill the 
+ * return int	: 1 indicate if PTLsim has handled the cpuid and fill the
  *                 required values into the registers and 0 indicates its not
  *                 handled by PTLsim
  */

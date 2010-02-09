@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef CONTROLLER_H
@@ -55,7 +55,7 @@ struct Message : public FixStateListObject {
 		os << "hasData[", hasData, "]\n";
 		return os;
 	}
-	
+
 	void init() {
 		sender = null;
 		request = null;
@@ -83,7 +83,7 @@ class Controller
 		MemoryHierarchy *memoryHierarchy_;
 		W8 coreid_;
 
-		Controller(W8 coreid, char *name, 
+		Controller(W8 coreid, char *name,
 				MemoryHierarchy *memoryHierarchy) :
 			memoryHierarchy_(memoryHierarchy)
 			, coreid_(coreid)
@@ -126,7 +126,7 @@ class Controller
 		char* get_name() const {
 			return name_;
 		}
-		
+
 		void set_private(bool flag) {
 			isPrivate_ = flag;
 		}

@@ -36,7 +36,7 @@ struct ConfigurationOption {
 };
 
 enum {
-  OPTION_TYPE_NONE    = 0, 
+  OPTION_TYPE_NONE    = 0,
   OPTION_TYPE_W64     = 1,
   OPTION_TYPE_FLOAT   = 2,
   OPTION_TYPE_STRING  = 3,
@@ -86,7 +86,7 @@ struct ConfigurationParser: public T {
   void add(stringbuf& field, const char* name, const char* description) {
     options.addentry(this, field, OPTION_TYPE_STRING, name, description);
   }
-  
+
   void section(const char* name) {
     options.addentry(this, null, OPTION_TYPE_SECTION, name, name);
   }

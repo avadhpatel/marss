@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os 
+import os
 import re
 import sys
 
@@ -59,7 +59,7 @@ def block_end_handler(matchstring):
 
 def scalar_handler(matchstring):
     type,name=matchstring.group(1,2)
-    if type=="W64": 
+    if type=="W64":
         print("%s%s.addint(\"%s\");")\
             %(depth,node,name)
     elif type=="double":
@@ -68,7 +68,7 @@ def scalar_handler(matchstring):
     else :
         print "%s%s.add(\"%s\", %s);"\
         %(depth,node,name,type)
-            
+
 def array_handler(matchstring):
     typedict={}
     type,name,dims=matchstring.group(1,2,3)
@@ -79,7 +79,7 @@ def array_handler(matchstring):
     typedict["char"]="%s.addstring(\"%s\", %s);" \
         %(node,name,dims)
     print depth + typedict[type]
-    
+
 def label_handler(matchstring):
     type,name,dims,label=matchstring.group(1,2,3,4)
     if type=="W64":
@@ -87,7 +87,7 @@ def label_handler(matchstring):
             %(depth,node,name,dims,label)
     else:
         raise NameError("Histograms and labeled histograms must use W64 type")
-    
+
 def histo_handler(matchstring):
     type,name,dims,extra=matchstring.group(1,2,3,4)
     if type=="W64":
@@ -95,7 +95,7 @@ def histo_handler(matchstring):
             %(depth,node,name,dims,extra)
     else:
         raise NameError("Histograms and labeled histograms must use W64 type")
-    
+
 def commit_handler(matchstring):
     pass
 
@@ -141,8 +141,8 @@ for line in f:
                     print "}"
                 topnode=""
             break
-        elif depth=='  ': 
-            break #if there is no rootnode don't search   
+        elif depth=='  ':
+            break #if there is no rootnode don't search
 
 
 infile.close()

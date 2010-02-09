@@ -268,9 +268,9 @@ namespace superstl {
     W64 bits;
     int n;
     bool reverse;
-    
+
     bitstring() { }
-    
+
     bitstring(const W64 bits, const int n, bool reverse = false) {
       assert(n <= 64);
       this->bits = bits;
@@ -288,9 +288,9 @@ namespace superstl {
     W64 mask;
     int n;
     bool reverse;
-    
+
     bitmaskstring() { }
-    
+
     bitmaskstring(const W64 bits, W64 mask, const int n, bool reverse = false) {
       assert(n <= 64);
       this->bits = bits;
@@ -299,7 +299,7 @@ namespace superstl {
       this->reverse = reverse;
     }
   };
-  
+
   stringbuf& operator <<(stringbuf& os, const bitmaskstring& bs);
 
   DeclareStringBufToStream(bitmaskstring);
@@ -307,15 +307,15 @@ namespace superstl {
   struct hexstring {
     W64 value;
     int n;
-    
+
     hexstring() { }
-    
+
     hexstring(const W64 value, const int n) {
       this->value = value;
       this->n = n;
     }
   };
-  
+
   stringbuf& operator <<(stringbuf& os, const hexstring& hs);
 
   DeclareStringBufToStream(hexstring);
@@ -337,7 +337,7 @@ namespace superstl {
       this->splitat = splitat;
     }
   };
-  
+
   stringbuf& operator <<(stringbuf& os, const bytestring& bs);
 
   DeclareStringBufToStream(bytestring);
@@ -358,7 +358,7 @@ namespace superstl {
       this->splitat = splitat;
     }
   };
-  
+
   stringbuf& operator <<(stringbuf& os, const bytemaskstring& bs);
 
   DeclareStringBufToStream(bytemaskstring);
@@ -383,7 +383,7 @@ namespace superstl {
     double value;
     int width;
     int precision;
-    
+
     floatstring() { }
 
     floatstring(double value, int width = 0, int precision = 6) {
@@ -392,7 +392,7 @@ namespace superstl {
       this->precision = precision;
     }
   };
-  
+
   stringbuf& operator <<(stringbuf& os, const floatstring& fs);
 
   DeclareStringBufToStream(floatstring);
@@ -467,7 +467,7 @@ namespace superstl {
   int stringsubst(stringbuf& sb, const char* pattern, const char* find, const char* replace);
   int stringsubst(stringbuf& sb, const char* pattern, const char* find[], const char* replace[], int substcount);
 
-  class readline { 
+  class readline {
   public:
     readline(char* p, size_t l): buf(p), len(l) { }
     char* buf;
@@ -546,7 +546,7 @@ namespace superstl {
   template <class T>
   struct range {
     T lo, hi;
-    range() { } 
+    range() { }
     range(T v) { this->lo = v; this->hi = v; }
     range(T lo, T hi) { this->lo = lo; this->hi = hi; }
     range<T>& operator ()(T lo, T hi) { this->lo = lo; this->hi = hi; return *this; }
@@ -559,7 +559,7 @@ namespace superstl {
       return os << '[', lo, ' ', hi, ']';
     }
   };
-  
+
   template <typename T>
   static inline ostream& operator <<(ostream& os, const range<T>& r) {
     return r.print(os);
@@ -567,7 +567,7 @@ namespace superstl {
 
   /*
    * Simple array class with optional bounds checking
-   */  
+   */
   template <typename T, int size>
   struct array {
   public:
@@ -575,18 +575,18 @@ namespace superstl {
     static const int length = size;
 
     T data[size];
-    const T& operator [](int i) const { 
+    const T& operator [](int i) const {
 #ifdef CHECK_BOUNDS
       assert((i >= 0) && (i < size));
 #endif
-      return data[i]; 
+      return data[i];
     }
 
-    T& operator [](int i) { 
+    T& operator [](int i) {
 #ifdef CHECK_BOUNDS
       assert((i >= 0) && (i < size));
 #endif
-      return data[i]; 
+      return data[i];
     }
 
     void clear() {
@@ -609,12 +609,12 @@ namespace superstl {
 
     stack() { reset(); }
 
-    const T& operator [](int i) const { 
+    const T& operator [](int i) const {
       return data[i];
     }
 
-    T& operator [](int i) { 
-      return data[i]; 
+    T& operator [](int i) {
+      return data[i];
     }
 
     T& push() {
@@ -633,7 +633,7 @@ namespace superstl {
       if unlikely (!count) abort();
       T& v = data[--count];
       return v;
-    } 
+    }
 
     bool empty() const { return (count == 0); }
     bool full() const { return (count == size); }
@@ -689,7 +689,7 @@ namespace superstl {
       granularity = 16;
       data = null;
     }
-    
+
     dynarray(int initcap, int g = 16) {
       length = 0;
       reserved = 0;
@@ -697,7 +697,7 @@ namespace superstl {
       data = null;
       reserve(initcap);
     }
-    
+
     ~dynarray() {
       if (!(isprimitive(T) | ispointer(T))) {
         foreach (i, reserved) data[i].~T();
@@ -708,18 +708,18 @@ namespace superstl {
       length = 0;
       reserved = 0;
     }
-    
+
     inline int capacity() const { return reserved; }
     inline bool empty() const { return (length == 0); }
     inline void clear() { resize(0); }
     inline int size() const { return length; }
     inline int count() const { return length; }
-    
+
     void push(const T& obj) {
       T& pushed = push();
       pushed = obj;
     }
-    
+
     T& push() {
       reserve(length + 1);
       length++;
@@ -729,7 +729,7 @@ namespace superstl {
     T& pop() {
       length--;
       return data[length];
-    }   
+    }
 
     void resize(int newsize) {
       if likely (newsize > length) reserve(newsize);
@@ -742,7 +742,7 @@ namespace superstl {
       if unlikely (newsize <= oldlength) return;
       for (int i = oldlength; i < reserved; i++) { data[i] = emptyvalue; }
     }
-    
+
     void reserve(int newsize) {
       if unlikely (newsize <= reserved) return;
       newsize = (newsize + (granularity-1)) & ~(granularity-1);
@@ -795,7 +795,7 @@ namespace superstl {
   struct CRC32 {
     static const W32 crctable[256];
     W32 crc;
-    
+
     inline W32 update(byte value) {
       crc = crctable[byte(crc ^ value)] ^ (crc >> 8);
       return crc;
@@ -811,11 +811,11 @@ namespace superstl {
     CRC32() {
       reset();
     }
-    
+
     CRC32(W32 newcrc) {
       reset(newcrc);
     }
-    
+
     inline void reset(W32 newcrc = 0xffffffff) {
       crc = newcrc;
     }
@@ -838,9 +838,9 @@ namespace superstl {
 
   struct RandomNumberGenerator {
     W32 s1, s2, s3;
-    
+
     RandomNumberGenerator(W32 seed = 123) { reseed(seed); }
-    
+
     void reseed(W32 seed);
     W32 random32();
     W64 random64();
@@ -865,7 +865,7 @@ namespace superstl {
       if likely (prev) prev->next = next;
       if likely (next) next->prev = prev;
       prev = null;
-      next = null;  
+      next = null;
       return this;
     }
 
@@ -982,7 +982,7 @@ namespace superstl {
 		  next->prev = this;
       this->next = next;
       this->prev = prev;
-		  prev->next = this;      
+		  prev->next = this;
     }
   };
 
@@ -1083,12 +1083,12 @@ namespace superstl {
 
   protected:
     void addlink(queuelink<T>* prev, queuelink<T>* next) {
-		if(next) 
+		if(next)
 			next->prev = this;
 		this->next = next;
 		this->prev = prev;
 		if(prev)
-			prev->next = this;      
+			prev->next = this;
     }
   };
 
@@ -1114,8 +1114,8 @@ namespace superstl {
 	  int count;
 	  int size;
 
-	  FixQueueLink() { 
-		  reset(); 
+	  FixQueueLink() {
+		  reset();
 		  size = SIZE;
 	  }
 
@@ -1139,8 +1139,8 @@ namespace superstl {
 		  return head->data;
 	  }
 
-	  void reset_iter() { 
-		  iter_count = -1; 
+	  void reset_iter() {
+		  iter_count = -1;
 		  last_iter_entry = null;
 	  }
 
@@ -1170,7 +1170,7 @@ namespace superstl {
 		  if unlikely (isFull()) return null;
 		  if unlikely (tail == null) {
 			  assert(head == null);
-				
+
 			  head = &objects[0];
 			  tail = head;
 
@@ -1413,7 +1413,7 @@ namespace superstl {
       T& head = heads[qid];
       T& tail = tails[qid];
 
-      assert(isnull(next[tag]));      
+      assert(isnull(next[tag]));
       if unlikely (empty(qid)) {
         head = tail = tag;
         return;
@@ -1525,7 +1525,7 @@ namespace superstl {
       *this = obj;
     }
 
-    shortptr<T, P, base, granularity>& operator =(const T& obj) { 
+    shortptr<T, P, base, granularity>& operator =(const T& obj) {
       p = (P)((((Waddr)&obj) - base) / granularity);
       return *this;
     }
@@ -1542,7 +1542,7 @@ namespace superstl {
     T* operator ->() const {
       return get();
     }
-  
+
     T& operator *() const {
       return *get();
     }
@@ -1564,7 +1564,7 @@ namespace superstl {
   static inline stringbuf& operator <<(stringbuf& os, const shortptr<T, P, base, granularity>& sp) {
     return os << (T*)sp;
   }
-  
+
   // null allowed:
   template <typename T>
   struct indexrefnull {
@@ -1572,7 +1572,7 @@ namespace superstl {
 
     indexrefnull() { }
 
-    indexrefnull<T>& operator =(const T& obj) { 
+    indexrefnull<T>& operator =(const T& obj) {
       index = (&obj) ? obj.index() : -1;
       return *this;
     }
@@ -1606,7 +1606,7 @@ namespace superstl {
 
     indexref() { }
 
-    indexref<T>& operator =(const T& obj) { 
+    indexref<T>& operator =(const T& obj) {
       index = obj.index();
       return *this;
     }
@@ -1686,7 +1686,7 @@ namespace superstl {
       if likely (shift) {
         const size_t wshift = shift / BITS_PER_WORD;
         const size_t offset = shift % BITS_PER_WORD;
-    
+
         if unlikely (offset == 0) {
           for (size_t i = N - 1; i >= wshift; --i) { w[i] = w[i - wshift]; }
         } else {
@@ -1705,7 +1705,7 @@ namespace superstl {
         const size_t wshift = shift / BITS_PER_WORD;
         const size_t offset = shift % BITS_PER_WORD;
         const size_t limit = N - wshift - 1;
-      
+
         if unlikely (offset == 0) {
           for (size_t i = 0; i <= limit; ++i) { w[i] = w[i + wshift]; }
         } else {
@@ -1948,13 +1948,13 @@ namespace superstl {
   // Helper class to zero out the unused high-order bits in the highest word.
   template <size_t extrabits>
   struct bitvec_sanitizer {
-    static void sanitize(unsigned long& val) { 
-      val &= ~((~static_cast<unsigned long>(0)) << extrabits); 
+    static void sanitize(unsigned long& val) {
+      val &= ~((~static_cast<unsigned long>(0)) << extrabits);
     }
   };
 
   template <>
-  struct bitvec_sanitizer<0> { 
+  struct bitvec_sanitizer<0> {
     static void sanitize(unsigned long) { }
   };
 
@@ -1991,7 +1991,7 @@ namespace superstl {
       inline reference& operator =(bool x) {
         // Optimized, x86-specific way:
         if (isconst(x) & isconst(bpos)) {
-          // Most efficient to just AND/OR with a constant mask: 
+          // Most efficient to just AND/OR with a constant mask:
           *wp = ((x) ? (*wp | base_t::maskof(bpos)) : (*wp & (~base_t::maskof(bpos))));
         } else {
           // Use bit set or bit reset x86 insns:
@@ -2001,7 +2001,7 @@ namespace superstl {
         }
         /*
         // Optimized, branch free generic way:
-        *wp = (__builtin_constant_p(x)) ? 
+        *wp = (__builtin_constant_p(x)) ?
           ((x) ? (*wp | base_t::maskof(bpos)) : (*wp & (~base_t::maskof(bpos)))) :
           (((*wp) & (~base_t::maskof(bpos))) | ((static_cast<T>((x != 0))) << base_t::bitof(bpos)));
         */
@@ -2017,7 +2017,7 @@ namespace superstl {
         *wp = (x86_bt(*j.wp, j.bpos)) ? b1 : b0;
         /*
         // Optimized, branch free generic way:
-        *wp = (__builtin_constant_p(x)) ? 
+        *wp = (__builtin_constant_p(x)) ?
           (((*(j.wp) & base_t::maskof(j.bpos))) ? (*wp | base_t::maskof(bpos)) : (*wp & (~base_t::maskof(bpos)))) :
           (((*wp) & (~base_t::maskof(bpos))) | ((static_cast<T>((((*(j.wp) & base_t::maskof(j.bpos))) != 0))) << base_t::bitof(bpos)));
         */
@@ -2207,7 +2207,7 @@ namespace superstl {
       return b;
     }
 
-    bitvec<N> mask(size_t count) const { 
+    bitvec<N> mask(size_t count) const {
       bitvec<N> b(*this);
       b.maskop(count);
       return b;
@@ -2216,7 +2216,7 @@ namespace superstl {
     bitvec<N> operator %(size_t b) const {
       return mask(b);
     }
- 
+
     bitvec<N> extract(size_t index, size_t count) const {
       return (bitvec<N>(*this) >> index) % count;
     }
@@ -2779,7 +2779,7 @@ namespace superstl {
       return get(key);
     }
 
-    T* add(const K& key, const T& value) { 
+    T* add(const K& key, const T& value) {
       entry_t* entry = base_t::get(key);
       if unlikely (entry) {
         entry->value = value;
@@ -3131,7 +3131,7 @@ namespace superstl {
       int i;
 
       Iterator() { }
-      
+
       Iterator(ChunkList<T, N>* chunklist) {
         reset(chunklist);
       }
@@ -3153,7 +3153,7 @@ namespace superstl {
             prefetch(nextchunk);
             i = 0;
           }
-          
+
           if unlikely (chunk->freemap[i]) { i++; continue; }
 
           return &chunk->data[i++];
@@ -3389,7 +3389,7 @@ namespace superstl {
     bool empty() const { return (valid == 0); }
 
     ostream& print(ostream& os) const {
-      os << "SearchableChunkList16Entry<", N, " total ", sizeof(T), "-byte entries, ", bytes, "-byte chunk:", endl; 
+      os << "SearchableChunkList16Entry<", N, " total ", sizeof(T), "-byte entries, ", bytes, "-byte chunk:", endl;
       os << "  Tags: ", bytemaskstring((byte*)&tags, valid, N), endl;
       foreach (i, N) {
         if likely (!bit(valid, i)) continue;
@@ -3601,7 +3601,7 @@ namespace superstl {
   }
 
   //
-  // Detect repeated patterns in an array 
+  // Detect repeated patterns in an array
   //
   template <typename T>
   bool detect_repeated_pattern(const T* list, int n, int& pattern_length, int& repeat_count, int& remaining_count) {
@@ -3632,7 +3632,7 @@ namespace superstl {
         remaining_count = n - start;
         break;
       }
-    
+
       repeat_count++;
       start += pattern_length;
     }
@@ -3647,7 +3647,7 @@ namespace superstl {
     W64s v;
 
     switch (type) {
-    case 0: 
+    case 0:
       return 0;
     case 1:
       v = *((W8s*)p);
@@ -3779,7 +3779,7 @@ namespace superstl {
   //
   // Automatically start cycle timer at top of block and
   // stop it when this struct leaves the scope
-  // 
+  //
   struct CycleTimerScope {
     CycleTimer& ct;
     CycleTimerScope(CycleTimer& ct_): ct(ct_) { ct.start(); }
@@ -3895,13 +3895,13 @@ namespace superstl {
       }
     }
   };
-  
+
   //
   // Safe divide and remainder functions that return true iff operation did not generate an exception:
   //
   template <typename T> bool div_rem(T& quotient, T& remainder, T dividend_hi, T dividend_lo, T divisor);
   template <typename T> bool div_rem_s(T& quotient, T& remainder, T dividend_hi, T dividend_lo, T divisor);
-  
+
   template <typename T>
   struct ScopedLock {
     T& lock;
@@ -3952,7 +3952,7 @@ namespace superstl {
 		  return (TFunctor*)t;
 	  }
 
-  TFunctor* signal_fun_ptr(bool (*_fpt)(void *arg)); 
+  TFunctor* signal_fun_ptr(bool (*_fpt)(void *arg));
 
   class Signal {
 	  private:
@@ -3961,7 +3961,7 @@ namespace superstl {
 
 	  public:
 		  Signal();
-		  Signal(const char* name); 
+		  Signal(const char* name);
 		  bool emit(void *arg) ;
 		  void connect(TFunctor* _func);
 		  const char* get_name() {

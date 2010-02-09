@@ -4,8 +4,8 @@
 // Simulator Structures
 //
 // Copyright 2003-2008 Matt T. Yourst <yourst@yourst.com>
-// 
-// Copyright 2009 Avadh Patel <avadh4all@gmail.com>
+//
+// Copyright 2009-2010 Avadh Patel <avadh4all@gmail.com>
 //
 
 #ifndef _PTLSIM_H_
@@ -50,7 +50,7 @@ struct PTLsimMachine {
   Context* ret_qemu_env;
   PTLsimMachine() { initialized = 0; stopped = 0;}
   virtual bool init(PTLsimConfig& config);
-  virtual int run(PTLsimConfig& config);  
+  virtual int run(PTLsimConfig& config);
   virtual void update_stats(PTLsimStats& stats);
   virtual void dump_state(ostream& os);
   virtual void flush_tlb(Context& ctx);
@@ -60,7 +60,7 @@ struct PTLsimMachine {
   static void removemachine(const char* name, PTLsimMachine* machine);
   static PTLsimMachine* getmachine(const char* name);
   static PTLsimMachine* getcurrent();
-  
+
   stringbuf machine_name;
 
   Context& contextof(W8 i) {
@@ -158,7 +158,7 @@ extern ofstream ptl_rip_trace;
 
 #define INVALIDRIP 0xffffffffffffffffULL
 
-// 
+//
 // Configuration Options:
 //
 struct PTLsimConfig {
@@ -188,7 +188,7 @@ struct PTLsimConfig {
   W64 mm_log_buffer_size;
   bool enable_inline_mm_logging;
   bool enable_mm_validate;
-  
+
   // Event Logging
   bool event_log_enabled;
   W64 event_log_ring_buffer_size;
@@ -212,12 +212,12 @@ struct PTLsimConfig {
 
   // bus configration
   bool atomic_bus_enabled;
-  
+
   // Statistics Database
   stringbuf stats_filename;
   W64 snapshot_cycles;
   stringbuf snapshot_now;
-  
+
 #ifndef PTLSIM_HYPERVISOR
   // Starting Point
   W64 start_at_rip;
@@ -274,7 +274,7 @@ struct PTLsimConfig {
   bool kill_after_finish;
   bool exit_after_finish;
 #endif
- 
+
   bool continuous_validation;
   W64 validation_start_cycle;
 
@@ -295,7 +295,7 @@ struct PTLsimConfig {
 
   ///
   /// for memory hierarchy implementaion
-  /// 
+  ///
   //  bool memory_log;
   bool use_memory_hierarchy;
   W64 number_of_cores;

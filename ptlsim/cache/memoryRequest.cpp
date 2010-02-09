@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifdef MEM_TEST
@@ -59,7 +59,7 @@ void MemoryRequest::init(W8 coreId,
 	cycles_ = cycles;
 	ownerRIP_ = ownerRIP;
 	ownerUUID_ = ownerUUID;
-	refCounter_ = 0; // or maybe 1 	
+	refCounter_ = 0; // or maybe 1
 	opType_ = opType;
 	isData_ = !isInstruction;
 
@@ -78,7 +78,7 @@ void MemoryRequest::init(MemoryRequest *request)
 	cycles_ = request->cycles_;
 	ownerRIP_ = request->ownerRIP_;
 	ownerUUID_ = request->ownerUUID_;
-	refCounter_ = 0; // or maybe 1 	
+	refCounter_ = 0; // or maybe 1
 	opType_ = request->opType_;
 	isData_ = request->isData_;
 
@@ -135,8 +135,8 @@ MemoryRequest* RequestPool::get_free_request()
 {
 	if (isPoolLow()){
 		garbage_collection();
-		// if asserted here please increase REQUEST_POOL_SIZE
-		assert(!isEmpty()); 
+        /* if asserted here please increase REQUEST_POOL_SIZE */
+		assert(!isEmpty());
 	}
 	MemoryRequest* memoryRequest = (MemoryRequest*)freeRequestList_.peek();
 	freeRequestList_.remove((selfqueuelink*)memoryRequest);
@@ -146,7 +146,7 @@ MemoryRequest* RequestPool::get_free_request()
 
 void RequestPool::freeRequest( MemoryRequest* memoryrequest)
 {
-	// we should free it only when no one refrence to it 
+    /* we should free it only when no one refrence to it  */
 	assert(0 == memoryrequest->get_ref_counter());
 	usedRequestsList_.remove(memoryrequest);
 	freeRequestList_.enqueue(memoryrequest);

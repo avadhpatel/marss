@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #include <globals.h>
@@ -107,14 +107,14 @@ void MemoryHierarchy::shared_L2_configuration()
 	using namespace Memory::MESICache;
 
 	GET_STRINGBUF_PTR(bus_name, "Bus");
-	MESICache::BusInterconnect *bus = new 
+	MESICache::BusInterconnect *bus = new
 		MESICache::BusInterconnect(bus_name->buf, this);
 
 	foreach(i, coreNo_) {
 
 		// FIXME this is a memory leak
 		GET_STRINGBUF_PTR(cpuName_t, "CPUController_", i);
-		CPUController *cpuController = new CPUController(i, 
+		CPUController *cpuController = new CPUController(i,
 				cpuName_t->buf,
 				this);
 		cpuControllers_.push((Controller*)cpuController);
@@ -175,7 +175,7 @@ void MemoryHierarchy::shared_L2_configuration()
 	l2->set_private(false);
 
 	GET_STRINGBUF_PTR(mem_name, "Memory");
-	MemoryController *mem = new MemoryController(0, mem_name->buf, 
+	MemoryController *mem = new MemoryController(0, mem_name->buf,
 			this);
 	allControllers_.push((Controller*)mem);
 	mem->register_cache_interconnect(mem_interconnect);
@@ -210,7 +210,7 @@ void MemoryHierarchy::private_L2_configuration()
 	P2PInterconnect *l2p2p = new P2PInterconnect(l2p2p_name->buf, this);
 #else
 	GET_STRINGBUF_PTR(bus_name, "Bus");
-	MESICache::BusInterconnect *bus = new 
+	MESICache::BusInterconnect *bus = new
 		MESICache::BusInterconnect(bus_name->buf, this);
 #endif
 
@@ -218,7 +218,7 @@ void MemoryHierarchy::private_L2_configuration()
 
 		// FIXME this is a memory leak
 		GET_STRINGBUF_PTR(cpuName_t, "CPUController_", i);
-		CPUController *cpuController = new CPUController(i, 
+		CPUController *cpuController = new CPUController(i,
 				cpuName_t->buf,
 				this);
 		cpuControllers_.push((Controller*)cpuController);
@@ -314,7 +314,7 @@ void MemoryHierarchy::private_L2_configuration()
 #endif
 
 	GET_STRINGBUF_PTR(mem_name, "Memory");
-	MemoryController *mem = new MemoryController(0, mem_name->buf, 
+	MemoryController *mem = new MemoryController(0, mem_name->buf,
 			this);
 	allControllers_.push((Controller*)mem);
 #ifdef ENABLE_L3_CACHE
@@ -394,7 +394,7 @@ int MemoryHierarchy::flush(uint8_t coreid)
 	int delay = 0;
 
 	if(coreid == -1) {
-		/* Here delay is not added because all the CPU Controllers 
+		/* Here delay is not added because all the CPU Controllers
 		 * can be flushed in parallel */
 		foreach(i, cpuControllers_.count()) {
 			delay = cpuControllers_[i]->flush();
@@ -405,7 +405,7 @@ int MemoryHierarchy::flush(uint8_t coreid)
 	return delay;
 }
 
-void MemoryHierarchy::set_controller_full(Controller* controller, 
+void MemoryHierarchy::set_controller_full(Controller* controller,
 		bool flag)
 {
 
@@ -429,7 +429,7 @@ void MemoryHierarchy::set_controller_full(Controller* controller,
 }
 
 void MemoryHierarchy::set_interconnect_full(Interconnect* interconnect,
-	   	bool flag)
+		bool flag)
 {
 	bool anyFull = false;
 	foreach(i, allInterconnects_.count()) {
@@ -447,7 +447,7 @@ void MemoryHierarchy::set_interconnect_full(Interconnect* interconnect,
 	someStructIsFull_ = anyFull;
 }
 
-bool MemoryHierarchy::is_controller_full(Controller* controller) 
+bool MemoryHierarchy::is_controller_full(Controller* controller)
 {
 	foreach(j, allControllers_.count()) {
 		if(allControllers_[j] == controller) {
@@ -468,7 +468,6 @@ bool MemoryHierarchy::is_cache_available(W8 coreid, W8 threadid,
 	CPUController *cpuController = (CPUController*)cpuControllers_[coreid];
 	assert(cpuController != null);
 	return !(cpuController->is_full());
-//	return !someStructIsFull_;
 }
 
 void MemoryHierarchy::dump_info(ostream& os)
@@ -551,29 +550,14 @@ void MemoryHierarchy::sort_event_queue(Event *event)
 		}
 	}
 
-//	foreach_queuelink(eventQueue_, entry, Event) {
-//		if(*event < *entry || *event == *entry) {
-//			if(event == entry)
-//				return;
-//
-//			eventQueue_.unlink(event);
-//			eventQueue_.insert_before(event, entry);
-//
-//			return;
-//		} else {
-//			continue;
-//		}
-//	}
-//
 	// Entry is already at the tail of queue, keep it there
 	return;
 }
 
 void MemoryHierarchy::add_event(Signal *signal, int delay, void *arg)
 {
-//	Event *event = new Event(signal, sim_cycle + delay, arg);
 	Event *event = eventQueue_.alloc();
-	if(eventQueue_.count() == 1) 
+	if(eventQueue_.count() == 1)
 		assert(event == eventQueue_.head());
 	assert(event);
 	event->setup(signal, sim_cycle + delay, arg);
@@ -584,16 +568,13 @@ void MemoryHierarchy::add_event(Signal *signal, int delay, void *arg)
 		assert(event->execute());
 
 		eventQueue_.free(event);
-//		memdebug("Queue after add: \n", eventQueue_);
+        /* memdebug("Queue after add: \n", eventQueue_); */
 		return;
 	}
 
 	memdebug("Adding event:", *event);
-//	memdebug("Queue before sort: \n", eventQueue_);
 
 	sort_event_queue(event);
-
-//	memdebug("Queue after sort: \n", eventQueue_);
 
 	return;
 }
@@ -616,11 +597,9 @@ void MemoryHierarchy::annul_request(W8 coreid,
 
     /*
 	 * Flushin of the caches is disabled currently because we need to
-	 * implement a logic where every cache will check physaddr's cache line 
+	 * implement a logic where every cache will check physaddr's cache line
 	 * address with pending requests and flush them.
      */
-	// First find the corresponding memory request
-	// in the rquest pool
 	MemoryRequest* memRequest = get_free_request();
 	memRequest->init(coreid, threadid, physaddr, robid, sim_cycle, is_icache,
 			-1, -1, (is_write ? MEMORY_OP_WRITE : MEMORY_OP_READ));
@@ -648,7 +627,7 @@ void MemoryHierarchy::annul_request(W8 coreid,
  *                 // allInterconnects_[k]->annul_request(annul_request);
  *             // }
  *             // annul_request->set_ref_counter(0);
- * 
+ *
  *         }
  *     }
  */

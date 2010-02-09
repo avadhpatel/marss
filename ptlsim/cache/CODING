@@ -1,7 +1,7 @@
 
 A Simple guideline for coding for new cache structures in MPtlsim:
 
-1. 
+1.
 Names for Class, Struct, or representing any types must be in mixed case
 starting with upper case and no '_' in name. For example:
 	class Cache
@@ -32,7 +32,7 @@ variables and class variables. For example:
 
 6.
 Avoid unnecessary abbreviation of names when full name can be used. For example:
-	do not use - 
+	do not use -
 		int getLineLen();
 	instead use -
 		int getLineLength();
@@ -50,7 +50,7 @@ example:
 	void setMemoryHierarchy(MemoryHierarchy* memoryHierarchy);
 
 8.
-For access of private variables use 'get', 'set'. And write all getters/setters 
+For access of private variables use 'get', 'set'. And write all getters/setters
 into the class definition so they will be treated as 'inline' by compiler.
 
 9.
@@ -71,7 +71,7 @@ Enumeration constants should be prefixed by a common type name. For example:
 11.
 Opening bracket for class/function must be started in next line. For example:
 	do not use -
-		class Cache { 
+		class Cache {
 	instead use -
 		class Cache
 		{

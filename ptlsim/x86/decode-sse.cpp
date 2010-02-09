@@ -93,7 +93,7 @@ bool TraceDecoder::decode_sse() {
   case 0x55c: // sub
   case 0x55d: // min
   case 0x55e: // div
-  case 0x55f: 
+  case 0x55f:
   case 0x5c2: { // cmp (has imm byte at end for compare type)
     DECODE(gform, rd, x_mode);
     DECODE(eform, ra, x_mode);
@@ -171,16 +171,16 @@ bool TraceDecoder::decode_sse() {
   // Integer SSE Arithmetic
   //
   //        0        1        2        3        4          5         6         7          8           9           a          b        c           d           e          f
-  // 0x5d0: -------- psrlw    psrld    psrlq    paddq      pmullw    movq      pmovmskb   psubusb     psubusw     pminub     pand     paddusb     paddusw     pmaxub     pandn    
-  // 0x5e0: pavgb    psraw    psrad    pavgw    pmulhuw    pmulhw    cvttpd2dq movntdq    psubsb      psubsw      pminsw     por      paddsb      paddsw      pmaxsw     pxor     
-  // 0x5f0: -------- psllw    pslld    psllq    pmuludq    pmaddwd   psadbw    maskmovdqu psubb       psubw       psubd      psubq    paddb       paddw       paddd      -------- 
+  // 0x5d0: -------- psrlw    psrld    psrlq    paddq      pmullw    movq      pmovmskb   psubusb     psubusw     pminub     pand     paddusb     paddusw     pmaxub     pandn
+  // 0x5e0: pavgb    psraw    psrad    pavgw    pmulhuw    pmulhw    cvttpd2dq movntdq    psubsb      psubsw      pminsw     por      paddsb      paddsw      pmaxsw     pxor
+  // 0x5f0: -------- psllw    pslld    psllq    pmuludq    pmaddwd   psadbw    maskmovdqu psubb       psubw       psubd      psubq    paddb       paddw       paddd      --------
   //
   case 0x5d1 ... 0x5d5:
   case 0x5d8 ... 0x5df:
   case 0x5e0 ... 0x5e5:
   case 0x5e8 ... 0x5ef:
   case 0x5f1 ... 0x5f6:
-  case 0x5f8 ... 0x5fe: {    
+  case 0x5f8 ... 0x5fe: {
     DECODE(gform, rd, x_mode);
     DECODE(eform, ra, x_mode);
     EndOfDecode();
@@ -188,13 +188,13 @@ bool TraceDecoder::decode_sse() {
     static const byte x86_opcode_to_ptl_opcode[3][16] = {
     // 0x5d0:
     // 0        1        2        3        4          5         6         7          8           9           a          b        c           d           e          f
-    // -------- psrlw    psrld    psrlq    paddq      pmullw    movq      pmovmskb   psubusb     psubusw     pminub     pand     paddusb     paddusw     pmaxub     pandn    
+    // -------- psrlw    psrld    psrlq    paddq      pmullw    movq      pmovmskb   psubusb     psubusw     pminub     pand     paddusb     paddusw     pmaxub     pandn
       {0,       OP_vshr, OP_vshr, OP_vshr, OP_vadd,   OP_vmull, 0,        0,         OP_vsub_us, OP_vsub_us, OP_vmin,   OP_and,  OP_vadd_us, OP_vadd_us, OP_vmax,   OP_andnot},
     // 0x5e0:
-    // pavgb    psraw    psrad    pavgw    pmulhuw    pmulhw    cvttpd2dq movntdq    psubsb      psubsw      pminsw     por      paddsb      paddsw      pmaxsw     pxor     
+    // pavgb    psraw    psrad    pavgw    pmulhuw    pmulhw    cvttpd2dq movntdq    psubsb      psubsw      pminsw     por      paddsb      paddsw      pmaxsw     pxor
       {OP_vavg, OP_vsar, OP_vsar, OP_vavg, OP_vmulhu, OP_vmulh, 0,        0,         OP_vsub_ss, OP_vsub_ss, OP_vmin_s, OP_or,   OP_vadd_ss, OP_vadd_ss, OP_vmax_s, OP_xor},
     // 0x5f0:
-    // -------- psllw    pslld    psllq    pmuludq    pmaddwd   psadbw    maskmovdqu psubb       psubw       psubd      psubq    paddb       paddw       paddd      -------- 
+    // -------- psllw    pslld    psllq    pmuludq    pmaddwd   psadbw    maskmovdqu psubb       psubw       psubd      psubq    paddb       paddw       paddd      --------
       {0,       OP_vshl, OP_vshl, OP_vshl, OP_mulhl,  OP_vmaddp,OP_vsad,  0,         OP_vsub,    OP_vsub,    OP_vsub,   OP_vsub, OP_vadd,    OP_vadd,    OP_vadd,   0},
     };
 #define B 0
@@ -204,13 +204,13 @@ bool TraceDecoder::decode_sse() {
     static const byte x86_opcode_to_sizeshift[3][16] = {
     // 0x5d0:
     // 0        1        2        3        4          5         6         7          8           9           a          b        c           d           e          f
-    // -------- psrlw    psrld    psrlq    paddq      pmullw    movq      pmovmskb   psubusb     psubusw     pminub     pand     paddusb     paddusw     pmaxub     pandn    
+    // -------- psrlw    psrld    psrlq    paddq      pmullw    movq      pmovmskb   psubusb     psubusw     pminub     pand     paddusb     paddusw     pmaxub     pandn
       {0,       W,       D,       Q,       Q,         W,        Q,        B,         B,          W,          B,         Q,       B,          W,          B,         Q},
     // 0x5e0:
-    // pavgb    psraw    psrad    pavgw    pmulhuw    pmulhw    cvttpd2dq movntdq    psubsb      psubsw      pminsw     por      paddsb      paddsw      pmaxsw     pxor     
+    // pavgb    psraw    psrad    pavgw    pmulhuw    pmulhw    cvttpd2dq movntdq    psubsb      psubsw      pminsw     por      paddsb      paddsw      pmaxsw     pxor
       {B,       W,       D,       W,       W,         W,        0,        0,         B,          W,          W,         Q,       B,          W,          W,         Q},
     // 0x5f0:
-    // -------- psllw    pslld    psllq    pmuludq    pmaddwd   psadbw    maskmovdqu psubb       psubw       psubd      psubq    paddb       paddw       paddd      -------- 
+    // -------- psllw    pslld    psllq    pmuludq    pmaddwd   psadbw    maskmovdqu psubb       psubw       psubd      psubq    paddb       paddw       paddd      --------
       {0,       W,       D,       Q,       D,         W,        W,        0,         B,          W,          D,         Q,       B,          W,          D,         0},
     };
 #undef B
@@ -260,13 +260,13 @@ bool TraceDecoder::decode_sse() {
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
 
-    W64 maskctl = 
+    W64 maskctl =
       (op == 0x5d7) ? MaskControlInfo(56, 8, 56) : // pmovmskb (16-bit mask)
       (op == 0x350) ? MaskControlInfo(62, 2, 62) : // movmskps (4-bit mask)
       (op == 0x550) ? MaskControlInfo(63, 1, 63) : // movmskpd (2-bit mask)
       MaskControlInfo(0);
 
-    int sizeshift = 
+    int sizeshift =
       (op == 0x5d7) ? 0 :                          // pmovmskb (16-bit mask)
       (op == 0x350) ? 2 :                          // movmskps (4-bit mask)
       (op == 0x550) ? 3 : 0;                       // movmskpd (2-bit mask)
@@ -415,7 +415,7 @@ bool TraceDecoder::decode_sse() {
     static const byte x86_opcode_to_ptl_opcode[16] = {
     // 0x56x:
     // 0          1         2         3           4         5         6         7           8           9           a          b           c           d           e          f
-    // punpcklbw  punpcklwd punpckldq packsswb    pcmpgtb   pcmpgtw   pcmpgtd   packuswb    punpckhbw   punpckhwd   punpckhdq  packssdw    punpcklqdq  punpckhqdq  movd       movdqa   
+    // punpcklbw  punpcklwd punpckldq packsswb    pcmpgtb   pcmpgtw   pcmpgtd   packuswb    punpckhbw   punpckhwd   punpckhdq  packssdw    punpcklqdq  punpckhqdq  movd       movdqa
        OP_permb,  OP_permb, OP_permb, OP_vpack_ss,0,        0,        0,        OP_vpack_us,OP_permb,   OP_permb,   OP_permb,  OP_vpack_ss,OP_permb,   OP_permb,   0,         0,
     };
 #define B 0
@@ -425,7 +425,7 @@ bool TraceDecoder::decode_sse() {
     static const byte x86_opcode_to_sizeshift[16] = {
     // 0x56x:
     // 0          1         2         3           4         5         6         7           8           9           a          b           c           d           e          f
-    // punpcklbw  punpcklwd punpckldq packsswb    pcmpgtb   pcmpgtw   pcmpgtd   packuswb    punpckhbw   punpckhwd   punpckhdq  packssdw    punpcklqdq  punpckhqdq  movd       movdqa   
+    // punpcklbw  punpcklwd punpckldq packsswb    pcmpgtb   pcmpgtw   pcmpgtd   packuswb    punpckhbw   punpckhwd   punpckhdq  packssdw    punpcklqdq  punpckhqdq  movd       movdqa
        Q,         Q,        Q,        B,          0,        0,        0,        B,          Q,          Q,          Q,         W,          Q,          Q,          0,         0,
     };
 #undef B
@@ -497,11 +497,11 @@ bool TraceDecoder::decode_sse() {
   case 0x56c: { // punpcklqdq
 	// Copy dest[63:0] to dest[63:0]
 	// Copy src[63:0] to dest[127:64]
-	
+
     DECODE(gform, rd, x_mode);
     DECODE(eform, ra, x_mode);
     EndOfDecode();
-	
+
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     int rareg;
 
@@ -725,7 +725,7 @@ bool TraceDecoder::decode_sse() {
     } else {
       rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     }
-      
+
     TransOp uop(OP_fcvt_d2s_p, rdreg+0, rareg+1, rareg+0, REG_zero, 3); uop.datatype = DATATYPE_VEC_FLOAT; this << uop;
     this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3);
     break;
@@ -878,7 +878,7 @@ bool TraceDecoder::decode_sse() {
     break;
   }
 
-  case 0x328: // movaps load 
+  case 0x328: // movaps load
   case 0x528: // movapd load
   case 0x310: // movups load
   case 0x510: // movupd load
@@ -974,7 +974,7 @@ bool TraceDecoder::decode_sse() {
       this << TransOp(OP_mov, rdreg+0, REG_zero, rareg, REG_zero, 3);
       this << TransOp(OP_mov, rdreg+1, REG_zero, rareg, REG_zero, 3);
     }
- 
+
     break;
   }
   case 0x211: // movss store
@@ -1034,7 +1034,7 @@ bool TraceDecoder::decode_sse() {
     this << TransOp(OP_maskb, rdreg + which, rdreg + which, rareg, REG_imm, 3, 0, MaskControlInfo(64 - shift, 16, 64 - lowbits(shift, 6)));
     break;
   }
-  
+
   case 0x570: // pshufd
   case 0x3c6: { // shufps
     DECODE(gform, rd, x_mode);
@@ -1237,7 +1237,7 @@ bool TraceDecoder::decode_sse() {
         TransOp uoplo(OP_mov, rdreg+1, REG_zero, rareg+0, REG_zero, 3); uoplo.datatype = datatype; this << uoplo; break;
       }
       case 0x515: { // unpckhpd
-        TransOp uoplo(OP_mov, rdreg+0, REG_zero, rdreg+1, REG_zero, 3); uoplo.datatype = datatype; this << uoplo; 
+        TransOp uoplo(OP_mov, rdreg+0, REG_zero, rdreg+1, REG_zero, 3); uoplo.datatype = datatype; this << uoplo;
         TransOp uophi(OP_mov, rdreg+1, REG_zero, rareg+1, REG_zero, 3); uophi.datatype = datatype; this << uophi; break;
       }
       }

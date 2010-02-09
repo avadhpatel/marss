@@ -1,5 +1,5 @@
 
-// 
+//
 // Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
 //
 // Authors:
@@ -11,17 +11,17 @@
 #include <memoryHierarchy.h>
 #include <test.h>
 
-using namespace Memory; 
+using namespace Memory;
 // Dummy OutOfOrderMachine struct
 namespace OutOfOrderModel {
-	struct OutOfOrderMachine 
+	struct OutOfOrderMachine
 	{
 	};
 };
 
 void MemoryHierarchy::icache_wakeup_wrapper(int coreid, W64 physaddr)
 {
-	memdebug("ICache access completed for core: ", coreid, 
+	memdebug("ICache access completed for core: ", coreid,
 			" address: ", hexstring(physaddr, 48), endl);
 }
 
@@ -29,7 +29,7 @@ void MemoryHierarchy::dcache_wakeup_wrapper(int coreid, int threadid,
 		int robid, W64 seq, W64 physaddr)
 {
 	memdebug("DCache access completed for core: ", coreid,
-			" thread: ", threadid, " rob: ", robid, 
+			" thread: ", threadid, " rob: ", robid,
 			" address: ", hexstring(physaddr, 48), endl);
 }
 
@@ -47,7 +47,7 @@ bool test_signal_cb(void *arg)
 
 void test_event_add(MemoryHierarchy* memoryHierarchy)
 {
-	cout << "Testing MemoryHierarchy::add_event "; 
+	cout << "Testing MemoryHierarchy::add_event ";
 
 	stringbuf *sig_name = new stringbuf();
 	*sig_name << "Sig1";
@@ -120,7 +120,7 @@ void test_access_fast_path(MemoryHierarchy *memoryHierarchy)
 	for(sim_cycle; sim_cycle < 1500; sim_cycle++) {
 		ptl_logfile << "Clock: ", sim_cycle, endl;
 		if(sim_cycle == 3) {
-			ret_val = memoryHierarchy->access_cache(0, 0, 0, 0, 0, 
+			ret_val = memoryHierarchy->access_cache(0, 0, 0, 0, 0,
 					0x86, true, false);
 
 			ptl_logfile << "access ret value ", ret_val, endl;
@@ -136,7 +136,7 @@ void test_request_pool()
 {
 	cout << "Testing request pool.." ;
 	RequestPool *requestPool = new RequestPool();
-	
+
 	// First check if we get 100 free requests
 	// checked if we can have more than 100 , and it worked with 1500
 	MemoryRequest* memoryRequest = null;
@@ -215,7 +215,7 @@ void test_fix_statelist()
 {
 	FixStateList<FixStateListTester, 10> testList;
 	FixStateListTester* entryArr[10];
-	
+
 	cout << "Testing FixStateList\n";
 	ptl_logfile << "Testing FixStateList\n";
 
@@ -238,7 +238,7 @@ void test_fix_statelist()
 	ptl_logfile << endl, flush;
 
 	// Now unlink entry from tail and add to head
-	ptl_logfile << "Before unlinking the tail entry: ", testList, endl, 
+	ptl_logfile << "Before unlinking the tail entry: ", testList, endl,
 			flush;
 	FixStateListTester* tail = testList.tail();
 	assert(tail);
@@ -260,10 +260,10 @@ void test_trace(MemoryHierarchy *memoryHierarchy, char *filename)
 	stringbuf line;
 	dynarray<stringbuf*> splits;
 	W64 clock;
-	W8 coreid; 
+	W8 coreid;
 	char dataFlag;
 	char readFlag;
-   	W64 addr;
+	W64 addr;
 
 	sim_cycle = 0;
 
@@ -272,7 +272,7 @@ void test_trace(MemoryHierarchy *memoryHierarchy, char *filename)
 		line.reset();
 		file >> line;
 		if(!file) break;
-		
+
 //		cout << "Line read: ", line, endl, flush;
 		line = line.strip();
 
@@ -298,17 +298,17 @@ void test_trace(MemoryHierarchy *memoryHierarchy, char *filename)
 
 			}
 			else {
-				sscanf(splits[i]->buf, "%hu:%c:%c:0x%llx", 
-						(short unsigned int*)&coreid, 
+				sscanf(splits[i]->buf, "%hu:%c:%c:0x%llx",
+						(short unsigned int*)&coreid,
 						&dataFlag, &readFlag, &addr);
 //				cout.seek(0);
 //				cout << "Coreid: ", coreid, " DataFlag: ", dataFlag,
-//					 " Read/Write: ", readFlag, 
+//					 " Read/Write: ", readFlag,
 //					 " Address: 0x", hexstring(addr, 48), " \r";
 
 				memoryHierarchy->access_cache(coreid, 0, 0,
-						0, sim_cycle, addr, 
-						(dataFlag == 'd') ? false : true, 
+						0, sim_cycle, addr,
+						(dataFlag == 'd') ? false : true,
 						(readFlag == 'r') ? false : true);
 			}
 
@@ -339,7 +339,7 @@ void test_strip()
 	}
 }
 
-int main(int argc, char *argv[]) 
+int main(int argc, char *argv[])
 {
 
 	ptl_logfile.open("mem_test.log");
@@ -353,7 +353,7 @@ int main(int argc, char *argv[])
 	ptl_logfile << "config.number_of_cores ", config.number_of_cores, endl, flush;
 
 	sim_cycle = 0;
-	OutOfOrderMachine machine; 
+	OutOfOrderMachine machine;
 	MemoryHierarchy *memory = new MemoryHierarchy(machine);
 
 	memory->print_map(ptl_logfile);

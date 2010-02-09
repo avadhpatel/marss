@@ -66,10 +66,10 @@ if arch_type == '64bit':
 
 Export('env')
 
-print("Build Envrionment:")
-print("\tCC:%s" % env['CC'])
-print("\tCCFLAGS:%s" % env['CCFLAGS'])
-print("\tCPPPATH:%s" % env['CPPPATH'])
+# print("Build Envrionment:")
+# print("\tCC:%s" % env['CC'])
+# print("\tCCFLAGS:%s" % env['CCFLAGS'])
+# print("\tCPPPATH:%s" % env['CPPPATH'])
 
 # Setup the build directory
 
@@ -80,7 +80,7 @@ for dir in dirs:
 	# Skip the Tools directory
     if dir == "tools":
         continue
-    o = SConscript('%s/SConscript' % dir, variant_dir='build/%s' % dir) 
+    o = SConscript('%s/SConscript' % dir, variant_dir='build/%s' % dir)
     if type(o) == list:
         objs.append(o[0])
         dst_objs.append(o[1])
@@ -96,15 +96,12 @@ inc_str = ""
 for i_s in env['CPPPATH']:
     inc_str += " -I%s" % i_s
 env['incstr'] = inc_str
-# dst_script = "%s/tools/dstbuild" % os.getcwd()
 dst_script = "%s/tools/dstbuild.py" % os.getcwd()
 st_i = env.Command('build/stats.i', 'stats/stats.h',
         "$CXX $CCFLAGS $incstr -E -C $SOURCE > $TARGET")
-# dst_tmp_cpp = env.Command('build/dstbuild.temp.cpp', st_i,
-        # "cat $SOURCE | %s PTLsimStats > $TARGET" % dst_script)
 dst_tmp_cpp = env.Command('build/dstbuild.temp.cpp', st_i,
         "%s $SOURCE PTLsimStats > $TARGET" % dst_script)
-dst_tmp = env.Program('build/dstbuild.temp', 
+dst_tmp = env.Program('build/dstbuild.temp',
         dst_objs + ["build/dstbuild.temp.cpp"],
         CCFLAGS = env['CCFLAGS'] + " -DDSTBUILD -include stats.h")
 ptl_dst = env.Command('build/ptlsim.dst', dst_tmp,
@@ -116,14 +113,8 @@ ptl_dst_o = env.Command('build/ptlsim.dst.o', ptl_dst,
 Depends(dst_tmp_cpp, dst_script)
 Requires(dst_tmp_cpp, st_i)
 Requires(dst_tmp, dst_tmp_cpp)
-#Delete(st_i)
-#Delete(dst_tmp_cpp)
-#Delete(dst_tmp)
-
 
 #lib = env.Library('build/libmptlsim', objs + ptl_dst_o)
 lib = objs + ptl_dst_o
-
-#Requires(lib, ptl_dst)
 
 Return('lib')

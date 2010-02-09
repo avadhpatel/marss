@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifdef MEM_TEST
@@ -36,17 +36,17 @@
 
 using namespace Memory;
 
-BusInterconnect::BusInterconnect(char *name, 
-		MemoryHierarchy *memoryHierarchy) : 
+BusInterconnect::BusInterconnect(char *name,
+		MemoryHierarchy *memoryHierarchy) :
 	Interconnect(name,memoryHierarchy),
 	busBusy_(false)
 {
 	GET_STRINGBUF_PTR(broadcast_name, name, "_broadcast");
 	broadcast_.set_name(broadcast_name->buf);
-	broadcast_.connect(signal_mem_ptr(*this, 
+	broadcast_.connect(signal_mem_ptr(*this,
 				&BusInterconnect::broadcast_cb));
 
-	GET_STRINGBUF_PTR(broadcastComplete_name, name, 
+	GET_STRINGBUF_PTR(broadcastComplete_name, name,
 			"_broadcastComplete");
 	broadcastCompleted_.set_name(broadcastComplete_name->buf);
 	broadcastCompleted_.connect(signal_mem_ptr(*this,
@@ -54,10 +54,10 @@ BusInterconnect::BusInterconnect(char *name,
 
 	GET_STRINGBUF_PTR(dataBroadcast_name, name, "_dataBroadcast");
 	dataBroadcast_.set_name(dataBroadcast_name->buf);
-	dataBroadcast_.connect(signal_mem_ptr(*this, 
+	dataBroadcast_.connect(signal_mem_ptr(*this,
 				&BusInterconnect::data_broadcast_cb));
 
-	GET_STRINGBUF_PTR(dataBroadcastComplete_name, name, 
+	GET_STRINGBUF_PTR(dataBroadcastComplete_name, name,
 			"_dataBroadcastComplete");
 	dataBroadcastCompleted_.set_name(dataBroadcastComplete_name->buf);
 	dataBroadcastCompleted_.connect(signal_mem_ptr(*this,
@@ -108,10 +108,10 @@ void BusInterconnect::annul_request(MemoryRequest *request)
 bool BusInterconnect::controller_request_cb(void *arg)
 {
 	Message *message = (Message*)arg;
-	
+
 	BusControllerQueue* busControllerQueue;
 	foreach(i, controllers.count()) {
-		if(controllers[i]->controller == 
+		if(controllers[i]->controller ==
 				(Controller*)message->sender) {
 			busControllerQueue = controllers[i];
 		}
@@ -121,7 +121,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
 		memdebug("Bus queue is full\n");
 		return false;
 	}
-	
+
 	BusQueueEntry *busQueueEntry;
 	busQueueEntry = busControllerQueue->queue.alloc();
 	if(busControllerQueue->queue.isFull()) {
@@ -175,28 +175,28 @@ bool BusInterconnect::broadcast_cb(void *arg)
 	BusQueueEntry *queueEntry;
 	if(arg != null)
 		queueEntry = (BusQueueEntry*)arg;
-	else 
+	else
 		queueEntry = arbitrate_round_robin();
-	
+
 	if(queueEntry == null) { // nothing to broadcast
 		set_bus_busy(false);
 		return true;
 	}
 
-	// first check if any of the other controller's receive queue is 
+	// first check if any of the other controller's receive queue is
 	// full or not
 	// if its full the don't broadcast untill it has a free
 	// entry and  pass the queue entry as argument to the broadcast
 	// signal so next time it doesn't need to arbitrate
 	bool isFull = false;
 	foreach(i, controllers.count()) {
-		if(controllers[i]->controller == 
+		if(controllers[i]->controller ==
 				queueEntry->controllerQueue->controller)
 			continue;
 		isFull |= controllers[i]->controller->is_full(true);
 	}
 	if(isFull) {
-		memoryHierarchy_->add_event(&broadcast_, 
+		memoryHierarchy_->add_event(&broadcast_,
 				BUS_BROADCASTS_DELAY, queueEntry);
 		return true;
 	}
@@ -226,7 +226,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
 		memoryHierarchy_->set_interconnect_full(this, false);
 	}
 	queueEntry->request->decRefCounter();
-	memoryHierarchy_->add_event(&broadcastCompleted_, 
+	memoryHierarchy_->add_event(&broadcastCompleted_,
 			BUS_BROADCASTS_DELAY, null);
 
 	// Free the message
@@ -239,7 +239,7 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
 {
 	assert(is_busy());
 
-	// call broadcast_cb that will check if any pending 
+	// call broadcast_cb that will check if any pending
 	// requests are there or not
 	broadcast_cb(null);
 
@@ -258,9 +258,9 @@ void BusInterconnect::print_map(ostream& os)
 {
 	os << "Bus Interconnect: ", get_name(), endl;
 	os << "\tconnected to: ", endl;
-	
+
 	foreach(i, controllers.count()) {
-		os << "\t\tcontroller[i]: ", 
+		os << "\t\tcontroller[i]: ",
 			controllers[i]->controller->get_name(), endl;
 	}
 }

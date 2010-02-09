@@ -2,21 +2,21 @@
 #define STATELIST_H
 #include <globals.h>
 #include <superstl.h>
-//#include <ptlsim.h>
 
-//
-  // Iterate through a linked list of objects where each object directly inherits
-  // only from the selfqueuelink class or otherwise has a selfqueuelink object
-  // as the first member.
-  //
-  // This iterator supports mutable lists, meaning the current entry (obj) may
-  // be safely removed from the list and/or moved to some other list without
-  // affecting the next object processed.
-  //
-  // This does NOT mean you can remove any object from the list other than the
-  // current object obj - to do this, copy the list of pointers to an array and
-  // then process that instead.
-  // copy from ooocore.h
+/*
+ * Iterate through a linked list of objects where each object directly inherits
+ * only from the selfqueuelink class or otherwise has a selfqueuelink object
+ * as the first member.
+ *
+ * This iterator supports mutable lists, meaning the current entry (obj) may
+ * be safely removed from the list and/or moved to some other list without
+ * affecting the next object processed.
+ *
+ * This does NOT mean you can remove any object from the list other than the
+ * current object obj - to do this, copy the list of pointers to an array and
+ * then process that instead.
+ * copy from ooocore.h
+ */
 
 #define foreach_list_mutable_linktype(L, obj, entry, nextentry, linktype) \
   linktype* entry; \
@@ -76,7 +76,7 @@
         return null;
       count--;
       assert(count >=0);
-      selfqueuelink* obj = removehead(); 
+      selfqueuelink* obj = removehead();
       return obj;
     }
 
@@ -87,7 +87,7 @@
     }
 
     selfqueuelink* enqueue_after(selfqueuelink* entry, selfqueuelink* preventry) {
-      if (preventry) entry->addhead(preventry); 
+      if (preventry) entry->addhead(preventry);
 	  else entry->addhead(this);
       count++;
       return entry;
@@ -109,16 +109,16 @@
       remove(entry);
       if (place_at_head)
         enqueue_after(entry, newqueue->head());
-      else 
+      else
         newqueue->enqueue(entry);
       return newqueue;
     }
-    
+
     void checkvalid();
 
     ostream& print(ostream& os) const{
       os << " (", count, " entries):";
-      
+
       selfqueuelink* obj;
       foreach_list_mutable(*this, obj, entry, nextentry) {
         obj->print(os);
@@ -151,7 +151,7 @@ struct FixStateListObject : public selfqueuelink
 };
 
 template<typename T, int SIZE>
-struct FixStateList 
+struct FixStateList
 {
 
 	FixStateList() {
@@ -189,16 +189,12 @@ struct FixStateList
 		obj->init();
 		obj->free = false;
 		freeList_.remove_to_list(&usedList_, false, (selfqueuelink*)obj );
-//		freeList_.remove((selfqueuelink*)obj);
-//		usedList_.enqueue((selfqueuelink*)obj);
 		return obj;
 	}
 
 	void free(T* obj) {
 		obj->free = true;
 		usedList_.remove_to_list(&freeList_, false, (selfqueuelink*)obj);
-//		usedList_.remove((selfqueuelink*)obj);
-//		freeList_.enqueue((selfqueuelink*)obj);
 	}
 
 	bool empty() {
@@ -210,11 +206,12 @@ struct FixStateList
 		usedList_.remove((selfqueuelink*)obj);
 	}
 
-	// This is a very tricky function, first argument
-	// is the entry we need to insert after the second argument
-	// entry. 
-	// If you want to add to the head of the list, pass the root
-	// argument as null
+    /*
+     * This is a very tricky function, first argument
+     * is the entry we need to insert after the second argument
+     * entry. If you want to add to the head of the list, pass the root
+     * argument as null
+     */
 	void insert_after(T* entry, T* root) {
 		assert((selfqueuelink*)entry->unlinked());
 		if(root)

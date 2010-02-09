@@ -145,8 +145,6 @@ tcp_subr.c tcp_timer.c udp.c bootp.c debug.c tftp.c"
         slirp_list.append("slirp/%s" % s)
     comm_lib_env['CPPPATH'].append("slirp")
 
-print slirp_list
-
 comm_hw_list = []
 for h in Split(comm_hw_files):
     comm_hw_list.append("hw/%s" % h)

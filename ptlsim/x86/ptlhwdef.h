@@ -301,7 +301,7 @@ struct IssueState {
       W64 physaddr:48, flags:8, lfrqslot:8;
     } ldreg;
 
-    struct { 
+    struct {
       W64 riptaken;
       W64 ripseq;
     } brreg;
@@ -393,7 +393,7 @@ struct FXSAVEStruct {
       W16 ds;
       W16 reserved2;
     } use32;
-    struct { 
+    struct {
       W64 rip;
       W64 rdp;
     } use64;
@@ -436,7 +436,7 @@ inline void cpu_set_fpcw(W16 fpcw) {
   asm volatile("fldcw %[fpcw]" : : [fpcw] "m" (fpcw));
 }
 
-struct SegmentDescriptor { 
+struct SegmentDescriptor {
 	W16 limit0;
 	W16 base0;
 	W16 base1:8, type:4, s:1, dpl:2, p:1;
@@ -516,7 +516,7 @@ ostream& operator <<(ostream& os, const SegmentDescriptorCache& seg);
 //
 // NOTE: Gate descriptors on x86-64 are 128 bits!
 //
-struct GateDescriptor { 
+struct GateDescriptor {
 	W16 offset0;
 	W16 selector;
 	W16 ist:3, reserved:5, type:4, s:1, dpl:2, p:1;
@@ -744,7 +744,7 @@ enum {
 enum {
   DEBUGREG_SIZE_1 = 0,
   DEBUGREG_SIZE_2 = 1,
-  DEBUGREG_SIZE_8 = 2, 
+  DEBUGREG_SIZE_8 = 2,
   DEBUGREG_SIZE_4 = 3,
 };
 
@@ -846,7 +846,7 @@ struct Context: public CPUX86State {
 	  set_cpu_env((CPUX86State*)this);
 	  W64 flags = reg_flags;
 	  // Set the 2nd bit to 1 for compatibility
-	  flags = (flags | FLAG_INV); 
+	  flags = (flags | FLAG_INV);
 	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O | FLAG_IF));
 	  fpstt = reg_fptos >> 3;
 	  foreach(i, 8) {
@@ -859,7 +859,7 @@ struct Context: public CPUX86State {
 	  set_cpu_env((CPUX86State*)this);
 	  W64 flags = compute_eflags();
 
-	  // Clear the 2nd and 3rd bit as its used by PTLSim to indicate if 
+	  // Clear the 2nd and 3rd bit as its used by PTLSim to indicate if
 	  // uop is executed correctly or not
 	  flags = (flags & ~(W64)(FLAG_INV));
 	  reg_flags = flags;
@@ -982,59 +982,59 @@ struct Context: public CPUX86State {
 	  }
 	  else if(index == REG_fptos) {
 		  return reg_fptos;
-	  } 
+	  }
 	  else if(index == REG_fpsw) {
 		  return (W64&)fpus;
-	  } 
+	  }
 	  else if(index == REG_fptags) {
 		  return reg_fptag;
-	  } 
+	  }
 	  else if(index == REG_fpstack) {
 		  return reg_fpstack;
-	  } 
+	  }
 	  else if(index == 52) {
 		  // Not implemented in Xen or anywhere else..
 		  return invalid_reg;
-	  } 
+	  }
 	  else if(index == 53) {
 		  // Not implemented in Xen or anywhere else..
 		  return invalid_reg;
-	  } 
+	  }
 	  else if(index == 54) {
 		  return reg_trace;
-	  } 
+	  }
 	  else if(index == 55) {
 		  return reg_ctx;
-	  } 
+	  }
 	  else if(index == 56) {
 		  return (W64&)(eip);
-	  } 
+	  }
 	  else if(index == REG_flags) {
-		  return reg_flags; //(W64&)(eflags);
-	  } 
+		  return reg_flags;
+	  }
 	  else if(index == 58) {
 		  // Not implemented in Xen or anywhere else..
 		  return invalid_reg;
-	  } 
+	  }
 	  else if(index == 59) {
 		  return reg_selfrip;
-	  } 
+	  }
 	  else if(index == 60) {
 		  return reg_nextrip;
-	  } 
+	  }
 	  else if(index == 61) {
 		  return reg_ar1;
-	  } 
+	  }
 	  else if(index == 62) {
 		  return reg_ar2;
-	  } 
+	  }
 	  else if(index == 63) {
 		  return reg_zero;
-	  } 
+	  }
 
 	  return invalid_reg;
   }
-  
+
 
   void set_reg(int index, W64 value) {
 	  if likely (index < 16) {
@@ -1050,56 +1050,56 @@ struct Context: public CPUX86State {
 	  }
 	  else if(index == REG_fptos) {
 		  reg_fptos = value;
-	  } 
+	  }
 	  else if(index == REG_fpsw) {
 		  fpus = value;
-	  } 
+	  }
 	  else if(index == REG_fptags) {
 		  reg_fptag = value;
-	  } 
+	  }
 	  else if(index == REG_fpstack) {
 		  reg_fpstack = value;
-	  } 
+	  }
 	  else if(index == 52) {
 		  // Not implemented in Xen or anywhere else..
 		  return;
-	  } 
+	  }
 	  else if(index == 53) {
 		  // Not implemented in Xen or anywhere else..
 		  return;
-	  } 
+	  }
 	  else if(index == 54) {
 		  assert(0);
 		  reg_trace = value;
-	  } 
+	  }
 	  else if(index == 55) {
 		  reg_ctx = value;
-	  } 
+	  }
 	  else if(index == 56) {
 		  eip = value;
-	  } 
+	  }
 	  else if(index == REG_flags) {
-		  reg_flags = value; //(W64&)(eflags);
-	  } 
+		  reg_flags = value;
+	  }
 	  else if(index == 58) {
 		  // Not implemented in Xen or anywhere else..
 		  return;
-	  } 
+	  }
 	  else if(index == 59) {
 		  reg_selfrip = value;
-	  } 
+	  }
 	  else if(index == 60) {
 		  reg_nextrip = value;
-	  } 
+	  }
 	  else if(index == 61) {
 		  reg_ar1 = value;
-	  } 
+	  }
 	  else if(index == 62) {
 		  reg_ar2 = value;
-	  } 
+	  }
 	  else if(index == 63) {
 		  reg_zero = 0;
-	  } 
+	  }
 
 	  return ;
   }
@@ -1129,7 +1129,7 @@ static inline ostream& operator <<(ostream& os, const SegmentCache& seg) {
 }
 
 #ifndef PTLSIM_HYPERVISOR
-extern Context ctx; 
+extern Context ctx;
 #endif
 
 int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) ;
@@ -1137,7 +1137,6 @@ int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr&
 // Other flags not defined above
 enum {
   FLAG_TF = (1 << 8),
-  //FLAG_IF = (1 << 9),
   FLAG_DF = (1 << 10),
   FLAG_IOPL = (1 << 12) | (1 << 13),
   FLAG_NT = (1 << 14),
@@ -1152,7 +1151,7 @@ enum {
 
 //
 // Operation Classes
-// 
+//
 
 #define OPCLASS_LOGIC                   (1 << 0)
 
@@ -1461,7 +1460,7 @@ static inline W32 make_mask_control_info(int ms, int mc, int ds) {
 #define MF_TYPE_SFENCE (1 << 0)
 #define MF_TYPE_LFENCE (1 << 1)
 
-// These go in the extshift field of branch and/or jump operations; they are used as hints only: 
+// These go in the extshift field of branch and/or jump operations; they are used as hints only:
 #define BRANCH_HINT_PUSH_RAS (1 << 0)
 #define BRANCH_HINT_POP_RAS (1 << 1)
 
@@ -1501,11 +1500,11 @@ extern const W16 setflags_to_x86_flags[1<<3];
 //
 
 // This is for profiling purposes only, since all loads and stores are uniform except for their sizes:
-enum { 
-  DATATYPE_INT, DATATYPE_FLOAT, DATATYPE_VEC_FLOAT, 
-  DATATYPE_DOUBLE, DATATYPE_VEC_DOUBLE, 
-  DATATYPE_VEC_8BIT, DATATYPE_VEC_16BIT, 
-  DATATYPE_VEC_32BIT, DATATYPE_VEC_64BIT, 
+enum {
+  DATATYPE_INT, DATATYPE_FLOAT, DATATYPE_VEC_FLOAT,
+  DATATYPE_DOUBLE, DATATYPE_VEC_DOUBLE,
+  DATATYPE_VEC_8BIT, DATATYPE_VEC_16BIT,
+  DATATYPE_VEC_32BIT, DATATYPE_VEC_64BIT,
   DATATYPE_VEC_128BIT, DATATYPE_COUNT
 };
 extern const char* datatype_names[DATATYPE_COUNT];
@@ -1544,7 +1543,7 @@ struct TransOp: public TransOpBase {
   void init(int opcode, int rd, int ra, int rb, int rc, int size, W64s rbimm = 0, W64s rcimm = 0, W32 setflags = 0, int memid = 0)  {
     setzero(*this);
     this->opcode = opcode;
-    this->rd = rd; 
+    this->rd = rd;
     this->ra = ra;
     this->rb = rb;
     this->rc = rc;
@@ -1576,16 +1575,7 @@ typedef void (*uopimpl_func_t)(IssueState& state, W64 ra, W64 rb, W64 rc, W16 ra
 #define BB_PTRS_PER_CHUNK 62
 #endif
 
-// We don't have this defined outside the PTLsim build process:
-#ifdef PTLSIM_PUBLIC_ONLY
-#define PTLSIM_VIRT_BASE 0
-#endif
-
-//#ifdef PTLSIM_HYPERVISOR
-//typedef shortptr<BasicBlock, W32, PTLSIM_VIRT_BASE> BasicBlockPtr;
-//#else
 typedef shortptr<BasicBlock> BasicBlockPtr;
-//#endif
 
 struct BasicBlockChunkList: public ChunkList<BasicBlockPtr, BB_PTRS_PER_CHUNK> {
   selflistlink hashlink;
@@ -1722,9 +1712,9 @@ struct flagstring {
   W64 bits;
   int n;
   bool reverse;
-  
+
   flagstring() { }
-  
+
   flagstring(const W64 bits) {
     this->bits = bits;
   }
@@ -1747,7 +1737,7 @@ static inline stringbuf& operator <<(stringbuf& sb, const flagstring& bs) {
 }
 
 typedef bool (*assist_func_t)(Context& ctx);
-typedef W64 (*light_assist_func_t)(Context& ctx, W64 ra, W64 rb, W64 rc, 
+typedef W64 (*light_assist_func_t)(Context& ctx, W64 ra, W64 rb, W64 rc,
 		W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
 
 const char* assist_name(assist_func_t func);

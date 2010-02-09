@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifdef MEM_TEST
@@ -41,7 +41,7 @@
 //#ifdef memdebug
 //#undef memdebug
 //#define memdebug(...) if(config.loglevel >= 0) { \
-//	ptl_logfile << __VA_ARGS__ ; } //ptl_logfile.flush(); 
+//	ptl_logfile << __VA_ARGS__ ; } //ptl_logfile.flush();
 //#endif
 
 using namespace Memory;
@@ -83,10 +83,6 @@ CacheLine* CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::probe(MemoryReq
 	CacheLine *line = base_t::probe(physAddress);
 
 	return line;
-//	if(line) 
-//		return line->isValid;
-//
-//	return false;
 }
 
 // Line Update is called when upper level cache has write the line
@@ -106,14 +102,8 @@ template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
 CacheLine* CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::insert(MemoryRequest *request, W64& oldTag)
 {
 	W64 physAddress = request->get_physical_address();
-//	W64 oldTag = InvalidTag<W64>::INVALID;
 	CacheLine *line = base_t::select(physAddress, oldTag);
 
-//	if(oldTag != InvalidTag<W64>::INVALID) {
-//		line->invalidate();
-//	}
-//
-//	line->init(tagOf(physAddress));
 	return line;
 }
 
@@ -144,7 +134,7 @@ bool CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::get_port(MemoryReques
 			rc = (writePortUsed_ < writePorts_) ? ++writePortUsed_ : 0;
 			break;
 		default:
-			memdebug("Unknown type of memory request: ", 
+			memdebug("Unknown type of memory request: ",
 					request->get_type(), endl);
 			assert(0);
 	};
@@ -163,7 +153,7 @@ void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::print(ostream& os) co
 }
 
 
-CacheController::CacheController(W8 coreid, char *name, 
+CacheController::CacheController(W8 coreid, char *name,
 		MemoryHierarchy *memoryHierarchy, CacheType type) :
 	Controller(coreid, name, memoryHierarchy)
 	, type_(type)
@@ -267,9 +257,8 @@ CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
 {
 	W64 requestLineAddress = get_line_address(request);
 
-//	foreach_queuelink(pendingRequests_, queueEntry, CacheQueueEntry) {
 	CacheQueueEntry* queueEntry;
-	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry, 
+	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry,
 			prevEntry) {
 
 		if(request == queueEntry->request)
@@ -277,8 +266,8 @@ CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
 
 		if(get_line_address(queueEntry->request) == requestLineAddress) {
 			// Found an entry with same line address, check if other
-			// entry also depends on this entry or not and to 
-			// maintain a chain of dependent entries, return the 
+			// entry also depends on this entry or not and to
+			// maintain a chain of dependent entries, return the
 			// last entry in the chain
 			while(queueEntry->depends >= 0)
 				queueEntry = &pendingRequests_[queueEntry->depends];
@@ -293,15 +282,11 @@ CacheQueueEntry* CacheController::find_match(MemoryRequest *request)
 {
 	W64 requestLineAddress = get_line_address(request);
 
-//	foreach_queuelink(pendingRequests_, queueEntry, CacheQueueEntry) {
 	CacheQueueEntry* queueEntry;
-	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry, 
+	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry,
 			prevEntry) {
 		if(request == queueEntry->request)
 			return queueEntry;
-
-		// if(get_line_address(queueEntry->request) == requestLineAddress)
-			// return queueEntry;
 	}
 
 	return null;
@@ -329,7 +314,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 	memdebug("Message received is: ", *msg);
 
 	if(sender == upperInterconnect_ || sender == upperInterconnect2_) {
-		
+
         /*
 		 * if pendingRequests_ queue is full then simply
 		 * return false to indicate that this controller
@@ -348,7 +333,6 @@ bool CacheController::handle_interconnect_cb(void *arg)
 			return true;
 
 		CacheQueueEntry *queueEntry = pendingRequests_.alloc();
-		//assert(queueEntry);
 
 		/* set full flag if buffer is full */
 		if(pendingRequests_.isFull()) {
@@ -363,7 +347,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 		queueEntry->sender = sender;
 		queueEntry->request->incRefCounter();
 		ADD_HISTORY_ADD(queueEntry->request);
-		
+
         /*
 		 * We are going to access the cache later, to make
 		 * sure that this entry is not cleared enable the
@@ -396,15 +380,14 @@ bool CacheController::handle_interconnect_cb(void *arg)
 			} else if(type == MEMORY_OP_WRITE) {
 				STAT_UPDATE(cpurequest.stall.write.dependency++);
 			}
-//			queueEntry->depends = dependsOn->idx;
 		} else {
 			cache_access_cb(queueEntry);
 		}
 
-		memdebug("Cache: ", get_name(), " added queue entry: ", 
+		memdebug("Cache: ", get_name(), " added queue entry: ",
 				*queueEntry, endl);
 	} else {
-		memdebug(get_name(), 
+		memdebug(get_name(),
 				" Received message from lower interconnect\n");
 
 		if(msg->hasData) {
@@ -419,7 +402,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 				 * Do the following only when:
 				 *  - we received response to our request
 				 *  - we have read miss on same request
-				 * 
+				 *
 				 * two things here: insert cache entry and response to
 				 * upper cache.
 				 * So we create two events in parallel.
@@ -433,7 +416,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 					clear_entry_cb(queueEntry);
 				} else if(msg->request == queueEntry->request ||
 						(msg->request != queueEntry->request &&
-						 queueEntry->request->get_type() == 
+						 queueEntry->request->get_type() ==
 						 MEMORY_OP_READ) ) {
 
 					queueEntry->sendTo = queueEntry->sender;
@@ -442,7 +425,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 					queueEntry->eventFlags[
 						CACHE_WAIT_INTERCONNECT_EVENT]++;
 
-					memdebug("Queue entry flag after both events: ", 
+					memdebug("Queue entry flag after both events: ",
 							queueEntry->eventFlags, endl);
 
 					memoryHierarchy_->add_event(&cacheInsert_, 0,
@@ -487,7 +470,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 								0, newEntry);
 					}
 
-					memoryHierarchy_->add_event(&cacheAccess_, 0, 
+					memoryHierarchy_->add_event(&cacheAccess_, 0,
 							newEntry);
 				}
 				else {
@@ -521,17 +504,19 @@ int CacheController::access_fast_path(Interconnect *interconnect,
 	memdebug("Accessing Cache ", get_name(), " : Request: ", *request, endl);
 	bool hit = cacheLines_->probe(request);
 
-	// TESTING 
-//	hit = true;
+	// TESTING
+    //	hit = true;
 
-	// if its a write, dont do fast access as the lower
-	// level cache has to be updated
+    /*
+     * if its a write, dont do fast access as the lower
+     * level cache has to be updated
+     */
 	if(hit && request->get_type() != MEMORY_OP_WRITE) {
 		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++);
 		return cacheLines_->latency();
 	}
 
-	return -1; 
+	return -1;
 }
 
 void CacheController::register_upper_interconnect(Interconnect *interconnect)
@@ -539,7 +524,7 @@ void CacheController::register_upper_interconnect(Interconnect *interconnect)
 	upperInterconnect_ = interconnect;
 }
 
-void CacheController::register_second_upper_interconnect(Interconnect 
+void CacheController::register_second_upper_interconnect(Interconnect
 		*interconnect)
 {
 	upperInterconnect2_ = interconnect;
@@ -557,7 +542,7 @@ bool CacheController::cache_hit_cb(void *arg)
 		return true;
 
 	queueEntry->eventFlags[CACHE_HIT_EVENT]--;
-	memdebug("Cache: ", get_name(), " cache_hit_cb entry: ", 
+	memdebug("Cache: ", get_name(), " cache_hit_cb entry: ",
 			*queueEntry, endl);
 
 	OP_TYPE type = queueEntry->request->get_type();
@@ -576,8 +561,10 @@ bool CacheController::cache_hit_cb(void *arg)
 		memoryHierarchy_->add_event(&waitInterconnect_, 0,
 				(void*)queueEntry);
 	} else {
-		// there will not be any situation where the sender was
-		// lower interconnect and we had a cache hit
+        /*
+         * there will not be any situation where the sender was
+         * lower interconnect and we had a cache hit
+         */
 		assert(0);
 	}
 
@@ -603,7 +590,7 @@ bool CacheController::cache_miss_cb(void *arg)
 	queueEntry->sendTo = lowerInterconnect_;
 	memoryHierarchy_->add_event(&waitInterconnect_, 0,
 			(void*)queueEntry);
-	memdebug("Cache: ", get_name(), " cache_miss_cb entry: ", 
+	memdebug("Cache: ", get_name(), " cache_miss_cb entry: ",
 			*queueEntry, endl);
 
 	return true;
@@ -637,7 +624,7 @@ bool CacheController::cache_insert_cb(void *arg)
 		line->isValid = true;
 
 		queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
-		memoryHierarchy_->add_event(&cacheInsertComplete_, 
+		memoryHierarchy_->add_event(&cacheInsertComplete_,
 				cacheAccessLatency_, queueEntry);
 		return true;
 	}
@@ -656,9 +643,9 @@ bool CacheController::cache_insert_complete_cb(void *arg)
 		return true;
 
 	queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]--;
-	
+
 	queueEntry->eventFlags[CACHE_CLEAR_ENTRY_EVENT]++;
-	memoryHierarchy_->add_event(&clearEntry_, 
+	memoryHierarchy_->add_event(&clearEntry_,
 			0, queueEntry);
 
 	return true;
@@ -677,22 +664,24 @@ bool CacheController::cache_access_cb(void *arg)
 		bool hit = (line == null) ? false : line->isValid;
 
 		// Testing 100 % L2 Hit
-//		if(type_ == L2_CACHE)
-//			hit = true;
+        //		if(type_ == L2_CACHE)
+        //			hit = true;
 
 		OP_TYPE type = queueEntry->request->get_type();
 		Signal *signal;
 		int delay;
 		if(hit) {
-			if(type == MEMORY_OP_READ || 
+			if(type == MEMORY_OP_READ ||
 					type == MEMORY_OP_WRITE) {
 				signal = &cacheHit_;
 				delay = cacheAccessLatency_;
 				queueEntry->eventFlags[CACHE_HIT_EVENT]++;
 
-				// Create a new memory request with
-				// opration type MEMORY_OP_UPDATE and
-				// send it to lower caches
+                /*
+                 * Create a new memory request with
+                 * opration type MEMORY_OP_UPDATE and
+                 * send it to lower caches
+                 */
 				if(type == MEMORY_OP_WRITE) {
 					if(wt_disabled_) {
 						line->isModified = true;
@@ -702,13 +691,15 @@ bool CacheController::cache_access_cb(void *arg)
 					}
 				}
 			} else if(type == MEMORY_OP_UPDATE){
-				// On memory op update, simply do nothing in cache
-				// remove the entry from the queue if its not 
-				// going to be used, else do nothing
+                /*
+                 * On memory op update, simply do nothing in cache
+                 * remove the entry from the queue if its not
+                 * going to be used, else do nothing
+                 */
 				signal = &cacheInsertComplete_;
 				delay = cacheAccessLatency_;
 				queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
-			}	   
+			}
 		} else { // Cache Miss
 			if(type == MEMORY_OP_READ ||
 					type == MEMORY_OP_WRITE) {
@@ -718,8 +709,7 @@ bool CacheController::cache_access_cb(void *arg)
 				if(!queueEntry->prefetch && type == MEMORY_OP_READ)
 					do_prefetch(queueEntry->request);
 			}
-			// else its update and its a cache miss, so
-			// ignore that
+            /* else its update and its a cache miss, so ignore that */
 			else {
 				signal = &clearEntry_;
 				delay = cacheAccessLatency_;
@@ -739,7 +729,7 @@ bool CacheController::cache_access_cb(void *arg)
 	}
 
 retry_cache_access:
-	// No port available yet, retry next cycle
+    /* No port available yet, retry next cycle */
 	queueEntry->eventFlags[CACHE_ACCESS_EVENT]++;
 	memoryHierarchy_->add_event(&cacheAccess_, 1, arg);
 
@@ -763,29 +753,31 @@ bool CacheController::wait_interconnect_cb(void *arg)
 	message.sender = this;
 	message.request = queueEntry->request;
 	bool success=false;
-	
-	if(queueEntry->sendTo == upperInterconnect_ || 
+
+	if(queueEntry->sendTo == upperInterconnect_ ||
 			queueEntry->sendTo == upperInterconnect2_) {
-		// sending to upper interconnect, so its a response to 
-		// previous request, so mark 'hasData' to true in message
+        /*
+         * sending to upper interconnect, so its a response to
+         * previous request, so mark 'hasData' to true in message
+         */
 		message.hasData = true;
 		memdebug("Sending message: ", message, endl);
 		success = queueEntry->sendTo->get_controller_request_signal()->
 			emit(&message);
 
 		if(success == true) {
-			// free this entry if no future event is going to use it
+            /* free this entry if no future event is going to use it */
 			clear_entry_cb(queueEntry);
 		} else {
-			// Queue in interconnect is full so retry after interconnect delay
+            /* Queue in interconnect is full so retry after interconnect delay */
 			queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
             int delay = queueEntry->sendTo->get_delay();
             if(delay == 0) delay = 1;
-			memoryHierarchy_->add_event(&waitInterconnect_, 
+			memoryHierarchy_->add_event(&waitInterconnect_,
 					delay, (void*)queueEntry);
 		}
 	} else {
-		if(queueEntry->request->get_type() == MEMORY_OP_UPDATE) 
+		if(queueEntry->request->get_type() == MEMORY_OP_UPDATE)
 			message.hasData = true;
 
 		success = lowerInterconnect_->
@@ -793,17 +785,19 @@ bool CacheController::wait_interconnect_cb(void *arg)
 
 		memdebug("success is : ", success, endl);
 		if(success == false) {
-			// Queue in interconnect full so retry after interconnect delay
+            /* Queue in interconnect full so retry after interconnect delay */
 
 			int delay = lowerInterconnect_->get_delay();
 			if(delay == 0) delay = AVG_WAIT_DELAY;
 			queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
-			memoryHierarchy_->add_event(&waitInterconnect_, 
+			memoryHierarchy_->add_event(&waitInterconnect_,
 					delay, (void*)queueEntry);
 		} else {
-			// If the request is for memory update, its send to
-			// lower level cache so we can remove the entry from 
-			// local queue
+            /*
+             * If the request is for memory update, its send to
+             * lower level cache so we can remove the entry from
+             * local queue
+             */
 			if(queueEntry->request->get_type() == MEMORY_OP_UPDATE) {
 				clear_entry_cb(queueEntry);
 			} else {
@@ -812,7 +806,7 @@ bool CacheController::wait_interconnect_cb(void *arg)
 		}
 	}
 
-	// Free the message
+    /* Free the message */
 	memoryHierarchy_->free_message(&message);
 
 	return true;
@@ -832,7 +826,7 @@ bool CacheController::clear_entry_cb(void *arg)
 	memdebug("Queue Entry flags: ", queueEntry->eventFlags, endl);
 	if(queueEntry->eventFlags.iszero()) {
 
-		// Get the dependent entry if any
+        /* Get the dependent entry if any */
 		if(queueEntry->depends >= 0) {
 			CacheQueueEntry* depEntry = &pendingRequests_[
 				queueEntry->depends];
@@ -850,8 +844,10 @@ bool CacheController::clear_entry_cb(void *arg)
 			pendingRequests_.free(queueEntry);
 		}
 
-		// Check if pendingRequests_ buffer is not full then
-		// clear the flag in memory hierarchy
+        /*
+         * Check if pendingRequests_ buffer is not full then
+         * clear the flag in memory hierarchy
+         */
 		if(!pendingRequests_.isFull()) {
 			memoryHierarchy_->set_controller_full(this, false);
 		}

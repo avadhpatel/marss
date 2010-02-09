@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef CACHECONSTANTS_H
@@ -50,21 +50,21 @@ namespace Memory{
 	const int L1D_WAY_COUNT = 2;
 	const int L1D_DCACHE_BANKS = 8; // 8 banks x 8 bytes/bank = 64 bytes/line
 	const int L1D_LATENCY   = 2;
-//	const int L1D_REQ_NUM = 8;
+    //	const int L1D_REQ_NUM = 8;
 	const int L1D_READ_PORT = 2;
 	const int L1D_WRITE_PORT = 3;
-//	const int L1D_WB_COUNT = L1D_REQ_NUM; // writeback buffer size
-//	const int L1D_SNOOP_PORT = 2;
+    //	const int L1D_WB_COUNT = L1D_REQ_NUM; // writeback buffer size
+    //	const int L1D_SNOOP_PORT = 2;
 
 	// 128 KB L1I
 	const int L1I_LINE_SIZE = 16;
 	const int L1I_SET_COUNT = 2048;
 	const int L1I_WAY_COUNT = 2;
 	const int L1I_LATENCY   = 2;
-//	const int L1I_REQ_NUM = 8;
+    //	const int L1I_REQ_NUM = 8;
 	const int L1I_READ_PORT = 2;
 	const int L1I_WRITE_PORT = 1;
-//	const int L1I_SNOOP_PORT = 2;
+    //	const int L1I_SNOOP_PORT = 2;
 
 	// 8M KB L2
 	const int L2_LINE_SIZE = 64;
@@ -79,8 +79,8 @@ namespace Memory{
 	const int L2_REQ_NUM = 16;
 	const int L2_READ_PORT = 2;
 	const int L2_WRITE_PORT = 2;
-//	const int L2_WB_COUNT = L2_REQ_NUM; // writeback buffer size
-//	const int L2_SNOOP_PORT = 2;
+    //	const int L2_WB_COUNT = L2_REQ_NUM; // writeback buffer size
+    //	const int L2_SNOOP_PORT = 2;
 
 	// 2M KB L3
 	const int L3_LINE_SIZE = 64;
@@ -88,11 +88,11 @@ namespace Memory{
 	const int L3_WAY_COUNT = 32;
 	//  const int L3_DCACHE_BANKS = 8; // 8 banks x 8 bytes/bank = 64 bytes/line
 	const int L3_LATENCY   = 32;
-//	const int L3_REQ_NUM = 16;
+    //	const int L3_REQ_NUM = 16;
 	const int L3_READ_PORT = 2;
 	const int L3_WRITE_PORT = 1;
-//	const int L3_WB_COUNT = L3_REQ_NUM; // writeback buffer size
-//	const int L3_SNOOP_PORT = 2;
+    //	const int L3_WB_COUNT = L3_REQ_NUM; // writeback buffer size
+    //	const int L3_SNOOP_PORT = 2;
 
 	// Main Memory
 	const int MEM_REQ_NUM = 64;

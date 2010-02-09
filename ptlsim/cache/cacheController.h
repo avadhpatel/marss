@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef CACHE_CONTROLLER_H
@@ -46,7 +46,7 @@ struct CacheLine
 	W64 tag;
 	bool isValid;
 	bool isModified;
-	
+
 	void init(W64 tag_t) {
 		tag = tag_t;
 	}
@@ -58,7 +58,7 @@ struct CacheLine
 	}
 
 	void invalidate() { reset(); }
-	
+
 	void print(ostream& os) const {
 		os << "Cacheline: tag[", tag, "] ";
 		os << "valid[", isValid, "] ";
@@ -87,7 +87,7 @@ struct CacheLinesBase
 		virtual int latency() const =0;
 		virtual CacheLine* probe(MemoryRequest *request)=0;
 		virtual void update(MemoryRequest *request)=0;
-		virtual CacheLine* insert(MemoryRequest *request, 
+		virtual CacheLine* insert(MemoryRequest *request,
 				W64& oldTag)=0;
 		virtual int invalidate(MemoryRequest *request)=0;
 		virtual bool get_port(MemoryRequest *request)=0;
@@ -95,9 +95,9 @@ struct CacheLinesBase
 };
 
 template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-class CacheLines : public CacheLinesBase, 
-	public AssociativeArray<W64, CacheLine, SET_COUNT, 
-		WAY_COUNT, LINE_SIZE> 
+class CacheLines : public CacheLinesBase,
+	public AssociativeArray<W64, CacheLine, SET_COUNT,
+		WAY_COUNT, LINE_SIZE>
 {
 	private:
 		int readPortUsed_;
@@ -107,10 +107,10 @@ class CacheLines : public CacheLinesBase,
 		W64 lastAccessCycle_;
 
 	public:
-		typedef AssociativeArray<W64, CacheLine, SET_COUNT, 
+		typedef AssociativeArray<W64, CacheLine, SET_COUNT,
 				WAY_COUNT, LINE_SIZE> base_t;
-		typedef FullyAssociativeArray<W64, CacheLine, WAY_COUNT, 
-				NullAssociativeArrayStatisticsCollector<W64,  
+		typedef FullyAssociativeArray<W64, CacheLine, WAY_COUNT,
+				NullAssociativeArrayStatisticsCollector<W64,
 					CacheLine> > Set;
 
 		CacheLines(int readPorts, int writePorts);
@@ -126,8 +126,8 @@ class CacheLines : public CacheLinesBase,
 };
 
 template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-static inline ostream& operator <<(ostream& os, const 
-		CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>& 
+static inline ostream& operator <<(ostream& os, const
+		CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>&
 		cacheLines)
 {
 	cacheLines.print(os);
@@ -135,8 +135,8 @@ static inline ostream& operator <<(ostream& os, const
 }
 
 template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-static inline ostream& operator ,(ostream& os, const 
-		CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>& 
+static inline ostream& operator ,(ostream& os, const
+		CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>&
 		cacheLines)
 {
 	cacheLines.print(os);
@@ -144,19 +144,19 @@ static inline ostream& operator ,(ostream& os, const
 }
 
 // L1D cache lines
-typedef CacheLines<L1D_SET_COUNT, L1D_WAY_COUNT, L1D_LINE_SIZE, 
+typedef CacheLines<L1D_SET_COUNT, L1D_WAY_COUNT, L1D_LINE_SIZE,
 		L1D_LATENCY> L1DCacheLines;
 
 // L1I cache lines
-typedef CacheLines<L1I_SET_COUNT, L1I_WAY_COUNT, L1I_LINE_SIZE, 
+typedef CacheLines<L1I_SET_COUNT, L1I_WAY_COUNT, L1I_LINE_SIZE,
 		L1I_LATENCY> L1ICacheLines;
 
 // L2 cache lines
-typedef CacheLines<L2_SET_COUNT, L2_WAY_COUNT, L2_LINE_SIZE, 
+typedef CacheLines<L2_SET_COUNT, L2_WAY_COUNT, L2_LINE_SIZE,
 		L2_LATENCY> L2CacheLines;
 
-// L3 cache lines 
-typedef CacheLines<L3_SET_COUNT, L3_WAY_COUNT, L3_LINE_SIZE, 
+// L3 cache lines
+typedef CacheLines<L3_SET_COUNT, L3_WAY_COUNT, L3_LINE_SIZE,
 		L3_LATENCY> L3CacheLines;
 
 // Cache Events enum used for Queue entry flags
@@ -174,10 +174,10 @@ enum {
 };
 
 // CacheQueueEntry
-// Cache has queue to maintain a list of pending requests 
-// that this caches has received. 
+// Cache has queue to maintain a list of pending requests
+// that this caches has received.
 
-struct CacheQueueEntry : public FixStateListObject 
+struct CacheQueueEntry : public FixStateListObject
 {
 	public:
 		int depends;
@@ -215,7 +215,7 @@ struct CacheQueueEntry : public FixStateListObject
 			else
 				os << "sender[none] ";
 
-			if(sendTo) 
+			if(sendTo)
 				os << "sendTo[" << sendTo->get_name() << "] ";
 			else
 				os << "sendTo[none] ";
@@ -240,7 +240,7 @@ static inline ostream& operator <<(ostream& os, const CacheQueueEntry&
 class CacheController : public Controller
 {
 	private:
-		
+
 		CacheType type_;
 		CacheLinesBase *cacheLines_;
 		CacheStats *stats_;
@@ -287,7 +287,7 @@ class CacheController : public Controller
 		Signal waitInterconnect_;
 
 		CacheQueueEntry* find_dependency(MemoryRequest *request);
-		
+
 		// This function is used to find pending request with either
 		// same MemoryRequest or memory request with same address
 		CacheQueueEntry* find_match(MemoryRequest *request);
@@ -296,22 +296,22 @@ class CacheController : public Controller
 			return request->get_physical_address() >> cacheLineBits_;
 		}
 
-		bool send_update_message(CacheQueueEntry *queueEntry, 
+		bool send_update_message(CacheQueueEntry *queueEntry,
 				W64 tag=-1);
 
 		void do_prefetch(MemoryRequest *request, int additional_delay=0);
 
 	public:
-		CacheController(W8 coreid, char *name, 
+		CacheController(W8 coreid, char *name,
 				MemoryHierarchy *memoryHierarchy, CacheType type);
 		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);
-		
+
 		void register_upper_interconnect(Interconnect *interconnect);
 		void register_lower_interconnect(Interconnect *interconnect);
-		void register_second_upper_interconnect(Interconnect 
+		void register_second_upper_interconnect(Interconnect
 				*interconnect);
 
 		void annul_request(MemoryRequest *request);

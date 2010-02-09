@@ -126,7 +126,7 @@ void PTLsimConfig::reset() {
   distance_prefetcher = 0;
   prefetch_degree = 1;
   wait_all_finished = 0;
-  
+
   perfect_L2 = 0;
 
   // memory model
@@ -249,7 +249,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   section("Trace Stop Point");
   add(stop_at_user_insns,           "stopinsns",            "Stop after executing <stopinsns> user instructions");
   add(stop_at_cycle,                "stopcycle",            "Stop after <stop> cycles");
-  add(stop_at_iteration,            "stopiter",             "Stop after <stop> iterations (does not apply to cycle-accurate cores)");  
+  add(stop_at_iteration,            "stopiter",             "Stop after <stop> iterations (does not apply to cycle-accurate cores)");
   add(stop_at_rip,                  "stoprip",              "Stop before rip <stoprip> is translated for the first time");
   add(stop_at_marker,               "stop-at-marker",       "Stop after PTLCALL_MARKER with marker X");
   add(stop_at_marker_hits,          "stop-at-marker-hits",  "Stop after PTLCALL_MARKER is called N times");
@@ -319,7 +319,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
  add(comparing_cache,               "comparing-cache",                   "run simulation with storing actual data in cache");
  add(trace_memory_updates,               "trace-memory-updates",                   "log memory updates");
  add(trace_memory_updates_logfile,        "trace-memory-updates-ptl_logfile",                   "ptl_logfile for memory updates");
- 
+
  section("Memory Event Ring Buffer Logging Control");
  add(mem_event_log_enabled,            "mem-ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
  add(mem_event_log_ring_buffer_size,   "mem-ringbuf-size",         "Core event log ring buffer size: only save last <ringbuf> entries");
@@ -365,7 +365,7 @@ void print_banner(ostream& os, const PTLsimStats& stats, int argc, char** argv) 
   os << "//  Copyright 1999-2007 Matt T. Yourst <yourst@yourst.com>", endl;
   os << "// ", endl;
   os << "//  Revision ", stringify(SVNREV), " (", stringify(SVNDATE), ")", endl;
-  os << "//  Built ", __DATE__, " ", __TIME__, " on ", stringify(BUILDHOST), " using gcc-", 
+  os << "//  Built ", __DATE__, " ", __TIME__, " on ", stringify(BUILDHOST), " using gcc-",
     stringify(__GNUC__), ".", stringify(__GNUC_MINOR__), endl;
   os << "//  Running on ", hostinfo.nodename, ".", hostinfo.domainname, endl;
   os << "//  ", endl;
@@ -479,7 +479,7 @@ void flush_stats() {
 }
 
 void print_sysinfo(ostream& os) {
-	// TODO: In QEMU based system 
+	// TODO: In QEMU based system
 }
 
 bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
@@ -491,27 +491,19 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
     current_log_filename = config.log_filename;
   }
 #ifdef TRACE_RIP
-	if(!ptl_rip_trace.is_open()) 
+	if(!ptl_rip_trace.is_open())
 		ptl_rip_trace.open("ptl_rip_trace");
 #endif
 
-//  ptl_logfile.setchain((config.log_on_console) ? &cout : null);
-
-//  if (config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
-    // Can also use "-ptl_logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
     statswriter.open(config.stats_filename, &_binary_ptlsim_build_ptlsim_dst_start,
                      &_binary_ptlsim_build_ptlsim_dst_end - &_binary_ptlsim_build_ptlsim_dst_start,
                      sizeof(PTLsimStats));
     current_stats_filename = config.stats_filename;
-//  }
 
   if (config.trace_memory_updates_logfile.set() && (config.trace_memory_updates_logfile != current_trace_memory_updates_logfile)) {
     backup_and_reopen_memory_logfile();
     current_trace_memory_updates_logfile = config.trace_memory_updates_logfile;
   }
-
-
-//  ptl_logfile.setbuf(config.log_buffer_size);
 
   if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.start_log_at_iteration == infinity)) {
     config.start_log_at_iteration = 0;
@@ -533,8 +525,6 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
     config.start_log_at_rip = INVALIDRIP;
     logenable = 0;
   }
-
-  //  logenable = 1; // Hui
 
   if (config.bbcache_dump_filename.set() && (config.bbcache_dump_filename != current_bbcache_dump_filename)) {
     // Can also use "-ptl_logfile /dev/fd/1" to send to stdout (or /dev/fd/2 for stderr):
@@ -658,12 +648,11 @@ extern "C" void ptl_machine_init(char* config_str) {
 	configparser.setup();
 	config.reset();
 
-//OutOfOrderMachine ooomodel("ooo");
 	// Setup the configuration
 	ptl_reconfigure(config_str);
 
 	// After reconfigure reset the machine's initalized variable
-	
+
 	PTLsimMachine* machine = null;
 	char* machinename = config.core_name;
 	if likely (curr_ptl_machine != null) {
@@ -676,12 +665,6 @@ extern "C" void ptl_machine_init(char* config_str) {
 		machine->initialized = 0;
 
 }
-
-//Context* ptl_contexts[MAX_CONTEXTS];
-//
-//inline Context& contextof(W8 i) {
-//	return *ptl_contexts[i];
-//}
 
 static int ctx_counter = 0;
 extern "C"
@@ -699,7 +682,7 @@ CPUX86State* ptl_create_new_context() {
 
 // print selected stats to log for average of all cores
 void print_stats_in_log(){
-  
+
 
 #ifdef PTLSIM_HYPERVISOR
   // 1. execution key stats:
@@ -728,7 +711,7 @@ void print_stats_in_log(){
   // branch prediction accuracy
   ptl_logfile << " branch-accuracy ", double (stats.ooocore_context_total.branchpred.cond[1] * 100.0)/double (stats.ooocore_context_total.branchpred.cond[0] + stats.ooocore_context_total.branchpred.cond[1]), endl;
 
-  // 2. simulation speed: 
+  // 2. simulation speed:
   ptl_logfile << " elapse_seconds ", stats.elapse_seconds, endl;
   // CPS : number of similated cycle per second
   ptl_logfile << " CPS ",  W64(double(sim_cycle) / double(stats.elapse_seconds)), endl;
@@ -741,7 +724,7 @@ void print_stats_in_log(){
   ptl_logfile << " per_vcpu_IPC ", stats.ooocore_context_total.commit.ipc, endl;
   ptl_logfile << " total_IPC ",  double(total_user_insns_committed) / double(sim_cycle), endl;
 
-  // 4. internconnection related 
+  // 4. internconnection related
   struct CacheStats::cpurequest::count &count_L1I = stats.memory.total.L1I.cpurequest.count;
   W64 hit_L1I = count_L1I.hit.read.hit.hit + count_L1I.hit.read.hit.forward +  count_L1I.hit.write.hit.hit + count_L1I.hit.write.hit.forward;
   W64 miss_L1I = count_L1I.miss.read +  count_L1I.miss.write;
@@ -771,77 +754,6 @@ void print_stats_in_log(){
   // average load miss latency
    ptl_logfile << " L1_read_miss_latency ", double (stats.memory.total.L1I.latency.IF + stats.memory.total.L1D.latency.load) / double (count_L1I.miss.read +  count_L2.miss.read), endl;
    ptl_logfile << " L1_write_miss_latency ", double (stats.memory.total.L1D.latency.store) / double (count_L1D.miss.write), endl;
-
-  
-#ifndef NEW_CACHE
-  // bus utilization
-   ptl_logfile << " atomic_bus_utilization ", double (stats.memory.bus.atomic_utilization[Memory::BUS_DES_BUSY] * 100.0) / double (  stats.memory.bus.atomic_utilization[Memory::BUS_DES_FREE] +  stats.memory.bus.atomic_utilization[Memory::BUS_DES_BUSY] + 1), endl; 
-   ptl_logfile << " addr_bus_utilization ", double (stats.memory.bus.addr_utilization[Memory::BUS_DES_BUSY] * 100.0) / double (  stats.memory.bus.addr_utilization[Memory::BUS_DES_FREE] +  stats.memory.bus.addr_utilization[Memory::BUS_DES_BUSY] +1), endl; 
-   ptl_logfile << " data_bus_utilization ", double (stats.memory.bus.data_utilization[Memory::BUS_DES_BUSY] * 100.0) / double (  stats.memory.bus.data_utilization[Memory::BUS_DES_FREE] +  stats.memory.bus.data_utilization[Memory::BUS_DES_BUSY] +1), endl; 
-
-   W64 total_bus_command = 0;
-   W64 total_command_grant_latency = 0;
-   W64 total_command_bus_latency = 0;
-
-  // bus activity classification
-//    foreach (i , Memory::NUM_BUS_COMMANDS){
-//      if(!stats.memory.bus.command_count[i]) stats.memory.bus.command_count[i]=1; 
-//      ptl_logfile << Memory::BusCommandName[i], "_count ", stats.memory.bus.command_count[i], endl;
-//      int grant_latency =  double (stats.memory.bus.command_grant_latency[i]) / double (stats.memory.bus.command_count[i]);
-//      // delay wait for bus.
-//      ptl_logfile << Memory::BusCommandName[i], "_grant_latency ", grant_latency, endl;
-//      int bus_latency =  double (stats.memory.bus.command_bus_latency[i]) / double (stats.memory.bus.command_count[i]);
-//      // delay after bus granted.
-//      ptl_logfile << Memory::BusCommandName[i], "_bus_latency ", bus_latency, endl;
-
-//      if(i == Memory::BUS_COMMAND_RD){
-//        ptl_logfile << " L2_read_miss_latency ", grant_latency+bus_latency, endl;
-//      }
-
-//      if(i == Memory::BUS_COMMAND_RDX){
-//        ptl_logfile << " L2_write_miss_latency ", grant_latency+bus_latency, endl;
-//      }
-
-//      if(i == Memory::BUS_COMMAND_WB){
-//        ptl_logfile << " L2_write_back_latency ", grant_latency+bus_latency, endl;
-//      }
-
-//      if(i == Memory::BUS_COMMAND_UPGR){
-//        ptl_logfile << " L2_write_upgrade_latency ", grant_latency+bus_latency, endl;
-//      }
-
-//      total_bus_command += stats.memory.bus.command_count[i];
-//      total_command_bus_latency += stats.memory.bus.command_bus_latency[i];
-//      total_command_grant_latency += stats.memory.bus.command_grant_latency[i];
-//    }
-   
-   foreach (i , Memory::NUM_BUS_COMMANDS){
-     if(!stats.memory.bus.command_count[i]) stats.memory.bus.command_count[i]=1; 
-     ptl_logfile << "total_",Memory::BusCommandName[i], "_count ", stats.memory.bus.command_count[i], endl;
-     int grant_latency =  double (stats.memory.bus.command_grant_latency[i]) / double (stats.memory.bus.command_count[i]);
-     // delay wait for bus.
-     ptl_logfile << "average_",Memory::BusCommandName[i], "_grant_latency ", grant_latency, endl;
-     int bus_latency =  double (stats.memory.bus.command_bus_latency[i]) / double (stats.memory.bus.command_count[i]);
-     // delay after bus granted.
-     ptl_logfile << "average_",Memory::BusCommandName[i], "_bus_latency ", bus_latency, endl;
-
-
-     total_bus_command += stats.memory.bus.command_count[i];
-     total_command_bus_latency += stats.memory.bus.command_bus_latency[i];
-     total_command_grant_latency += stats.memory.bus.command_grant_latency[i];
-   }
-
-   foreach (j , Memory::NUM_BUS_COMMANDS){
-     W64 total_miss_lat = stats.memory.bus.command_grant_latency[j] + stats.memory.bus.command_bus_latency[j];
-     ptl_logfile << " L2_miss", Memory::BusCommandName[j], "_latency ", total_miss_lat, endl;
-     ptl_logfile << " L2_miss", Memory::BusCommandName[j], "_latency_percentage ", (total_miss_lat *100.0) / ((total_command_grant_latency + total_command_bus_latency) * 1.0), endl;
-   }
-
-  // bus command latency average 
-   ptl_logfile << "average_bus_grant_latency ", double(total_command_grant_latency) / double(total_bus_command), endl;
-   ptl_logfile << "average_bus_latency ", double(total_command_bus_latency) / double(total_bus_command), endl;
-   ptl_logfile << "average_bus_total_latency ", double(total_command_grant_latency + total_command_bus_latency) / double(total_bus_command), endl;
-#endif // NEW_CACHE
 }
 
 void setup_qemu_switch_all_ctx(Context& last_ctx) {
@@ -930,7 +842,7 @@ extern "C" uint8_t ptl_simulate() {
 
     /*
 	 * Set ret_qemu_env to null, it will be set at the exit of simulation 'run'
-	 * to the Context that has interrupts/exceptions pending 
+	 * to the Context that has interrupts/exceptions pending
      */
 	machine->ret_qemu_env = null;
 	ptl_stable_state = 0;
@@ -944,7 +856,7 @@ extern "C" uint8_t ptl_simulate() {
 			ptl_logfile  << "[cpu ", i, "]", (void*)(contextof(i).eip), " ";
 		}
         ptl_logfile << " sim_cycle: ", sim_cycle;
-	   	ptl_logfile << endl;
+		ptl_logfile << endl;
     }
 
 	machine->run(config);
@@ -968,7 +880,7 @@ extern "C" uint8_t ptl_simulate() {
 		setup_qemu_switch_all_ctx(*machine->ret_qemu_env);
 
 		/* Tell QEMU that we will come back to simulate */
-		return 1;  
+		return 1;
 	}
 
 
@@ -1001,7 +913,7 @@ extern "C" uint8_t ptl_simulate() {
 #endif
 	print_stats_in_log();
 
-	
+
 	const char *final_name = "final";
     strncpy(stats.snapshot_name, final_name, sizeof(final_name));
 	stats.snapshot_uuid = statswriter.next_uuid();
@@ -1031,9 +943,9 @@ extern "C" void update_progress() {
     double seconds = ticks_to_seconds(delta);
     double cycles_per_sec = (sim_cycle - last_printed_status_at_cycle) / seconds;
     double insns_per_sec = (total_user_insns_committed - last_printed_status_at_user_insn) / seconds;
-    
+
     stringbuf sb;
-    sb << "Completed ", intstring(sim_cycle, 13), " cycles, ", intstring(total_user_insns_committed, 13), " commits: ", 
+    sb << "Completed ", intstring(sim_cycle, 13), " cycles, ", intstring(total_user_insns_committed, 13), " commits: ",
       intstring((W64)cycles_per_sec, 9), " Hz, ", intstring((W64)insns_per_sec, 9), " insns/sec";
 
     sb << ": rip";

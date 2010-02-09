@@ -55,30 +55,30 @@ W64 get_core_freq_hz() {
   ifstream cpufreqis("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq");
   if (cpufreqis) {
     char s[256];
-    cpufreqis >> readline(s, sizeof(s));      
-    
+    cpufreqis >> readline(s, sizeof(s));
+
     int khz;
     int n = sscanf(s, "%d", &khz);
-    
+
     if (n == 1) {
       hz = (W64)khz * 1000;
       core_freq_hz = hz;
       return hz;
     }
   }
-  
+
   ifstream is("/proc/cpuinfo");
-  
+
   if (!is.is_open()) {
     cerr << "get_core_freq_hz(): warning: cannot open /proc/cpuinfo. Is this a Linux machine?", endl;
     core_freq_hz = hz;
     return hz;
   }
-  
+
   while (!is.eof()) {
     char s[256];
 	is.getline(s, 256);
-    
+
     int mhz;
     int n = sscanf(s, "cpu MHz\t: %d\n", &mhz);
     if (n == 1) {
@@ -141,7 +141,7 @@ namespace superstl {
     if (remaining() < extra) resize(newlength);
     assert(remaining() >= extra);
   }
-  
+
   stringbuf stringbuf::strip() {
 	  stringbuf retBuf;
 	  int start=0, end=0;
@@ -175,7 +175,7 @@ namespace superstl {
   }
 
 
-  void stringbuf::split(dynarray<stringbuf*>& bufArray, 
+  void stringbuf::split(dynarray<stringbuf*>& bufArray,
 		  const char *chr) {
 #ifdef MEM_TEST
 	  stringbuf* tmp = null;
@@ -226,7 +226,7 @@ namespace superstl {
       // MSB first (default):
       for (int i = bs.n-1; i >= 0; i--) os << (char)(bit(bs.bits, i) + '0');
     }
-    
+
     return os;
   }
 
@@ -261,12 +261,12 @@ namespace superstl {
     os << buf;
     return os;
   }
-  
+
   stringbuf& operator <<(stringbuf& os, const bytestring& bs) {
     foreach (i, bs.n) {
       os << hexstring(bs.bytes[i], 8);
-      if (((i % bs.splitat) == (bs.splitat-1)) && (i != bs.n-1)) 
-        os << endl; 
+      if (((i % bs.splitat) == (bs.splitat-1)) && (i != bs.n-1))
+        os << endl;
       else if (i != bs.n-1)
         os << " ";
     }
@@ -279,8 +279,8 @@ namespace superstl {
       if (bit(bs.mask, i))
         os << hexstring(bs.bytes[i], 8);
       else os << "xx";
-      if (((i % bs.splitat) == (bs.splitat-1)) && (i != bs.n-1)) 
-        os << endl; 
+      if (((i % bs.splitat) == (bs.splitat-1)) && (i != bs.n-1))
+        os << endl;
       else if (i != bs.n-1)
         os << " ";
     }
@@ -398,7 +398,7 @@ namespace superstl {
       }
 
       int presize =  pp - pattern;
-    
+
       sb << substring(pattern, 0, pp - pattern);
       sb << replace;
       pattern = pp + strlen(find);
@@ -460,27 +460,27 @@ namespace superstl {
   //
   void RandomNumberGenerator::reseed(W32 seed) {
     if unlikely (seed == 0) seed = 1; // default seed is 1
-    
+
 #define LCG(n) (69069 * n)
     s1 = LCG(seed);
     s2 = LCG(s1);
     s3 = LCG(s2);
 #undef LCG
-    
+
     // warm it up
     foreach (i, 8) random32();
   }
-  
+
   W32 RandomNumberGenerator::random32() {
 #define TAUSWORTHE(s,a,b,c,d) ((s&c)<<d) ^ (((s <<a) ^ s)>>b)
-    
+
     s1 = TAUSWORTHE(s1, 13, 19, 4294967294UL, 12);
     s2 = TAUSWORTHE(s2, 2, 25, 4294967288UL, 4);
     s3 = TAUSWORTHE(s3, 3, 11, 4294967280UL, 17);
-    
+
     return (s1 ^ s2 ^ s3);
   }
-  
+
   W64 RandomNumberGenerator::random64() {
     return (W64(random32()) << 32) | W64(random32());
   }
@@ -532,9 +532,9 @@ namespace superstl {
 
   ostream& operator <<(ostream& os, const CycleTimer& ct) {
     double seconds = ((double)ct.total / ct.gethz());
-    os << "CycleTimer ", padstring(ct.title, -16), " ", intstring(ct.total, 16), " cycles, ", 
-      floatstring(seconds, 9, 3), " seconds, ", 
-      floatstring((float)ct.total / (float)ct.iterations, 18, 1), " cycles/iter, ", 
+    os << "CycleTimer ", padstring(ct.title, -16), " ", intstring(ct.total, 16), " cycles, ",
+      floatstring(seconds, 9, 3), " seconds, ",
+      floatstring((float)ct.total / (float)ct.iterations, 18, 1), " cycles/iter, ",
       floatstring((float)ct.iterations / (float)seconds, 18, 1), " iters/second";
 
     return os;
@@ -739,7 +739,7 @@ namespace superstl {
     quotient = dividend / divisor;
     remainder = T(dividend % divisor);
     quotientlo = T(quotient);
-  
+
     if unlikely (quotient != signext64(W64(quotientlo), B)) goto out;
 
     return true;

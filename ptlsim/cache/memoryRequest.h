@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef MEMORY_REQUEST_H
@@ -32,7 +32,6 @@
 #include <superstl.h>
 #include <statelist.h>
 #include <cacheConstants.h>
-//these should be constants in other file 
 
 namespace Memory {
 
@@ -44,8 +43,6 @@ enum OP_TYPE {
 	NO_MEMORY_OP
 };
 
-//extern const char* memory_op_names[NO_MEMORY_OP];
-
 static const char* memory_op_names[NO_MEMORY_OP] = {
 	"memory_op_read",
 	"memory_op_write",
@@ -53,7 +50,7 @@ static const char* memory_op_names[NO_MEMORY_OP] = {
 	"memory_op_evict"
 };
 
-class MemoryRequest: public selfqueuelink 
+class MemoryRequest: public selfqueuelink
 {
 	public:
 		MemoryRequest() { reset(); }
@@ -65,7 +62,7 @@ class MemoryRequest: public selfqueuelink
 			robId_ = 0;
 			cycles_ = 0;
 			ownerRIP_ = 0;
-			refCounter_ = 0; // or maybe 1 	
+			refCounter_ = 0; // or maybe 1
 			opType_ = MEMORY_OP_READ;
 			isData_ = 0;
 			history = new stringbuf();
@@ -122,7 +119,7 @@ class MemoryRequest: public selfqueuelink
 		void set_robid(int idx) { robId_ = idx; }
 
 		W64 get_owner_rip() { return ownerRIP_; }
-		
+
 		W64 get_owner_uuid() { return ownerUUID_; }
 
 		OP_TYPE get_type() { return opType_; }
@@ -131,8 +128,6 @@ class MemoryRequest: public selfqueuelink
 		W64 get_init_cycles() { return cycles_; }
 
 		stringbuf& get_history() { return *history; }
-
-//		ostream& print(ostream& os) const;
 
 		ostream& print(ostream& os) const
 		{
@@ -170,7 +165,7 @@ static inline ostream& operator <<(ostream& os, const MemoryRequest& request)
 	return request.print(os);
 }
 
-class RequestPool: public array<MemoryRequest,REQUEST_POOL_SIZE> 
+class RequestPool: public array<MemoryRequest,REQUEST_POOL_SIZE>
 {
 	public:
 		RequestPool();
@@ -205,23 +200,23 @@ class RequestPool: public array<MemoryRequest,REQUEST_POOL_SIZE>
 			os << "---- End: Request pool\n";
 		}
 
-	private: 
+	private:
 		int size_;
 		StateList freeRequestList_;
 		StateList usedRequestsList_;
 
 		void freeRequest(MemoryRequest* request);
 
-		bool isEmpty() 
-		{ 
+		bool isEmpty()
+		{
 			return (freeRequestList_.empty());
 		}
 
-		bool isPoolLow() 
+		bool isPoolLow()
 		{
 			return (freeRequestList_.count < (
 						REQUEST_POOL_SIZE * REQUEST_POOL_LOW_RATIO));
-		}		
+		}
 };
 
 static inline ostream& operator <<(ostream& os, RequestPool &pool)

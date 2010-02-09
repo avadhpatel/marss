@@ -28,7 +28,7 @@ struct PTLstatsConfig {
   stringbuf table_row_col_pattern;
   stringbuf table_type_name;
   bool use_percents;
-  
+
   stringbuf graph_title;
   double graph_width;
   double graph_height;
@@ -41,22 +41,22 @@ struct PTLstatsConfig {
   stringbuf subtract_branch;
 
   bool show_sum_of_subtrees_only;
-  
+
   W64 maxdepth;
-  
+
   W64 table_scale_rel_to_col;
   W64 table_mark_highest_col;
-  
+
   W64 percent_digits;
-  
+
   double histogram_thresh;
   bool cumulative_histogram;
   bool show_stars_in_histogram;
-  
+
   bool percent_of_toplevel;
   bool hide_zero_branches;
   bool slice_cumulative;
-  
+
   bool invert_gains;
 
   bool print_datastore_info;
@@ -94,18 +94,18 @@ void PTLstatsConfig::reset() {
   subtract_branch.reset();
 
   show_sum_of_subtrees_only = 0;
-  
+
   maxdepth = limits<int>::max;
-  
+
   table_scale_rel_to_col = limits<int>::max;
   table_mark_highest_col = 0;
-  
+
   percent_digits = 1; // e.g. "66.7%"
-  
+
   histogram_thresh = 0.0001;
   cumulative_histogram = 0;
   show_stars_in_histogram = 1;
-  
+
   percent_of_toplevel = 1;
   hide_zero_branches = 1;
   slice_cumulative = 0;
@@ -373,7 +373,7 @@ void create_svg_of_histogram_percent_bargraph(ostream& os, W64s* histogram, int 
   foreach (i, count) { total += histogram[i]; }
 
   double cum = 0;
-  foreach (i, count) { 
+  foreach (i, count) {
     cum += ((double)histogram[i] / (double)total);
     maxwidth++;
     if (cum >= (config.graph_clip_percentile / 100.0)) break;
@@ -574,10 +574,10 @@ void create_svg_of_percentage_line_graph(ostream& os, double* xpoints, int xcoun
     svg.setdash(line.dashoffset, line.dashon, line.dashoff);
     svg.filled = line.filled;
     svg.fill = line.fill;
-    
+
     if (!line.enabled)
       continue;
-    
+
     foreach (sample, xcount) {
       double yy = ypoints[col][sample];
       double xp = xpoints[sample] * xscale;
@@ -597,7 +597,7 @@ void create_svg_of_percentage_line_graph(ostream& os, double* xpoints, int xcoun
       }
       svg.nextpoint(xp, yp);
     }
-    
+
     if (stacked) {
       svg.nextpoint(imagewidth, imageheight);
       svg.nextpoint(0, imageheight);
@@ -861,7 +861,7 @@ bool capture_table(dynarray<char*>& rowlist, dynarray<char*>& collist, dynarray<
       if (ds) {
         value = *ds;
         sum_of_all_rows[col] += value;
-      } else { 
+      } else {
         cerr << "ptlstats: Warning: cannot find subtree '", statname, "' for row ", row, ", col ", col, endl;
         value = 0;
       }
@@ -1177,7 +1177,7 @@ int main(int argc, char* argv[]) {
     }
 
     ds = ds->searchpath(config.mode_histogram);
-    
+
     if (!ds) {
       cerr << "ptlstats: Error: cannot find subtree '", config.mode_histogram, "'", endl;
       return 1;
@@ -1290,12 +1290,12 @@ int main(int argc, char* argv[]) {
           cerr << "ptlstats: Error: cannot find subtree '", colnames[col], "' in column ", col, endl;
           break;
         }
-        
+
         if (ds->type != DataStoreNode::DS_NODE_TYPE_INT) {
           cerr << "ptlstats: Error: slice '", colnames[col], "' cannot be taken for this node time", endl;
           break;
         }
-        
+
         W64 rawvalue = W64(*ds);
         double value = rawvalue;
         if (isnan(value)) value = 0;

@@ -74,7 +74,7 @@ void BusInterconnect::register_controller(Controller *controller)
     BusControllerQueue *busControllerQueue = new BusControllerQueue();
     busControllerQueue->controller = controller;
 
-    // Set controller pointer in each queue entry
+    /* Set controller pointer in each queue entry */
     BusQueueEntry *entry;
     foreach(i, busControllerQueue->queue.size()) {
         entry = (BusQueueEntry*)&busControllerQueue->queue[i];
@@ -121,8 +121,10 @@ bool BusInterconnect::controller_request_cb(void *arg)
 
     memdebug("Bus received message: ", *message, endl);
 
-    // check if the request is already in pendingRequests_ queue
-    // then update the hasData array in that queue
+    /*
+     * check if the request is already in pendingRequests_ queue
+     * then update the hasData array in that queue
+     */
     PendingQueueEntry *pendingEntry;
     foreach_list_mutable(pendingRequests_.list(), pendingEntry,
             entry, nextentry) {
@@ -160,7 +162,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
             MEMORY_OP_UPDATE)
         assert(0);
 
-    // its a new request, add entry into controllerqueues
+    /* its a new request, add entry into controllerqueues */
     BusControllerQueue* busControllerQueue;
     foreach(i, controllers.count()) {
         if(controllers[i]->controller ==
@@ -186,7 +188,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
 
 
     if(!is_busy()) {
-        // address bus
+        /* address bus */
         memoryHierarchy_->add_event(&broadcast_, 1, null);
         set_bus_busy(true);
     } else {
@@ -250,8 +252,10 @@ bool BusInterconnect::broadcast_cb(void *arg)
         return true;
     }
 
-    // first check if pendingRequests_ queue is full or not
-    // if its full dont' broadcast
+    /*
+     * first check if pendingRequests_ queue is full or not
+     * if its full dont' broadcast
+     */
     if(pendingRequests_.isFull()) {
         memdebug("Bus cant do addr broadcast, pending queue full\n");
         memoryHierarchy_->add_event(&broadcast_,
@@ -259,11 +263,12 @@ bool BusInterconnect::broadcast_cb(void *arg)
         return true;
     }
 
-    // now check if any of the other controller's receive queue is
-    // full or not
-    // if its full the don't broadcast untill it has a free
-    // entry and  pass the queue entry as argument to the broadcast
-    // signal so next time it doesn't need to arbitrate
+    /*
+     * now check if any of the other controller's receive queue is
+     * full or not if its full the don't broadcast untill it has a free
+     * entry and  pass the queue entry as argument to the broadcast
+     * signal so next time it doesn't need to arbitrate
+     */
     if(!can_broadcast(queueEntry->controllerQueue)) {
         memdebug("Bus cant do addr broadcast\n");
         set_bus_busy(true);
@@ -276,7 +281,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
 
     memdebug("Broadcasing entry: ", *queueEntry, endl);
 
-    // now create an entry into pendingRequests_
+    /* now create an entry into pendingRequests_ */
     PendingQueueEntry *pendingEntry = null;
     if(queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
         pendingEntry = pendingRequests_.alloc();
@@ -303,14 +308,16 @@ bool BusInterconnect::broadcast_cb(void *arg)
                 get_interconnect_signal()->emit(&message);
             assert(ret);
         } else {
-            // its the originating controller, mark its
-            // response received flag to true
+            /*
+             * its the originating controller, mark its
+             * response received flag to true
+             */
             if(pendingEntry)
                 pendingEntry->responseReceived[i] = true;
         }
     }
 
-    // Free the entry from queue
+    /* Free the entry from queue */
     queueEntry->request->decRefCounter();
     if(!queueEntry->annuled) {
         queueEntry->controllerQueue->queue.free(queueEntry);
@@ -321,7 +328,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
     memoryHierarchy_->add_event(&broadcastCompleted_,
             BUS_BROADCASTS_DELAY, null);
 
-    // Free the message
+    /* Free the message */
     memoryHierarchy_->free_message(&message);
 
     return true;
@@ -331,8 +338,10 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
 {
     assert(is_busy());
 
-    // call broadcast_cb that will check if any pending
-    // requests are there or not
+    /*
+     * call broadcast_cb that will check if any pending
+     * requests are there or not
+     */
     broadcast_cb(null);
 
     return true ;
@@ -343,11 +352,12 @@ bool BusInterconnect::data_broadcast_cb(void *arg)
     PendingQueueEntry *pendingEntry = (PendingQueueEntry*)arg;
     assert(pendingEntry);
 
-    // now check if any of the other controller's receive queue is
-    // full or not
-    // if its full the don't broadcast untill it has a free
-    // entry and  pass the queue entry as argument to the broadcast
-    // signal so next time it doesn't need to arbitrate
+    /*
+     * now check if any of the other controller's receive queue is
+     * full or not if its full the don't broadcast untill it has a free
+     * entry and  pass the queue entry as argument to the broadcast
+     * signal so next time it doesn't need to arbitrate
+     */
     if(!can_broadcast(pendingEntry->controllerQueue)) {
         memoryHierarchy_->add_event(&dataBroadcast_,
                 BUS_BROADCASTS_DELAY, arg);
@@ -383,8 +393,7 @@ bool BusInterconnect::data_broadcast_cb(void *arg)
 
 bool BusInterconnect::data_broadcast_completed_cb(void *arg)
 {
-    // check if any other pending request received all the
-    // responses
+    /* check if any other pending request received all the responses */
     PendingQueueEntry *pendingEntry;
     bool found = false;
     foreach_list_mutable(pendingRequests_.list(), pendingEntry,
@@ -404,4 +413,3 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
     dataBusBusy_ = false;
     return true;
 }
-

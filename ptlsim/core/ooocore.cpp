@@ -7,7 +7,7 @@
 // Copyright 2006-2008 Hui Zeng <hzeng@cs.binghamton.edu>
 //
 // Modifications for MARSSx86
-// Copyright 2009 Avadh Patel <avadh4all@gmail.com>
+// Copyright 2009-2010 Avadh Patel <avadh4all@gmail.com>
 
 #include <globals.h>
 #include <elf.h>
@@ -25,17 +25,15 @@
 #else
 #include <ooocore.h>
 #endif
-// #include <memorysystem.h>
 #ifdef NEW_CACHE
 #include <memoryHierarchy.h>
 #else
 #include <MemoryHierarchy.h>
 #endif
-//#include <MemoryEvent.h>
 
 #include <stats.h>
 
-#define MYDEBUG if(logable(99)) ptl_logfile 
+#define MYDEBUG if(logable(99)) ptl_logfile
 
 
 #ifndef ENABLE_CHECKS
@@ -55,34 +53,6 @@ namespace OutOfOrderModel {
   W32 forward_at_cycle_lut[MAX_CLUSTERS][MAX_FORWARDING_LATENCY+1];
 };
 
-#if 0
-void StateList::init(const char* name, ListOfStateLists& lol, W32 flags) {
-  this->name = strdup(name);
-  this->flags = flags;
-  listid = lol.add(this);
-  reset();
-}
-
-void StateList::reset() {
-  selfqueuelink::reset();
-  count = 0;
-  dispatch_source_counter = 0;
-  issue_source_counter = 0;
-}
-
-int ListOfStateLists::add(StateList* list) {
-  assert(count < lengthof(data));
-  data[count] = list;
-  return count++;
-}
-
-void ListOfStateLists::reset() {
-  foreach (i, count) {
-    data[i]->reset();
-  }
-}
-#endif
-
 //
 // Initialize lookup tables used by the simulation
 //
@@ -96,7 +66,7 @@ static void init_luts() {
     }
     uop_executable_on_cluster[i] = allowedcl;
   }
-  
+
   // Initialize forward-at-cycle LUTs
   foreach (srcc, MAX_CLUSTERS) {
     foreach (destc, MAX_CLUSTERS) {
@@ -130,7 +100,7 @@ void ThreadContext::reset() {
   last_commit_at_cycle = 0;
   smc_invalidate_pending = 0;
   setzero(smc_invalidate_rvp);
-      
+
   chk_recovery_rip = 0;
   unaligned_ldst_buf.reset();
   consecutive_commits_inside_spinlock = 0;
@@ -139,7 +109,7 @@ void ThreadContext::reset() {
 
   total_uops_committed = 0;
   total_insns_committed = 0;
-  dispatch_deadlock_countdown = 0;    
+  dispatch_deadlock_countdown = 0;
 #ifdef MULTI_IQ
   foreach(i, 4){
     issueq_count[i] = 0;
@@ -148,7 +118,6 @@ void ThreadContext::reset() {
   issueq_count = 0;
 #endif
   queued_mem_lock_release_count = 0;
-  //  branchpred.init();
   branchpred.init(coreid, threadid);
 }
 
@@ -177,7 +146,7 @@ void ThreadContext::init() {
 }
 
 
-OutOfOrderCore::OutOfOrderCore(W8 coreid_, OutOfOrderMachine& machine_): 
+OutOfOrderCore::OutOfOrderCore(W8 coreid_, OutOfOrderMachine& machine_):
   coreid(coreid_), caches(coreid_), machine(machine_), cache_callbacks(*this)
 #ifdef NEW_MEMORY
 , memoryHierarchy(*machine_.memoryHierarchyPtr)
@@ -193,27 +162,21 @@ void OutOfOrderCore::reset() {
   round_robin_reg_file_offset = 0;
   caches.reset();
   caches.callback = &cache_callbacks;
-  //  test_controller.callback = &cache_callbacks;
-  //  test_controller.coreptr = this;
   setzero(robs_on_fu);
   foreach_issueq(reset(coreid));
 
-#ifndef MULTI_IQ  
-  ///  reserved_iq_entries = (int)sqrt(ISSUE_QUEUE_SIZE / MAX_THREADS_PER_CORE);
+#ifndef MULTI_IQ
   int reserved_iq_entries_per_thread = (int)sqrt(ISSUE_QUEUE_SIZE / NUMBER_OF_THREAD_PER_CORE);
   reserved_iq_entries = reserved_iq_entries_per_thread * NUMBER_OF_THREAD_PER_CORE;
   assert(reserved_iq_entries && reserved_iq_entries < ISSUE_QUEUE_SIZE);
 
-  ///  foreach_issueq(set_reserved_entries(reserved_iq_entries * MAX_THREADS_PER_CORE));
   foreach_issueq(set_reserved_entries(reserved_iq_entries));
 #else
   int reserved_iq_entries_per_thread = (int)sqrt(ISSUE_QUEUE_SIZE / NUMBER_OF_THREAD_PER_CORE);
   for_each_cluster(cluster){
-    //    reserved_iq_entries[i] = ISSUE_QUEUE_SIZE;
      reserved_iq_entries[cluster] = reserved_iq_entries_per_thread * NUMBER_OF_THREAD_PER_CORE;
      assert(reserved_iq_entries[cluster] && reserved_iq_entries[cluster] < ISSUE_QUEUE_SIZE);
   }
-  //  foreach_issueq(set_reserved_entries(ISSUE_QUEUE_SIZE));
   foreach_issueq(set_reserved_entries(reserved_iq_entries_per_thread * NUMBER_OF_THREAD_PER_CORE));
 #endif
 
@@ -228,7 +191,7 @@ void OutOfOrderCore::init_generic() {
   reset();
 }
 
-template <typename T> 
+template <typename T>
 static void OutOfOrderModel::print_list_of_state_lists(ostream& os, const ListOfStateLists& lol, const char* title) {
   os << title, ":", endl;
   foreach (i, lol.count) {
@@ -244,19 +207,10 @@ static void OutOfOrderModel::print_list_of_state_lists(ostream& os, const ListOf
     }
     assert(n == list.count);
     os << endl;
-    // list.validate();
   }
 }
 
 void StateList::checkvalid() {
-#if 0
-  int realcount = 0;
-  selfqueuelink* obj;
-  foreach_list_mutable(*this, obj, entry, nextentry) {
-    realcount++;
-  }
-  assert(count == realcount);
-#endif
 }
 
 void PhysicalRegisterFile::init(const char* name, W8 coreid, int rfid, int size) {
@@ -347,7 +301,7 @@ namespace OutOfOrderModel {
     os << "  r", intstring(physreg.index(), -3), " state ", padstring(physreg.get_state_list().name, -12), " ", sb;
     if (physreg.rob) os << " rob ", physreg.rob->index(), " (uuid ", physreg.rob->uop.uuid, ")";
     os << " refcount ", physreg.refcount;
-    
+
     return os;
   }
 };
@@ -404,8 +358,6 @@ bool OutOfOrderCore::runcycle() {
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
     bool current_interrupts_pending = thread->ctx.check_events();
-//    bool edge_triggered = ((!thread->prev_interrupts_pending) & current_interrupts_pending);
-//    thread->handle_interrupt_at_next_eom |= edge_triggered;
 	thread->handle_interrupt_at_next_eom = current_interrupts_pending;
     thread->prev_interrupts_pending = current_interrupts_pending;
   }
@@ -425,21 +377,17 @@ bool OutOfOrderCore::runcycle() {
   foreach (i, NUMBER_OF_THREAD_PER_CORE) {
     ThreadContext* thread = threads[i];
     assert(thread);
-    
-//     if unlikely (!thread) {
-//       total_issueq_reserved_free += reserved_iq_entries;
-//     } else {
+
     total_issueq_count += thread->issueq_count;
     if(thread->issueq_count < reserved_iq_entries_per_thread){
       total_issueq_reserved_free += reserved_iq_entries_per_thread - thread->issueq_count;
     }
-//     }
   }
 
-  MYDEBUG << " ISSUE_QUEUE_SIZE ", ISSUE_QUEUE_SIZE, " issueq_all.count ", issueq_all.count, " issueq_all.shared_free_entries ", 
-    issueq_all.shared_free_entries, " total_issueq_reserved_free ", total_issueq_reserved_free, 
+  MYDEBUG << " ISSUE_QUEUE_SIZE ", ISSUE_QUEUE_SIZE, " issueq_all.count ", issueq_all.count, " issueq_all.shared_free_entries ",
+    issueq_all.shared_free_entries, " total_issueq_reserved_free ", total_issueq_reserved_free,
     " reserved_iq_entries ", reserved_iq_entries, " total_issueq_count ", total_issueq_count, endl;
- 
+
   assert (total_issueq_count == issueq_all.count);
   assert((ISSUE_QUEUE_SIZE - issueq_all.count) == (issueq_all.shared_free_entries + total_issueq_reserved_free));
 #else
@@ -450,25 +398,21 @@ bool OutOfOrderCore::runcycle() {
     foreach (i, NUMBER_OF_THREAD_PER_CORE) {
       ThreadContext* thread = threads[i];
       assert(thread);
-    
-      //     if unlikely (!thread) {
-      //       total_issueq_reserved_free += reserved_iq_entries;
-      //     } else {
+
       MYDEBUG << " TH[", thread->threadid, "] issueq_count[", cluster, "] ", thread->issueq_count[cluster], endl;
       assert(thread->issueq_count[cluster] >=0);
       total_issueq_count += thread->issueq_count[cluster];
       if(thread->issueq_count[cluster] < reserved_iq_entries_per_thread){
         total_issueq_reserved_free += reserved_iq_entries_per_thread - thread->issueq_count[cluster];
       }
-//     }
     }
-    
+
     int issueq_count = 0;
     issueq_operation_on_cluster_with_result((*this), cluster, issueq_count, count);
     int issueq_shared_free_entries = 0;
     issueq_operation_on_cluster_with_result((*this), cluster, issueq_shared_free_entries, shared_free_entries);
-    MYDEBUG << " cluster[", cluster, "] ISSUE_QUEUE_SIZE ", ISSUE_QUEUE_SIZE, " issueq[" , cluster, "].count ", issueq_count, " issueq[" , cluster, "].shared_free_entries ", 
-      issueq_shared_free_entries, " total_issueq_reserved_free ", total_issueq_reserved_free, 
+    MYDEBUG << " cluster[", cluster, "] ISSUE_QUEUE_SIZE ", ISSUE_QUEUE_SIZE, " issueq[" , cluster, "].count ", issueq_count, " issueq[" , cluster, "].shared_free_entries ",
+      issueq_shared_free_entries, " total_issueq_reserved_free ", total_issueq_reserved_free,
       " reserved_iq_entries ", reserved_iq_entries[cluster], " total_issueq_count ", total_issueq_count, endl;
     assert (total_issueq_count == issueq_count);
     assert((ISSUE_QUEUE_SIZE - issueq_count) == (issueq_shared_free_entries + total_issueq_reserved_free));
@@ -541,7 +485,7 @@ bool OutOfOrderCore::runcycle() {
   //
   // Clock the TLB miss page table walk state machine
   // This may use up load ports, so do it before other
-  // loads can issue 
+  // loads can issue
   //
 #ifdef PTLSIM_HYPERVISOR
   if(!config.use_new_memory_system){ // TODO MESI -Hui
@@ -615,7 +559,7 @@ bool OutOfOrderCore::runcycle() {
       priority_value[i] = thread->get_priority();
       if unlikely (!thread->ctx.running) priority_value[i] = limits<int>::max;
     }
-    
+
     sort(priority_index, threadcount, SortPrecomputedIndexListComparator<int, false>(priority_value));
   }
 
@@ -722,7 +666,7 @@ bool OutOfOrderCore::runcycle() {
       break;
     }
     case COMMIT_RESULT_EXCEPTION: {
-	  if (logable(3) && thread->current_basic_block && 
+	  if (logable(3) && thread->current_basic_block &&
 			  thread->current_basic_block->rip) {
 		  ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in exception handling at rip ", thread->current_basic_block->rip, endl, flush;
 	  }
@@ -743,7 +687,6 @@ bool OutOfOrderCore::runcycle() {
 		  ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in interrupt handling at rip ", thread->current_basic_block->rip, endl, flush;
 	  }
       exiting = 1;
-      // machine.stopped[thread->ctx.cpu_index] = 1;
       thread->handle_interrupt();
       break;
     }
@@ -803,8 +746,6 @@ bool OutOfOrderCore::runcycle() {
     ThreadContext* thread = threads[i];
     if unlikely (!thread->ctx.running) break;
 
-//    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  8192 ) {
-//    if unlikely ((sim_cycle - thread->last_commit_at_cycle) >  2048 ) {
 	if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 4*4096) {
       stringbuf sb;
       sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
@@ -840,7 +781,7 @@ void ReorderBufferEntry::init(int idx) {
 }
 
 //
-// Clean out various fields from the ROB entry that are 
+// Clean out various fields from the ROB entry that are
 // expected to be zero when allocating a new ROB entry.
 //
 void ReorderBufferEntry::reset() {
@@ -848,7 +789,7 @@ void ReorderBufferEntry::reset() {
   // Deallocate ROB entry
   entry_valid = false;
   cycles_left = 0;
-  uop.uuid = -1; 
+  uop.uuid = -1;
   physreg = (PhysicalRegister*)null;
   lfrqslot = -1;
   lsq = 0;
@@ -872,7 +813,7 @@ bool ReorderBufferEntry::ready_to_issue() const {
   bool rbready = operands[1]->ready();
   bool rcready = operands[2]->ready();
   bool rsready = operands[3]->ready();
-  
+
   if (isstore(uop.opcode)) {
     return (load_store_second_phase) ? (raready & rbready & rcready & rsready) : (raready & rbready);
   } else if (isload(uop.opcode)) {
@@ -889,7 +830,7 @@ bool ReorderBufferEntry::ready_to_commit() const {
 StateList& ReorderBufferEntry::get_ready_to_issue_list() const {
   OutOfOrderCore& core = getcore();
   ThreadContext& thread = getthread();
-  return 
+  return
     isload(uop.opcode) ? thread.rob_ready_to_load_list[cluster] :
     isstore(uop.opcode) ? thread.rob_ready_to_store_list[cluster] :
     thread.rob_ready_to_issue_list[cluster];
@@ -930,14 +871,13 @@ issueq_tag_t ReorderBufferEntry::get_tag() {
   int mask = ((1 << MAX_THREADS_BIT) - 1) << MAX_ROB_IDX_BIT;
   if (logable(100)) ptl_logfile << " get_tag() thread ", (void*) threadid, " rob idx ", (void*)idx, " mask ", (void*)mask, endl;
 
-  assert(!(idx & mask)); 
+  assert(!(idx & mask));
   assert(!(threadid >> MAX_THREADS_BIT));
-  //  W8 threadid = 1;  
   issueq_tag_t rc = (idx | (threadid << MAX_ROB_IDX_BIT));
   if (logable(100)) ptl_logfile <<  " tag ", (void*) rc, endl;
   return rc;
 }
-  
+
 ostream& ReorderBufferEntry::print_operand_info(ostream& os, int operand) const {
   stringbuf sb;
   get_operand_info(sb, operand);
@@ -951,21 +891,21 @@ ostream& ReorderBufferEntry::print(ostream& os) const {
   get_operand_info(rainfo, 0);
   get_operand_info(rbinfo, 1);
   get_operand_info(rcinfo, 2);
-  
+
   if(!current_state_list || !physreg){
     os << " rob ", intstring(index(), -3), " uuid ", intstring(uop.uuid, 16), " is not valid. ";
     return os;
   }
   os << "rob ", intstring(index(), -3), " uuid ", intstring(uop.uuid, 16), " rip 0x", hexstring(uop.rip, 48), " ",
-    padstring(current_state_list->name, -24), " ", (uop.som ? "SOM" : "   "), " ", (uop.eom ? "EOM" : "   "), 
+    padstring(current_state_list->name, -24), " ", (uop.som ? "SOM" : "   "), " ", (uop.eom ? "EOM" : "   "),
     " @ ", padstring((cluster >= 0) ? clusters[cluster].name : "???", -4), " ",
     padstring(name, -12), " r", intstring(physreg->index(), -3), " ", padstring(arch_reg_names[uop.rd], -6);
-  if (isload(uop.opcode)){ 
+  if (isload(uop.opcode)){
     if(lsq) os << " ld", intstring(lsq->index(), -3);
   }else if (isstore(uop.opcode)){
     if(lsq) os << " st", intstring(lsq->index(), -3);
   }else os << "      ";
-  
+
   os << " = ";
   os << padstring(rainfo, -30);
   os << padstring(rbinfo, -30);
@@ -1084,19 +1024,19 @@ void OutOfOrderCore::check_refcounts() {
     foreach (i, physregs.size) {
       if unlikely (physregs[i].refcount != refcounts[rfid][i]) {
         ptl_logfile << "ERROR: r", i, " refcount is ", physregs[i].refcount, " but should be ", refcounts[rfid][i], endl;
-        
+
         foreach_forward(ROB, r) {
           ReorderBufferEntry& rob = ROB[r];
           foreach (j, MAX_OPERANDS) {
             if ((rob.operands[j]->index() == i) & (rob.operands[j]->rfid == rfid)) ptl_logfile << "  ROB ", r, " operand ", j, endl;
           }
         }
-        
+
         foreach (j, TRANSREG_COUNT) {
           if ((commitrrt[j]->index() == i) & (commitrrt[j]->rfid == rfid)) ptl_logfile << "  CommitRRT ", arch_reg_names[j], endl;
           if ((specrrt[j]->index() == i) & (specrrt[j]->rfid == rfid)) ptl_logfile << "  SpecRRT ", arch_reg_names[j], endl;
         }
-        
+
         errors = 1;
       }
     }
@@ -1152,7 +1092,7 @@ ostream& LoadStoreQueueEntry::print(ostream& os) const {
     if (addrvalid)
       os << "0x", hexstring(physaddr << 3, 48);
     else os << "< Addr Inval >";
-  }    
+  }
   return os;
 }
 
@@ -1166,8 +1106,6 @@ bool ThreadContext::handle_barrier() {
   // Release resources of everything in the pipeline:
 
   core_to_external_state();
-//  if (logable(3)) ptl_logfile << " handle_barrier, flush_pipeline.",endl;
-//  flush_pipeline();
   if(current_basic_block) {
 	  current_basic_block->release();
 	  current_basic_block = null;
@@ -1175,7 +1113,7 @@ bool ThreadContext::handle_barrier() {
 
   int assistid = ctx.eip;
   assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
-  
+
   // Special case for write_cr3 to flush before calling assist
   if(assistid == ASSIST_WRITE_CR3) {
 	  flush_pipeline();
@@ -1186,16 +1124,16 @@ bool ThreadContext::handle_barrier() {
       (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
       ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
   }
-  
-  if (logable(6)) ptl_logfile << "Calling assist function at ", (void*)assist, "...", endl, flush; 
-  
+
+  if (logable(6)) ptl_logfile << "Calling assist function at ", (void*)assist, "...", endl, flush;
+
   update_assist_stats(assist);
   if (logable(6)) {
     ptl_logfile << "Before assist:", endl, ctx, endl;
   }
-  
+
   bool flush_required = assist(ctx);
-  
+
   if (logable(6)) {
     ptl_logfile << "Done with assist", endl;
     ptl_logfile << "New state:", endl;
@@ -1226,7 +1164,7 @@ bool ThreadContext::handle_exception() {
   flush_pipeline();
 
   if (logable(4)) {
-    ptl_logfile << "[vcpu ", ctx.cpu_index, "] Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip, 
+    ptl_logfile << "[vcpu ", ctx.cpu_index, "] Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip,
       " at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
   }
 
@@ -1242,7 +1180,7 @@ bool ThreadContext::handle_exception() {
   // whatever is in chk_recovery_rip and execution should resume.
   //
   // CheckFailed exceptions usually indicate the processor needs to take
-  // evasive action to avoid a user visible exception. For instance, 
+  // evasive action to avoid a user visible exception. For instance,
   // CheckFailed is raised when an inlined floating point operand is
   // denormal or otherwise cannot be handled by inlined fastpath uops,
   // or when some unexpected segmentation or page table conditions
@@ -1278,9 +1216,9 @@ bool ThreadContext::handle_exception() {
 	  write_exception = 2;
 	  goto handle_page_fault;
 handle_page_fault: {
-	  if (logable(10)) 
+	  if (logable(10))
 		  ptl_logfile << "Page fault exception address: ",
-					  hexstring(exception_address, 64), 
+					  hexstring(exception_address, 64),
 					  " is_write: ", write_exception, endl, ctx, endl;
       assert(ctx.page_fault_addr != 0);
 	  int old_exception = ctx.exception_index;
@@ -1293,7 +1231,7 @@ handle_page_fault: {
 	  ctx.exception_index = old_exception;
 	  ctx.exception_is_int = 0;
 	  return true;
-				   }
+                   }
 	  break;
   case EXCEPTION_FloatingPointNotAvailable:
     ctx.exception_index= EXCEPTION_x86_fpu_not_avail; break;
@@ -1318,12 +1256,12 @@ handle_page_fault: {
 
   return true;
 #else
-  if (logable(6)) 
-    ptl_logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.eip, 
+  if (logable(6))
+    ptl_logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.eip,
       ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
 
   stringbuf sb;
-  ptl_logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.eip, " @ ", 
+  ptl_logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.eip, " @ ",
     total_user_insns_committed, " commits (", total_uops_committed, " uops): genuine user exception (",
     exception_name(ctx.exception), "); aborting", endl;
   ptl_logfile << ctx, endl;
@@ -1495,7 +1433,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
   case EVENT_FETCH_TRANSLATE:
     os <<  "xlate  rip ", rip, ": ", fetch.bb_uop_count, " uops"; break;
   case EVENT_FETCH_OK: {
-    os <<  "fetch  rip ", rip, ": ", uop, 
+    os <<  "fetch  rip ", rip, ": ", uop,
       " (uopid ", uop.bbindex;
     if (uop.som) os << "; SOM";
     if (uop.eom) os << "; EOM ", uop.bytes, " bytes";
@@ -1540,7 +1478,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
     break;
   case EVENT_CLUSTER_NO_CLUSTER:
   case EVENT_CLUSTER_OK: {
-    os << ((type == EVENT_CLUSTER_OK) ? "clustr" : "noclus"), " rob ", intstring(rob, -3), " allowed FUs = ", 
+    os << ((type == EVENT_CLUSTER_OK) ? "clustr" : "noclus"), " rob ", intstring(rob, -3), " allowed FUs = ",
       bitstring(fuinfo[uop.opcode].fu, FU_COUNT, true), " -> clusters ",
       bitstring(select_cluster.allowed_clusters, MAX_CLUSTERS, true), " avail";
     foreach (i, MAX_CLUSTERS) os << " ", select_cluster.iq_avail[i];
@@ -1668,10 +1606,10 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
     assert(loadstore.inherit_sfr_used);
     os << "inherit from ", loadstore.inherit_sfr, " (uuid ", loadstore.inherit_sfr_uuid,
       ", rob", loadstore.inherit_sfr_rob, ", lsq ", loadstore.inherit_sfr_lsq,
-      ", r", loadstore.inherit_sfr_physreg, "); ";    
+      ", r", loadstore.inherit_sfr_physreg, "); ";
     break;
   }
-  case EVENT_LOAD_HIT: 
+  case EVENT_LOAD_HIT:
   case EVENT_LOAD_MISS: {
     if (type == EVENT_LOAD_HIT)
       os << (loadstore.load_store_second_phase ? "load2 " : "load  ");
@@ -1698,7 +1636,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
     break;
   }
   case EVENT_LOAD_TLB_MISS: {
-    os << (loadstore.load_store_second_phase ? "ldtlb2" : "ldtlb ");  
+    os << (loadstore.load_store_second_phase ? "ldtlb2" : "ldtlb ");
     os << " rob ", intstring(rob, -3), " ldq ", lsq,
       " r", intstring(physreg, -3), " on ", padstring(fu_names[fu], -4), " @ ",
       (void*)(Waddr)loadstore.virtaddr, " (phys ", (void*)(Waddr)(loadstore.sfr.physaddr << 3), "): ";
@@ -1786,7 +1724,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
   case EVENT_ANNUL_NO_FUTURE_UOPS:
     os << "misspc rob ", intstring(rob, -3), ": SOM rob ", annul.somidx, ", EOM rob ", annul.eomidx, ": no future uops to annul"; break;
   case EVENT_ANNUL_MISSPECULATION: {
-    os << "misspc rob ", intstring(rob, -3), ": SOM rob ", annul.somidx, 
+    os << "misspc rob ", intstring(rob, -3), ": SOM rob ", annul.somidx,
       ", EOM rob ", annul.eomidx, ": annul from rob ", annul.startidx, " to rob ", annul.endidx;
     break;
   }
@@ -1842,8 +1780,8 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
   case EVENT_COMPLETE:
     os << "complt rob ", intstring(rob, -3), " on ", padstring(fu_names[fu], -4), ": r", intstring(physreg, -3); break;
   case EVENT_FORWARD: {
-    os << "forwd", forwarding.forward_cycle, " rob ", intstring(rob, -3), 
-      " (", clusters[cluster].name, ") r", intstring(physreg, -3), 
+    os << "forwd", forwarding.forward_cycle, " rob ", intstring(rob, -3),
+      " (", clusters[cluster].name, ") r", intstring(physreg, -3),
       " => ", "uuid ", forwarding.target_uuid, " rob ", forwarding.target_rob,
       " (", clusters[forwarding.target_cluster].name, ") r", forwarding.target_physreg,
       " operand ", forwarding.operand;
@@ -1855,7 +1793,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
     break;
   }
   case EVENT_BROADCAST: {
-    os << "brcst", forwarding.forward_cycle, " rob ", intstring(rob, -3), 
+    os << "brcst", forwarding.forward_cycle, " rob ", intstring(rob, -3),
       " from cluster ", clusters[cluster].name, " to cluster ", clusters[forwarding.target_cluster].name,
       " on forwarding cycle ", forwarding.forward_cycle;
     break;
@@ -1888,7 +1826,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
                 os << " [rrt ", arch_reg_names[uop.rd], " = r", physreg, " 0x", hexstring(commit.state.reg.rddata, 64), "]";
 
     if ((!uop.nouserflags) && uop.setflags) {
-      os << " [flags ", ((uop.setflags & SETFLAG_ZF) ? "z" : ""), 
+      os << " [flags ", ((uop.setflags & SETFLAG_ZF) ? "z" : ""),
         ((uop.setflags & SETFLAG_CF) ? "c" : ""), ((uop.setflags & SETFLAG_OF) ? "o" : ""),
         " -> ", flagstring(commit.state.reg.rdflags), "]";
     }
@@ -1905,12 +1843,12 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
       if (commit.pteupdate.ptwrite) os << " w";
       os << "]";
     }
-        
+
     if unlikely (ld|st) {
       os << " [lsq ", lsq, "]";
       os << " [upslot ", OutOfOrderCore::hash_unaligned_predictor_slot(rip), " = ", commit.ld_st_truly_unaligned, "]";
     }
-        
+
     if likely (commit.oldphysreg > 0) {
       if unlikely (commit.oldphysreg_refcount) {
         os << " [pending free old r", commit.oldphysreg, " ref by";
@@ -1930,7 +1868,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
     if unlikely (br) {
       os << " [brupdate", (commit.taken ? " tk" : " nt"), (commit.predtaken ? " pt" : " np"), ((commit.taken == commit.predtaken) ? " ok" : " MP"), "]";
     }
-        
+
     if (uop.eom) os << " [EOM #", commit.total_user_insns_committed, "]";
     break;
   }
@@ -1986,30 +1924,25 @@ bool OutOfOrderMachine::init(PTLsimConfig& config) {
   int context_idx = 0;
   // create a memoryHierarchy
 #ifdef NEW_MEMORY
-
   memoryHierarchyPtr = new Memory::MemoryHierarchy(*this);
   assert(memoryHierarchyPtr);
   msdebug << " after create memoryHierarchyPtr", endl;
-
 #endif
 
   foreach (cur_core, NUMBER_OF_CORES){
     if(cores[cur_core]) delete cores[cur_core];
 
     cores[cur_core] = new OutOfOrderCore(cur_core, *this);
-#ifdef NEW_MEMORY
-    //    memoryHierarchyPtr->addCore(cur_core);
-#endif
-    OutOfOrderCore& core = *cores[cur_core];    
+    OutOfOrderCore& core = *cores[cur_core];
 	ptl_logfile << "Core created: ", (int)(cores[cur_core]->coreid), endl;
     foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) {
       core.threadcount++;
-	  cout << "context ", context_idx, " is : ", 
+	  cout << "context ", context_idx, " is : ",
 		   contextof(context_idx), endl;
       ThreadContext* thread = new ThreadContext(core, cur_thread, contextof(context_idx++));
       core.threads[cur_thread] = thread;
       thread->init();
-      
+
     //
     // Note: in a multi-processor model, config may
     // specify various ways of slicing contextcount up
@@ -2018,34 +1951,11 @@ bool OutOfOrderMachine::init(PTLsimConfig& config) {
     // be specified here.
     //
     }
-    
+
     cores[cur_core]->init();
   }
-  init_luts(); 
-
-  /* svn 225
-  // Note: we only create a single core for all contexts for now.
-  cores[0] = new OutOfOrderCore(0, *this);
-
-  foreach (i, contextcount) {
-    OutOfOrderCore& core = *cores[0];
-    core.threadcount++;
-    ThreadContext* thread = new ThreadContext(core, i, contextof(i));
-    core.threads[i] = thread;
-    thread->init();
-
-    //
-    // Note: in a multi-processor model, config may
-    // specify various ways of slicing contextcount up
-    // into threads, cores and sockets; the appropriate
-    // interconnect and cache hierarchy parameters may
-    // be specified here.
-    //
-  }
-
-  cores[0]->init();
   init_luts();
-  */
+
   return true;
 }
 
@@ -2065,7 +1975,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
     if unlikely (!logenable) ptl_logfile << "Start logging at level ", config.loglevel, " in cycle ", iterations, endl, flush;
     logenable = 1;
   }
-  
+
   // reset all cores for fresh start:
   foreach (cur_core, NUMBER_OF_CORES){
 	  OutOfOrderCore& core =* cores[cur_core];
@@ -2082,10 +1992,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  cores[cur_core]->flush_pipeline_all();
 	  }
 
-	  //ptl_logfile << "IssueQueue states:", endl;
-
 	  if unlikely (config.event_log_enabled && (!cores[cur_core]->eventlog.start)) {
-		  //      cores[cur_core]->eventlog.init(config.event_log_ring_buffer_size);
 		  cores[cur_core]->eventlog.init(config.event_log_ring_buffer_size, cur_core);
 		  cores[cur_core]->eventlog.ptl_logfile = &ptl_logfile;
 	  }
@@ -2111,7 +2018,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
   // loop only break if all cores' threads are stopped at eom,
   // or any pending interrupt or CPU_EXIT_REQUEST from QEMU
-  
+
   for (;;) {
 	  if unlikely ((!logenable) && iterations >= config.start_log_at_iteration) {
 		  ptl_logfile << "Start logging at level ", config.loglevel, " in cycle ", iterations, endl, flush;
@@ -2120,7 +2027,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
 	  if(sim_cycle % 1000 == 0)
 		  update_progress();
-	  
+
 	  // limit the ptl_logfile size
 	  if unlikely (ptl_logfile.is_open() && (ptl_logfile.tellp() > config.log_file_size))
 		  backup_and_reopen_logfile();
@@ -2146,14 +2053,14 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 						  stopped[thread->ctx.cpu_index] = 1;
 						  ret_qemu_env = &thread->ctx;
 						  exiting = 1;
-					  } 
+					  }
 					  continue;
 				  }
 
 				  if unlikely ( thread->total_insns_committed >= config.stop_at_user_insns && !finished[cur_core][cur_thread]) {
-					  ptl_logfile << "TH ", thread->threadid, " reaches ",  config.stop_at_user_insns, 
+					  ptl_logfile << "TH ", thread->threadid, " reaches ",  config.stop_at_user_insns,
 								  " total_insns_committed (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl, flush;
-					  finished[cur_core][cur_thread] = 1;          
+					  finished[cur_core][cur_thread] = 1;
 					  running_thread --;
 				  }
 #endif
@@ -2162,17 +2069,6 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  MYDEBUG << "cur_core: ", cur_core, " running [core ", core.coreid, "]", endl;
 		  exiting |= core.runcycle();
 	  }
-
-    /*
-     * if unlikely (!stopping) {
-     *   if (config.abort_at_end) {
-     *     config.abort_at_end = 0;
-     *     ptl_logfile << "Abort immediately: do not wait for next x86 boundary nor flush pipelines", endl;
-     *     stopped = 1;
-     *     exiting = 1;
-     *   }
-     * }
-     */
 
     stats.summary.cycles++;
     foreach (coreid, NUMBER_OF_CORES){
@@ -2202,22 +2098,8 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
   if(logable(1))
 	ptl_logfile << "Exiting out-of-order core at ", total_user_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
 
-/*
- *  foreach (cur_core, NUMBER_OF_CORES){
- *    OutOfOrderCore& core =* cores[cur_core];
- *    foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) { 
- *     ThreadContext* thread = core.threads[cur_thread];
- *     thread->core_to_external_state();
- * 
- *     if (logable(6) | ((sim_cycle - thread->last_commit_at_cycle) > 1024) | config.dump_state_now) {
- *         ptl_logfile << "Core [", core.coreid, "] Thread [", thread->threadid, "]: last_commit_cycle: ", thread->last_commit_at_cycle, " sim_cyclee: ", sim_cycle, endl;
- *     }
- *   }
- *  }
- */
-
   config.dump_state_now = 0;
-  
+
   return exiting;
 }
 
@@ -2227,8 +2109,6 @@ void OutOfOrderCore::flush_tlb(Context& ctx, W8 threadid, bool selective, Waddr 
     ptl_logfile << "[vcpu ", ctx.cpu_index, "] core ", coreid, ", thread ", threadid, ": Flush TLBs";
     if (selective) ptl_logfile << " for virtaddr ", (void*)virtaddr, endl;
     ptl_logfile << endl;
-    //ptl_logfile << "DTLB before: ", endl, caches.dtlb, endl;
-    //ptl_logfile << "ITLB before: ", endl, caches.itlb, endl;
   }
   int dn; int in;
 
@@ -2241,8 +2121,6 @@ void OutOfOrderCore::flush_tlb(Context& ctx, W8 threadid, bool selective, Waddr 
   }
   if (logable(5)) {
     ptl_logfile << "Flushed ", dn, " DTLB slots and ", in, " ITLB slots", endl;
-    //ptl_logfile << "DTLB after: ", endl, caches.dtlb, endl;
-    //ptl_logfile << "ITLB after: ", endl, caches.itlb, endl;
   }
 }
 
@@ -2267,12 +2145,12 @@ void OutOfOrderMachine::dump_state(ostream& os) {
     if (!cores[i]) continue;
     OutOfOrderCore& core =* cores[i];
     Context& ctx = contextof(i);
-    if unlikely (config.event_log_enabled){ 
+    if unlikely (config.event_log_enabled){
         os << " dump event_log: ", endl;
         core.eventlog.print(ptl_logfile);
       }else
       os << " config.event_log_enabled is not enabled ", config.event_log_enabled, endl;
-    
+
     core.dump_smt_state(os);
     core.print_smt_state(os);
   }
@@ -2354,26 +2232,6 @@ void OutOfOrderMachine::update_stats(PTLsimStats& stats) {
   stats.ooocore_context_total.issue.uipc = (double)stats.ooocore_context_total.issue.uops / (double)stats.ooocore_total.cycles;
   stats.ooocore_context_total.commit.uipc = (double)stats.ooocore_context_total.commit.uops / (double)stats.ooocore_total.cycles;
   stats.ooocore_context_total.commit.ipc = (double)stats.ooocore_context_total.commit.insns / (double)stats.ooocore_total.cycles;
-
-
-//   PerContextOutOfOrderCoreStats& s = stats.ooocore.total;
-//   s.issue.uipc = s.issue.uops / (double)stats.ooocore.cycles;
-//   s.commit.uipc = (double)s.commit.uops / (double)stats.ooocore.cycles;
-//   s.commit.ipc = (double)s.commit.insns / (double)stats.ooocore.cycles;
-
-//   stats.ooocore.simulator.total_time = cttotal.seconds();
-//   stats.ooocore.simulator.cputime.fetch = ctfetch.seconds();
-//   stats.ooocore.simulator.cputime.decode = ctdecode.seconds();
-//   stats.ooocore.simulator.cputime.rename = ctrename.seconds();
-//   stats.ooocore.simulator.cputime.frontend = ctfrontend.seconds();
-//   stats.ooocore.simulator.cputime.dispatch = ctdispatch.seconds();
-//   stats.ooocore.simulator.cputime.issue = ctissue.seconds() - (ctissueload.seconds() + ctissuestore.seconds());
-//   stats.ooocore.simulator.cputime.issueload = ctissueload.seconds();
-//   stats.ooocore.simulator.cputime.issuestore = ctissuestore.seconds();
-//   stats.ooocore.simulator.cputime.complete = ctcomplete.seconds();
-//   stats.ooocore.simulator.cputime.transfer = cttransfer.seconds();
-//   stats.ooocore.simulator.cputime.writeback = ctwriteback.seconds();
-//   stats.ooocore.simulator.cputime.commit = ctcommit.seconds();
 }
 
 //
@@ -2395,12 +2253,12 @@ void OutOfOrderMachine::flush_all_pipelines() {
     // references to to the basic block
     //
     core->flush_pipeline_all();
-    foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) { 
+    foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) {
       //  foreach (i, core->threadcount) {
       ThreadContext* thread = core->threads[cur_thread];
       thread->invalidate_smc();
     }
-  }  
+  }
 }
 
 /* svn 225
@@ -2419,7 +2277,7 @@ void OutOfOrderMachine::flush_all_pipelines() {
   foreach (i, core->threadcount) {
     ThreadContext* thread = core->threads[i];
     thread->invalidate_smc();
-  }  
+  }
 }
 */
 ///OutOfOrderMachine smtmodel("smt");
@@ -2433,7 +2291,7 @@ OutOfOrderCore& OutOfOrderModel::coreof(W8 coreid) {
 #ifdef NEW_MEMORY
 namespace Memory{
   using namespace OutOfOrderModel;
-  
+
   void MemoryHierarchy::icache_wakeup_wrapper(MemoryRequest *request){
 #ifdef NEW_CACHE
     OutOfOrderCore* core = machine_.cores[request->get_coreid()];

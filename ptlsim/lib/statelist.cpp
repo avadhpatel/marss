@@ -8,7 +8,7 @@ void StateList::init(const char* name, ListOfStateLists& lol, W32 flags) {
 }
 
 
-StateList::StateList(const char* name, ListOfStateLists& lol, W32 flags) {  
+StateList::StateList(const char* name, ListOfStateLists& lol, W32 flags) {
   init(name, lol, flags);
 }
 

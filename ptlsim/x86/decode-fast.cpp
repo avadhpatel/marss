@@ -38,7 +38,7 @@ bool TraceDecoder::decode_fast() {
 		// 0x1e push ds
 		// else invalid
 		if(op > 0x1e) {
-			invalid |= true; 
+			invalid |= true;
 		} else {
 
 			EndOfDecode();
@@ -48,9 +48,9 @@ bool TraceDecoder::decode_fast() {
 			int seg_reg = (op >> 3);
 			int r = REG_temp0;
 
-			TransOp ldp(OP_ld, r, REG_ctx, REG_imm, REG_zero, size, 
+			TransOp ldp(OP_ld, r, REG_ctx, REG_imm, REG_zero, size,
 					offsetof_t(Context, segs[seg_reg].selector));
-			ldp.internal = 1; 
+			ldp.internal = 1;
 			this << ldp;
 
 			this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, r, sizeshift, -size);
@@ -133,7 +133,7 @@ bool TraceDecoder::decode_fast() {
     break;
   }
 
-  case 0x63: 
+  case 0x63:
   case 0x1be ... 0x1bf: {
     // sign extensions: movsx movsxd
     int bytemode = (op == 0x1be) ? b_mode : v_mode;
@@ -208,7 +208,7 @@ bool TraceDecoder::decode_fast() {
     end_of_block = true;
     EndOfDecode();
 
-    if (!last_flags_update_was_atomic) 
+    if (!last_flags_update_was_atomic)
       this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
     int condcode = bits(op, 0, 4);
     TransOp transop(OP_br, REG_rip, cond_code_to_flag_regs[condcode].ra, cond_code_to_flag_regs[condcode].rb, REG_zero, 3, 0);
@@ -366,8 +366,8 @@ bool TraceDecoder::decode_fast() {
     break;
   }
 
-  case 0xc0 ... 0xc1: 
-  case 0xd0 ... 0xd1: 
+  case 0xc0 ... 0xc1:
+  case 0xd0 ... 0xd1:
   case 0xd2 ... 0xd3: {
     /*
       rol ror rcl rcr shl shr shl sar:
@@ -386,37 +386,37 @@ bool TraceDecoder::decode_fast() {
       - Shifts also alter the ZAPS flags while rotates do not.
 
       For constant counts, this is easy to determine while translating:
-        
+
       op   rd = ra,0       op rd = ra,1              op rd = ra,N
       Becomes:             Becomes:                  Becomes
       (nop)                op rd = ra,1 [set of cf]  op rd = ra,N [set cf]
-        
+
       For variable counts, things are more complex. Since the shift needs
       to determine its output flags at runtime based on both the shift count
       and the input flags (CF, OF, ZAPS), we need to specify the latest versions
       in program order of all the existing flags. However, this would require
       three operands to the shift uop not even counting the value and count
       operands.
-        
+
       Therefore, we use a collcc (collect flags) uop to get all
       the most up to date flags into one result, using three operands for
       ZAPS, CF, OF. This forms a zero word with all the correct flags
       attached, which is then forwarded as the rc operand to the shift.
-        
+
       This may add additional scheduling constraints in the case that one
       of the operands to the shift itself sets the flags, but this is
       fairly rare (generally the shift amount is read from a table and
       loads don't generate flags.
-        
+
       Conveniently, this also lets us directly implement the 65-bit
       rcl/rcr uops in hardware with little additional complexity.
-        
+
       Example:
-        
+
       shl         rd,rc
-        
+
       Becomes:
-        
+
       collcc       t0 = zf,cf,of
       sll<size>   rd = rd,rc,t0
 
@@ -834,7 +834,7 @@ bool TraceDecoder::decode_fast() {
     assert(rd.type == OPTYPE_REG);
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
-    
+
     int sizeshift = reginfo[ra.reg.reg].sizeshift;
     // bt has no output - just flags:
     this << TransOp(opcode, (opcode == OP_bt) ? REG_temp0 : rdreg, rdreg, rareg, REG_zero, sizeshift, 0, 0, SETFLAG_CF);
@@ -894,9 +894,9 @@ bool TraceDecoder::decode_fast() {
 	int seg_reg = (op >> 3) & 7;
 	int r = REG_temp0;
 
-    TransOp ldp(OP_ld, r, REG_ctx, REG_imm, REG_zero, size, 
+    TransOp ldp(OP_ld, r, REG_ctx, REG_imm, REG_zero, size,
 			offsetof_t(Context, segs[seg_reg].selector));
-	ldp.internal = 1; 
+	ldp.internal = 1;
 	this << ldp;
 
     this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, r, sizeshift, -size);
@@ -904,7 +904,7 @@ bool TraceDecoder::decode_fast() {
 	break;
   }
 
-  case 0x1bc: 
+  case 0x1bc:
   case 0x1bd: {
     // bsf/bsr:
     DECODE(gform, rd, v_mode); DECODE(eform, ra, v_mode);

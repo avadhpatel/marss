@@ -13,17 +13,17 @@
 
 inline vec16b x86_sse_ldvbu(const vec16b* m) { vec16b rd; asm("movdqu %[m],%[rd]" : [rd] "=x" (rd) : [m] "xm" (*m)); return rd; }
 inline void x86_sse_stvbu(vec16b* m, const vec16b ra) { asm("movdqu %[ra],%[m]" : [m] "=xm" (*m) : [ra] "x" (ra) : "memory"); }
-inline vec8w x86_sse_ldvwu(const vec8w* m) { 
-	vec8w rd; 
-	asm("movdqu %[m],%[rd]" : [rd] "=x" (rd) : [m] "xm" (*m)); 
-	return rd; 
+inline vec8w x86_sse_ldvwu(const vec8w* m) {
+	vec8w rd;
+	asm("movdqu %[m],%[rd]" : [rd] "=x" (rd) : [m] "xm" (*m));
+	return rd;
 }
 //inline vec8w x86_sse_ldvwu(const vec8w* m) { vec8w rd; asm("movdqu %[rd], %[m]" : [rd] "=x" (rd) : [m] "xm" (*m)); return rd; }
 inline void x86_sse_stvwu(vec8w* m, const vec8w ra) { asm("movdqu %[ra],%[m]" : [m] "=xm" (*m) : [ra] "x" (ra) : "memory"); }
 
 extern ofstream ptl_logfile;
 
-template <typename T> 
+template <typename T>
 struct latch {
   T data;
   T newdata;
@@ -53,7 +53,7 @@ struct latch {
 
 template <typename T, int size>
 struct SynchronousRegisterFile {
-  SynchronousRegisterFile() { 
+  SynchronousRegisterFile() {
     reset();
   }
 
@@ -66,8 +66,8 @@ struct SynchronousRegisterFile {
 
   latch<T> data[size];
 
-  latch<T>& operator [](int i) { 
-    return data[i]; 
+  latch<T>& operator [](int i) {
+    return data[i];
   }
 
   void clock(bool clkenable = true) {
@@ -84,7 +84,7 @@ struct SynchronousRegisterFile {
 // Queue
 //
 
-// Iterate forward through queue from head to tail 
+// Iterate forward through queue from head to tail
 #define foreach_forward(Q, i) for (int i = (Q).head; i != (Q).tail; i = add_index_modulo(i, +1, (Q).size))
 
 // Iterate forward through queue from the specified entry until the tail
@@ -240,7 +240,7 @@ struct FixedQueue: public array<T, SIZE> {
       const T& entry = (*this)[i];
       os << "  slot ", intstring(i, 3), ": ", entry, endl;
     }
-    
+
     return os;
   }
 };
@@ -310,7 +310,7 @@ struct HistoryBuffer: public array<T, size> {
 
   /*
    * Undo last addition
-   */ 
+   */
   void undo() {
     this->data[current] = prevoldest;
     current = add_index_modulo(current, -1, size);
@@ -581,7 +581,7 @@ struct FullyAssociativeTagsNbitOneHot {
       *(((byte*)(&tags[i])) + index) = (byte)t;
       t >>= 8;
     }
-    
+
     tagsmirror[index] = tag;
     valid[index] = 1;
     evictmap[index] = 1;
@@ -815,7 +815,7 @@ struct FullyAssociativeArray {
     invalidate_way(way);
     return way;
   }
-  
+
   V& operator [](int way) { return data[way]; }
 
   V* operator ()(T tag) { return select(tag); }
@@ -1473,7 +1473,7 @@ ostream& operator <<(ostream& os, const LockableCommitRollbackAssociativeArray<T
 template <typename T, typename V, int setcount, int waycount, int linesize, int maxdirty, typename stats = NullAssociativeArrayStatisticsCollector<T, V> >
 struct CommitRollbackCache: public LockableCommitRollbackAssociativeArray<T, V, setcount, waycount, linesize, stats> {
   typedef LockableCommitRollbackAssociativeArray<T, V, setcount, waycount, linesize, stats> array_t;
-  
+
   struct BackupCacheLine {
     W64* addr;
     W64 data[linesize / sizeof(W64)];
@@ -1481,7 +1481,7 @@ struct CommitRollbackCache: public LockableCommitRollbackAssociativeArray<T, V, 
 
   BackupCacheLine stores[maxdirty];
   BackupCacheLine* storetail;
-  
+
   CommitRollbackCache() {
     reset();
   }
@@ -1495,7 +1495,7 @@ struct CommitRollbackCache: public LockableCommitRollbackAssociativeArray<T, V, 
   // Invalidate lines in higher level caches if needed
   //
   void invalidate_upwards(T addr);
-  
+
   void invalidate(T addr) {
     array_t::invalidate(addr);
     invalidate_upwards(addr);
@@ -1540,7 +1540,7 @@ struct CommitRollbackCache: public LockableCommitRollbackAssociativeArray<T, V, 
     }
     storetail = stores;
   }
-  
+
   void complete() { }
 };
 
@@ -1841,7 +1841,7 @@ struct FullyAssociativeTags16bit {
   void decrement(base_t amount = 1) {
     foreach (i, chunkcount) { tags[i] = x86_sse_psubusw(tags[i], prep(amount)); }
   }
-      
+
   void increment(base_t amount = 1) {
     foreach (i, chunkcount) { tags[i] = x86_sse_paddusw(tags[i], prep(amount)); }
   }

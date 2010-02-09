@@ -26,22 +26,20 @@
 	setup_qemu_switch_all_ctx(ctx); \
 	func_name(__VA_ARGS__);		\
 	setup_ptlsim_switch_all_ctx(ctx); \
-    ptl_stable_state = 0; 
-	/* ctx.setup_ptlsim_switch(); \ */
+    ptl_stable_state = 0;
 
-struct RexByte { 
+struct RexByte {
   // a.k.a., b, x, r, w
-  byte extbase:1, extindex:1, extreg:1, mode64:1, insnbits:4; 
+  byte extbase:1, extindex:1, extreg:1, mode64:1, insnbits:4;
   RexByte() { }
   RexByte(const byte& b) { *((byte*)this) = b; }
   operator byte() const { return (*((byte*)this)); }
 };
 
-struct ModRMByte { 
-  byte rm:3, reg:3, mod:2; 
+struct ModRMByte {
+  byte rm:3, reg:3, mod:2;
   ModRMByte() { }
   ModRMByte(const byte& b) { *((byte*)this) = b; }
-  //operator bool() { return (*((byte*)this)) != 0; }
   operator byte() const { return (*((byte*)this)); }
 };
 
@@ -84,7 +82,7 @@ enum {
   APR_spl, APR_bpl, APR_sil, APR_dil,
   APR_r8b, APR_r9b, APR_r10b, APR_r11b, APR_r12b, APR_r13b, APR_r14b, APR_r15b,
   // SSE registers
-  APR_xmm0, APR_xmm1, APR_xmm2, APR_xmm3, APR_xmm4, APR_xmm5, APR_xmm6, APR_xmm7, APR_xmm8, APR_xmm9, APR_xmm10, APR_xmm11, APR_xmm12, APR_xmm13, APR_xmm14, APR_xmm15, 
+  APR_xmm0, APR_xmm1, APR_xmm2, APR_xmm3, APR_xmm4, APR_xmm5, APR_xmm6, APR_xmm7, APR_xmm8, APR_xmm9, APR_xmm10, APR_xmm11, APR_xmm12, APR_xmm13, APR_xmm14, APR_xmm15,
   // segments:
   APR_es, APR_cs, APR_ss, APR_ds, APR_fs, APR_gs,
   // special:
@@ -233,7 +231,7 @@ struct TraceDecoder {
   void address_generate_and_load_or_store(int destreg, int srcreg, const DecodedOperand& memref, int opcode, int datatype = DATATYPE_INT, int cachelevel = 0, bool force_seg_bias = false, bool rmw = false);
   void operand_load(int destreg, const DecodedOperand& memref, int loadop = OP_ld, int datatype = 0, int cachelevel = 0, bool rmw = false);
   void result_store(int srcreg, int tempreg, const DecodedOperand& memref, int datatype = 0, bool rmw = false);
-  void alu_reg_or_mem(int opcode, const DecodedOperand& rd, const DecodedOperand& ra, W32 setflags, int rcreg, 
+  void alu_reg_or_mem(int opcode, const DecodedOperand& rd, const DecodedOperand& ra, W32 setflags, int rcreg,
                       bool flagsonly = false, bool isnegop = false, bool ra_rb_imm_form = false, W64s ra_rb_imm_form_rbimm = 0);
 
   void move_reg_or_mem(const DecodedOperand& rd, const DecodedOperand& ra, int force_rd = REG_zero);

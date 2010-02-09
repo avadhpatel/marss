@@ -47,9 +47,9 @@ declare_syscall4(__NR_mremap, void*, sys_mremap, void*, old_address, size_t, old
 declare_syscall3(__NR_mprotect, int, sys_mprotect, void*, addr, size_t, len, int, prot);
 declare_syscall3(__NR_madvise, int, sys_madvise, void*, addr, size_t, len, int, action);
 declare_syscall2(__NR_mlock, int, sys_mlock, const void*, addr, size_t, len);
-declare_syscall2(__NR_munlock, int, sys_munlock, const void*, addr, size_t, len); 
-declare_syscall1(__NR_mlockall, int, sys_mlockall, int, flags);  
-declare_syscall0(__NR_munlockall, int, sys_munlockall);  
+declare_syscall2(__NR_munlock, int, sys_munlock, const void*, addr, size_t, len);
+declare_syscall1(__NR_mlockall, int, sys_mlockall, int, flags);
+declare_syscall0(__NR_munlockall, int, sys_munlockall);
 
 declare_syscall3(__NR_open, int, sys_open, const char*, pathname, int, flags, int, mode);
 declare_syscall1(__NR_close, int, sys_close, int, fd);

@@ -1979,7 +1979,7 @@ int TraceDecoder::fillbuf(Context& ctx, byte* insnbytes, int insnbytes_bufsize) 
     faultaddr = 0;
     pfec = 0;
     invalid = 0;
-    valid_byte_count = ctx.copy_from_user(insnbytes, bb.rip, insnbytes_bufsize, pfec, faultaddr, true); //, ptelo, ptehi);
+    valid_byte_count = ctx.copy_from_user(insnbytes, bb.rip, insnbytes_bufsize, pfec, faultaddr, true);
     return valid_byte_count;
 }
 
@@ -2007,33 +2007,7 @@ bool TraceDecoder::translate() {
     first_uop_in_insn = 1;
     ripstart = rip;
 
-    // if unlikely(faultaddr) {
-    // if(rip == faultaddr) {
-    // is_sse = 0;
-    // is_x87 = 0;
-    // ptl_logfile << "################# Exec-Page fault at start ##########";
-    // ptl_logfile << " faultaddr: ", (void*)(faultaddr), " rip: ", (void*)rip, endl;
-    // abs_code_addr_immediate(REG_ar1, 3, faultaddr);
-    // abs_code_addr_immediate(REG_ar2, 3, bb.rip.rip);
-    // // immediate(REG_ar2, 3, pfec);
-    // microcode_assist(ASSIST_EXEC_PAGE_FAULT, ripstart, faultaddr);
-    // user_insn_count++;
-    // end_of_block = 1;
-    // bb.invalidblock = 1;
-    // flush();
-    // return false;
-    // }
-    // }
-
     decode_prefixes();
-
-#if 0
-    ptl_logfile << "prefixes = ", prefixes, ":";
-    foreach (i, PFX_count) {
-        if (prefixes & (1 << i)) ptl_logfile << " ", prefix_names[i];
-    }
-    ptl_logfile << endl;
-#endif
 
     if (prefixes & PFX_ADDR) addrsize_prefix = 1;
 
@@ -2226,7 +2200,6 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     }
 
     for (;;) {
-        // if (DEBUG) ptl_logfile << "rip ", (void*)trans.rip, ", relrip = ", (void*)(trans.rip - trans.bb.rip), endl;
         if (!trans.translate()) break;
     }
 
@@ -2252,7 +2225,6 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
 
     BasicBlockChunkList* pagelist;
 
-    //smc_cleardirty(bb->rip.mfnlo);
     pagelist = bbpages.get(bb->rip.mfnlo);
     if (!pagelist) {
         pagelist = new BasicBlockChunkList(bb->rip.mfnlo);
@@ -2276,7 +2248,6 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     int page_crossing = ((lowbits(bb->rip, 12) + (bb->bytes-1)) >> 12);
 
     if (page_crossing) {
-        //smc_cleardirty(bb->rip.mfnhi);
         BasicBlockChunkList* pagelisthi = bbpages.get(bb->rip.mfnhi);
         if (!pagelisthi) {
             pagelisthi = new BasicBlockChunkList(bb->rip.mfnhi);
@@ -2392,8 +2363,6 @@ ostream& BasicBlockCache::print(ostream& os) {
            intstring(bb.tagcount, 4), "t ", intstring(bb.memcount - bb.storecount, 3), "ld ",
            intstring(bb.storecount, 3), "st ", intstring(bb.user_insn_count, 3), "u ",
            intstring(bb.hitcount, 10), "h ", intstring(bb.predcount, 10), "pr ",
-           //floatstring(100.0 * (double)bb.predcount / (double)bb.hitcount, 10, 2), "%pr ",
-           //floatstring(100.0 * percent_of_total_uops, 6, 2), "%uops",
            intstring(bb.hitcount * bb.tagcount, 10), "uu ",
            ": taken 0x", hexstring(bb.rip_taken, 48), ", seq ", hexstring(bb.rip_not_taken, 48);
         if (bb.rip_taken == bb.rip) os << " [loop]";
@@ -2410,7 +2379,6 @@ void bbcache_reclaim(size_t bytes, int urgency) {
 }
 
 void init_decode() {
-    //ptl_mm_register_reclaim_handler(bbcache_reclaim);
 }
 
 void shutdown_decode() {

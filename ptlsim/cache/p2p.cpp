@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifdef MEM_TEST
@@ -38,7 +38,7 @@
 
 using namespace Memory;
 
-P2PInterconnect::P2PInterconnect(char *name, 
+P2PInterconnect::P2PInterconnect(char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Interconnect(name, memoryHierarchy)
 {
@@ -57,14 +57,16 @@ void P2PInterconnect::register_controller(Controller *controller)
 	}
 
 	memdebug("Already two controllers register in P2P\n");
-	// Already two controllers are registered
+    /* Already two controllers are registered */
 	assert(0);
 }
 
 bool P2PInterconnect::controller_request_cb(void *arg)
 {
-	// P2P is 0 latency interconnect so directly
-	// pass it to next controller
+    /*
+     * P2P is 0 latency interconnect so directly
+     * pass it to next controller
+     */
 	Message *msg = (Message*)arg;
 
 	Controller *receiver = get_other_controller(
@@ -79,14 +81,14 @@ bool P2PInterconnect::controller_request_cb(void *arg)
 	bool ret_val;
 	ret_val = receiver->get_interconnect_signal()->emit((void *)&message);
 
-	// Free the message
+    /* Free the message */
 	memoryHierarchy_->free_message(&message);
 
 	return ret_val;
 
 }
 
-int P2PInterconnect::access_fast_path(Controller *controller, 
+int P2PInterconnect::access_fast_path(Controller *controller,
 		MemoryRequest *request)
 {
 	Controller *receiver = get_other_controller(controller);
@@ -112,8 +114,6 @@ void P2PInterconnect::print_map(ostream &os)
 bool P2PInterconnect::send_request(Controller *sender,
 		MemoryRequest *request, bool hasData)
 {
-	// FIXME all the reqeusts are accepted as of now
-//	return true;
 	assert(0);
 	return false;
 }

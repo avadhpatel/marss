@@ -115,12 +115,12 @@ static int ptlsim_ptlcall_init() {
 //  cout << "rbx = 0x", hexstring(rbx, 32), endl;
 //  cout << "rcx = 0x", hexstring(rcx, 32), endl;
 //  cout << "rdx = 0x", hexstring(rdx, 32), endl;
-  
+
   if (rax != PTLSIM_CPUID_FOUND) {
     ptlsim_check_status = -1;
     return 0;
   }
-  
+
   supported_ptlcall_methods = rbx;
   ptlcall_mmio_page_physaddr = (bits(rdx, 0, 16) << 32) | LO32(rcx);
   ptlcall_mmio_page_offset = (ptlcall_mmio_page_physaddr & 0xfff);
@@ -130,7 +130,7 @@ static int ptlsim_ptlcall_init() {
   if (supported_ptlcall_methods & PTLCALL_METHOD_MMIO) {
     // We use O_SYNC to guarantee uncached accesses:
     int fd = open(mmap_filename, O_RDWR|O_LARGEFILE|O_SYNC, 0);
-    
+
     if (fd < 0) {
       fprintf(stderr, "ptlsim_ptlcall_init: cannot open %s for MMIO to physaddr %p (%s)\n",
               mmap_filename, (void*)ptlcall_mmio_page_physaddr, strerror(errno));
@@ -138,9 +138,9 @@ static int ptlsim_ptlcall_init() {
       ptlsim_check_status = -2;
       return 0;
     }
-    
+
     ptlcall_mmio_page_virtaddr = (W64*)mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_SHARED, fd, ptlcall_mmio_page_physaddr);
-    
+
     if (((int)(Waddr)ptlcall_mmio_page_virtaddr) == -1) {
       fprintf(stderr, "ptlsim_ptlcall_init: cannot mmap %s (fd %d) for MMIO to physaddr %p (%s)\n",
               mmap_filename, fd, (void*)ptlcall_mmio_page_physaddr, strerror(errno));
@@ -149,7 +149,7 @@ static int ptlsim_ptlcall_init() {
       close(fd);
       return 0;
     }
-    
+
     // Adjust the pointer to the actual trigger word within the page (usually always offset 0)
     ptlcall_mmio_page_virtaddr = (W64*)(((Waddr)ptlcall_mmio_page_virtaddr) + ptlcall_mmio_page_offset);
 
@@ -182,7 +182,7 @@ static inline W64 do_ptlcall_mmio(W64 callid, W64 arg1, W64 arg2, W64 arg3, W64 
                 "smsw %[target]\n"
                 : "=a" (rc),
                   [target] "=m" (*ptlcall_mmio_page_virtaddr)
-                : [callid] "a" (callid), 
+                : [callid] "a" (callid),
                   [arg1] "D" ((W64)(arg1)),
                   [arg2] "S" ((W64)(arg2)),
                   [arg3] "d" ((W64)(arg3)),
@@ -357,7 +357,7 @@ static inline W64 ptlcall_capture_stats(const char* snapshot) {
 // after creating the checkpoint:
 //
 
-#define PTLCALL_CHECKPOINT_AND_CONTINUE  0 
+#define PTLCALL_CHECKPOINT_AND_CONTINUE  0
 #define PTLCALL_CHECKPOINT_AND_SHUTDOWN  1
 #define PTLCALL_CHECKPOINT_AND_REBOOT    2
 #define PTLCALL_CHECKPOINT_AND_PAUSE     3
@@ -395,7 +395,7 @@ static inline W64 ptlcall_checkpoint_dummy() {
   static const char* name= "default";
   return ptlcall_checkpoint_generic(name, PTLCALL_CHECKPOINT_DUMMY);
 }
-	
+
 
 #endif // PTLCALLS_USERSPACE
 

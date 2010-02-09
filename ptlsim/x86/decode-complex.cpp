@@ -3,6 +3,7 @@
 // Decoder for complex instructions
 //
 // Copyright 1999-2008 Matt T. Yourst <yourst@yourst.com>
+// Copyright 2009-2010 Avadh Patel <apatel@cs.binghamton.edu>
 //
 
 #include <decode.h>
@@ -62,32 +63,10 @@ bool assist_int(Context& ctx) {
   return true;
 }
 
-#ifdef PTLSIM_HYPERVISOR
-//extern void handle_xen_hypercall_assist(Context& ctx);
-//
-//extern void handle_syscall_assist(Context& ctx);
-#endif
-
 bool assist_syscall(Context& ctx) {
 #ifdef PTLSIM_HYPERVISOR
-//  //
-//  // SYSCALL has two distinct sets of semantics on Xen x86-64.
-//  //
-//  // When executed from user mode, it's a normal system call
-//  // in the Linux sense, and Xen just relays control back
-//  // to the guest domain's kernel.
-//  //
-//
-//  if (ctx.kernel_mode) {
-//    ptl_logfile << ctx, endl, flush;
-//    assert(!ctx.kernel_mode);
-//  }
-//  handle_syscall_assist(ctx);
-//	ctx.setup_qemu_switch();
-//	helper_syscall(ctx.regs[R_ECX]);
 	ctx.eip = ctx.reg_selfrip;
 	ASSIST_IN_QEMU(helper_syscall, ctx.reg_nextrip - ctx.reg_selfrip);
-//	ASSIST_IN_QEMU(helper_syscall, ctx.regs[R_ECX]);
 #else
   if (ctx.use64) {
 #ifdef __x86_64__
@@ -113,19 +92,6 @@ bool assist_hypercall(Context& ctx) {
 	cerr << "assist_hypercall is called, ", \
 		 "this function should not be called in QEMU\n";
 	return false;
-//#ifdef PTLSIM_HYPERVISOR
-//  //
-//  // SYSCALL has two distinct sets of semantics on Xen x86-64.
-//  //
-//  // When executed from kernel mode, it's interpreted as a
-//  // hypercall into Xen itself.
-//  //
-//  if (!ctx.kernel_mode) {
-//    ptl_logfile << ctx, endl, flush;
-//    assert(ctx.kernel_mode);
-//  }
-//  handle_xen_hypercall_assist(ctx);
-//#endif
 }
 
 bool assist_ptlcall(Context& ctx) {
@@ -135,16 +101,6 @@ bool assist_ptlcall(Context& ctx) {
 
 bool assist_sysenter(Context& ctx) {
 	ASSIST_IN_QEMU(helper_sysenter);
-//	ctx.setup_qemu_switch();
-//	helper_sysenter();
-//#ifdef PTLSIM_HYPERVISOR
-//  //++MTY TODO
-//  cerr << "assist_sysenter()", endl, flush;
-//  assert(false);
-//#else
-//  handle_syscall_32bit(SYSCALL_SEMANTICS_SYSENTER);
-//#endif
-  // REG_rip is filled out for us
 	return true;
 }
 
@@ -161,7 +117,7 @@ static const char cpuid_description[48+1] = "Intel(R) Xeon(TM) CPU 2.00 GHz     
 #define X86_FEATURE_FPU		(1 <<  0) // Onboard FPU
 #define X86_FEATURE_VME		(1 <<  1) // Virtual Mode Extensions
 #define X86_FEATURE_DE		(1 <<  2) // Debugging Extensions
-#define X86_FEATURE_PSE 	(1 <<  3) // Page Size Extensions
+#define X86_FEATURE_PSE	(1 <<  3) // Page Size Extensions
 #define X86_FEATURE_TSC		(1 <<  4) // Time Stamp Counter
 #define X86_FEATURE_MSR		(1 <<  5) // Model-Specific Registers, RDMSR, WRMSR
 #define X86_FEATURE_PAE		(1 <<  6) // Physical Address Extensions
@@ -277,79 +233,6 @@ union ProcessorMiscInfo {
 
 bool assist_cpuid(Context& ctx) {
 	ASSIST_IN_QEMU(helper_cpuid);
-//	ctx.setup_qemu_switch();
-//	helper_cpuid();
-//  W64& rax = ctx.regs[R_EAX];
-//  W64& rbx = ctx.regs[R_EBX];
-//  W64& rcx = ctx.regs[R_ECX];
-//  W64& rdx = ctx.regs[R_EDX];
-//
-//  W32 func = rax;
-//  if (logable(4)) {
-//    ptl_logfile << "assist_cpuid: func 0x", hexstring(func, 32), " called from ",
-//      (void*)(Waddr)ctx.reg_selfrip, ":", endl;
-//  }
-//
-//  switch (func) {
-//  case 0: {
-//    // Max avail function spec and vendor ID:
-//    const W32* vendor = (const W32*)&cpuid_vendor;
-//    rax = 1; // only one extended function
-//    rbx = vendor[0];
-//    rdx = vendor[1];
-//    rcx = vendor[2];
-//    break;
-//  }
-//
-//  case 1: {
-//    // Model and capability information
-//    rax = PTLSIM_X86_MODEL_INFO; // model
-//    rbx = PTLSIM_X86_MISC_INFO | (ctx.cpu_index << 24);
-//    rcx = PTLSIM_X86_EXT_FEATURE;
-//    rdx = PTLSIM_X86_FEATURE;
-//    break;
-//  }
-//
-//  case 0x80000000: {
-//    // Max avail extended function spec and vendor ID:
-//    const W32* vendor = (const W32*)&cpuid_vendor;
-//    rax = 4;
-//    rbx = vendor[0];
-//    rdx = vendor[1];
-//    rcx = vendor[2];
-//    break;
-//  }
-//
-//  case 0x80000001: {
-//    // extended feature info
-//    rax = PTLSIM_X86_MODEL_INFO;
-//    rbx = 0; // brand ID
-//    rcx = PTLSIM_X86_VENDOR_EXT_FEATURE;
-//    rdx = PTLSIM_X86_VENDOR_FEATURE;
-//    break;
-//  }
-//
-//  case 0x80000002 ... 0x80000004: {
-//    // processor name string
-//    const W32* cpudesc = (const W32*)(&cpuid_description[(func - 0x80000002)*16]);
-//    rax = cpudesc[0];
-//    rbx = cpudesc[1];
-//    rcx = cpudesc[2];
-//    rdx = cpudesc[3];
-//    break;
-//  }
-//
-//  default: {
-//    W32 eax, ebx, ecx, edx;
-//    cpuid(func, eax, ebx, ecx, edx);
-//    rax = eax;
-//    rbx = ebx;
-//    rcx = ecx;
-//    rdx = edx;
-//    break;
-//  }
-//  }
-//
   ctx.eip = ctx.reg_nextrip;
   return true;
 }
@@ -360,7 +243,7 @@ bool assist_sti(Context& ctx) {
 	return false;
 }
 
-W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
 	W16 current_flags = (W16)ra;
@@ -383,13 +266,13 @@ bool assist_cli(Context& ctx) {
 	return false;
 }
 
-W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
 	W16 current_flags = (W16)ra;
 	current_flags &= ~IF_MASK;
 	flags = current_flags;
-	
+
 	// Update in QEMU's flags
     ctx.setup_qemu_switch();
     helper_cli();
@@ -419,7 +302,6 @@ bool assist_enter(Context& ctx) {
     }
 
     ctx.regs[REG_rbp] = tmp1;
-    // ctx.regs[REG_rsp] -= (esp_addend - (opsize * level));
     ctx.regs[REG_rsp] = tmp1 + (-esp_addend + (-opsize * level));
 
     ctx.eip = ctx.reg_nextrip;
@@ -430,7 +312,7 @@ bool assist_enter(Context& ctx) {
 bool assist_ud2a(Context& ctx) {
 	// This instruction should never occur in simulation.
 	// Linux Kernel uses ud2a to trigger Bug in the code or
-	// hardware so we use it to generate an assert(0) and 
+	// hardware so we use it to generate an assert(0) and
 	// print as detail as possible in logfile
 	ptl_logfile << "*****Got UD2A*****\n";
 	ptl_logfile << "Context:\n", ctx, endl;
@@ -445,8 +327,6 @@ bool assist_ljmp_prct(Context& ctx) {
 	W32 next_eip_addend = ctx.reg_nextrip - ctx.reg_selfrip;
 	ptl_logfile << "assit_ljmp_prct: csbase: ", ctx.reg_ar1,
 				" eip: ", ctx.reg_ar2, endl;
-//	ctx.setup_qemu_switch();
-//	helper_ljmp_protected(new_cs, new_eip, next_eip_addend);
 	ASSIST_IN_QEMU(helper_ljmp_protected, new_cs, new_eip,
 			next_eip_addend);
 	ctx.cs_segment_updated();
@@ -463,14 +343,12 @@ bool assist_ljmp(Context& ctx) {
 	W64 base = selector << 4;
 	ctx.segs[R_CS].base = base;
 	ctx.cs_segment_updated();
-	ctx.eip = base + new_eip;//new_cs + 
+	ctx.eip = base + new_eip;
 	return true;
 }
 
 // BCD Assist
 bool assist_bcd_aas(Context& ctx) {
-//	ctx.setup_qemu_switch();
-//	helper_aas();
 	ASSIST_IN_QEMU(helper_aas);
 	ctx.eip = ctx.reg_nextrip;
 	return true;
@@ -620,8 +498,8 @@ bool assist_clts(Context& ctx) {
 
 // SWAPGS
 bool assist_swapgs(Context& ctx) {
-	// This instruction is created as an assist because we 
-	// have to make sure that we dont do any out-of order 
+	// This instruction is created as an assist because we
+	// have to make sure that we dont do any out-of order
 	// execution of after this opcode untill its completed
 	// So it acts as a barriar instruction
 	// Actual swap of GS is already done in uops
@@ -631,7 +509,7 @@ bool assist_swapgs(Context& ctx) {
 
 // Barrier
 bool assist_barrier(Context& ctx) {
-	// Simple barrier assist to make sure we don't do any 
+	// Simple barrier assist to make sure we don't do any
 	// out of order execution beyound the instruction that calls
 	// this assist function
 	ctx.eip = ctx.reg_nextrip;
@@ -647,20 +525,15 @@ bool assist_halt(Context& ctx) {
 
 // Pause
 bool assist_pause(Context& ctx) {
-	// TODO: Currently we will advance the sim_cycle by
-	// a fix value but we can do more things here
-//	cerr << "Pausing CPU for 500 sim cycles\n";
-//	sim_cycle += 1000;
 	ctx.eip = ctx.reg_nextrip;
 	return true;
 }
 
+// TODO : Convert RDTSC to Light Assist
 bool assist_rdtsc(Context& ctx) {
-	ASSIST_IN_QEMU(helper_rdtsc);
-//	cerr << "rdtsc: eax: ", ctx.regs[R_EAX], " edx: ", 
-//		 ctx.regs[R_EDX], endl;
-  ctx.eip = ctx.reg_nextrip;
-	return true;
+    ASSIST_IN_QEMU(helper_rdtsc);
+    ctx.eip = ctx.reg_nextrip;
+    return true;
 }
 
 bool assist_pushf(Context& ctx) {
@@ -675,23 +548,20 @@ bool assist_pushf(Context& ctx) {
 	return true;
 }
 
-W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
 	// RA contains the latest flags contains ZAPS, CF, OF and IF
 	ctx.setup_qemu_switch();
 	W64 stable_flags = helper_read_eflags();
 	ctx.setup_ptlsim_switch();
-	// W64 stable_flags = ctx.eflags | (ctx.df & DF_MASK);
-	// stable_flags |= ctx.eflags & ~(VM_MASK | RF_MASK);
 
 	W64 flagmask = (setflags_to_x86_flags[7] | FLAG_IF);
 	stable_flags |= (ra & flagmask);
 	flags = (W16)ra;
-	// flags = (W16)(ra | (stable_flags & FLAG_IF));
-	
-	if(logable(4)) 
-		ptl_logfile << "[cpu ", ctx.cpu_index, "]push stable_flags: ", hexstring(stable_flags, 64), 
+
+	if(logable(4))
+		ptl_logfile << "[cpu ", ctx.cpu_index, "]push stable_flags: ", hexstring(stable_flags, 64),
 					" flags: ", hexstring(flags, 16), " at rip: ",
 				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
 
@@ -710,23 +580,16 @@ bool assist_popf(Context& ctx) {
   } else {
 	  mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK);
   }
-  // bit 1 is always '1', and bits {3, 5, 15} are always '0':
-// flags = (flags | (1 << 1)) & (~((1 << 3) | (1 << 5) | (1 << 15)));
-//  ctx.internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
-//  ctx.eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
   ASSIST_IN_QEMU(helper_write_eflags, flags , mask);
   ctx.eip = ctx.reg_nextrip;
 
   // Update internal flags too (only update non-standard flags in internal_flags_bits):
   // Equivalent to these uops:
-  // this << TransOp(OP_and, REG_temp1, REG_temp0, REG_imm, REG_zero, 2, ~(FLAG_ZAPS|FLAG_CF|FLAG_OF));
-  // TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, REG_temp1, 2, offsetof(Context, internal_eflags)); stp.internal = 1; this << stp;
-  // this << TransOp(OP_movrcc, REG_temp0, REG_zero, REG_temp0, REG_zero, 3, 0, 0, FLAGS_DEFAULT_ALU);
-	return true;
+  return true;
 }
 
 
-W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
 	W32 mask = 0;
@@ -736,16 +599,6 @@ W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK);
 	}
 	W64 stable_flags = (ra & mask);
-
-	// Update the eflags in QEMU
-	// ctx.setup_qemu_switch();
-	// helper_write_eflags(ra, mask);
-	// ctx.setup_ptlsim_switch();
-
-	// if(logable(4)) 
-		// ptl_logfile << "[cpu ", ctx.cpu_index, "]pop stable_flags: ", 
-					// hexstring(stable_flags, 64), " at rip: ",
-				   // (void*)ctx.eip, " cycle: ", sim_cycle, endl;
 
 	W64 flagmask = (setflags_to_x86_flags[7] | FLAG_IF);
 	flags = (W16)(ra & flagmask);
@@ -760,13 +613,13 @@ W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 //
 bool assist_cld(Context& ctx) {
   ctx.internal_eflags &= ~FLAG_DF;
-  ctx.eip = ctx.reg_nextrip;  
+  ctx.eip = ctx.reg_nextrip;
 	return true;
 }
 
 bool assist_std(Context& ctx) {
   ctx.internal_eflags |= FLAG_DF;
-  ctx.eip = ctx.reg_nextrip;  
+  ctx.eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -779,28 +632,9 @@ bool assist_write_segreg(Context& ctx) {
   W16 selector = ctx.reg_ar1;
   byte segid = ctx.reg_ar2;
 
- ASSIST_IN_QEMU(helper_load_seg, segid , selector);
-  // setup_qemu_switch_except_ctx(ctx);
-  // ctx.setup_qemu_switch();
-
-  // Before calling helper_load_seg we have to set the 
-  // correct eip because in case of fault this function
-  // will not return so we have to make sure that our
-  //
-  // ctx.eip = ctx.reg_selfrip - ctx.segs[R_CS].base;
-  // helper_load_seg(segid , selector);
-  // ctx.setup_ptlsim_switch();
-
-//  int exception = ctx.write_segreg(segid, selector);
-//
-//  if unlikely (exception) {
-//    ctx.eip = ctx.reg_selfrip;
-//    ctx.propagate_x86_exception(exception, selector);
-//    return;
-//  }
-//
+  ASSIST_IN_QEMU(helper_load_seg, segid , selector);
   ctx.eip = ctx.reg_nextrip;
-	return true;
+  return true;
 }
 
 bool assist_ldmxcsr(Context& ctx) {
@@ -814,7 +648,7 @@ bool assist_ldmxcsr(Context& ctx) {
   ctx.mxcsr = (ctx.mxcsr & 0xffffffff00000000ULL) | mxcsr;
 
   // We can't have exceptions going on inside PTLsim: virtualize this feature in uopimpl code
-  // Everything else will be used by real SSE insns inside uopimpls. 
+  // Everything else will be used by real SSE insns inside uopimpls.
   mxcsr |= MXCSR_EXCEPTION_DISABLE_MASK;
   x86_set_mxcsr(mxcsr);
 
@@ -830,54 +664,17 @@ bool assist_ldmxcsr(Context& ctx) {
 }
 
 bool assist_fxsave(Context& ctx) {
-//  FXSAVEStruct state;
-//
-//  ctx.fxsave(state);
-//
-//  Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
-//
-//  PageFaultErrorCode pfec;
-//  Waddr faultaddr;
-//  int bytes = ctx.copy_to_user(target, &state, sizeof(state), pfec, faultaddr);
-//
-//  if (bytes < sizeof(state)) {
-//    ctx.eip = ctx.reg_selfrip;
-//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-//    return;
-//  }
   Waddr target = ctx.reg_ar1;
   ASSIST_IN_QEMU(helper_fxsave, target, 1);
-//  ctx.setup_qemu_switch();
-//  helper_fxsave(target, 1);
   ctx.eip = ctx.reg_nextrip;
   return true;
 }
 
 bool assist_fxrstor(Context& ctx) {
-//  FXSAVEStruct state;
-//
-//  Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
-//
-//  PageFaultErrorCode pfec;
-//  Waddr faultaddr;
-//  int bytes = ctx.copy_from_user(&state, target, sizeof(state), pfec, faultaddr);
-//
-//  if (bytes < sizeof(state)) {
-//    ctx.eip = ctx.reg_selfrip;
-//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-//    return;
-//  }
-//
-//  ctx.fxrstor(state);
-//
-//  // We can't have exceptions going on inside PTLsim: virtualize this feature in uopimpl code
-//  // Everything else will be used by real SSE insns inside uopimpls. 
   Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
   ASSIST_IN_QEMU(helper_fxrstor, target, 1);
   W32 mxcsr = ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
   x86_set_mxcsr(mxcsr);
-//  ctx.setup_qemu_switch();
-//  helper_fxrstor(target, 1);
   ctx.eip = ctx.reg_nextrip;
   return true;
 }
@@ -886,128 +683,31 @@ bool assist_wrmsr(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_wrmsr);
   ctx.eip = ctx.reg_nextrip;
-	return true;
-//  ctx.setup_qemu_switch();
-//  helper_wrmsr();
-//
-//#ifdef PTLSIM_HYPERVISOR
-//  if (ctx.kernel_mode) {
-//    W64 value = (ctx.regs[R_EDX] << 32) | LO32(ctx.regs[R_EAX]);
-//    W32 msr = ctx.regs[R_ECX];
-//    bool invalid = 0;
-//    switch (msr) {
-//    case 0xc0000100:
-//      ctx.segs[SEGID_FS].base = value; break;
-//    case 0xc0000101:
-//      ctx.segs[SEGID_GS].base = value; break;
-//    case 0xc0000102:
-//      ctx.swapgs_base = value; break;
-//    default:
-//      invalid = 1; break;
-//    }
-//    if (invalid) {
-//      ptl_logfile << "Warning: wrmsr: invalid MSR write (msr  ", (void*)(Waddr)msr,
-//        ") with value ", (void*)(Waddr)value, " from rip ",
-//        (void*)(Waddr)ctx.eip, endl;
-//      // Invalid MSR writes are ignored by Xen by default
-//      // ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//    } else {
-//      ctx.eip = ctx.reg_nextrip;
-//    }
-//  } else {
-//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//  }
-//#else
-//  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-//#endif
+  return true;
 }
 
 
 bool assist_rdmsr(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
-//  ctx.setup_qemu_switch();
-//  helper_rdmsr();
-	ASSIST_IN_QEMU(helper_rdmsr);
-	ctx.eip = ctx.reg_nextrip;
-	return true;
-
-//#ifdef PTLSIM_HYPERVISOR
-//  if (ctx.kernel_mode) {
-//    W32 msr = ctx.regs[R_ECX];
-//    W64 rc = 0;
-//    bool invalid = 0;
-//    switch (msr) {
-//    case 0xc0000100:
-//      rc = ctx.segs[SEGID_FS].base; break;
-//    case 0xc0000101:
-//      rc = ctx.segs[SEGID_GS].base; break;
-//    case 0xc0000102:
-//      rc = ctx.swapgs_base; break;
-//    case 0xc0000080:
-//      rc = ctx.efer; break;
-//    default:
-//      invalid = 1; break;
-//    }
-//    if (invalid) {
-//      ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//    } else {
-//      ctx.regs[R_EDX] = HI32(rc);
-//      ctx.regs[R_EAX] = LO32(rc);
-//      ctx.eip = ctx.reg_nextrip;
-//    }
-//  } else {
-//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//  }
-//#else
-//  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-//#endif
+    ctx.eip = ctx.reg_selfrip;
+    ASSIST_IN_QEMU(helper_rdmsr);
+    ctx.eip = ctx.reg_nextrip;
+    return true;
 }
 
 #ifdef PTLSIM_HYPERVISOR
 bool assist_write_cr0(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
-//  ctx.setup_qemu_switch();
-//  helper_write_crN(0, ctx.reg_ar1);
-
   ASSIST_IN_QEMU(helper_write_crN, 0, ctx.reg_ar1);
-//  if (!ctx.kernel_mode) {
-//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//    return;
-//  }
-//
-//  W64 val = ctx.reg_ar1;
-//
-//  if ((val ^ ctx.cr[0]) & ~(X86_CR0_TS)) {
-//    // Only allowed to change TS flag
-//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//    return;
-//  }
-//
-//  ctx.cr[0] = val;
-
   ctx.eip = ctx.reg_nextrip;
-	return true;
+  return true;
 }
 
 bool assist_write_cr2(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 2, ctx.reg_ar1);
-//  ctx.setup_qemu_switch();
-//  helper_write_crN(2, ctx.reg_ar1);
-
-//  if (!ctx.kernel_mode) {
-//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//    return;
-//  }
-//
-//  W64 val = ctx.reg_ar1;
-//  sshinfo.vcpu_info[ctx.cpu_index].arch.cr2 = val;
-//  ctx.cr[2] = val;
   ctx.eip = ctx.reg_nextrip;
-	return true;
+  return true;
 }
-
-//void switch_page_table(mfn_t mfn);
 
 #define STORE_CR3_VALUES
 #ifdef STORE_CR3_VALUES
@@ -1020,36 +720,15 @@ bool assist_write_cr3(Context& ctx) {
 #endif
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
-//  ctx.setup_qemu_switch();
-//  helper_write_crN(3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
-
-//  if (!ctx.kernel_mode) {
-//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//    return;
-//  }
-//
-//  ctx.cr[3] = ctx.reg_ar1 & 0xfffffffffffff000ULL;
-//  ctx.flush_tlb();
-//  switch_page_table(ctx.cr[3] >> 12);
   ctx.eip = ctx.reg_nextrip;
-	return true;
+  return true;
 }
 
 bool assist_write_cr4(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 4, ctx.reg_ar1);
-//  ctx.setup_qemu_switch();
-//  helper_write_crN(4, ctx.reg_ar1);
-
-//  if (!ctx.kernel_mode) {
-//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//    return;
-//  }
-
-  // (Ignore all writes to CR4 under Xen)
-
   ctx.eip = ctx.reg_nextrip;
-	return true;
+  return true;
 }
 
 bool assist_write_debug_reg(Context& ctx) {
@@ -1080,20 +759,8 @@ bool assist_write_debug_reg(Context& ctx) {
   } else {
 	  ctx.dr[regid] = value;
   }
-
-//  switch (regid) {
-//  case 0: ctx.dr[0] = value; break;
-//  case 1: ctx.dr[1] = value; break;
-//  case 2: ctx.dr[2] = value; break;
-//  case 3: ctx.dr[3] = value; break;
-//  case 4: ctx.dr[4] = value; break;
-//  case 5: ctx.dr[5] = value; break;
-//  case 6: ctx.dr[6] = value; break;
-//  case 7: ctx.dr[7] = value; break;
-//  };
-
   ctx.eip = ctx.reg_nextrip;
-	return true;
+  return true;
 }
 
 #else
@@ -1187,47 +854,6 @@ bool assist_iret64(Context& ctx) {
 	}
 
 	return true;
-
-//#ifdef PTLSIM_HYPERVISOR
-//  IRETStackFrame frame;
-//
-//  PageFaultErrorCode pfec;
-//  Waddr faultaddr;
-//
-//  ctx.eip = ctx.reg_selfrip;
-//
-//  int n = ctx.copy_from_user(&frame, (Waddr)ctx.regs[R_ESP], sizeof(frame), pfec, faultaddr);
-//  if unlikely (n != sizeof(frame)) {
-//    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-//    return;
-//  }
-//
-//  int exception;
-//
-//  if unlikely (exception = ctx.write_segreg(SEGID_SS, frame.ss)) {
-//    ctx.propagate_x86_exception(exception, frame.ss & 0xfff8);
-//    return;
-//  }
-//
-//  if unlikely (exception = ctx.write_segreg(SEGID_CS, frame.cs)) {
-//    ctx.propagate_x86_exception(exception, frame.cs & 0xfff8);
-//    return;
-//  }
-//
-//  if (logable(5)) {
-//    ptl_logfile << "IRET64 from rip ", (void*)(Waddr)ctx.eip, ": iretctx @ ",
-//      (void*)(Waddr)ctx.regs[R_ESP], " = ", frame, " (", sim_cycle, " cycles, ",
-//      total_user_insns_committed, " commits)", endl;
-//  }
-//
-//  ctx.eip = frame.rip;
-//  ctx.regs[R_ESP] = frame.rsp;
-//  ctx.internal_eflags = frame.rflags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
-//  ctx.eflags = frame.rflags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
-//#else
-//  ctx.eip = ctx.reg_selfrip;
-//  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-//#endif
 }
 
 static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
@@ -1256,11 +882,6 @@ bool assist_ioport_in(Context& ctx) {
 
   ctx.eip = ctx.reg_selfrip;
 
-//  if (!ctx.kernel_mode) {
-//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//    return;
-//  }
-
   W64 port = ctx.reg_ar1;
   W64 sizeshift = ctx.reg_ar2;
 
@@ -1276,18 +897,12 @@ bool assist_ioport_in(Context& ctx) {
   }
   ctx.setup_ptlsim_switch();
 
-//  W64 value = x86_merge(ctx.regs[R_EAX], 0xffffffffffffffffULL, sizeshift);
-//
-//  ptl_logfile << "assist_ioport_in from rip ", (void*)(Waddr)ctx.reg_selfrip, "): ",
-//    "in port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) => 0x",
-//    hexstring(value, 64), endl;
-
   ctx.regs[R_EAX] = x86_merge(ctx.regs[R_EAX], value, sizeshift);
   ctx.eip = ctx.reg_nextrip;
-	return true;
+  return true;
 }
 
-W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
 	W64 port = ra;
@@ -1304,12 +919,11 @@ W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	} else {
 		value = helper_inl(port);
 	}
-	// ctx.setup_ptlsim_switch();
 	setup_ptlsim_switch_all_ctx(ctx);
 
 	value = x86_merge(old_eax, value, sizeshift);
 
-	if(logable(4)) 
+	if(logable(4))
 		ptl_logfile << "ioport in value: ", hexstring(value, 64), " at rip: ",
 				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
 
@@ -1322,11 +936,6 @@ bool assist_ioport_out(Context& ctx) {
   // rax = value to write
 
   ctx.eip = ctx.reg_selfrip;
-
-//  if (!ctx.kernel_mode) {
-//    ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
-//    return;
-//  }
 
   W64 port = ctx.reg_ar1;
   W64 sizeshift = ctx.reg_ar2;
@@ -1342,16 +951,11 @@ bool assist_ioport_out(Context& ctx) {
 	  helper_outl(port, value);
   }
   ctx.setup_ptlsim_switch();
-
-//  ptl_logfile << "assist_ioport_out from rip ", (void*)(Waddr)ctx.reg_selfrip, "): ",
-//    "out port 0x", hexstring(port, 16), " (size ", (1<<sizeshift), " bytes) <= 0x",
-//    hexstring(value, 64), endl;
-
   ctx.eip = ctx.reg_nextrip;
-	return true;
+  return true;
 }
 
-W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, 
+W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
 	W64 port = ra;
@@ -1367,15 +971,12 @@ W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	} else {
 		helper_outl(port, value);
 	}
-	// ctx.setup_ptlsim_switch();
 	setup_ptlsim_switch_all_ctx(ctx);
 
-	if(logable(4)) 
+	if(logable(4))
 		ptl_logfile << "ioport out value: ", hexstring(value, 64), " at rip: ",
 				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
 
-	// Set flags to -1 so it will be ignored at commit time
-	// flags = -1;
 	return 0;
 }
 
@@ -1430,8 +1031,8 @@ static inline void vm_func(TraceDecoder& dec, int assist) {
 	if (check_privilege(dec)) {
 		dec << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero,
 			   3, dec.use32);
-		if (assist == ASSIST_VMRUN) 
-			dec << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, 
+		if (assist == ASSIST_VMRUN)
+			dec << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm,
 					REG_zero, 3, dec.ripstart - dec.cs_base);
 
 		dec.microcode_assist(assist, dec.ripstart, dec.rip);
@@ -1443,7 +1044,7 @@ bool TraceDecoder::decode_complex() {
   DecodedOperand ra;
 
   switch (op) {
- 
+
   case 0x60: {
     // pusha [not used by gcc]
     MakeInvalid();
@@ -1511,13 +1112,13 @@ bool TraceDecoder::decode_complex() {
 
       bool moveonly = (!rdhigh && !rahigh);
 
-      int maskctl1 = 
+      int maskctl1 =
         (rdhigh && !rahigh) ? MaskControlInfo(56, 8, 56) : // insert high byte
         (!rdhigh && rahigh) ? MaskControlInfo(0, 8, 8) : // extract high byte
         (rdhigh && rahigh) ? MaskControlInfo(56, 8, 0) : // move between high bytes
         MaskControlInfo(0, 64, 0); // straight move (but cannot synthesize from mask uop)
 
-      int maskctl2 = 
+      int maskctl2 =
         (rdhigh && !rahigh) ? MaskControlInfo(0, 8, 8) : // extract high byte
         (!rdhigh && rahigh) ? MaskControlInfo(56, 8, 56) : // insert high byte
         (rdhigh && rahigh) ? MaskControlInfo(56, 8, 0) : // move between high bytes
@@ -1888,7 +1489,7 @@ bool TraceDecoder::decode_complex() {
             rip = (rcx.z | !t2.z) ? ripseq : riploop;
 
             ornotf   t3 = rcx,t2
-            br.nz    rip = t3,zero [loop, seq]             # all branches are swapped so they are expected to be taken 
+            br.nz    rip = t3,zero [loop, seq]             # all branches are swapped so they are expected to be taken
 
             ===> Equivalent sequence for repnz cmp:
 
@@ -2033,10 +1634,7 @@ bool TraceDecoder::decode_complex() {
   case 0xcf: {
     // IRET
     EndOfDecode();
-//    int assistid = (use64) ? (opsize_prefix ? ASSIST_IRET32 : ASSIST_IRET64) : (opsize_prefix ? ASSIST_IRET16 : ASSIST_IRET32);
-//    microcode_assist(assistid, ripstart, rip);
-	// push the current value of prefix to reg ar1
-	this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 2, 
+	this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 2,
 			prefixes);
 	microcode_assist(ASSIST_IRET64, ripstart, rip);
     end_of_block = 1;
@@ -2179,9 +1777,9 @@ bool TraceDecoder::decode_complex() {
 	}
 	DECODE(iform, rd, w_mode);
 	EndOfDecode();
-	this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 
+	this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero,
 			2, rd.imm.imm);
-	this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 
+	this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero,
 			sizeshift, ra.imm.imm);
 
 	if(pe && !vm86) {
@@ -2255,7 +1853,7 @@ bool TraceDecoder::decode_complex() {
     // This should be trapped by hypervisor to properly do idle time
     EndOfDecode();
 	// If it has rep prefix then do SVM_EXIT
-	if(svm_check_intercept(*this, SVM_EXIT_PAUSE)) 
+	if(svm_check_intercept(*this, SVM_EXIT_PAUSE))
 		break;
     this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
     break;
@@ -2390,14 +1988,14 @@ bool TraceDecoder::decode_complex() {
           {ASSIST_DIV8,  ASSIST_DIV16,  ASSIST_DIV32,  ASSIST_DIV64},
           {ASSIST_IDIV8, ASSIST_IDIV16, ASSIST_IDIV32, ASSIST_IDIV64}
         };
-        
+
         this << TransOp(OP_mov, REG_ar1, REG_zero, REG_temp2, REG_zero, 3);
         microcode_assist(subop_and_size_to_assist_idx[modrm.reg - 6][sizeshift], ripstart, rip);
         end_of_block = 1;
         */
       }
 
-      break;      
+      break;
     }
     break;
   }
@@ -2405,7 +2003,7 @@ bool TraceDecoder::decode_complex() {
   case 0xfa: { // cli
     EndOfDecode();
 
-	this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 
+	this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of,
 			3, 0, 0, FLAGS_DEFAULT_ALU);
 	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3);
 	ast.riptaken = L_ASSIST_CLI;
@@ -2417,7 +2015,7 @@ bool TraceDecoder::decode_complex() {
   case 0xfb: { // sti
     EndOfDecode();
 
-	this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 
+	this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of,
 			3, 0, 0, FLAGS_DEFAULT_ALU);
 	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3);
 	ast.riptaken = L_ASSIST_STI;
@@ -2476,7 +2074,7 @@ bool TraceDecoder::decode_complex() {
 				svm_check_intercept(*this, SVM_EXIT_LDTR_WRITE);
 
 				if(modrm.mod == 3) {
-					this << TransOp(OP_mov, REG_ar1, ra.reg.reg, REG_zero, 
+					this << TransOp(OP_mov, REG_ar1, ra.reg.reg, REG_zero,
 							REG_zero, 2);
 				} else {
 					operand_load(REG_ar1, ra);
@@ -2497,7 +2095,7 @@ bool TraceDecoder::decode_complex() {
 				svm_check_intercept(*this, SVM_EXIT_LDTR_WRITE);
 
 				if(modrm.mod == 3) {
-					this << TransOp(OP_mov, REG_ar1, ra.reg.reg, REG_zero, 
+					this << TransOp(OP_mov, REG_ar1, ra.reg.reg, REG_zero,
 							REG_zero, 2);
 				} else {
 					operand_load(REG_ar1, ra);
@@ -2516,11 +2114,11 @@ bool TraceDecoder::decode_complex() {
 			DECODE(eform, ra, w_mode);
 			EndOfDecode();
 
-			this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 
+			this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of,
 					3, 0, 0, FLAGS_DEFAULT_ALU);
-			
+
 			if(modrm.mod == 3) {
-				this << TransOp(OP_mov, REG_ar1, ra.reg.reg, REG_zero, 
+				this << TransOp(OP_mov, REG_ar1, ra.reg.reg, REG_zero,
 						REG_zero, 2);
 			} else {
 				operand_load(REG_ar1, ra);
@@ -2544,7 +2142,7 @@ bool TraceDecoder::decode_complex() {
 	TransOp* st2;
 	switch(modrm.reg) {
 		case 0: { // sgdt
-			// Get the address in ra 
+			// Get the address in ra
 			DECODE(eform, ra, v_mode);
 			EndOfDecode();
 
@@ -2556,16 +2154,16 @@ bool TraceDecoder::decode_complex() {
 			address_generate_and_load_or_store(REG_temp1, REG_zero,
 					ra, OP_add);
 
-			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
+			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
 					REG_zero, 3, offsetof_t(Context, gdt.limit));
 			ldp->internal = 1;
 			this << *ldp;
 			delete ldp;
 
-			this << TransOp(OP_st, REG_mem, REG_temp1, REG_zero, 
+			this << TransOp(OP_st, REG_mem, REG_temp1, REG_zero,
 					REG_temp0, 3);
-			
-			ldp2 = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
+
+			ldp2 = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
 					REG_zero, 3, offsetof_t(Context, gdt.base));
 			ldp2->internal = 1;
 			this << *ldp2;
@@ -2581,11 +2179,10 @@ bool TraceDecoder::decode_complex() {
 			TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
 			mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
 			this << mf;
-			// microcode_assist(ASSIST_BARRIER, ripstart, rip);
 			end_of_block = 1;
 			break;
 				}
-		case 1: 
+		case 1:
 			if (modrm.mod == 3) {
 				switch(modrm.rm) {
 					case 0: // monitor
@@ -2594,11 +2191,11 @@ bool TraceDecoder::decode_complex() {
 						EndOfDecode();
 						if(!kernel)
 							goto invalid_opcode;
-						this << TransOp(OP_collcc, REG_temp0, REG_zf, 
-								REG_cf, REG_of, 3, 0, 0, 
+						this << TransOp(OP_collcc, REG_temp0, REG_zf,
+								REG_cf, REG_of, 3, 0, 0,
 								FLAGS_DEFAULT_ALU);
 						this << TransOp(OP_jmp, REG_rip, REG_zero,
-								REG_imm, REG_zero, 3, 
+								REG_imm, REG_zero, 3,
 								ripstart);
 
 						sizeshift = (use64) ? 3 : 2;
@@ -2610,9 +2207,9 @@ bool TraceDecoder::decode_complex() {
 						}
 
 						// Add DS segment base to reg_ar1
-						ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, 
-								REG_imm, REG_zero, sizeshift, 
-								offsetof_t(Context, 
+						ldp = new TransOp(OP_ld, REG_temp0, REG_ctx,
+								REG_imm, REG_zero, sizeshift,
+								offsetof_t(Context,
 									segs[R_DS].base));
 						ldp->internal = 1;
 						this << *ldp;
@@ -2623,17 +2220,17 @@ bool TraceDecoder::decode_complex() {
 								ripstart, rip);
 						break;
 					case 1: // mwait
-						// Add more check if MWait feature is 
+						// Add more check if MWait feature is
 						// available or not
 						EndOfDecode();
 						if(!kernel)
 							goto invalid_opcode;
-						this << TransOp(OP_collcc, REG_temp0, REG_zf, 
-								REG_cf, REG_of, 3, 0, 0, 
+						this << TransOp(OP_collcc, REG_temp0, REG_zf,
+								REG_cf, REG_of, 3, 0, 0,
 								FLAGS_DEFAULT_ALU);
 
 						this << TransOp(OP_jmp, REG_rip, REG_zero,
-								REG_imm, REG_zero, 3, 
+								REG_imm, REG_zero, 3,
 								ripstart);
 
 						this << TransOp(OP_mov, REG_ar1, REG_zero,
@@ -2645,7 +2242,7 @@ bool TraceDecoder::decode_complex() {
 						goto invalid_opcode;
 				}
 			} else { // sidt
-				// Get the address in ra 
+				// Get the address in ra
 				DECODE(eform, ra, v_mode);
 				EndOfDecode();
 
@@ -2654,31 +2251,30 @@ bool TraceDecoder::decode_complex() {
 				address_generate_and_load_or_store(REG_temp1, REG_zero,
 						ra, OP_add);
 
-				ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
+				ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
 						REG_zero, 2, offsetof_t(Context, idt.limit));
 				ldp->internal = 1;
 				this << *ldp;
 				delete ldp;
-				this << TransOp(OP_st, REG_mem, REG_temp1, REG_zero, 
+				this << TransOp(OP_st, REG_mem, REG_temp1, REG_zero,
 						REG_temp0, 3);
 
-				ldp2 = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
+				ldp2 = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
 						REG_zero, 3, offsetof_t(Context, idt.base));
 				ldp2->internal = 1;
 				this << *ldp2;
 				delete ldp2;
 
 				if (!use64)
-					this << TransOp(OP_and, REG_temp0, REG_temp0, 
+					this << TransOp(OP_and, REG_temp0, REG_temp0,
 							REG_imm, REG_zero, 3, 0xffffff);
 
 				this << TransOp(OP_st, REG_mem, REG_temp1, REG_imm,
 						REG_temp0, 3, 2);
-				
+
 				TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
 				mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
 				this << mf;
-				// microcode_assist(ASSIST_BARRIER, ripstart, rip);
 				end_of_block = 1;
 			}
 			break;
@@ -2686,7 +2282,7 @@ bool TraceDecoder::decode_complex() {
 		case 3: // lidt
 			if (modrm.mod == 3) {
 				EndOfDecode();
-				this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, 
+				this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf,
 						REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
 				this << TransOp(OP_jmp, REG_rip, REG_zero,
 						REG_imm, REG_zero, 3, ripstart);
@@ -2745,23 +2341,23 @@ bool TraceDecoder::decode_complex() {
 					DECODE(eform, ra, v_mode);
 					EndOfDecode();
 
-					svm_check_intercept(*this, 
+					svm_check_intercept(*this,
 							modrm.reg == 2 ? SVM_EXIT_GDTR_WRITE : \
 							SVM_EXIT_IDTR_WRITE);
 
 					address_generate_and_load_or_store(REG_temp1, REG_zero,
 							ra, OP_add);
 
-					ldp = new TransOp(OP_ld, REG_temp0, REG_temp1, 
+					ldp = new TransOp(OP_ld, REG_temp0, REG_temp1,
 							REG_zero, REG_zero, 2);
 					this << *ldp;
 					delete ldp;
-					ldp2 = new TransOp(OP_ld, REG_temp7, REG_temp1, 
+					ldp2 = new TransOp(OP_ld, REG_temp7, REG_temp1,
 							REG_imm, REG_zero, 3, 2);
 					this << *ldp2;
 					delete ldp2;
 
-					if(!use64) 
+					if(!use64)
 						this << TransOp(OP_and, REG_temp7, REG_temp7,
 								REG_imm, REG_zero, 3, 0xffffff);
 
@@ -2774,11 +2370,11 @@ bool TraceDecoder::decode_complex() {
 						offset_val1 = offsetof_t(Context, idt.base);
 						offset_val2 = offsetof_t(Context, idt.limit);
 					}
-					st1 = new TransOp(OP_st, REG_mem, REG_temp7, 
+					st1 = new TransOp(OP_st, REG_mem, REG_temp7,
 							REG_zero, REG_imm, 2, offset_val1);
 					st1->internal = 1;
 					this << *st1;
-					st2 = new TransOp(OP_st, REG_mem, REG_temp0, 
+					st2 = new TransOp(OP_st, REG_mem, REG_temp0,
 							REG_zero, REG_imm, 2, offset_val2);
 					st2->internal = 1;
 					this << *st2;
@@ -2787,7 +2383,6 @@ bool TraceDecoder::decode_complex() {
 					TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
 					mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
 					this << mf;
-					// microcode_assist(ASSIST_BARRIER, ripstart, rip);
 					end_of_block = 1;
 				}
 
@@ -2800,10 +2395,10 @@ bool TraceDecoder::decode_complex() {
 			svm_check_intercept(*this, SVM_EXIT_READ_CR0);
 
 #ifdef __x86_64__
-			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
+			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
 					REG_zero, 3, offsetof_t(Context, cr[0]) + 4);
 #else
-			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm, 
+			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
 					REG_zero, 3, offsetof_t(Context, cr[0]));
 #endif
 			ldp->internal = 1;
@@ -2837,7 +2432,7 @@ bool TraceDecoder::decode_complex() {
 						// swapgs
 						EndOfDecode();
 						TransOp ld1(OP_ld, REG_temp0, REG_ctx, REG_imm,
-								REG_zero, 3, 
+								REG_zero, 3,
 								offsetof_t(Context, segs[R_GS].base));
 						TransOp ld2(OP_ld, REG_temp1, REG_ctx, REG_imm,
 								REG_zero, 3,
@@ -2847,10 +2442,10 @@ bool TraceDecoder::decode_complex() {
 						this << ld1;
 						this << ld2;
 
-						st1 = new TransOp(OP_st, REG_mem, REG_ctx, 
+						st1 = new TransOp(OP_st, REG_mem, REG_ctx,
 								REG_imm, REG_temp1, 3,
 								offsetof_t(Context, segs[R_GS].base));
-						st2 = new TransOp(OP_st, REG_mem, REG_ctx, 
+						st2 = new TransOp(OP_st, REG_mem, REG_ctx,
 								REG_imm, REG_temp0, 3,
 								offsetof_t(Context, kernelgsbase));
 						st1->internal = 1;
@@ -2863,20 +2458,18 @@ bool TraceDecoder::decode_complex() {
 						TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
 						mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
 						this << mf;
-						// microcode_assist(ASSIST_SWAPGS, ripstart, rip);
 						end_of_block = 1;
 
 					} else {
 						goto invalid_opcode;
-					}	
+					}
 				} else {
 					DECODE(eform, ra, v_mode);
 					EndOfDecode();
 
-					this << TransOp(OP_collcc, REG_temp0, REG_zf, 
-							REG_cf, REG_of, 3, 0, 0, 
+					this << TransOp(OP_collcc, REG_temp0, REG_zf,
+							REG_cf, REG_of, 3, 0, 0,
 							FLAGS_DEFAULT_ALU);
-					//operand_load(REG_ar1, ra);
 					// Instead of load value from the operand, just load
 					// the effective address of ra into reg ar1
 					address_generate_and_load_or_store(REG_ar1, REG_zero,
@@ -2913,25 +2506,8 @@ bool TraceDecoder::decode_complex() {
 	// TODO: In actual execution we have to generate invalid opcode
 	// exception
 	EndOfDecode();
-//    this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
 	microcode_assist(ASSIST_UD2A, ripstart, rip);
 	end_of_block = 1;
-	
-    //
-    // ud2a is special under Xen: if the {0x0f, 0x0b} opcode is followed by
-    // the bytes {0x78, 0x65, 0x6e} ("xen"), we check the next instruction
-    // in sequence and modify its behavior in a Xen-specific manner. The
-    // only supported instruction is CPUID {0x0f, 0xa2}, which Xen extends.
-    //
-//    if (((valid_byte_count - ((int)(rip - (Waddr)bb.rip))) >= 5) && 
-//        (fetch(5) == 0xa20f6e6578)) { // 78 65 6e 0f a2 = 'x' 'e' 'n' <cpuid>
-//      // ptl_logfile << "Decode special intercept cpuid at rip ", (void*)ripstart, "; return to rip ", (void*)rip, endl;
-//      EndOfDecode();
-//      microcode_assist(ASSIST_CPUID, ripstart, rip);
-//      end_of_block = 1;
-//    } else {
-//      MakeInvalid();
-//    }
 #else
     MakeInvalid();
 #endif
@@ -3189,7 +2765,7 @@ bool TraceDecoder::decode_complex() {
       this << TransOp(OP_nop,   REG_temp0, REG_zero,  REG_zero,  REG_zero, 0);
       break;
     }
-    
+
     if (!immform) {
       if (left) {
         //
@@ -3238,7 +2814,7 @@ bool TraceDecoder::decode_complex() {
     //
     // shrd rd,rs:
     //
-    // shr  t = rd,c          
+    // shr  t = rd,c
     //      t.cf = rd[c-1] last bit shifted out
     //      t.of = rd[63]  or whatever rd's original sign bit position was
     // mask rd = t,rs,[ms=c, mc=c, ds=c]
@@ -3247,7 +2823,7 @@ bool TraceDecoder::decode_complex() {
     //
     // shld rd,rs:
     //
-    // shl  t = rd,c          
+    // shl  t = rd,c
     //      t.cf = rd[64-c] last bit shifted out
     //      t.of = rd[63]   or whatever rd's original sign bit position was
     // mask rd = t,rs,[ms=0, mc=c, ds=64-c]
@@ -3293,10 +2869,10 @@ bool TraceDecoder::decode_complex() {
     int rdreg = (rd.type == OPTYPE_MEM) ? -1 : arch_pseudo_reg_to_arch_reg[rd.reg.reg];
 
     /*
-      
+
     Action:
-    - Compare rax with [mem]. 
-    - If (rax == [mem]), [mem] := ra. 
+    - Compare rax with [mem].
+    - If (rax == [mem]), [mem] := ra.
     - Else rax := [mem]
 
     cmpxchg [mem],ra
@@ -3352,7 +2928,7 @@ bool TraceDecoder::decode_complex() {
     // cmpxchg16b
     prefixes |= PFX_LOCK;
     if (memory_fence_if_locked(0)) break;
-      
+
     /*
 
     Microcode:
@@ -3368,13 +2944,13 @@ bool TraceDecoder::decode_complex() {
     sel.eq rdx = t1,rdx,(t7)
     st     [mem],t2
     st     [mem+8],t3
-    
+
     */
-    
+
     operand_load(REG_temp0, ra, OP_ld);
     ra.mem.offset += sizeincr;
     operand_load(REG_temp1, ra, OP_ld);
-    
+
     TransOp sublo(OP_sub, REG_temp2, REG_temp0, REG_rax, REG_zero, sizeshift, 0, 0, FLAGS_DEFAULT_ALU); sublo.nouserflags = 1; this << sublo;
     TransOp subhi(OP_sub, REG_temp3, REG_temp1, REG_rdx, REG_zero, sizeshift, 0, 0, FLAGS_DEFAULT_ALU); subhi.nouserflags = 1; this << subhi;
     this << TransOp(OP_andcc, REG_temp7, REG_temp2, REG_temp3, REG_zero, sizeshift, 0, 0, FLAGS_DEFAULT_ALU);
@@ -3385,7 +2961,7 @@ bool TraceDecoder::decode_complex() {
     result_store(REG_temp2, REG_temp4, rd);
     rd.mem.offset += sizeincr;
     result_store(REG_temp3, REG_temp5, rd);
-    
+
     if (memory_fence_if_locked(1)) break;
 
     break;
@@ -3403,7 +2979,7 @@ bool TraceDecoder::decode_complex() {
     int rdreg = (rd.type == OPTYPE_MEM ? -1 : arch_pseudo_reg_to_arch_reg[rd.reg.reg]);
 
     /*
-      
+
     Action:
     - Exchange [rd],ra
     - Add [rd]+ra and set flags
@@ -3535,7 +3111,6 @@ bool TraceDecoder::decode_complex() {
     // Saves return address into %rcx and jumps to MSR_LSTAR
     EndOfDecode();
     abs_code_addr_immediate(REG_rcx, 3, (Waddr)(rip - cs_base));
-//    microcode_assist((kernel) ? ASSIST_HYPERCALL : ASSIST_SYSCALL, ripstart, rip);
     microcode_assist(ASSIST_SYSCALL, ripstart, rip);
     end_of_block = 1;
     break;
@@ -3565,13 +3140,6 @@ bool TraceDecoder::decode_complex() {
   case 0x131: {
     // rdtsc: put result into %edx:%eax
     EndOfDecode();
-//    TransOp ldp1(OP_ld, REG_rdx, REG_zero, REG_imm, REG_zero, 3, (Waddr)&sim_cycle); ldp1.internal = 1; this << ldp1;
-#ifdef PTLSIM_HYPERVISOR
-//    TransOp ldp2(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 3, offsetof_t(Context, tsc_offset)); ldp2.internal = 1; this << ldp2;
-//    this << TransOp(OP_add, REG_rdx, REG_rdx, REG_temp0, REG_zero, 3);
-#endif
-//    this << TransOp(OP_mov, REG_rax, REG_zero, REG_rdx, REG_zero, 2);
-//    this << TransOp(OP_shr, REG_rdx, REG_rdx, REG_imm, REG_zero, 3, 32);
 	microcode_assist(ASSIST_RDTSC, ripstart, rip);
     break;
   }
@@ -3586,7 +3154,7 @@ bool TraceDecoder::decode_complex() {
 
   case 0x137: { // 0f 37: PTL undocumented opcode
     EndOfDecode();
-    microcode_assist(ASSIST_PTLCALL, ripstart, rip);      
+    microcode_assist(ASSIST_PTLCALL, ripstart, rip);
     end_of_block = 1;
     break;
   }

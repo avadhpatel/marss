@@ -20,20 +20,20 @@ extern "C" {
   W64 sys_seek(int fd, W64 offset, unsigned int origin);
   int sys_unlink(const char* pathname);
   int sys_rename(const char* oldpath, const char* newpath);
-  
+
   void* sys_mmap(void* start, size_t length, int prot, int flags, int fd, W64 offset);
   int sys_munmap(void * start, size_t length);
   void* sys_mremap(void* old_address, size_t old_size, size_t new_size, unsigned long flags);
   int sys_mprotect(void* addr, size_t len, int prot);
   int sys_madvise(void* addr, size_t len, int action);
-  int sys_mlock(const void *addr, size_t len);  
-  int sys_munlock(const void *addr, size_t len); 
-  int sys_mlockall(int flags);  
+  int sys_mlock(const void *addr, size_t len);
+  int sys_munlock(const void *addr, size_t len);
+  int sys_mlockall(int flags);
   int sys_munlockall(void);
-  
+
   pid_t sys_fork();
   int sys_execve(const char* filename, const char** argv, const char** envp);
-  
+
   pid_t sys_gettid();
   pid_t sys_getpid();
   void sys_exit(int code);
@@ -43,7 +43,7 @@ extern "C" {
 
   struct utsname;
   int sys_uname(struct utsname* buf);
-  
+
   void* malloc(size_t size) __attribute__((__malloc__));
   void free(void* ptr);
   char* getenv(const char* name);
@@ -84,7 +84,7 @@ extern "C" {
 
 #undef __syscall_return
 #define __syscall_return(type, res) return (type)(res);
-#define __syscall_clobber "r11","rcx","memory" 
+#define __syscall_clobber "r11","rcx","memory"
 #define __syscall "syscall"
 
 #define declare_syscall0(sysid,type,name) syslinkage type name(void) { long __res; asm volatile \
@@ -298,8 +298,8 @@ extern "C" {
 #define __NR_nfsservctl                        180
 #define __NR_getpmsg                           181	/* reserved for LiS/STREAMS */
 #define __NR_putpmsg                           182	/* reserved for LiS/STREAMS */
-#define __NR_afs_syscall                       183	/* reserved for AFS */ 
-#define __NR_tuxcall      		184 /* reserved for tux */
+#define __NR_afs_syscall                       183	/* reserved for AFS */
+#define __NR_tuxcall		184 /* reserved for tux */
 #define __NR_security			185
 #define __NR_gettid		186
 #define __NR_readahead		187
@@ -352,16 +352,16 @@ extern "C" {
 #define __NR_tgkill		234
 #define __NR_utimes		235
 #define __NR_vserver		236
-#define __NR_mbind 		237
-#define __NR_set_mempolicy 	238
-#define __NR_get_mempolicy 	239
-#define __NR_mq_open 		240
-#define __NR_mq_unlink 		241
-#define __NR_mq_timedsend 	242
+#define __NR_mbind		237
+#define __NR_set_mempolicy	238
+#define __NR_get_mempolicy	239
+#define __NR_mq_open		240
+#define __NR_mq_unlink		241
+#define __NR_mq_timedsend	242
 #define __NR_mq_timedreceive	243
-#define __NR_mq_notify 		244
-#define __NR_mq_getsetattr 	245
-#define __NR_kexec_load 	246
+#define __NR_mq_notify		244
+#define __NR_mq_getsetattr	245
+#define __NR_kexec_load	246
 #define __NR_waitid		247
 #define __NR_add_key		248
 #define __NR_request_key	249
@@ -684,7 +684,7 @@ extern "C" {
 #define __NR_mbind		274
 #define __NR_get_mempolicy	275
 #define __NR_set_mempolicy	276
-#define __NR_mq_open 		277
+#define __NR_mq_open		277
 #define __NR_mq_unlink		(__NR_mq_open+1)
 #define __NR_mq_timedsend	(__NR_mq_open+2)
 #define __NR_mq_timedreceive	(__NR_mq_open+3)

@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef _MEMORYSYSTEM_H_
@@ -47,7 +47,7 @@
 	__VA_ARGS__ ; ptl_logfile.flush(); }
 #else
 #define memdebug(...) if(logable(5)) { \
-	ptl_logfile << __VA_ARGS__ ; } //ptl_logfile.flush(); 
+	ptl_logfile << __VA_ARGS__ ; } //ptl_logfile.flush();
 #endif
 #else
 #define memdebug(...) (0)
@@ -72,7 +72,7 @@
 #define GET_STRINGBUF_PTR(var_name, ...)  \
 	stringbuf *var_name = new stringbuf(); \
 	*var_name << __VA_ARGS__; \
-	
+
 
 namespace OutOfOrderModel {
   class OutOfOrderMachine;
@@ -85,22 +85,14 @@ namespace Memory {
 
   using namespace OutOfOrderModel;
 
-//  class Event : public FixQueueLinkObject
   class Event : public FixStateListObject
 	{
 		private:
 			Signal *signal_;
 			W64    clock_;
 			void   *arg_;
-		public:
-//			Event(Signal *signal, W64 clock, void *arg) {
-//				signal_ = signal;
-//				clock_ = clock;
-//				arg_ = arg;
-//				next = null;
-//				prev = null;
-//			}
 
+		public:
 			void init() {
 				signal_ = null;
 				clock_ = -1;
@@ -121,26 +113,6 @@ namespace Memory {
 				return clock_;
 			}
 
-//			void insert_after(Event* event) {
-//				Event* next_event = (Event*)(this->next);
-//				this->next = (selfqueuelink*)(event);
-//				event->prev = (selfqueuelink*)(this);
-//				if(next_event) {
-//					event->next = (selfqueuelink*)next_event;
-//					next_event->prev = (selfqueuelink*)event;
-//				}
-//			}
-//
-//			void insert_before(Event* event) {
-//				Event* prev_event = (Event*)(this->prev);
-//				this->prev = (selfqueuelink*)event;
-//				event->next = (selfqueuelink*)this;
-//				if(prev_event) {
-//					prev_event->next = (selfqueuelink*)event;
-//					event->prev = (selfqueuelink*)prev_event;
-//				}
-//			}
-			
 			ostream& print(ostream& os) const {
 				os << "Event< ";
 				if(signal_)
@@ -150,19 +122,19 @@ namespace Memory {
 				os << ">" << endl, flush;
 				return os;
 			}
-			
+
 			bool operator ==(Event &event) {
 				if(clock_ == event.clock_)
 					return true;
 				return false;
 			}
-			
+
 			bool operator >(Event &event) {
 				if(clock_ > event.clock_)
 					return true;
 				return false;
 			}
-			
+
 			bool operator <(Event &event) {
 				if(clock_ < event.clock_)
 					return true;
@@ -173,18 +145,18 @@ namespace Memory {
   ostream& operator <<(ostream& os, const Event& event);
   ostream& operator ,(ostream& os, const Event& event);
 
-  
+
   //
   // MemoryHierarchy provides interface with core
   //
-  
+
   class MemoryHierarchy {
   public:
     MemoryHierarchy(OutOfOrderMachine& machine);
     ~MemoryHierarchy(); // release memory for pool
 
 	// check L1 availability
-    bool is_cache_available(W8 coreid, W8 threadid, bool is_icache); 
+    bool is_cache_available(W8 coreid, W8 threadid, bool is_icache);
 
     // interface to memory hierarchy
 	bool access_cache(MemoryRequest *request);
@@ -203,13 +175,13 @@ namespace Memory {
 
     void clock();
 
-    void reset(); 
+    void reset();
 
 	// return the number of cycle used to flush the caches
-    int flush(uint8_t coreid); 
+    int flush(uint8_t coreid);
 
 	// for debugging
-    void dump_info(ostream& os); 
+    void dump_info(ostream& os);
 	void print_map(ostream& os);
 
 	// Add event into event queue
@@ -235,23 +207,23 @@ namespace Memory {
     void private_L2_configuration();
 
     // machine
-    OutOfOrderMachine &machine_;  
-	
+    OutOfOrderMachine &machine_;
+
 	// array of caches and memory
 	dynarray<Controller*> cpuControllers_;
-	dynarray<Controller*> allControllers_; 
+	dynarray<Controller*> allControllers_;
 	dynarray<Interconnect*> allInterconnects_;
 	Controller* memoryController_;
 
-	// array to indicate if controller or interconnect buffers 
+	// array to indicate if controller or interconnect buffers
 	// are full or not
 	dynarray<bool> cpuFullFlags_;
 	dynarray<bool> controllersFullFlags_;
 	dynarray<bool> interconnectsFullFlags_;
 	bool someStructIsFull_;
-	
+
     // number of cores
-    int coreNo_; 
+    int coreNo_;
 
 	// Request pool
 	RequestPool requestPool_;
@@ -264,7 +236,7 @@ namespace Memory {
 
 	void sort_event_queue(Event *event);
 
-  }; 
+  };
 
 };
 

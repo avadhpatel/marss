@@ -530,8 +530,8 @@ ostream& DataStoreNode::print(ostream& os, const DataStoreNodePrintSettings& pri
               if (cumulative_percent >= 99.9)
                 os << "[ ", padstring("100", 3 + printinfo.percent_digits), "% ] ";
               else os << "[ ", floatstring(cumulative_percent, 3 + printinfo.percent_digits, printinfo.percent_digits), "% ] ";
-              
-              os << intstring(base, w), " ", 
+
+              os << intstring(base, w), " ",
                 intstring(base + (histostride-1), w), " ",
                 intstring(value, w);
 
@@ -683,7 +683,7 @@ bool DataStoreNode::read(ifstream& is) {
   assert(is);
 
   if (h.magic != DSN_MAGIC_VER_3) {
-    cerr << "DataStoreNode::read(): ERROR: stream does not have proper DSN version 2 header (0x", 
+    cerr << "DataStoreNode::read(): ERROR: stream does not have proper DSN version 2 header (0x",
       hexstring(h.magic, 32), ") at offset ", is.tellg(), endl, flush;
     return false;
   }
@@ -842,7 +842,7 @@ ofstream& DataStoreNode::write_bin(ofstream& os, bool bin) const {
   case DS_NODE_TYPE_STRING: {
     if (count == 1) {
       int len = strlen(value.s);
-      assert(len < 65536);     
+      assert(len < 65536);
       if(bin)
           os << (W16)len;
       else
@@ -946,7 +946,7 @@ ostream& DataStoreNode::write(ostream& os, bool bin) const {
   case DS_NODE_TYPE_STRING: {
     if (count == 1) {
       int len = strlen(value.s);
-      assert(len < 65536);     
+      assert(len < 65536);
       if(bin)
           os << (W16)len;
       else
@@ -1118,15 +1118,15 @@ ofstream& DataStoreNodeTemplate::write(ofstream& os) const {
 
   os.write((char*)((DataStoreNodeTemplateBase*)this), sizeof(DataStoreNodeTemplateBase));
 
-  n = strlen(name); 
-  os.write((char*)(&n), sizeof(W16)); 
+  n = strlen(name);
+  os.write((char*)(&n), sizeof(W16));
   os.write(name, n);
 
   if (labeled_histogram) {
     foreach (i, count) {
-      n = strlen(labels[i]); 
-      os.write((char*)(&n), sizeof(W16)); 
-//      os << n; 
+      n = strlen(labels[i]);
+      os.write((char*)(&n), sizeof(W16));
+//      os << n;
       os.write(labels[i], n);
     }
   }
@@ -1195,7 +1195,7 @@ DataStoreNode* DataStoreNodeTemplate::reconstruct(const W64*& p) const {
       ds->histomax = histomax;
       ds->histostride = histostride;
       ds->labeled_histogram = labeled_histogram;
-        
+
       if (labeled_histogram) {
         ds->labels = new char* [count];
         foreach (i, count) {
@@ -1204,7 +1204,7 @@ DataStoreNode* DataStoreNodeTemplate::reconstruct(const W64*& p) const {
           ds->add(subds);
         }
       }
-        
+
       p += count;
     } else {
       ds = new DataStoreNode(name, *(W64s*)p);
@@ -1229,7 +1229,7 @@ DataStoreNode* DataStoreNodeTemplate::reconstruct(const W64*& p) const {
       foreach (i, count) {
         strings[i] = (const char*)p;
         p += limit / 8;
-      }        
+      }
       ds = new DataStoreNode(name, strings, count);
     } else {
       ds = new DataStoreNode(name, (const char*)p);

@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifdef MEM_TEST
@@ -89,7 +89,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 
 	/*
 	 * if this request is a memory update request then
-	 * first check the pending queue and see if we have a 
+	 * first check the pending queue and see if we have a
 	 * memory update request to same line and if we can merge
 	 * those requests then merge them into one request
 	 */
@@ -102,7 +102,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 				/*
 				 * found an request for same line, now if this
 				 * request is memory update then merge else
-				 * don't merge to maintain the serialization 
+				 * don't merge to maintain the serialization
 				 * order
 				 */
 				if(!entry->inUse && entry->request->get_type() ==
@@ -185,7 +185,7 @@ bool MemoryController::access_completed_cb(void *arg)
 	wait_interconnect_cb(queueEntry);
 
 	/*
-	 * Now check if we still have pending requests 
+	 * Now check if we still have pending requests
 	 * for the same bank
 	 */
 	MemoryQueueEntry* entry;
@@ -195,7 +195,7 @@ bool MemoryController::access_completed_cb(void *arg)
 				get_physical_address());
 		if(bank_no == bank_no_2 && entry->inUse == false) {
 			entry->inUse = true;
-			memoryHierarchy_->add_event(&accessCompleted_, 
+			memoryHierarchy_->add_event(&accessCompleted_,
 					MEM_LATENCY, entry);
 			banksUsed_[bank_no] = 1;
 			break;

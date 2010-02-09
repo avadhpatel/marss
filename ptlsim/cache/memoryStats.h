@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef MEMORY_STATS_H
@@ -71,7 +71,7 @@ namespace Memory {
 					W64 dependency;
 					W64 cache_port;
 					W64 buffer_full;
-				} write;  
+				} write;
 			} stall;
 
 			W64 redirects;
@@ -86,7 +86,7 @@ namespace Memory {
 		W64 annul;
 		W64 queueFull;
 
-		struct latency{ //node: summable 
+		struct latency{ //node: summable
 			W64 IF;
 			W64 load;
 			W64 store;

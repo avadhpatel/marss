@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef P2P_INTERCONNECT_H
@@ -55,7 +55,7 @@ class P2PInterconnect : public Interconnect
 		P2PInterconnect(char *name, MemoryHierarchy *memoryHierarchy);
 		bool controller_request_cb(void *arg);
 		void register_controller(Controller *controller);
-		int access_fast_path(Controller *controller, 
+		int access_fast_path(Controller *controller,
 				MemoryRequest *request);
 		void print_map(ostream& os);
 
@@ -73,7 +73,7 @@ class P2PInterconnect : public Interconnect
 };
 
 static inline ostream& operator << (ostream& os, const P2PInterconnect&
-		p2p) 
+		p2p)
 {
 	p2p.print(os);
 	return os;

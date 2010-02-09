@@ -5,6 +5,7 @@
 //
 // Copyright 2003-2008 Matt T. Yourst <yourst@yourst.com>
 // Copyright 2006-2008 Hui Zeng <hzeng@cs.binghamton.edu>
+// Copyright 2009-2010 Avadh Patel <apatel@cs.binghamton.edu>
 //
 
 #ifndef _OOOCORE_H_
@@ -901,7 +902,7 @@ namespace OutOfOrderModel {
         ISSUE_NEEDS_REPLAY = 0,   // fast scheduling replay
         ISSUE_MISSPECULATED = -1, // mis-speculation: redispatch dependent slice
         ISSUE_NEEDS_REFETCH = -2, // refetch from RIP of bad insn
-        ISSUE_SKIPED = -3,        // used to indicate that skip this Issue (used for light assist)
+        ISSUE_SKIPPED = -3,        // used to indicate that skip this Issue (used for light assist)
     };
 
     enum {

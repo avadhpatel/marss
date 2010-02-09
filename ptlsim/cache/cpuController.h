@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef CPU_CONTROLLER_H
@@ -36,7 +36,7 @@
 
 namespace Memory {
 
-struct CPUControllerQueueEntry : public FixStateListObject 
+struct CPUControllerQueueEntry : public FixStateListObject
 {
 	MemoryRequest *request;
 	int cycles;
@@ -64,7 +64,7 @@ struct CPUControllerQueueEntry : public FixStateListObject
 	}
 };
 
-static inline ostream& operator <<(ostream& os, 
+static inline ostream& operator <<(ostream& os,
 		const CPUControllerQueueEntry& entry)
 {
 	return entry.print(os);
@@ -89,7 +89,7 @@ struct CPUControllerBufferEntry : public FixStateListObject
 	}
 };
 
-static inline ostream& operator <<(ostream& os, 
+static inline ostream& operator <<(ostream& os,
 		const CPUControllerBufferEntry& entry)
 {
 	entry.print(os);
@@ -131,7 +131,7 @@ class CPUController : public Controller
 		}
 
 	public:
-		CPUController(W8 coreid, char *name, 
+		CPUController(W8 coreid, char *name,
 				MemoryHierarchy *memoryHierarchy);
 
 		bool handle_request_cb(void *arg);

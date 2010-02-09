@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef BUS_H
@@ -113,7 +113,7 @@ class BusInterconnect : public Interconnect
 		bool data_broadcast_completed_cb(void *arg);
 };
 
-static inline ostream& operator <<(ostream& os, 
+static inline ostream& operator <<(ostream& os,
 		const BusInterconnect& bus)
 {
 	bus.print(os);

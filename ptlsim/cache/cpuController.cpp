@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifdef MEM_TEST
@@ -39,7 +39,7 @@
 
 using namespace Memory;
 
-CPUController::CPUController(W8 coreid, char *name, 
+CPUController::CPUController(W8 coreid, char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Controller(coreid, name, memoryHierarchy)
 {
@@ -54,7 +54,7 @@ CPUController::CPUController(W8 coreid, char *name,
 	signal_name = new stringbuf();
 	*signal_name << name, "_Cache_Access";
 	cacheAccess_.set_name(signal_name->buf);
-	cacheAccess_.connect(signal_mem_ptr(*this, 
+	cacheAccess_.connect(signal_mem_ptr(*this,
 				&CPUController::cache_access_cb));
 }
 
@@ -77,13 +77,8 @@ bool CPUController::handle_interconnect_cb(void *arg)
 
 	CPUControllerQueueEntry *queueEntry = find_entry(message->request);
 	if(queueEntry == null) {
-		// ptl_logfile << "Message received that is not for this queue\n";
-		// ptl_logfile << "Message: ", *message, endl;
-		// ptl_logfile << "Controler: " << get_name(), endl;
-		// assert(0);
 		return true;
 	}
-	//assert(queueEntry);
 
 	wakeup_dependents(queueEntry);
 	finalize_request(queueEntry);
@@ -93,7 +88,6 @@ bool CPUController::handle_interconnect_cb(void *arg)
 
 CPUControllerQueueEntry* CPUController::find_entry(MemoryRequest *request)
 {
-//	foreach_queuelink(pendingRequests_, entry, CPUControllerQueueEntry) {
 	CPUControllerQueueEntry* entry;
 	foreach_list_mutable(pendingRequests_.list(), entry, entry_t, prev_t) {
 		if(entry->request == request)
@@ -107,7 +101,6 @@ void CPUController::annul_request(MemoryRequest *request)
 	CPUControllerQueueEntry *entry;
 	foreach_list_mutable(pendingRequests_.list(), entry,
 			entry_t, nextentry_t) {
-		// if(entry->request == request) {
 		if(entry->request->is_same(request)) {
 			entry->annuled = true;
 			entry->request->decRefCounter();
@@ -129,7 +122,7 @@ int CPUController::flush()
 	return 4;
 }
 
-bool CPUController::is_icache_buffer_hit(MemoryRequest *request) 
+bool CPUController::is_icache_buffer_hit(MemoryRequest *request)
 {
 	W64 lineAddress;
 	assert(request->is_instruction());
@@ -137,9 +130,8 @@ bool CPUController::is_icache_buffer_hit(MemoryRequest *request)
 
 	memdebug("Line Address is : ", lineAddress, endl);
 
-//	foreach_queuelink(icacheBuffer_, entry, CPUControllerBufferEntry) {
 	CPUControllerBufferEntry* entry;
-	foreach_list_mutable(icacheBuffer_.list(), entry, entry_t, 
+	foreach_list_mutable(icacheBuffer_.list(), entry, entry_t,
 			prev_t) {
 		if(entry->lineAddress == lineAddress) {
 			STAT_UPDATE(cpurequest.count.hit.read.hit.hit++);
@@ -181,8 +173,10 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 		return -1;
 	}
 
-	// now check if pendingRequests_ buffer is full then 
-	// set the full flag in memory hierarchy
+    /*
+     * now check if pendingRequests_ buffer is full then
+     * set the full flag in memory hierarchy
+     */
 	if(pendingRequests_.isFull()) {
 		memoryHierarchy_->set_controller_full(this, true);
 		STAT_UPDATE(queueFull++);
@@ -191,13 +185,15 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 	queueEntry->request = request;
 	request->incRefCounter();
 	ADD_HISTORY_ADD(request);
-	
-	if(dependentEntry && 
+
+	if(dependentEntry &&
 			dependentEntry->request->get_type() == request->get_type()) {
-		// Found an entry with same line request and request type, 
-		// Now in dependentEntry->depends add current entry's
-		// index value so it can wakeup this entry when 
-		// dependent entry is handled.
+        /*
+         * Found an entry with same line request and request type,
+         * Now in dependentEntry->depends add current entry's
+         * index value so it can wakeup this entry when
+         * dependent entry is handled.
+         */
 		memdebug("Dependent entry is: ", *dependentEntry, endl);
 		dependentEntry->depends = queueEntry->idx;
 		queueEntry->cycles = -1;
@@ -233,7 +229,7 @@ CPUControllerQueueEntry* CPUController::find_dependency(
 	W64 requestLineAddr = get_line_address(request);
 
 	CPUControllerQueueEntry* queueEntry;
-	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry_t, 
+	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry_t,
 			prev_t) {
 		assert(queueEntry);
 		if unlikely (request == queueEntry->request)
@@ -241,11 +237,13 @@ CPUControllerQueueEntry* CPUController::find_dependency(
 
 		if(get_line_address(queueEntry->request) == requestLineAddr) {
 
-			// The dependency is handled as chained, so all the
-			// entries maintain an index to their next dependent
-			// entry. Find the last entry of the chain which has
-			// the depends value set to -1 and return that entry
-			
+            /*
+             * The dependency is handled as chained, so all the
+             * entries maintain an index to their next dependent
+             * entry. Find the last entry of the chain which has
+             * the depends value set to -1 and return that entry
+             */
+
 			CPUControllerQueueEntry *retEntry = queueEntry;
 			while(retEntry->depends >= 0) {
 				retEntry = &pendingRequests_[retEntry->depends];
@@ -258,12 +256,14 @@ CPUControllerQueueEntry* CPUController::find_dependency(
 
 void CPUController::wakeup_dependents(CPUControllerQueueEntry *queueEntry)
 {
-	// All the dependents are wakeup one after another in 
-	// sequence in which they were requested. The delay
-	// for each entry to wakeup is 1 cycle
-	// At first wakeup only next dependent in next cycle.
-	// Following dependent entries will be waken up
-	// automatically when the next entry is finalized.
+    /*
+     * All the dependents are wakeup one after another in
+     * sequence in which they were requested. The delay
+     * for each entry to wakeup is 1 cycle
+     * At first wakeup only next dependent in next cycle.
+     * Following dependent entries will be waken up
+     * automatically when the next entry is finalized.
+     */
 	CPUControllerQueueEntry *entry = queueEntry;
 	CPUControllerQueueEntry *nextEntry;
 	if(entry->depends >= 0) {
@@ -281,7 +281,7 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 	MemoryRequest *request = queueEntry->request;
 
 	int req_latency = sim_cycle - request->get_init_cycles();
-	req_latency = (req_latency >= 200) ? 199 : req_latency; 
+	req_latency = (req_latency >= 200) ? 199 : req_latency;
 
 	if(request->is_instruction()) {
 		W64 lineAddress = get_line_address(request);
@@ -306,8 +306,10 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 	if(!queueEntry->annuled)
 		pendingRequests_.free(queueEntry);
 
-	// now check if pendingRequests_ buffer has space left then
-	// clear the full flag in memory hierarchy
+    /*
+     * now check if pendingRequests_ buffer has space left then
+     * clear the full flag in memory hierarchy
+     */
 	if(!pendingRequests_.isFull()) {
 		memoryHierarchy_->set_controller_full(this, false);
 		STAT_UPDATE(queueFull++);
@@ -321,11 +323,11 @@ bool CPUController::cache_access_cb(void *arg)
 	if(queueEntry->cycles > 0)
 		return true;
 
-	// Send request to corresponding interconnect
+    /* Send request to corresponding interconnect */
 	Interconnect *interconnect;
 	if(queueEntry->request->is_instruction())
 		interconnect = int_L1_i_;
-	else 
+	else
 		interconnect = int_L1_d_;
 
 	Message& message = *memoryHierarchy_->get_message();
@@ -333,7 +335,7 @@ bool CPUController::cache_access_cb(void *arg)
 	message.request = queueEntry->request;
 	bool success = interconnect->get_controller_request_signal()->
 		emit(&message);
-	// Free the message
+    /* Free the message */
 	memoryHierarchy_->free_message(&message);
 
 	if(!success) {
@@ -354,8 +356,10 @@ bool CPUController::queue_access_cb(void *arg)
 		return true;
 	}
 
-	// now check if pendingRequests_ buffer is full then 
-	// set the full flag in memory hierarchy
+    /*
+     * now check if pendingRequests_ buffer is full then
+     * set the full flag in memory hierarchy
+     */
 	if(pendingRequests_.isFull()) {
 		memoryHierarchy_->set_controller_full(this, true);
 		STAT_UPDATE(queueFull++);
@@ -364,15 +368,17 @@ bool CPUController::queue_access_cb(void *arg)
 	queueEntry->request = request;
 	request->incRefCounter();
 	ADD_HISTORY_ADD(request);
-	
+
 	CPUControllerQueueEntry *dependentEntry = find_dependency(request);
 
-	if(dependentEntry && 
+	if(dependentEntry &&
 			dependentEntry->request->get_type() == request->get_type()) {
-		// Found an entry with same line request and request type, 
-		// Now in dependentEntry->depends add current entry's
-		// index value so it can wakeup this entry when 
-		// dependent entry is handled.
+        /*
+         * Found an entry with same line request and request type,
+         * Now in dependentEntry->depends add current entry's
+         * index value so it can wakeup this entry when
+         * dependent entry is handled.
+         */
 		memdebug("Dependent entry is: ", *dependentEntry, endl);
 		dependentEntry->depends = queueEntry->idx;
 		queueEntry->cycles = -1;
@@ -396,9 +402,8 @@ bool CPUController::queue_access_cb(void *arg)
 
 void CPUController::clock()
 {
-//	foreach_queuelink(pendingRequests_, queueEntry, CPUControllerQueueEntry) {
 	CPUControllerQueueEntry* queueEntry;
-	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry_t, 
+	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry_t,
 			prev_t) {
 		queueEntry->cycles--;
 		if(queueEntry->cycles == 0) {
@@ -428,4 +433,3 @@ void CPUController::register_interconnect_L1_d(Interconnect *interconnect)
 {
 	int_L1_d_ = interconnect;
 }
-

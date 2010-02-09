@@ -1,5 +1,5 @@
 
-/* 
+/*
  * MARSSx86 : A Full System Computer-Architecture Simulator
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,10 +19,10 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
- * 
+ *
  * Copyright 2009 Avadh Patel <apatel@cs.binghamton.edu>
  * Copyright 2009 Furat Afram <fafram@cs.binghamton.edu>
- * 
+ *
  */
 
 #ifndef INTERCONNECT_H
@@ -37,12 +37,12 @@ class Interconnect
 	private:
 		char *name_;
 		Signal controller_request_;
-		
+
 	public:
 		MemoryHierarchy *memoryHierarchy_;
 		Interconnect(char *name, MemoryHierarchy *memoryHierarchy) :
 			memoryHierarchy_(memoryHierarchy)
-			, controller_request_("Controller Request") 
+			, controller_request_("Controller Request")
 		{
 			name_ = name;
 			controller_request_.connect(signal_mem_ptr(*this,
@@ -50,7 +50,7 @@ class Interconnect
 		}
 		virtual bool controller_request_cb(void *arg)=0;
 		virtual void register_controller(Controller *controller)=0;
-		virtual int access_fast_path(Controller *controller, 
+		virtual int access_fast_path(Controller *controller,
 				MemoryRequest *request)=0;
 		virtual void print_map(ostream& os)=0;
 		virtual void print(ostream& os) const = 0;

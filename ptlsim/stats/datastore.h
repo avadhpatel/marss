@@ -47,7 +47,7 @@ DeclareOperator(SubtractOperator, (a - b));
 struct AddScaleOperator {
   typedef double context_t;
   context_t coeff;
-  AddScaleOperator(double coeff_): coeff(coeff_) { }; 
+  AddScaleOperator(double coeff_): coeff(coeff_) { };
   W64s operator ()(W64s a, W64s b) const { return (W64s)round((double)a + ((double)b * coeff)); }
   double operator ()(double a, double b) const { return a + b*coeff; }
 };
@@ -68,7 +68,7 @@ DeclareOperator(ZeroOperator, (0));
 
 struct ScaleOperator {
   double coeff;
-  ScaleOperator(double coeff_): coeff(coeff_) { }; 
+  ScaleOperator(double coeff_): coeff(coeff_) { };
   W64s operator ()(W64s a) const { return (W64s)round(((double)a) * coeff); }
   double operator ()(double a) const { return a * coeff; }
 };
@@ -287,11 +287,11 @@ struct DataStoreNode {
     newnode->histostride = histostride;
 
     DataStoreNodeDirectory& list = getentries();
-    
+
     foreach (i, list.length) {
       newnode->add(list[i].value->map(func));
     }
-    
+
     delete &list;
 
     return newnode;
