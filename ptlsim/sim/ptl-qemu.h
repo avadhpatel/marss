@@ -89,7 +89,7 @@ extern uint8_t inside_ptlsim;
 void ptlsim_init(void);
 
 /*
- * ptl_machine_init
+ * ptl_machine_configure
  * config_str	: contains the configuration options of PTLsim
  * returns void :
  * working		: Setup the global variable config (type of PTLConfig) from the
@@ -97,7 +97,7 @@ void ptlsim_init(void);
  *                 function is called when QEMU gets the ptlsim configuration
  *                 and its about to change to simulation mode
  */
-void ptl_machine_init(char* config_str);
+void ptl_machine_configure(char* config_str);
 
 /*
  * ptl_create_new_context

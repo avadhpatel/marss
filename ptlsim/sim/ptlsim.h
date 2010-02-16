@@ -162,6 +162,7 @@ extern ofstream ptl_rip_trace;
 // Configuration Options:
 //
 struct PTLsimConfig {
+  bool help;
 #ifdef PTLSIM_HYPERVISOR
   W64 domain;
   bool run;

@@ -507,7 +507,7 @@ static void do_stop(void)
 static void do_simulate(char* args)
 {
 	term_printf("simulation options received:%s\n", args);
-	ptl_machine_init(args);
+	ptl_machine_configure(args);
     vm_stop(0);
     simulation_configured = 1;
 }
