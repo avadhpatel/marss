@@ -229,9 +229,14 @@ int sim_cpu_exec(void)
     int ret, interrupt_request;
 	CPUState *env1;
 
-	for(env1 = first_cpu; env1 != NULL; env1 = env1->next_cpu)
-		if (cpu_halted(env1) == EXCP_HALTED)
-			return EXCP_HALTED;
+    uint8_t all_halted = 1;
+    for(env1 = first_cpu; env1 != NULL; env1 = env1->next_cpu)
+        if (cpu_halted(env1) != EXCP_HALTED) {
+            all_halted = 0;
+            break;
+        }
+    if(all_halted)
+        return EXCP_HALTED;
 
     /* first we save global registers */
 #define SAVE_HOST_REGS 1
