@@ -97,9 +97,10 @@ if int (pretty_printing):
                 LINKCOMSTR = link_program_message,
                 )
 else:
-        qemu_env = Environment() 
+        qemu_env = Environment()
 qemu_env.Decider('MD5-timestamp')
 qemu_env['CC'] = CC
+qemu_env['CXX'] = CC
 qemu_configure_script = "%s/SConfigure" % qemu_dir
 Export('qemu_env')
 
@@ -126,9 +127,10 @@ if int (pretty_printing):
                 LINKCOMSTR = link_program_message,
                 )
 else:
-        ptl_env = Environment() 
+        ptl_env = Environment()
 ptl_env.Decider('MD5-timestamp')
 ptl_env['CC'] = CC
+ptl_env['CXX'] = CC
 ptl_env.SetDefault(qemu_dir = qemu_dir)
 ptl_env.SetDefault(RT_DIR = "%s" % curr_dir)
 
