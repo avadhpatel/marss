@@ -83,18 +83,21 @@ link_shared_library_message = '%sLinking Shared Library %s==> %s$TARGET%s' % \
   # LINKCOMSTR = link_program_message,
 # )
 
+pretty_printing=ARGUMENTS.get('pretty',1)
 # 1. Configure QEMU
-qemu_env = Environment(
-        CXXCOMSTR = compile_source_message,
-        CCCOMSTR = compile_source_message,
-        SHCCCOMSTR = compile_shared_source_message,
-        SHCXXCOMSTR = compile_shared_source_message,
-        ARCOMSTR = link_library_message,
-        RANLIBCOMSTR = ranlib_library_message,
-        SHLINKCOMSTR = link_shared_library_message,
-        LINKCOMSTR = link_program_message,
-        )
-# qemu_env = Environment() # Uncomment to print full compilation
+if int (pretty_printing):
+        qemu_env = Environment(
+                CXXCOMSTR = compile_source_message,
+                CCCOMSTR = compile_source_message,
+                SHCCCOMSTR = compile_shared_source_message,
+                SHCXXCOMSTR = compile_shared_source_message,
+                ARCOMSTR = link_library_message,
+                RANLIBCOMSTR = ranlib_library_message,
+                SHLINKCOMSTR = link_shared_library_message,
+                LINKCOMSTR = link_program_message,
+                )
+else:
+        qemu_env = Environment() 
 qemu_env.Decider('MD5-timestamp')
 qemu_env['CC'] = CC
 qemu_configure_script = "%s/SConfigure" % qemu_dir
@@ -111,17 +114,19 @@ if config_success != "success":
 
 # 2. Compile PTLsim
 ptl_compile_script = "%s/SConstruct" % ptl_dir
-ptl_env = Environment(
-        CXXCOMSTR = compile_source_message,
-        CCCOMSTR = compile_source_message,
-        SHCCCOMSTR = compile_shared_source_message,
-        SHCXXCOMSTR = compile_shared_source_message,
-        ARCOMSTR = link_library_message,
-        RANLIBCOMSTR = ranlib_library_message,
-        SHLINKCOMSTR = link_shared_library_message,
-        LINKCOMSTR = link_program_message,
-        )
-# ptl_env = Environment() # Uncomment to print full compilation
+if int (pretty_printing):
+        ptl_env = Environment(
+                CXXCOMSTR = compile_source_message,
+                CCCOMSTR = compile_source_message,
+                SHCCCOMSTR = compile_shared_source_message,
+                SHCXXCOMSTR = compile_shared_source_message,
+                ARCOMSTR = link_library_message,
+                RANLIBCOMSTR = ranlib_library_message,
+                SHLINKCOMSTR = link_shared_library_message,
+                LINKCOMSTR = link_program_message,
+                )
+else:
+        ptl_env = Environment() 
 ptl_env.Decider('MD5-timestamp')
 ptl_env['CC'] = CC
 ptl_env.SetDefault(qemu_dir = qemu_dir)
