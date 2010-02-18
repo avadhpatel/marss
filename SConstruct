@@ -1,5 +1,5 @@
 
-# Top level SConstruct for PQRS
+# Top level SConstruct for MARSSx86
 
 import os
 
@@ -29,8 +29,6 @@ print("running with -j%s" % GetOption('num_jobs'))
 # 1. Configure QEMU
 # 2. Build PTLsim
 # 3. Build QEMU
-
-CC = "g++"
 
 curr_dir = os.getcwd()
 qemu_dir = "%s/qemu" % curr_dir
@@ -72,35 +70,32 @@ ranlib_library_message = '%sRanlib Library %s==> %s$TARGET%s' % \
 link_shared_library_message = '%sLinking Shared Library %s==> %s$TARGET%s' % \
    (colors['red'], colors['purple'], colors['yellow'], colors['end'])
 
-# env = Environment(
-  # CXXCOMSTR = compile_source_message,
-  # CCCOMSTR = compile_source_message,
-  # SHCCCOMSTR = compile_shared_source_message,
-  # SHCXXCOMSTR = compile_shared_source_message,
-  # ARCOMSTR = link_library_message,
-  # RANLIBCOMSTR = ranlib_library_message,
-  # SHLINKCOMSTR = link_shared_library_message,
-  # LINKCOMSTR = link_program_message,
-# )
-
 pretty_printing=ARGUMENTS.get('pretty',1)
-# 1. Configure QEMU
-if int (pretty_printing):
-        qemu_env = Environment(
-                CXXCOMSTR = compile_source_message,
-                CCCOMSTR = compile_source_message,
-                SHCCCOMSTR = compile_shared_source_message,
-                SHCXXCOMSTR = compile_shared_source_message,
-                ARCOMSTR = link_library_message,
-                RANLIBCOMSTR = ranlib_library_message,
-                SHLINKCOMSTR = link_shared_library_message,
-                LINKCOMSTR = link_program_message,
-                )
+
+# Base Environment used to compile Marss code (QEMU and PTLSIM both)
+if int(pretty_printing) :
+    base_env = Environment(
+            CXXCOMSTR = compile_source_message,
+            CCCOMSTR = compile_source_message,
+            SHCCCOMSTR = compile_shared_source_message,
+            SHCXXCOMSTR = compile_shared_source_message,
+            ARCOMSTR = link_library_message,
+            RANLIBCOMSTR = ranlib_library_message,
+            SHLINKCOMSTR = link_shared_library_message,
+            LINKCOMSTR = link_program_message,
+            )
 else:
-        qemu_env = Environment()
+    base_env = Environment()
+# Setup the default envrionment paths from User's envrionment
+base_env['ENV'] = os.environ
+# To specify your c++ compiler uncomment this line and
+# set the correct path to your c++ compiler
+base_env['CXX'] = "g++"
+base_env['CC'] = base_env['CXX']
+
+# 1. Configure QEMU
+qemu_env = base_env.Clone()
 qemu_env.Decider('MD5-timestamp')
-qemu_env['CC'] = CC
-qemu_env['CXX'] = CC
 qemu_configure_script = "%s/SConfigure" % qemu_dir
 Export('qemu_env')
 
@@ -115,22 +110,8 @@ if config_success != "success":
 
 # 2. Compile PTLsim
 ptl_compile_script = "%s/SConstruct" % ptl_dir
-if int (pretty_printing):
-        ptl_env = Environment(
-                CXXCOMSTR = compile_source_message,
-                CCCOMSTR = compile_source_message,
-                SHCCCOMSTR = compile_shared_source_message,
-                SHCXXCOMSTR = compile_shared_source_message,
-                ARCOMSTR = link_library_message,
-                RANLIBCOMSTR = ranlib_library_message,
-                SHLINKCOMSTR = link_shared_library_message,
-                LINKCOMSTR = link_program_message,
-                )
-else:
-        ptl_env = Environment()
+ptl_env = base_env.Clone()
 ptl_env.Decider('MD5-timestamp')
-ptl_env['CC'] = CC
-ptl_env['CXX'] = CC
 ptl_env.SetDefault(qemu_dir = qemu_dir)
 ptl_env.SetDefault(RT_DIR = "%s" % curr_dir)
 
