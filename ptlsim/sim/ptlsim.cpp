@@ -555,6 +555,8 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 
   if((start_simulation || in_simulation) && config.stop) {
 	  in_simulation = 0;
+      if(config.run)
+          config.run = false;
   }
 
   if(config.kill) {
@@ -650,32 +652,34 @@ void ptl_reconfigure(char* config_str) {
 
 static bool ptl_machine_configured=false;
 extern "C" void ptl_machine_configure(char* config_str) {
+    if(!ptl_machine_configured) {
         configparser.setup();
         config.reset();
+    }
 
-        // Setup the configuration
-        ptl_reconfigure(config_str);
+    // Setup the configuration
+    ptl_reconfigure(config_str);
 
-        // After reconfigure reset the machine's initalized variable
-        if (config.help){
-                configparser.printusage(cerr, config);
-                config.help=0;
+    // After reconfigure reset the machine's initalized variable
+    if (config.help){
+        configparser.printusage(cerr, config);
+        config.help=0;
+    }
+    // reset machine's initalized variable only if it is the first run
+
+
+    if(!ptl_machine_configured){
+        ptl_machine_configured=true;
+        PTLsimMachine* machine = null;
+        char* machinename = config.core_name;
+        if likely (curr_ptl_machine != null) {
+            machine = curr_ptl_machine;
+        } else {
+            machine = PTLsimMachine::getmachine(machinename);
         }
-        // reset machine's initalized variable only if it is the first run
-
-
-        if(!ptl_machine_configured){
-                ptl_machine_configured=true;
-                PTLsimMachine* machine = null;
-                char* machinename = config.core_name;
-                if likely (curr_ptl_machine != null) {
-                        machine = curr_ptl_machine;
-                } else {
-                        machine = PTLsimMachine::getmachine(machinename);
-                }
-                assert(machine);
-                machine->initialized = 0;
-        }
+        assert(machine);
+        machine->initialized = 0;
+    }
 }
 
 static int ctx_counter = 0;

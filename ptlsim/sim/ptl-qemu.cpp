@@ -118,7 +118,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                  * QEMU will be automatically started in simulation mode
                  */
                 vm_stop(0);
-                ptl_reconfigure(command_str);
+                ptl_machine_configure(command_str);
                 cpu_interrupt(cpu, CPU_INTERRUPT_EXIT);
                 if(in_simulation)
                     vm_start();
