@@ -21,6 +21,9 @@ env['CPPPATH'].append(ptlsim_inc_dir)
 env.Append(CCFLAGS = "-MMD -MP -DNEED_CPU_H")
 env.Append(CCFLAGS = "-DMARSS_QEMU")
 
+num_sim_cores = ARGUMENTS.get('c', 1)
+env.Append(CCFLAGS = '-DNUM_SIM_CORES=%d' % int(num_sim_cores))
+
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
     env.Append(CCFLAGS = '-g')

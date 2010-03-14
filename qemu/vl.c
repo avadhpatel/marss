@@ -233,7 +233,7 @@ int win2k_install_hack = 0;
 int rtc_td_hack = 0;
 #endif
 int usb_enabled = 0;
-int smp_cpus = 1;
+int smp_cpus = NUM_SIM_CORES;
 const char *vnc_display;
 int acpi_enabled = 1;
 int no_hpet = 0;
@@ -4015,7 +4015,6 @@ static void help(int exitcode)
            "-h or -help     display this help and exit\n"
            "-M machine      select emulated machine (-M ? for list)\n"
            "-cpu cpu        select CPU (-cpu ? for list)\n"
-           "-smp n          set the number of CPUs to 'n' [default=1]\n"
            "-fda/-fdb file  use 'file' as floppy disk 0/1 image\n"
            "-hda/-hdb file  use 'file' as IDE hard disk 0/1 image\n"
            "-hdc/-hdd file  use 'file' as IDE hard disk 2/3 image\n"
@@ -4217,7 +4216,6 @@ enum {
     QEMU_OPTION_h,
     QEMU_OPTION_M,
     QEMU_OPTION_cpu,
-    QEMU_OPTION_smp,
     QEMU_OPTION_fda,
     QEMU_OPTION_fdb,
     QEMU_OPTION_hda,
@@ -4324,7 +4322,6 @@ static const QEMUOption qemu_options[] = {
     { "help", 0, QEMU_OPTION_h },
     { "M", HAS_ARG, QEMU_OPTION_M },
     { "cpu", HAS_ARG, QEMU_OPTION_cpu },
-    { "smp", HAS_ARG, QEMU_OPTION_smp },
     { "fda", HAS_ARG, QEMU_OPTION_fda },
     { "fdb", HAS_ARG, QEMU_OPTION_fdb },
     { "hda", HAS_ARG, QEMU_OPTION_hda },
@@ -5245,13 +5242,6 @@ int main(int argc, char **argv, char **envp)
                 }
                 usb_devices[usb_devices_index] = optarg;
                 usb_devices_index++;
-                break;
-            case QEMU_OPTION_smp:
-                smp_cpus = atoi(optarg);
-                if (smp_cpus < 1) {
-                    fprintf(stderr, "Invalid number of CPUs\n");
-                    exit(1);
-                }
                 break;
 	    case QEMU_OPTION_vnc:
 		vnc_display = optarg;
