@@ -35,6 +35,7 @@
 
 #include <mesiBus.h>
 #include <memoryHierarchy.h>
+#include <stats.h>
 
 using namespace Memory;
 using namespace Memory::MESICache;
@@ -316,6 +317,8 @@ bool BusInterconnect::broadcast_cb(void *arg)
                 pendingEntry->responseReceived[i] = true;
         }
     }
+
+    stats.memory.busBroadcasts++;
 
     /* Free the entry from queue */
     queueEntry->request->decRefCounter();

@@ -279,6 +279,8 @@ struct PTLsimStats { // rootnode:
     PerCoreCacheStats c5;
     PerCoreCacheStats c6;
     PerCoreCacheStats c7;
+
+    W64 busBroadcasts;
 //     PerCoreCacheStats c8;
 //     PerCoreCacheStats c9;
 //     PerCoreCacheStats c10;
