@@ -63,6 +63,7 @@ namespace Memory {
 
             void init(W64 tag_t) {
                 tag = tag_t;
+                state = MESI_INVALID;
             }
 
             void reset() {
@@ -187,6 +188,7 @@ namespace Memory {
                 bool evicting;
                 bool isSnoop;
                 bool isShared;
+                bool responseData;
 
                 void init() {
                     request = null;
@@ -199,6 +201,7 @@ namespace Memory {
                     evicting = false;
                     isSnoop = false;
                     isShared = false;
+                    responseData = false;
                 }
 
                 ostream& print(ostream& os) const {
@@ -230,6 +233,7 @@ namespace Memory {
                     os << "] evicting[" << evicting;
                     os << "] isSnoop[" << isSnoop;
                     os << "] isShared[" << isShared;
+                    os << "] responseData[" << responseData;
                     os << "] ";
                     os << endl;
                     return os;

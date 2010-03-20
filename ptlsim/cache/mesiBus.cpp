@@ -139,9 +139,26 @@ bool BusInterconnect::controller_request_cb(void *arg)
                     break;
                 }
             }
-            if(sender->is_private())
-                pendingEntry->shared |= message->isShared;
+
             pendingEntry->responseReceived[idx] = true;
+
+            if(sender->is_private()) {
+                pendingEntry->shared |= message->isShared;
+
+                /*
+                 * If same level cache responed with data indicating via shared
+                 * flag, then we can emit 'annul' signal to all other
+                 * controllers that are working on this request
+                 */
+                if(message->hasData) {
+                    foreach(x, controllers.count()) {
+                        if(!pendingEntry->responseReceived[x]) {
+                            controllers[x]->controller->annul_request(pendingEntry->request);
+                            pendingEntry->responseReceived[x] = true;
+                        }
+                    }
+                }
+            }
 
             if(!dataBusBusy_) {
                 bool all_set = true;
@@ -158,10 +175,6 @@ bool BusInterconnect::controller_request_cb(void *arg)
             return true;
         }
     }
-
-    if(message->hasData && message->request->get_type() !=
-            MEMORY_OP_UPDATE)
-        assert(0);
 
     /* its a new request, add entry into controllerqueues */
     BusControllerQueue* busControllerQueue;

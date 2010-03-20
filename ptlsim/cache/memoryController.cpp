@@ -81,7 +81,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 {
 	Message *message = (Message*)arg;
 
-	memdebug("Received message in controller: ", get_name(), endl);
+	memdebug("Received message in Memory controller: ", *message, endl);
 
 	if(message->hasData && message->request->get_type() !=
 			MEMORY_OP_UPDATE)
@@ -143,7 +143,9 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 	int bank_no = get_bank_id(message->request->
 			get_physical_address());
 
-	if(banksUsed_[bank_no] == 0 && queueEntry->inUse == false) {
+    assert(queueEntry->inUse == false);
+
+	if(banksUsed_[bank_no] == 0) {
 		banksUsed_[bank_no] = 1;
 		queueEntry->inUse = true;
 		memoryHierarchy_->add_event(&accessCompleted_, MEM_LATENCY,
@@ -165,51 +167,53 @@ void MemoryController::print(ostream& os) const
 	os << "---Memory-Controller: ", get_name(), endl;
 	if(pendingRequests_.count() > 0)
 		os << "Queue : ", pendingRequests_, endl;
+    os << "banksUsed_: ", banksUsed_, endl;
 	os << "---End Memory-Controller: ", get_name(), endl;
 }
 
 bool MemoryController::access_completed_cb(void *arg)
 {
-	MemoryQueueEntry *queueEntry = (MemoryQueueEntry*)arg;
-	if(queueEntry->annuled)
-		return true;
+    MemoryQueueEntry *queueEntry = (MemoryQueueEntry*)arg;
 
-	int bank_no = get_bank_id(queueEntry->request->
-			get_physical_address());
-	banksUsed_[bank_no] = 0;
+    int bank_no = get_bank_id(queueEntry->request->
+            get_physical_address());
+    banksUsed_[bank_no] = 0;
 
-	memdebug("Memory access done for Request: ", *queueEntry->request,
-			endl);
+    /*
+     * Now check if we still have pending requests
+     * for the same bank
+     */
+    MemoryQueueEntry* entry;
+    foreach_list_mutable(pendingRequests_.list(), entry, entry_t,
+            prev_t) {
+        int bank_no_2 = get_bank_id(entry->request->
+                get_physical_address());
+        if(bank_no == bank_no_2 && entry->inUse == false) {
+            entry->inUse = true;
+            memoryHierarchy_->add_event(&accessCompleted_,
+                    MEM_LATENCY, entry);
+            banksUsed_[bank_no] = 1;
+            break;
+        }
+    }
 
-	/* Send response back to cache */
-	wait_interconnect_cb(queueEntry);
+    if(!queueEntry->annuled) {
 
-	/*
-	 * Now check if we still have pending requests
-	 * for the same bank
-	 */
-	MemoryQueueEntry* entry;
-	foreach_list_mutable(pendingRequests_.list(), entry, entry_t,
-			prev_t) {
-		int bank_no_2 = get_bank_id(entry->request->
-				get_physical_address());
-		if(bank_no == bank_no_2 && entry->inUse == false) {
-			entry->inUse = true;
-			memoryHierarchy_->add_event(&accessCompleted_,
-					MEM_LATENCY, entry);
-			banksUsed_[bank_no] = 1;
-			break;
-		}
-	}
+        /* Send response back to cache */
+        memdebug("Memory access done for Request: ", *queueEntry->request,
+                endl);
 
-	return true;
+        wait_interconnect_cb(queueEntry);
+    } else {
+        queueEntry->request->decRefCounter();
+    }
+
+    return true;
 }
 
 bool MemoryController::wait_interconnect_cb(void *arg)
 {
 	MemoryQueueEntry *queueEntry = (MemoryQueueEntry*)arg;
-	if(queueEntry->annuled)
-		return true;
 
 	bool success = false;
 
@@ -252,15 +256,16 @@ bool MemoryController::wait_interconnect_cb(void *arg)
 
 void MemoryController::annul_request(MemoryRequest *request)
 {
-	MemoryQueueEntry *queueEntry;
-	foreach_list_mutable(pendingRequests_.list(), queueEntry,
-			entry, nextentry) {
-		if(queueEntry->request == request) {
-			ptl_logfile << "Annuling request from main memory\n";
-			queueEntry->annuled = true;
-			pendingRequests_.free(queueEntry);
-		}
-	}
+    MemoryQueueEntry *queueEntry;
+    foreach_list_mutable(pendingRequests_.list(), queueEntry,
+            entry, nextentry) {
+        if(queueEntry->request == request) {
+            queueEntry->annuled = true;
+            pendingRequests_.free(queueEntry);
+            if(!queueEntry->inUse)
+                queueEntry->request->decRefCounter();
+        }
+    }
 }
 
 int MemoryController::get_no_pending_request(W8 coreid)

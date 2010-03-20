@@ -511,9 +511,12 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
 
     // By default we mark the queueEntry's shared flat to false
     queueEntry->isShared = false;
+    queueEntry->responseData = true;
 
     switch(oldState) {
         case MESI_INVALID:
+            queueEntry->line = null;
+            queueEntry->responseData = false;
             break;
         case MESI_EXCLUSIVE:
             if(type == MEMORY_OP_READ) {
@@ -523,23 +526,17 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
                 if(isLowestPrivate_)
                     send_evict_message(queueEntry);
                 queueEntry->line->state = MESI_INVALID;
-                /*
-                 * set line to null to indicate its not shared
-                 * when we send response
-                 */
-                queueEntry->line = null;
             } else {
                 assert(0);
             }
             break;
         case MESI_SHARED:
             if(type == MEMORY_OP_READ) {
-                /* no change */
+                queueEntry->isShared = true;
             } else if(type == MEMORY_OP_WRITE) {
                 if(isLowestPrivate_)
                     send_evict_message(queueEntry);
                 queueEntry->line->state = MESI_INVALID;
-                queueEntry->line = null;
             } else {
                 assert(0);
             }
@@ -552,7 +549,6 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
                 if(isLowestPrivate_)
                     send_evict_message(queueEntry);
                 queueEntry->line->state = MESI_INVALID;
-                queueEntry->line = null;
             } else {
                 assert(0);
             }
@@ -908,6 +904,7 @@ bool CacheController::cache_miss_cb(void *arg)
          */
         queueEntry->line = null;
         queueEntry->isShared = false;
+        queueEntry->responseData = false;
         STAT_UPDATE(snooprequest.miss++);
     } else {
         if(queueEntry->line == null) {
@@ -1071,7 +1068,8 @@ bool CacheController::wait_interconnect_cb(void *arg)
                     queueEntry->sendTo->get_delay(), (void*)queueEntry);
         }
     } else {
-        if(queueEntry->request->get_type() == MEMORY_OP_UPDATE)
+        if(queueEntry->request->get_type() == MEMORY_OP_UPDATE ||
+                queueEntry->responseData)
             message.hasData = true;
         else
             message.hasData = false;
@@ -1153,7 +1151,14 @@ void CacheController::annul_request(MemoryRequest *request)
             entry, nextentry) {
         if(queueEntry->request == request) {
             queueEntry->annuled = true;
+            /* Wakeup the dependent entry if any */
+            if(queueEntry->depends >= 0) {
+                CacheQueueEntry* depEntry = &pendingRequests_[
+                    queueEntry->depends];
+                memoryHierarchy_->add_event(&cacheAccess_, 1, depEntry);
+            }
             pendingRequests_.free(queueEntry);
+            queueEntry->request->decRefCounter();
         }
     }
 }
