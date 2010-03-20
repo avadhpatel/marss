@@ -497,7 +497,10 @@ bool ThreadContext::fetch() {
       //
     }
 
-    Waddr physaddr = fetchrip;
+    PageFaultErrorCode pfec;
+    int exception = 0;
+    int mmio = 0;
+    Waddr physaddr = ctx.check_and_translate(fetchrip, 3, false, false, exception, mmio, pfec, true);
 
     W64 req_icache_block = floor(physaddr, ICACHE_FETCH_GRANULARITY);
     if ((!current_basic_block->invalidblock) && (req_icache_block != current_icache_block)) {
