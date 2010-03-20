@@ -465,7 +465,12 @@ bool OutOfOrderCore::runcycle() {
 
 	if (thread->pause_counter > 0) {
 		thread->pause_counter--;
-		commitrc[tid] = COMMIT_RESULT_OK;
+        if(thread->handle_interrupt_at_next_eom) {
+            commitrc[tid] = COMMIT_RESULT_INTERRUPT;
+            thread->pause_counter = 0;
+        } else {
+            commitrc[tid] = COMMIT_RESULT_OK;
+        }
 		continue;
 	}
 

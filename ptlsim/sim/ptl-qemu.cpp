@@ -452,7 +452,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
             if(logable(10))
                 ptl_logfile << "Unable to read code from ",
                             hexstring(source, 64), endl;
-            setup_ptlsim_switch();
+            setup_ptlsim_switch_all_ctx(*this);
             /*
              * restore the exception index as it will be
              * restore when we try to commit this entry from ROB
@@ -505,7 +505,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
             if(logable(10))
                 ptl_logfile << "Unable to read code from ",
                             hexstring(source + n, 64), endl;
-            setup_ptlsim_switch();
+            setup_ptlsim_switch_all_ctx(*this);
             /*
              * restore the exception index as it will be
              * restore when we try to commit this entry from ROB
@@ -536,7 +536,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 
     if(logable(109)) ptl_logfile << endl;
 
-    setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(*this);
 
     if(logable(10))
         ptl_logfile << "Copy done..\n";
@@ -744,7 +744,7 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
         raise_exception((int)exception);
     }
     ptl_stable_state = 0;
-    setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(*this);
 }
 
 W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
@@ -806,7 +806,7 @@ W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
                     "] data[", hexstring(data, 64), "] origaddr[",
                     hexstring(virtaddr, 64), "]\n";
 
-    setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(*this);
 
     return data;
 }
@@ -858,7 +858,7 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
         ptl_logfile << "Context::loadphys addr[", hexstring(addr, 64),
                     "] data[", hexstring(data, 64), "] origaddr[",
                     hexstring(orig_addr, 64), "]\n";
-    setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(*this);
     return data;
 }
 
@@ -1012,7 +1012,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
                         flush;
     }
 
-    setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(*this);
     return;
 }
 
@@ -1026,7 +1026,7 @@ bool Context::try_handle_fault(Waddr virtaddr, bool store) {
     int mmu_index = cpu_mmu_index((CPUState*)this);
     int fault = cpu_x86_handle_mmu_fault((CPUState*)this, virtaddr, store, mmu_index, 1);
 
-    setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(*this);
     if(fault) {
         if(logable(10))
             ptl_logfile << "Fault for addr: ", (void*)virtaddr, endl, flush;

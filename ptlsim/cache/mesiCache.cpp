@@ -509,12 +509,16 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
         return;
     }
 
+    // By default we mark the queueEntry's shared flat to false
+    queueEntry->isShared = false;
+
     switch(oldState) {
         case MESI_INVALID:
             break;
         case MESI_EXCLUSIVE:
             if(type == MEMORY_OP_READ) {
                 queueEntry->line->state = MESI_SHARED;
+                queueEntry->isShared = true;
             } else if(type == MEMORY_OP_WRITE) {
                 if(isLowestPrivate_)
                     send_evict_message(queueEntry);
@@ -543,6 +547,7 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
         case MESI_MODIFIED:
             if(type == MEMORY_OP_READ) {
                 queueEntry->line->state = MESI_SHARED;
+                queueEntry->isShared = true;
             } else if(type == MEMORY_OP_WRITE) {
                 if(isLowestPrivate_)
                     send_evict_message(queueEntry);
