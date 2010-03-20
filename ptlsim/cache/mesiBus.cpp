@@ -68,6 +68,8 @@ BusInterconnect::BusInterconnect(char *name,
     dataBroadcastCompleted_.set_name(dataBroadcastComplete_name->buf);
     dataBroadcastCompleted_.connect(signal_mem_ptr(*this,
                 &BusInterconnect::data_broadcast_completed_cb));
+
+    stats_ = &stats.memory.bus;
 }
 
 void BusInterconnect::register_controller(Controller *controller)
@@ -293,6 +295,17 @@ bool BusInterconnect::broadcast_cb(void *arg)
 
     set_bus_busy(true);
 
+    memoryHierarchy_->add_event(&broadcastCompleted_,
+            BUS_BROADCASTS_DELAY, queueEntry);
+
+    return true;
+}
+
+bool BusInterconnect::broadcast_completed_cb(void *arg)
+{
+    assert(is_busy());
+    BusQueueEntry *queueEntry = (BusQueueEntry*)arg;
+
     memdebug("Broadcasing entry: ", *queueEntry, endl);
 
     /* now create an entry into pendingRequests_ */
@@ -331,8 +344,6 @@ bool BusInterconnect::broadcast_cb(void *arg)
         }
     }
 
-    stats.memory.busBroadcasts++;
-
     /* Free the entry from queue */
     queueEntry->request->decRefCounter();
     if(!queueEntry->annuled) {
@@ -341,18 +352,24 @@ bool BusInterconnect::broadcast_cb(void *arg)
     if(!queueEntry->controllerQueue->queue.isFull()) {
         memoryHierarchy_->set_interconnect_full(this, false);
     }
-    memoryHierarchy_->add_event(&broadcastCompleted_,
-            BUS_BROADCASTS_DELAY, null);
+
+    /* Update bus stats */
+    stats_->addr_bus_cycles += BUS_BROADCASTS_DELAY;
+    if(pendingEntry) {
+        switch(pendingEntry->request->get_type()) {
+            case MEMORY_OP_READ: stats_->broadcasts.read++;
+                                 break;
+            case MEMORY_OP_WRITE: stats_->broadcasts.write++;
+                                  break;
+            default: assert(0);
+        }
+    } else { // On memory update we don't use any pending entry
+        stats_->broadcasts.update++;
+        stats_->broadcast_cycles.update += BUS_BROADCASTS_DELAY;
+    }
 
     /* Free the message */
     memoryHierarchy_->free_message(&message);
-
-    return true;
-}
-
-bool BusInterconnect::broadcast_completed_cb(void *arg)
-{
-    assert(is_busy());
 
     /*
      * call broadcast_cb that will check if any pending
@@ -383,6 +400,17 @@ bool BusInterconnect::data_broadcast_cb(void *arg)
     if(pendingEntry->annuled)
         return true;
 
+    memoryHierarchy_->add_event(&dataBroadcastCompleted_,
+            BUS_BROADCASTS_DELAY, pendingEntry);
+
+    return true;
+}
+
+bool BusInterconnect::data_broadcast_completed_cb(void *arg)
+{
+    PendingQueueEntry *pendingEntry = (PendingQueueEntry*)arg;
+    assert(pendingEntry);
+
     Message& message = *memoryHierarchy_->get_message();
     message.sender = this;
     message.request = pendingEntry->request;
@@ -395,22 +423,25 @@ bool BusInterconnect::data_broadcast_cb(void *arg)
         assert(ret);
     }
 
+    /* Update bus stats */
+    stats_->data_bus_cycles += BUS_BROADCASTS_DELAY;
+    W64 delay = sim_cycle - pendingEntry->initCycle;
+    assert(delay > BUS_BROADCASTS_DELAY);
+    switch(pendingEntry->request->get_type()) {
+        case MEMORY_OP_READ: stats_->broadcast_cycles.read += delay;
+                             break;
+        case MEMORY_OP_WRITE: stats_->broadcast_cycles.write += delay;
+                              break;
+        default: assert(0);
+    }
+
     pendingEntry->request->decRefCounter();
     pendingRequests_.free(pendingEntry);
     ADD_HISTORY_REM(pendingEntry->request);
 
-    memoryHierarchy_->add_event(&dataBroadcastCompleted_,
-            BUS_BROADCASTS_DELAY, null);
-
     memoryHierarchy_->free_message(&message);
 
-    return true;
-}
-
-bool BusInterconnect::data_broadcast_completed_cb(void *arg)
-{
     /* check if any other pending request received all the responses */
-    PendingQueueEntry *pendingEntry;
     bool found = false;
     foreach_list_mutable(pendingRequests_.list(), pendingEntry,
             entry, nextentry) {

@@ -29,6 +29,7 @@
 #define MESI_BUS_H
 
 #include <interconnect.h>
+#include <memoryStats.h>
 
 namespace Memory {
 
@@ -74,12 +75,14 @@ struct PendingQueueEntry : public FixStateListObject
 	bool hasData;
 	dynarray<bool> responseReceived;
 	bool annuled;
+    W64 initCycle;
 
 	void init() {
 		request = null;
 		shared = false;
 		hasData = false;
 		annuled = false;
+        initCycle = sim_cycle;
 	}
 
 	void set_num_controllers(int no) {
@@ -97,6 +100,7 @@ struct PendingQueueEntry : public FixStateListObject
 		os << "shared[", shared, "]";
 		os << "hasData[", hasData, "]";
 		os << "responseReceived[", responseReceived, "]";
+        os << "initCycle[", initCycle, "]";
 		return os;
 	}
 
@@ -128,6 +132,7 @@ class BusInterconnect : public Interconnect
 		Signal dataBroadcast_;
 		Signal broadcastCompleted_;
 		Signal dataBroadcastCompleted_;
+        BusStats *stats_;
 
 		BusQueueEntry *arbitrate_round_robin();
 		bool can_broadcast(BusControllerQueue *queue);

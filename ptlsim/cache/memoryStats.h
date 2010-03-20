@@ -78,7 +78,7 @@ namespace Memory {
 
 		} cpurequest ;
 
-		struct snooprequest {
+		struct snooprequest { //node: summable
 			W64 hit;
 			W64 miss;
 		} snooprequest;
@@ -97,6 +97,16 @@ namespace Memory {
 			W64 load;
 			W64 store;
 		} lat_count;
+
+        struct mesi_stats {
+
+            struct hit_state { //node: summable
+                W64 snoop[5]; //histo: 0, 4, 1
+                W64 cpu[5]; //histo: 0, 4, 1
+            } hit_state;
+
+            W64 state_transition[17]; //histo: 0, 16, 1
+        } mesi_stats;
 	};
 
 	struct PerCoreCacheStats { // rootnode:
@@ -106,6 +116,24 @@ namespace Memory {
 		CacheStats L2;
 		CacheStats L3;
 	};
+
+    struct BusStats { // rootnode:
+
+        struct broadcasts { //node: summable
+            W64 read;
+            W64 write;
+            W64 update;
+        } broadcasts;
+
+        struct broadcast_cycles { //node: summable
+            W64 read;
+            W64 write;
+            W64 update;
+        } broadcast_cycles;
+
+        W64 addr_bus_cycles;
+        W64 data_bus_cycles;
+    };
 
 };
 

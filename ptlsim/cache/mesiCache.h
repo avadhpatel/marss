@@ -35,6 +35,9 @@
 #include <cacheConstants.h>
 #include <memoryStats.h>
 
+#define UPDATE_MESI_TRANS_STATS(old_state, new_state) \
+    stats_->mesi_stats.state_transition[(old_state << 2) | new_state]++;
+
 namespace Memory {
 
     namespace MESICache {
@@ -42,11 +45,18 @@ namespace Memory {
         // CacheLine : a single cache line for MESI coherenent cache
 
         enum MESICacheLineState {
-            MESI_INVALID,
+            MESI_MODIFIED = 0,
             MESI_EXCLUSIVE,
             MESI_SHARED,
-            MESI_MODIFIED,
+            MESI_INVALID,
             NO_MESI_STATES
+        };
+
+        enum MESITransations {
+            MM=0, ME, MS, MI,
+            EM, EE, ES, EI,
+            SM, SE, SS, SI,
+            IM, IE, IS, II
         };
 
         static const char* MESIStateNames[NO_MESI_STATES] = {

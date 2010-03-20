@@ -30,9 +30,7 @@
 
 using Memory::CacheStats;
 using Memory::PerCoreCacheStats;
-#ifndef NEW_CACHE
 using Memory::BusStats;
-#endif
 
 #define increment_clipped_histogram(h, slot, incr) h[clipto(W64(slot), W64(0), W64(lengthof(h)-1))] += incr;
 
@@ -280,7 +278,6 @@ struct PTLsimStats { // rootnode:
     PerCoreCacheStats c6;
     PerCoreCacheStats c7;
 
-    W64 busBroadcasts;
 //     PerCoreCacheStats c8;
 //     PerCoreCacheStats c9;
 //     PerCoreCacheStats c10;
@@ -290,9 +287,7 @@ struct PTLsimStats { // rootnode:
 //     PerCoreCacheStats c14;
 //     PerCoreCacheStats c15;
 
-#ifndef NEW_CACHE
     BusStats bus;
-#endif
 
 	W64 dcache_latency[200]; // histo: 0, 199, 1
 	W64 icache_latency[200]; // histo: 0, 199, 1

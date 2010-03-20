@@ -393,10 +393,13 @@ MESICacheLineState CacheController::get_new_state(
         CacheQueueEntry *queueEntry, bool isShared)
 {
     MESICacheLineState oldState = queueEntry->line->state;
+    MESICacheLineState newState = MESI_INVALID;
     OP_TYPE type = queueEntry->request->get_type();
+
     if(type == MEMORY_OP_EVICT) {
         if(isLowestPrivate_)
             send_evict_message(queueEntry);
+        UPDATE_MESI_TRANS_STATS(oldState, MESI_INVALID);
         return MESI_INVALID;
     }
 
@@ -408,17 +411,18 @@ MESICacheLineState CacheController::get_new_state(
     switch(oldState) {
         case MESI_INVALID:
             if(isShared) {
-                if(type == MEMORY_OP_READ)
-                    return MESI_SHARED;
-                else //if(type == MEMORY_OP_WRITE)
+                if(type == MEMORY_OP_READ) {
+                    newState = MESI_SHARED;
+                } else { //if(type == MEMORY_OP_WRITE)
                     assert(0);
+                }
             } else {
                 if(type == MEMORY_OP_READ)
-                    return MESI_EXCLUSIVE;
+                    newState = MESI_EXCLUSIVE;
                 else if(type == MEMORY_OP_WRITE)
-                    return MESI_MODIFIED;
+                    newState = MESI_MODIFIED;
                 else if(type == MEMORY_OP_EVICT)
-                    return MESI_INVALID;
+                    newState = MESI_INVALID;
                 else
                     assert(0);
             }
@@ -426,21 +430,21 @@ MESICacheLineState CacheController::get_new_state(
         case MESI_EXCLUSIVE:
             if(isShared) {
                 if(type == MEMORY_OP_READ)
-                    return MESI_SHARED;
+                    newState = MESI_SHARED;
                 else {
                     if(isLowestPrivate_)
                         send_evict_message(queueEntry);
-                    return MESI_INVALID;
+                    newState = MESI_INVALID;
                 }
             } else {
                 if(type == MEMORY_OP_READ)
-                    return MESI_EXCLUSIVE;
+                    newState = MESI_EXCLUSIVE;
                 else if(type == MEMORY_OP_WRITE)
-                    return MESI_MODIFIED;
+                    newState = MESI_MODIFIED;
                 else if(type == MEMORY_OP_EVICT) {
                     if(isLowestPrivate_)
                         send_evict_message(queueEntry);
-                    return MESI_INVALID;
+                    newState = MESI_INVALID;
                 }
                 else
                     assert(0);
@@ -449,20 +453,20 @@ MESICacheLineState CacheController::get_new_state(
         case MESI_SHARED:
             if(isShared) {
                 if(type == MEMORY_OP_READ)
-                    return MESI_SHARED;
+                    newState = MESI_SHARED;
                 else if(type == MEMORY_OP_WRITE)
                     assert(0);
                 else
                     assert(0);
             } else {
                 if(type == MEMORY_OP_READ)
-                    return MESI_EXCLUSIVE;
+                    newState = MESI_EXCLUSIVE;
                 else if(type == MEMORY_OP_WRITE)
-                    return MESI_MODIFIED;
+                    newState = MESI_MODIFIED;
                 else if(type == MEMORY_OP_EVICT) {
                     if(isLowestPrivate_)
                         send_evict_message(queueEntry);
-                    return MESI_INVALID;
+                    newState = MESI_INVALID;
                 }
                 else
                     assert(0);
@@ -471,20 +475,20 @@ MESICacheLineState CacheController::get_new_state(
         case MESI_MODIFIED:
             if(isShared) {
                 if(type == MEMORY_OP_READ)
-                    return MESI_SHARED;
+                    newState = MESI_SHARED;
                 else if(type == MEMORY_OP_WRITE)
                     assert(0);
                 else
                     assert(0);
             } else {
                 if(type == MEMORY_OP_READ)
-                    return MESI_MODIFIED;
+                    newState = MESI_MODIFIED;
                 else if(type == MEMORY_OP_WRITE)
-                    return MESI_MODIFIED;
+                    newState = MESI_MODIFIED;
                 else if(type == MEMORY_OP_EVICT) {
                     if(isLowestPrivate_)
                         send_evict_message(queueEntry);
-                    return MESI_INVALID;
+                    newState = MESI_INVALID;
                 }
                 else
                     assert(0);
@@ -494,16 +498,20 @@ MESICacheLineState CacheController::get_new_state(
             memdebug("Invalid line state: ", oldState);
             assert(0);
     }
-    assert(0);
-    return MESI_INVALID;
+    UPDATE_MESI_TRANS_STATS(oldState, newState);
+    return newState;
 }
 
 void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
 {
     MESICacheLineState oldState = queueEntry->line->state;
+    MESICacheLineState newState = NO_MESI_STATES;
     OP_TYPE type = queueEntry->request->get_type();
 
+    stats_->mesi_stats.hit_state.snoop[oldState]++;
+
     if(type == MEMORY_OP_EVICT) {
+        UPDATE_MESI_TRANS_STATS(oldState, MESI_INVALID);
         queueEntry->line->state = MESI_INVALID;
         clear_entry_cb(queueEntry);
         return;
@@ -517,15 +525,18 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
         case MESI_INVALID:
             queueEntry->line = null;
             queueEntry->responseData = false;
+            newState = MESI_INVALID;
             break;
         case MESI_EXCLUSIVE:
             if(type == MEMORY_OP_READ) {
                 queueEntry->line->state = MESI_SHARED;
                 queueEntry->isShared = true;
+                newState = MESI_SHARED;
             } else if(type == MEMORY_OP_WRITE) {
                 if(isLowestPrivate_)
                     send_evict_message(queueEntry);
                 queueEntry->line->state = MESI_INVALID;
+                newState = MESI_INVALID;
             } else {
                 assert(0);
             }
@@ -533,10 +544,12 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
         case MESI_SHARED:
             if(type == MEMORY_OP_READ) {
                 queueEntry->isShared = true;
+                newState = MESI_SHARED;
             } else if(type == MEMORY_OP_WRITE) {
                 if(isLowestPrivate_)
                     send_evict_message(queueEntry);
                 queueEntry->line->state = MESI_INVALID;
+                newState = MESI_INVALID;
             } else {
                 assert(0);
             }
@@ -545,10 +558,12 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
             if(type == MEMORY_OP_READ) {
                 queueEntry->line->state = MESI_SHARED;
                 queueEntry->isShared = true;
+                newState = MESI_SHARED;
             } else if(type == MEMORY_OP_WRITE) {
                 if(isLowestPrivate_)
                     send_evict_message(queueEntry);
                 queueEntry->line->state = MESI_INVALID;
+                newState = MESI_INVALID;
             } else {
                 assert(0);
             }
@@ -558,6 +573,9 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
             assert(0);
     }
 
+    if(newState != NO_MESI_STATES)
+        UPDATE_MESI_TRANS_STATS(oldState, newState);
+
     /* send back the response */
     queueEntry->sendTo = queueEntry->sender;
     memoryHierarchy_->add_event(&waitInterconnect_, 0, queueEntry);
@@ -566,12 +584,18 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
 void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
 {
     MESICacheLineState oldState = queueEntry->line->state;
+    MESICacheLineState newState = NO_MESI_STATES;
     OP_TYPE type = queueEntry->request->get_type();
+
+    stats_->mesi_stats.hit_state.cpu[oldState]++;
+
     if(type == MEMORY_OP_EVICT) {
+        UPDATE_MESI_TRANS_STATS(oldState, MESI_INVALID);
         queueEntry->line->state = MESI_INVALID;
         clear_entry_cb(queueEntry);
         return;
     }
+
     switch(oldState) {
         case MESI_INVALID:
             /* treat it as a miss */
@@ -584,6 +608,7 @@ void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
                     queueEntry->sendTo = queueEntry->sender;
                     memoryHierarchy_->add_event(&waitInterconnect_,
                             0, queueEntry);
+                    newState = MESI_MODIFIED;
                 } else {
                     /*
                      * treat it as miss so lower cache also update
@@ -621,6 +646,9 @@ void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
             memdebug("Invalid line state: ", oldState);
             assert(0);
     }
+
+    if(newState != NO_MESI_STATES)
+        UPDATE_MESI_TRANS_STATS(oldState, newState);
 }
 
 bool CacheController::is_line_valid(CacheLine *line)
