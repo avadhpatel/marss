@@ -206,6 +206,8 @@ bool MemoryController::access_completed_cb(void *arg)
         wait_interconnect_cb(queueEntry);
     } else {
         queueEntry->request->decRefCounter();
+        ADD_HISTORY_REM(queueEntry->request);
+        pendingRequests_.free(queueEntry);
     }
 
     return true;
@@ -243,9 +245,7 @@ bool MemoryController::wait_interconnect_cb(void *arg)
 	} else {
 		queueEntry->request->decRefCounter();
 		ADD_HISTORY_REM(queueEntry->request);
-		if(!queueEntry->annuled || !queueEntry->free) {
-			pendingRequests_.free(queueEntry);
-		}
+        pendingRequests_.free(queueEntry);
 
 		if(!pendingRequests_.isFull()) {
 			memoryHierarchy_->set_controller_full(this, false);
@@ -261,9 +261,11 @@ void MemoryController::annul_request(MemoryRequest *request)
             entry, nextentry) {
         if(queueEntry->request == request) {
             queueEntry->annuled = true;
-            pendingRequests_.free(queueEntry);
-            if(!queueEntry->inUse)
+            if(!queueEntry->inUse) {
                 queueEntry->request->decRefCounter();
+                ADD_HISTORY_REM(queueEntry->request);
+                pendingRequests_.free(queueEntry);
+            }
         }
     }
 }
