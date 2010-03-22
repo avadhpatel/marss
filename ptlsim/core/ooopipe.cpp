@@ -216,8 +216,8 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
 void ThreadContext::invalidate_smc() {
   if unlikely (smc_invalidate_pending) {
     if (logable(5)) ptl_logfile << "SMC invalidate pending on ", smc_invalidate_rvp, endl;
-    bbcache.invalidate_page(smc_invalidate_rvp.mfnlo, INVALIDATE_REASON_SMC);
-    if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache.invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
+    bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnlo, INVALIDATE_REASON_SMC);
+    if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
     smc_invalidate_pending = 0;
   }
 }
@@ -708,12 +708,12 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
     current_basic_block = null;
   }
 
-  BasicBlock* bb = bbcache(rvp);
+  BasicBlock* bb = bbcache[ctx.cpu_index](rvp);
 
   if likely (bb) {
     current_basic_block = bb;
   } else {
-    current_basic_block = bbcache.translate(ctx, rvp);
+    current_basic_block = bbcache[ctx.cpu_index].translate(ctx, rvp);
     if (current_basic_block == null) return null;
     assert(current_basic_block);
     if unlikely (config.event_log_enabled) {

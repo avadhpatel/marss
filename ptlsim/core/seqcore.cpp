@@ -1070,12 +1070,12 @@ struct SequentialCore {
 
     rvp.update(ctx);
 
-    BasicBlock* bb = bbcache(rvp);
+    BasicBlock* bb = bbcache[ctx.cpu_index](rvp);
 
     if likely (bb) {
       current_basic_block = bb;
     } else {
-      current_basic_block = bbcache.translate(ctx, rvp);
+      current_basic_block = bbcache[ctx.cpu_index].translate(ctx, rvp);
       assert(current_basic_block);
       synth_uops_for_bb(*current_basic_block);
 
@@ -1189,8 +1189,8 @@ struct SequentialCore {
       //
       if unlikely (ctx.smc_isdirty(rvp.rip)) {
         ptl_logfile << "Self-modifying code at rip ", rvp, " detected: mfn was dirty (invalidate and retry)", endl;
-        bbcache.invalidate_page(rvp.mfnlo, INVALIDATE_REASON_SMC);
-        if (rvp.mfnlo != rvp.mfnhi) bbcache.invalidate_page(rvp.mfnhi, INVALIDATE_REASON_SMC);
+        bbcache[ctx.cpu_index].invalidate_page(rvp.mfnlo, INVALIDATE_REASON_SMC);
+        if (rvp.mfnlo != rvp.mfnhi) bbcache[ctx.cpu_index].invalidate_page(rvp.mfnhi, INVALIDATE_REASON_SMC);
         return SEQEXEC_SMC;
       }
 

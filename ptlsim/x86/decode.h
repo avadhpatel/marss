@@ -759,7 +759,9 @@ enum {
 };
 
 struct BasicBlockCache: public SelfHashtable<RIPVirtPhys, BasicBlock, BB_CACHE_SIZE, BasicBlockHashtableLinkManager> {
-  BasicBlockCache(): SelfHashtable<RIPVirtPhys, BasicBlock, BB_CACHE_SIZE, BasicBlockHashtableLinkManager>() { }
+  BasicBlockCache(): SelfHashtable<RIPVirtPhys, BasicBlock, BB_CACHE_SIZE, BasicBlockHashtableLinkManager>() {
+      cpuid = cpuid++;
+  }
 
   BasicBlock* translate(Context& ctx, const RIPVirtPhys& rvp);
   void translate_in_place(BasicBlock& targetbb, Context& ctx, Waddr rip);
@@ -770,11 +772,13 @@ struct BasicBlockCache: public SelfHashtable<RIPVirtPhys, BasicBlock, BB_CACHE_S
   int get_page_bb_count(Waddr mfn);
   int reclaim(size_t reqbytes = 0, int urgency = 0);
   void flush(int8_t context_id);
+  W8 cpuid;
+  static W8 cpuid_counter;
 
   ostream& print(ostream& os);
 };
 
-extern BasicBlockCache bbcache;
+extern BasicBlockCache bbcache[NUM_SIM_CORES];
 
 extern ofstream bbcache_dump_file;
 

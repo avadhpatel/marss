@@ -12,7 +12,7 @@
 #include <stats.h>
 
 
-BasicBlockCache bbcache;
+BasicBlockCache bbcache[NUM_SIM_CORES];
 
 struct BasicBlockChunkListHashtableLinkManager {
     static inline BasicBlockChunkList* objof(selflistlink* link) {
@@ -1564,7 +1564,7 @@ bool BasicBlockCache::invalidate(BasicBlock* bb, int reason) {
     }
 
     remove(bb);
-    stats.decoder.bbcache.count = bbcache.count;
+    stats.decoder.bbcache.count = bbcache[cpuid].count;
     stats.decoder.bbcache.invalidates[reason]++;
 
     bb->free();
@@ -1618,7 +1618,7 @@ bool BasicBlockCache::invalidate_page(Waddr mfn, int reason) {
     while (entry = iter.next()) {
         BasicBlock* bb = *entry;
         if (logable(3) | log_code_page_ops) ptl_logfile << "  Invalidate bb ", bb, " (", bb->rip, ", ", bb->bytes, " bytes)", endl;
-        if unlikely (!bbcache.invalidate(bb, reason)) {
+        if unlikely (!bbcache[cpuid].invalidate(bb, reason)) {
             if (logable(3) | log_code_page_ops) ptl_logfile << "  Could not invalidate bb ", bb, " (", bb->rip, ", ", bb->bytes, " bytes): still has refcount ", bb->refcount, endl;
             return false;
         }
@@ -1807,7 +1807,7 @@ bool assist_exec_page_fault(Context& ctx) {
     Waddr bbcache_rip = ctx.reg_ar2;
 
     ctx.eip = ctx.reg_selfrip;
-    assert(bbcache.invalidate(RIPVirtPhys(bbcache_rip).update(ctx), INVALIDATE_REASON_SPURIOUS));
+    assert(bbcache[ctx.cpu_index].invalidate(RIPVirtPhys(bbcache_rip).update(ctx), INVALIDATE_REASON_SPURIOUS));
     ctx.handle_page_fault(faultaddr, 2);
 
     return true;
@@ -2375,26 +2375,34 @@ ostream& BasicBlockCache::print(ostream& os) {
 }
 
 void bbcache_reclaim(size_t bytes, int urgency) {
-    bbcache.reclaim(bytes, urgency);
+    foreach(i, NUM_SIM_CORES) {
+        bbcache[i].reclaim(bytes, urgency);
+    }
 }
 
 void init_decode() {
 }
 
 void shutdown_decode() {
-    bbcache.flush(0);
+    foreach(i, NUM_SIM_CORES) {
+        bbcache[i].flush(0);
+    }
     if (bbcache_dump_file) bbcache_dump_file.close();
 }
 
 void dump_bbcache_to_logfile() {
-    BasicBlockCache::Iterator iter(&bbcache);
-    BasicBlock* bb;
-    while (bb = iter.next()) {
-        ptl_logfile << "BasicBlock: ", *bb, endl;
+    foreach(i, NUM_SIM_CORES) {
+        BasicBlockCache::Iterator iter(&bbcache[i]);
+        BasicBlock* bb;
+        while (bb = iter.next()) {
+            ptl_logfile << "BasicBlock: ", *bb, endl;
+        }
+        ptl_logfile << flush;
     }
-    ptl_logfile << flush;
 }
 
 extern "C" void ptl_flush_bbcache(int8_t context_id) {
-    bbcache.flush(context_id);
+    foreach(i, NUM_SIM_CORES) {
+        bbcache[i].flush(context_id);
+    }
 }

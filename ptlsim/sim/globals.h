@@ -39,7 +39,7 @@ extern "C" {
 #endif
 
 #ifdef ENABLE_SMT
-#define MAX_CONTEXTS 4
+#define MAX_CONTEXTS NUM_SIM_CORES
 static const int MAX_THREADS_PER_CORE = 1;
 static const int NUMBER_OF_CORES = NUM_SIM_CORES;
 static const int NUMBER_OF_THREAD_PER_CORE = 1;
