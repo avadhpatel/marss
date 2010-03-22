@@ -275,7 +275,8 @@ bool BusInterconnect::broadcast_cb(void *arg)
      * first check if pendingRequests_ queue is full or not
      * if its full dont' broadcast
      */
-    if(pendingRequests_.isFull()) {
+    if(pendingRequests_.isFull() &&
+            queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
         memdebug("Bus cant do addr broadcast, pending queue full\n");
         memoryHierarchy_->add_event(&broadcast_,
                 BUS_BROADCASTS_DELAY, queueEntry);
