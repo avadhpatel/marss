@@ -104,6 +104,7 @@ void BusInterconnect::annul_request(MemoryRequest *request)
                 entry, entry_t, nextentry_t) {
             if(entry->request == request) {
                 entry->annuled = true;
+                entry->request->decRefCounter();
                 controllers[i]->queue.free(entry);
             }
         }
@@ -113,6 +114,8 @@ void BusInterconnect::annul_request(MemoryRequest *request)
             entry, nextentry) {
         if(queueEntry->request == request) {
             queueEntry->annuled = true;
+            queueEntry->request->decRefCounter();
+            ADD_HISTORY_REM(queueEntry->request);
             pendingRequests_.free(queueEntry);
         }
     }
@@ -263,7 +266,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
     else
         queueEntry = arbitrate_round_robin();
 
-    if(queueEntry == null) { // nothing to broadcast
+    if(queueEntry == null || queueEntry->annuled) { // nothing to broadcast
         set_bus_busy(false);
         return true;
     }
@@ -305,6 +308,11 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
 {
     assert(is_busy());
     BusQueueEntry *queueEntry = (BusQueueEntry*)arg;
+
+    if(queueEntry == null || queueEntry->annuled) {
+        broadcast_cb(null);
+        return true;
+    }
 
     memdebug("Broadcasing entry: ", *queueEntry, endl);
 
@@ -397,8 +405,10 @@ bool BusInterconnect::data_broadcast_cb(void *arg)
         return true;
     }
 
-    if(pendingEntry->annuled)
+    if(pendingEntry->annuled) {
+        dataBusBusy_ = false;
         return true;
+    }
 
     memoryHierarchy_->add_event(&dataBroadcastCompleted_,
             BUS_BROADCASTS_DELAY, pendingEntry);
@@ -410,6 +420,11 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
 {
     PendingQueueEntry *pendingEntry = (PendingQueueEntry*)arg;
     assert(pendingEntry);
+
+    if(pendingEntry->annuled) {
+        dataBusBusy_ = false;
+        return true;
+    }
 
     Message& message = *memoryHierarchy_->get_message();
     message.sender = this;
