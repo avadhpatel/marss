@@ -847,7 +847,7 @@ struct Context: public CPUX86State {
 	  W64 flags = reg_flags;
 	  // Set the 2nd bit to 1 for compatibility
 	  flags = (flags | FLAG_INV);
-	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O | FLAG_IF));
+	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O));
 	  fpstt = reg_fptos >> 3;
 	  foreach(i, 8) {
           fptags[i] = !((reg_fptag >> (8*i)) & 0x1);
@@ -863,7 +863,7 @@ struct Context: public CPUX86State {
 	  // uop is executed correctly or not
 	  flags = (flags & ~(W64)(FLAG_INV));
 	  reg_flags = flags;
-	  internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF|FLAG_IF);
+	  internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
 	  eip = eip + segs[R_CS].base;
 	  cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
