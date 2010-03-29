@@ -148,6 +148,7 @@ class BusInterconnect : public Interconnect
 		int access_fast_path(Controller *controller,
 				MemoryRequest *request);
 		void annul_request(MemoryRequest *request);
+        void set_data_bus();
 
 		// Bus delay in sending message is BUS_BROADCASTS_DELAY
 		int get_delay() {

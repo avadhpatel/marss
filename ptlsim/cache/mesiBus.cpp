@@ -389,6 +389,33 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
     return true ;
 }
 
+/*
+ * This function check the pending request queue for an entry that has all the
+ * responses received and setup the data bus to broadcast the response of that
+ * entry.
+ */
+void BusInterconnect::set_data_bus()
+{
+    /* check if any other pending request received all the responses */
+    PendingQueueEntry *pendingEntry;
+    foreach_list_mutable(pendingRequests_.list(), pendingEntry,
+            entry, nextentry) {
+        bool all_set = true;
+        foreach(x, pendingEntry->responseReceived.count()) {
+            all_set &= pendingEntry->responseReceived[x];
+        }
+        if(all_set) {
+            dataBusBusy_ = true;
+            memoryHierarchy_->add_event(&dataBroadcast_, 1,
+                    pendingEntry);
+            return;
+        }
+    }
+
+    /* There is no pending entry with the response ready*/
+    dataBusBusy_ = false;
+}
+
 bool BusInterconnect::data_broadcast_cb(void *arg)
 {
     PendingQueueEntry *pendingEntry = (PendingQueueEntry*)arg;
@@ -407,7 +434,7 @@ bool BusInterconnect::data_broadcast_cb(void *arg)
     }
 
     if(pendingEntry->annuled) {
-        dataBusBusy_ = false;
+        set_data_bus();
         return true;
     }
 
@@ -423,7 +450,7 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
     assert(pendingEntry);
 
     if(pendingEntry->annuled) {
-        dataBusBusy_ = false;
+        set_data_bus();
         return true;
     }
 
@@ -457,22 +484,7 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
 
     memoryHierarchy_->free_message(&message);
 
-    /* check if any other pending request received all the responses */
-    bool found = false;
-    foreach_list_mutable(pendingRequests_.list(), pendingEntry,
-            entry, nextentry) {
-        bool all_set = true;
-        foreach(x, pendingEntry->responseReceived.count()) {
-            all_set &= pendingEntry->responseReceived[x];
-        }
-        if(all_set) {
-            dataBusBusy_ = true;
-            memoryHierarchy_->add_event(&dataBroadcast_, 1,
-                    pendingEntry);
-            return true;
-        }
-    }
+    set_data_bus();
 
-    dataBusBusy_ = false;
     return true;
 }
