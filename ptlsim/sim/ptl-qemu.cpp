@@ -227,6 +227,9 @@ static CPUWriteMemoryFunc* ptlcall_mmio_write_ops[] = {
     ptlcall_mmio_writel,
 };
 
+void dump_all_info();
+void dump_bbcache_to_logfile();
+
 void ptlsim_init() {
 
     /* First allocate some memory for PTLsim for its own memory manager */
@@ -243,6 +246,10 @@ void ptlsim_init() {
     cout << "ptlcall_mmio_init : Registered PTLcall MMIO page at physaddr ",
          PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR, " descriptor ", ptlcall_mmio_pd,
          " io_mem_index ", ptlcall_mmio_pd >> IO_MEM_SHIFT, endl;
+
+    /* Register ptlsim assert callback functions */
+    register_assert_cb(&dump_all_info);
+    register_assert_cb(&dump_bbcache_to_logfile);
 }
 
 int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,

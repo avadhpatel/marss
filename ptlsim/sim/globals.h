@@ -111,6 +111,8 @@ typedef W32 Waddr;
 #  define __ASSERT_VOID_CAST (void)
 #endif
 
+void register_assert_cb(void (*fn)());
+
 asmlinkage void assert_fail(const char *__assertion, const char *__file, unsigned int __line, const char *__function) __attribute__ ((__noreturn__));
 
 // For embedded debugging use only:
