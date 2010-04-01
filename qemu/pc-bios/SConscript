@@ -1,0 +1,7 @@
+# SConscript for pc-bios subdirectory
+
+# Import the envrionment
+Import('env')
+
+objs = env.Object(Glob('*.S'))
+Return('objs')

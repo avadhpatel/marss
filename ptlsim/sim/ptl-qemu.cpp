@@ -36,6 +36,8 @@
 
 extern "C" {
 #include <sysemu.h>
+#include <qemu-objects.h>
+#include <monitor.h>
 }
 
 #include <ptl-qemu.h>
@@ -235,7 +237,7 @@ void ptlsim_init() {
     byte* ptlsim_ram_end = ptlsim_ram_start + PTLSIM_RAM_SIZE;
 
     /* Register PTLsim PTLCALL mmio page */
-    W64 ptlcall_mmio_pd = cpu_register_io_memory(0, ptlcall_mmio_read_ops,
+    W64 ptlcall_mmio_pd = cpu_register_io_memory(ptlcall_mmio_read_ops,
             ptlcall_mmio_write_ops, NULL);
     cpu_register_physical_memory(PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR, 4096,
             ptlcall_mmio_pd);
@@ -372,7 +374,11 @@ void ptl_check_ptlcall_queue() {
                     cout << "MARSSx86::Creating checkpoint ",
                          pending_command_str, endl;
 
-                    do_savevm(pending_command_str);
+                    QDict *checkpoint_dict = qdict_new();
+                    qdict_put_obj(checkpoint_dict, "name", QOBJECT(
+                                qstring_from_str(pending_command_str)));
+                    Monitor *mon = cur_mon;
+                    do_savevm(cur_mon, checkpoint_dict);
                     cout << "MARSSx86::Checkpoint ", pending_command_str,
                          " created\n";
 

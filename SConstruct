@@ -55,6 +55,9 @@ if not sys.stdout.isatty():
 compile_source_message = '%sCompiling %s==> %s$SOURCE%s' % \
    (colors['blue'], colors['purple'], colors['yellow'], colors['end'])
 
+create_header_message = '%sCreating %s==> %s$SOURCE%s' % \
+   (colors['blue'], colors['purple'], colors['yellow'], colors['end'])
+
 compile_shared_source_message = '%sCompiling shared %s==> %s$SOURCE%s' % \
    (colors['blue'], colors['purple'], colors['yellow'], colors['end'])
 
@@ -76,6 +79,7 @@ pretty_printing=ARGUMENTS.get('pretty',1)
 if int(pretty_printing) :
     base_env = Environment(
             CXXCOMSTR = compile_source_message,
+            CREATECOMSTR = create_header_message,
             CCCOMSTR = compile_source_message,
             SHCCCOMSTR = compile_shared_source_message,
             SHCXXCOMSTR = compile_shared_source_message,

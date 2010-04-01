@@ -1,0 +1,1037 @@
+
+# Configure script for SCons
+
+try:
+    Import('qemu_env')
+    env = qemu_env
+except:
+    env = Environment()
+    env['CC'] = "g++"
+    env['LDFLAGS'] = ""
+
+#env.Append(CCFLAGS = "-g")
+
+# Set default parameters
+prefix = ""
+static = False
+cross_prefix = ""
+cc = env['CC']
+audio_drv_list = []
+audio_card_list = "ac97 es1370 sb16"
+audio_possible_cards = "ac97 es1370 sb16 cs4231a adlib gus"
+host_cc = env['CC']
+ar = "ar"
+make = "make"
+install = "install"
+strip = "strip"
+
+def exit_with_error():
+    ret_str = "Failure"
+    Return('ret_str')
+
+# Test functions
+# Add all the custom tests to following dict
+# so it will be added to conf object
+custom_tests = {}
+
+def CheckCPUDefine(context, type):
+    check_def_src = """
+    #if !defined(%s)
+    #error Not Define
+    #endif
+    int main(void) { return 0; }
+    """ % (type)
+    res = context.TryLink(check_def_src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckCPUDefine'] = CheckCPUDefine
+
+def CheckNPTL(context):
+    check_nptl_src = """
+    #include <sched.h>
+    #include <linux/futex.h>
+    void foo() {
+    #if !defined(CLONE_SETTLS) || !defined(FUTEX_WAIT)
+    #error bork
+    #endif
+    }
+    """
+    res = context.TryLink(check_nptl_src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckNPTL'] = CheckNPTL
+
+def CheckXenLibs(context):
+    xen_lib_src = """
+    #include <xenctrl.h>
+    #include <xs.h>
+    int main(void) { xs_daemon_open(); xc_interface_open(); return 0; }
+    """
+    xen_libs = ["xenstore", "xenctrl", "xenguest"]
+    context.AppendLIBS(xen_libs)
+    res = context.TryLink(xen_lib_src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckXenLibs'] = CheckXenLibs
+
+def CheckSDLX11Driver(context):
+    check_sdl_src = """
+    #include <SDL.h>
+    #if defined(SDL_VIDEO_DRIVER_X11)
+    #include <X11/XKBlib.h>
+    #else
+    #error No X11 support
+    #endif
+    int main(void) {return 0;}
+    """
+    res = context.TryLink(check_sdl_src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckSDLX11Driver'] = CheckSDLX11Driver
+
+def CheckVNCSASL(context):
+    vnc_sasl_src = """
+    #include <sasl/sasl.h>
+    #include <stdio.h>
+    int main(void) { sasl_server_init(NULL, "qemu"); return 0; }
+    """
+    context.AppendLIBS(["sasl2"])
+    res = context.TryLink(vnc_sasl_src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckVNCSASL'] = CheckVNCSASL
+
+def CheckFnmatch(context):
+    fnmatch_src = """
+    #include <fnmatch.h>
+    int main(void)
+    {
+        fnmatch("foo", "foo", 0);
+        return 0;
+    }
+    """
+    res = context.TryRun(fnmatch_src, '.cpp')[0]
+    context.Result(res)
+    return res
+custom_tests['CheckFnmatch'] = CheckFnmatch
+
+def CheckAudioDriver(context, drv, hdr, lib, exp):
+    check_aud_src = """
+    #include <%s>
+    int main(void) { %s }
+    """ % (hdr, exp)
+    print check_aud_src
+    print type(context)
+    context.AppendLIBS(lib)
+    res = context.TryRun(check_aud_src, '.cpp')[0]
+    context.Result(res)
+    return res
+custom_tests['CheckAudioDriver'] = CheckAudioDriver
+
+def CheckBrlAPI(context):
+    check_brlapi_src = """
+    #include <brlapi.h>
+    int main(void) { return brlapi_openConnection(NULL, NULL, NULL); }
+    """
+    res = context.TryRun(check_brlapi_src, '.cpp')[0]
+    context.Result(res)
+    return res
+custom_tests['CheckBrlAPI'] = CheckBrlAPI
+
+def CheckIovec(context):
+    check_iovec_src = """
+    #include <sys/types.h>
+    #include <sys/uio.h>
+    #include <unistd.h>
+    int main(void) { struct iovec iov; return 0; }
+    """
+    res = context.TryLink(check_iovec_src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckIovec'] = CheckIovec
+
+def CheckPreadv(context):
+    preadv_src = """
+    #include <sys/types.h>
+    #include <sys/uio.h>
+    #include <unistd.h>
+    int main(void) { preadv; }
+    """
+    res = context.TryLink(preadv_src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckPreadv'] = CheckPreadv
+
+def CheckAT(context):
+    atfile_src = """
+    #define _ATFILE_SOURCE
+    #include <sys/types.h>
+    #include <fcntl.h>
+    #include <unistd.h>
+
+    int
+    main(void)
+    {
+        /* try to unlink nonexisting file */
+        return (unlinkat(AT_FDCWD, "nonexistent_file", 0));
+    }
+    """
+    res = context.TryLink(atfile_src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckAT'] = CheckAT
+
+def CheckInotify(context):
+    src = """
+    #include <sys/inotify.h>
+
+    int
+    main(void)
+    {
+        /* try to start inotify */
+        return inotify_init();
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckInotify'] = CheckInotify
+
+def CheckUtimensat(context):
+    src = """
+    #define _ATFILE_SOURCE
+    #define _GNU_SOURCE
+    #include <stddef.h>
+    #include <fcntl.h>
+
+    int main(void)
+    {
+        utimensat(AT_FDCWD, "foo", NULL, 0);
+        futimens(0, NULL);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckUtimensat'] = CheckUtimensat
+
+def CheckPipe2(context):
+    src = """
+    #define _GNU_SOURCE
+    #include <unistd.h>
+    #include <fcntl.h>
+
+    int main(void)
+    {
+        int pipefd[2];
+        pipe2(pipefd, O_CLOEXEC);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckPipe2'] = CheckPipe2
+
+def CheckAccept4(context):
+    src = """
+    #define _GNU_SOURCE
+    #include <sys/socket.h>
+    #include <stddef.h>
+
+    int main(void)
+    {
+        accept4(0, NULL, NULL, SOCK_CLOEXEC);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckAccept4'] = CheckAccept4
+
+def CheckSplice(context):
+    src = """
+    #define _GNU_SOURCE
+    #include <unistd.h>
+    #include <fcntl.h>
+    #include <limits.h>
+
+    int main(void)
+    {
+        int len, fd;
+        len = tee(STDIN_FILENO, STDOUT_FILENO, INT_MAX, SPLICE_F_NONBLOCK);
+        splice(STDIN_FILENO, NULL, fd, NULL, len, SPLICE_F_MOVE);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckSplice'] = CheckSplice
+
+def CheckEventFD(context):
+    src = """
+    #include <sys/eventfd.h>
+    int main(void)
+    {
+        int efd = eventfd(0, 0);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckEventFD'] = CheckEventFD
+
+def CheckFallocate(context):
+    src = """
+    #include <fcntl.h>
+
+    int main(void)
+    {
+        fallocate(0, 0, 0, 0);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckFallocate'] = CheckFallocate
+
+def CheckDup3(context):
+    src = """
+    #include <unistd.h>
+    int main(void)
+    {
+        dup3(0, 0, 0);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckDup3'] = CheckDup3
+
+def CheckDup3(context):
+    src = """
+    #include <unistd.h>
+    int main(void)
+    {
+        dup3(0, 0, 0);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckDup3'] = CheckDup3
+
+# Start testing
+conf = Configure(env, custom_tests = custom_tests)
+
+# First check if C compiler works or not
+if not conf.CheckCXX():
+    print("ERROR: You do not have %s compiler installed!!" % env['CXX'])
+    exit_with_error()
+
+compile_test_src = """
+int main(void) {return 0;}
+"""
+if not conf.TryLink(compile_test_src, '.cpp'):
+    print("ERROR: %s either does not exist or does not work" % cc)
+    exit_with_error()
+
+# Get the CPU type
+if conf.CheckCPUDefine("__i386__"):
+    env['cpu'] = "i386"
+elif conf.CheckCPUDefine("__x86_64__"):
+    env['cpu'] = "x86_64"
+else :
+    print("ERROR: Unsupported type of host")
+    exit_with_error()
+
+# We currently support only one type of virtual machine target
+env['target_list'] = "x86_64-softmmu"
+
+libs_softmmu = []
+libs_tools = []
+
+# Default value for a variable defining feature "foo".
+#  * foo=FALSE  feature will only be used if user change it to TRUE
+#  * foo=""     feature will be searched for, and if found, will be used
+#               unless user change it to FALSE
+#  * foo=TRUE   feature will searched for,
+#               if not found, configure exits with error
+#
+
+env['bluez']=False
+env['brlapi']=""
+env['curl']=""
+env['curses']=""
+env['docs']=False
+env['fdt']=""
+env['kvm']=False
+env['nptl']=""
+env['sdl_x11']=True
+env['sparse']=False
+env['uuid']=""
+env['vde']=""
+env['vnc_tls']=""
+env['vnc_sasl']=""
+env['xen']=False
+env['linux_aio']=False
+
+env['gprof']=False
+env['debug_tcg']=False
+env['debug']=False
+env['strip_opt']=True
+env['bigendian']=False
+env['mingw32']=False
+env['EXESUF']=""
+env['slirp']=True
+env['fmod_lib']=""
+env['fmod_inc']=""
+env['oss_lib']=""
+# bsd=False
+env['linux']=True
+# solaris=False
+env['profiler']=False
+# cocoa=False
+env['softmmu']=True
+# linux_user=False
+# darwin_user=False
+# bsd_user=False
+env['guest_base']=""
+env['uname_release']=""
+env['iothread']=False
+env['mixemu']=False
+env['kerneldir']=""
+env['aix']=False
+env['blobs']=True
+env['pkgversion']=""
+env['check_utests']=False
+env['user_pie']=False
+env['zero_malloc']=""
+
+
+# gprof=False
+# sparse=False
+# bigendian=False
+# mingw32=False
+# EXESUF=""
+env['gdbstub']=True
+# slirp=True
+# vde=True
+# fmod_lib=""
+# fmod_inc=""
+# oss_lib=""
+# vnc_tls=True
+# bsd=False
+# linux=False
+# solaris=False
+# kqemu=False
+# profiler=False
+# cocoa=False
+env['check_gfx']=True
+env['softmmu']=True
+# linux_user=False
+# darwin_user=False
+# bsd_user=False
+# build_docs=False
+# uname_release=""
+# curses=True
+# aio=True
+# nptl=True
+# mixemu=False
+# bluez=True
+# kvm=False
+# kerneldir=""
+# aix=False
+# blobs=True
+# fdt=True
+# sdl_x11=False
+
+audio_drv_list = "oss"
+audio_possible_drivers = "oss sdl esd pa fmod"
+usb = "linux"
+linux_user = True
+
+# Check target OS
+if conf.CheckCPUDefine("__linux__"):
+    env['targetos'] = "Linux"
+else:
+    print("ERROR: Unsupported target OS, use Linux")
+    exit_with_error()
+
+CFLAGS = "%s -fno-strict-aliasing" % (env['CCFLAGS'])
+CFLAGS += " -Wall -Wundef -Wendif-labels -Wwrite-strings -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls"
+CFLAGS += " -m64"
+#LDFLAGS = "-g" 
+LDFLAGS = " -Wl,--warn-common -m64"
+host_guest_base = True
+
+guest_base = host_guest_base
+
+ARCH_CFLAGS = ""
+ARCH_LDFLAGS = ""
+OS_CFLAGS = ""
+OS_LDFLAGS = ""
+hostlongbits = "32"
+if env['cpu'] == "i386":
+    ARCH_CFLAGS = "-m32"
+    ARCH_LDFLAGS = "-m32"
+else :
+    ARCH_CFLAGS = "-m64"
+    ARCH_LDFLAGS = "-m64"
+    hostlongbits = "64"
+
+
+# Fix endianess 
+bigendian = False
+
+# Check NPTL
+if env['nptl'] != False and conf.CheckNPTL():
+    env['nptl'] = True
+else:
+    env['nptl'] = False
+
+# zlib check
+if not conf.CheckLibWithHeader('z', 'zlib.h', 'c'):
+    print("ERROR: zlib check failed")
+    print("Make sure you have zlib library and headers installed")
+    exit_with_error()
+
+# Xen Libraries check
+if env['xen'] != False and conf.CheckXenLibs():
+    env['xen'] = True
+    libs_softmmu += ['xenstore', 'xenctrl', 'xenguest']
+else:
+    env['xen'] = False
+
+# SDL probe
+sdl_config = "sdl-config"
+sdl = None
+sdl_static = None
+
+try:
+    pared = env.ParseConfig("sdl-config --cflags --libs --static-libs")
+    env['sdl'] = True
+except OSError:
+    env['sdl'] = False
+
+if not conf.CheckSDLX11Driver():
+    print("ERROR: SDL library not found")
+    exit_with_error()
+else:
+    env['sdl_x11'] = True
+    libs_softmmu.append('X11')
+    # LDFLAGS += " -lX11 "
+    sdl_x11 = True
+
+# VNC TLS detection
+try:
+    env.ParseConfig("pkg-config --cflags --libs gnutls")
+    env['vnc_tls'] = True
+except OSError:
+    print("VNC TLS support not found, TLS support disabled")
+    env['vnc_tls'] = False
+
+# fnmatch() probe, used for ACL routines
+if conf.CheckFnmatch():
+    env['fnmatch'] = True
+else:
+    env['fnmatch'] = False
+
+# vde libraries probe
+if env['vde'] != False and conf.CheckLib('vdeplug'):
+    #print("VDE library not found, VDE disabled")
+    env['vde'] = True 
+else:
+    env['vde'] = False
+
+# Audio support
+a_drv = ""
+a_hdr = ""
+a_lib = ""
+a_exp = ""
+a_check_req = True
+for aud_drv in audio_drv_list.split():
+    if aud_drv == "alsa":
+        a_drv = "alsa"
+        a_hdr = "alsa/asoundlib.h"
+        a_lib = "asound"
+        a_exp = "snd_pcm_t **handle; return snd_pcm_close(*handle);"
+    elif aud_drv == "esd":
+        a_drv = "esd"
+        a_hdr = "esd.h"
+        a_lib = "esd"
+        a_exp = "return esd_play_stream(0, 0, \"\", 0);"
+    elif aud_drv in ["oss", "sdl", "core", "wav", "dsound"]:
+        a_drv = aud_drv
+        a_check_req = False
+    else:
+        print("ERROR: Unknown type of audio driver support")
+        print("Please select from: alsa, esd, oss, sdl, wav, core \
+                dsound")
+        exit_with_error()
+
+env['aud_lib'] = ""
+if a_check_req == False:
+    env['audio_drv'] = a_drv
+    if a_drv == "oss":
+        env['aud_lib'] = env['oss_lib']
+elif conf.CheckAudioDriver(a_drv, a_hdr, a_lib, a_exp):
+    env['audio_drv'] = a_drv
+else:
+    print("ERROR: Can't configure audio %s" % a_drv)
+    print("Please install supported libs and headers for %s" % a_drv)
+    exit_with_error()
+
+# BrlAPI probe
+if env['brlapi'] != False and conf.CheckBrlAPI():
+    env['brlapi'] = True
+else:
+    env['brlapi'] = False
+
+# curses probe
+if env['curses'] != False and conf.CheckLibWithHeader('curses', 'curses.h', 'c'):
+    env['curses'] = True
+else:
+    env['curses'] = False
+
+# bluez support probe
+if env['bluez'] != False:
+    try:
+        env.ParseConfig("pkg-config --cflags --libs bluez")
+        env['bluez'] = True
+    except OSError:
+        env['bluez'] = False
+
+
+# We disable KVM by default in configuration
+env['kvm'] = False
+# We disable KQEMU by default
+env['kqemu'] = False
+
+# AIO probe
+AIOLIBS = ""
+if conf.CheckLibWithHeader('pthread', 'pthread.h', 'c'):
+    env['aio'] = True
+    AIOLIBS = "pthread"
+else:
+    env['aio'] = False
+
+# iovec probe
+if conf.CheckIovec():
+    env['iovec'] = True
+else:
+    env['iovec'] = False
+
+# fdt probe
+if env['fdt'] != False and conf.CheckLib('fdt'):
+    env['fdt'] = True
+else:
+    env['fdt'] = False
+
+# preadv probe
+if conf.CheckPreadv():
+    env['preadv'] = True
+else:
+    env['preadv'] = False
+
+# xxxat() functions support
+if conf.CheckAT():
+    env['atfile'] = True
+else:
+    env['atfile'] = False
+
+# inotify support
+if conf.CheckInotify():
+    env['inotify'] = True
+else:
+    env['inotify'] = False
+
+# utimensat and futimens
+if conf.CheckUtimensat():
+    env['utimensat'] = True
+else:
+    env['utimensat'] = False
+
+# pipe2
+if conf.CheckPipe2():
+    env['pipe2'] = True
+else:
+    env['pipe2'] = False
+
+# accept4
+if conf.CheckAccept4():
+    env['accept4'] = True
+else:
+    env['accept4'] = False
+
+# tee/splice
+if conf.CheckSplice():
+    env['splice'] = True
+else:
+    env['splice'] = False
+
+# eventfd
+if conf.CheckEventFD():
+    env['eventfd'] = True
+else:
+    env['eventfd'] = False
+
+# fallocate
+if conf.CheckFallocate():
+    env['fallocate'] = True
+else:
+    env['fallocate'] = False
+
+# dup3
+if conf.CheckDup3():
+    env['dup3'] = True
+else:
+    env['dup3'] = False
+
+# Check Header files
+if conf.CheckCHeader('signal.h') and conf.CheckCHeader('time.h'):
+    env['rt'] = True
+    if conf.CheckLib('rt'):
+        AIOLIBS += " rt"
+else:
+    env['rt'] = False
+
+# fdatasync
+if conf.CheckFunc('fdatasync'):
+    env['fdatasync'] = True
+else:
+    env['fdatasync'] = False
+
+# curl
+try:
+    pared = env.ParseConfig("curl-config --cflags --libs")
+    env['curl'] = True
+except OSError:
+    env['curl'] = False
+
+# zero malloc
+env['zero_malloc'] = True
+
+# VNC SASL detection
+if env['vnc_sasl'] != False and conf.CheckLibWithHeader('sasl', 'sasl.h', 'c'):
+    env['vnc_sasl'] = True
+    libs_softmmu.append("sasl2")
+else:
+    env['vnc_sasl'] = False
+
+env['bios_dir'] = "qemu/pc-bios"
+import os
+env['source_path'] = os.getcwd()
+
+config_mak_name = "%s/config-host.mak" % (env['source_path'])
+config_mak = open(config_mak_name, 'w')
+config_mak.write("# Automatically generated by SConfigure - do not modify\n")
+config_mak.write("CONFIG_QEMU_SHAREDIR=\"%s\"\n" % env['bios_dir'])
+
+config_mak.write("ARCH=%s\n" % env['cpu'])
+if env['strip_opt'] == True:
+    config_mak.write("STRIP_OPT=-s\n")
+
+if bigendian == True:
+    config_mak.write("HOST_WORDS_BIGENDIAN=y\n")
+
+config_mak.write("HOST_LONG_BITS=%s\n" % hostlongbits)
+config_mak.write("CONFIG_POSIX=y\n")
+config_mak.write("CONFIG_BDRV_WHITELIST=\n")
+
+write_config_y_list = ['linux', 'profiler', 'slirp', 'vde', 'mixemu',
+        'vnc_tls', 'vnc_sasl', 'fnmatch', 'uuid', 'sdl', 'curses', 'atfile',
+        'utimensat', 'pipe2', 'accept4', 'splice', 'eventfd', 'fallocate',
+        'dup3', 'inotify', 'curl', 'brlapi', 'bluez', 'xen', 'iothread',
+        'linux_aio', 'iovec', 'preadv', 'fdt', 'fdatasync', 'zero_malloc']
+for conf_opt in write_config_y_list:
+    if env[conf_opt] == True:
+        config_mak.write("CONFIG_%s=y\n" % conf_opt.upper())
+
+if env['blobs'] == True:
+    config_mak.write("INSTALL_BLOBS=y\n")
+
+if static == True:
+    config_mak.write("CONFIG_STATIC=y\n")
+env['static'] = static 
+
+if conf.CheckCHeader('byteswap.h'):
+    config_mak.write("CONFIG_BYTESWAP_H=y\n")
+
+if conf.CheckCHeader('machine/bswap.h'):
+    config_mak.write("CONFIG_MACHINE_BSWAP_H=y\n")
+
+# if env['gdbstub'] == True:
+    # config_mak.write("CONFIG_GDBSTUB=y\n")
+
+# if env['gprof'] == True:
+    # config_mak.write("HAVE_GPROF=y\n")
+
+for card in audio_card_list.split():
+    card = card.upper()
+    config_mak.write("CONFIG_%s=y\n" % card)
+    env[card] = True
+
+config_mak.write("CONFIG_AUDIO_DRIVERS=%s\n" % env['audio_drv'])
+for drv in env['audio_drv'].split():
+    config_mak.write("CONFIG_%s=y\n" % drv)
+    env[drv] = True
+
+qemu_version = open("%s/VERSION" % (env['source_path']), 'r').readline()
+env['qemu_version'] = qemu_version
+config_mak.write("VERSION=%s\n" % qemu_version.strip())
+config_mak.write("PKGVERSION=\n")
+config_mak.write("SRC_PATH=%s\n" % env['source_path'])
+# config_mak.write("TARGET_DIRS=%s\n" % env['target_dir'])
+
+env['usb'] = usb
+if env['usb'] == "linux":
+    config_mak.write("HOST_USB=linux\n")
+env['tools'] = "qemu-img qemu-nbd qemu-io"
+config_mak.write("TOOLS=%s\n" % env['tools'])
+env['roms'] = "optionrom"
+config_mak.write("ROMS=%s\n" % env['roms'])
+
+config_mak.close()
+
+# config_h_name = "%s/config-host.h" % (env['source_path'])
+# config_h = open(config_h_name, 'w')
+# config_h.write("// Automatically generated by SConfigure - do not modify\n")
+# config_h.write("#define CONFIG_QEMU_SHAREDIR \"%s\"\n" % env['bios_dir'])
+
+# if env['cpu'] == "i386":
+    # env['arch'] = "i386"
+    # config_h.write("#define HOST_I386 1\n")
+# elif env['cpu'] == "x86_64":
+    # env['arch'] = "x86_64"
+    # config_h.write("#define HOST_X86_64 1\n")
+# else:
+    # print("ERROR: Unsupported CPU type %s\n" % cpu)
+    # exit_with_error()
+
+# if bigendian == True:
+    # config_h.write("#define WORDS_BIGENDIAN 1\n")
+
+# config_h.write("#define HOST_LONG_BITS %s\n" % hostlongbits)
+
+# if conf.CheckCHeader('byteswap.h'):
+    # config_h.write("#define HAVE_BYTESWAP_H 1\n")
+
+# if conf.CheckCHeader('machine/bswap.h'):
+    # config_h.write("#define HAVE_MACHINE_BSWAP_H 1\n")
+
+# if gdbstub == True:
+    # config_h.write("#define CONFIG_GDBSTUB 1\n")
+# env['gdbstub'] = gdbstub
+
+# if gprof == True:
+    # config_h.write("#define HAVE_GPROF 1\n")
+# env['gprof'] = gprof
+
+# if static == True:
+    # config_h.write("#define CONFIG_STATIC 1\n")
+# env['static'] = static 
+
+# if profiler == True:
+    # config_h.write("#define CONFIG_PROFILER 1\n")
+
+# if slirp == True:
+    # config_h.write("#define CONFIG_SLIRP 1\n")
+# env['slirp'] = slirp 
+
+# if env['vde']:
+    # config_h.write("#define CONFIG_VDE 1\n")
+
+# for card in audio_card_list.split():
+    # card = card.upper()
+    # config_h.write("#define CONFIG_%s 1\n" % card)
+    # env[card] = True
+
+# config_h.write("#define AUDIO_DRIVERS \\\n")
+# for drv in env['audio_drv'].split():
+    # config_h.write("\t&%s_audio_driver, \\\n" % drv)
+    # env[drv] = True
+# config_h.write("\n")
+
+# if mixemu == True:
+    # config_h.write("#define CONFIG_MIXEMU 1\n")
+# env['mixemu'] = mixemu
+
+# if env['vnc_tls']:
+    # config_h.write("#define CONFIG_VNC_TLS 1\n")
+
+# qemu_version = open("%s/VERSION" % (env['source_path']), 'r').readline()
+# env['qemu_version'] = qemu_version
+# config_h.write("#define QEMU_VERSION \"%s\"\n" % qemu_version.strip())
+
+
+# if env['sdl']:
+    # config_h.write("#define CONFIG_SDL 1\n")
+
+# if cocoa == True:
+    # config_h.write("#define CONFIG_COCOA 1\n")
+# env['cocoa'] = cocoa
+
+# if env['curses']:
+    # config_h.write("#define CONFIG_CURSES 1\n")
+
+# if env['brlapi']:
+    # config_h.write("#define CONFIG_BRLAPI 1\n")
+
+# if env['bluez']:
+    # config_h.write("#define CONFIG_BLUEZ 1\n")
+
+# if env['aio']:
+    # config_h.write("#define CONFIG_AIO 1\n")
+
+# if env['iovec']:
+    # config_h.write("#define HAVE_IOVEC 1\n")
+
+# if env['fdt']:
+    # config_h.write("#define HAVE_FDT 1\n")
+
+# env['usb'] = usb
+# env['tools'] = "qemu-img qemu-nbd"
+
+# config_h.close()
+
+env.Append(CCFLAGS = CFLAGS)
+env.Append(LINKFLAGS = LDFLAGS)
+env.Append(LIBS = libs_softmmu)
+env['aiolibs'] = AIOLIBS
+env['ARLIB_BEGIN'] = "-Wl,--whole-archive"
+env['ARLIB_END'] = "-Wl,--no-whole-archive"
+
+env['targets'] = []
+for target in env['target_list'].split():
+    target_d = {}
+    env['targets'].append(target_d)
+    target_dir = "%s/%s" % (env['source_path'], target)
+    target_d['dir'] = target_dir
+    target_cpu = target_dir.split('-')[0]
+    target_softmmu = True
+    target_user_only = False
+    target_linux_user = False
+    target_darwin_user = False
+    target_bsd_user = False
+
+    if not target_user_only and env['check_gfx'] and not env['sdl'] and not cocoa:
+        print("ERROR: QEMU requires SDL or Cocoa for GUI output")
+        print("To build QEMU without graphical output configure with --disable-gfx-check")
+        print("Note this will disable all output from the virtual graphics card")
+        print("except through VNC or curses.")
+        exit_with_error()
+
+    try:
+        os.mkdir(target_dir)
+        os.mkdir("%s/fpu" % target_dir)
+        os.mkdir("%s/tcg" % target_dir)
+        os.mkdir("%s/ide" % target_dir)
+    except OSError:
+        pass 
+
+    t_config_mak = open("%s/config-target.mak" % target_dir, 'w')
+    t_config_mak.write("# Automatically generated by SConfigre - do not modify\n")
+    # t_config_mak.write("#include \"../config-host.h\"\n")
+
+    # FIXME Currently we are setting interp_prefix to source path
+    t_config_mak.write("CONFIG_QEMU_PREFIX=%s\n" % env['source_path'])
+
+    bflt = False
+    elfload32 = False
+    target_nptl = False
+#    interp_prefix1 = 
+    
+    target_d['arch'] = env['cpu']
+    if env['cpu'] == "i386":
+        t_config_mak.write("TARGET_ARCH=i386\n")
+        t_config_mak.write("TARGET_I386=1\n")
+        if env['kvm']:
+            t_config_mak.write("CONFIG_KVM=y\n")
+        if env['kqemu']:
+            t_config_mak.write("USE_KQEMU=y\n")
+    elif env['cpu'] == "x86_64":
+        t_config_mak.write("TARGET_ARCH=x86_64\n")
+        t_config_mak.write("TARGET_X86_64=y\n")
+        t_config_mak.write("TARGET_ARCH2=x86_64\n")
+        t_config_mak.write("TARGET_BASE_ARCH=i386\n")
+        if env['kvm'] == True:
+            t_config_mak.write("CONFIG_KVM=y\n")
+        if env['kqemu'] == True:
+            t_config_mak.write("USE_KQEMU=y\n")
+        if env['xen'] == True:
+            t_config_mak.write("CONFIG_XEN=y\n")
+        t_config_mak.write("TARGET_ABI_DIR=x86_64\n")
+        t_config_mak.write("TARGET_PHYS_ADDR_BITS=64\n")
+    else:
+        print("ERROR: Unknown CPU type %s" % env['cpu'])
+        exit_with_error()
+
+    target_d['softmmu'] = target_softmmu
+    if target_softmmu:
+        t_config_mak.write("CONFIG_SOFTMMU=y\n")
+    target_d['user_only'] = target_user_only
+    if target_user_only:
+        t_config_mak.write("CONFIG_USER_ONLY=y\n")
+    target_d['linux_user'] = target_linux_user
+    if target_linux_user:
+        t_config_mak.write("CONFIG_LINUX_USER=y\n")
+    target_d['darwin_user'] = target_darwin_user
+    if target_darwin_user:
+        t_config_mak.write("CONFIG_DARWIN_USER=y\n")
+
+    # No need for softfloat in i386 and x86_64
+    target_d['softfloat'] = False
+    t_config_mak.write("CONFIG_NOSOFTFLOAT=y\n")
+    t_config_mak.write("CONFIG_I386_DIS=y\n")
+
+    target_d['bflt'] = (target_user_only and bflt)
+    if target_user_only and bflt:
+        t_config_mak.write("TARGET_HAS_BFLT 1\n")
+
+    target_d['nplt'] = (target_user_only and env['nplt'] and target_nptl)
+    if target_user_only and env['nplt'] and target_nptl:
+        t_config_mak.write("USE_NPTL 1\n")
+
+    target_d['elfload32'] = (target_user_only and elfload32)
+    if target_user_only and elfload32:
+        t_config_mak.write("TARGET_HAS_ELFLOAD32 1\n")
+
+    t_config_mak.close()
+
+# tempoarary config to build sub modules
+for rom in ['seabios', 'vgabios']:
+    rom_config_mak_name = "%s/roms/%s/config.mak" % (env['source_path'], rom)
+    rom_config_mak = open(rom_config_mak_name, 'w')
+    rom_config_mak.write("# Automatically generated config file - do not modify\n")
+    rom_config_mak.write("SRC_PATH=%s/roms/%s\n" % (env['source_path'], rom))
+    rom_config_mak.write("CC=%s\n" % env['CC'])
+    rom_config_mak.write("BCC=bcc\n")
+    rom_config_mak.write("CPP=cpp\n")
+    rom_config_mak.write("OBJCOPY=objcopy\n")
+    rom_config_mak.write("IASL=iasl\n")
+    rom_config_mak.write("HOST_CC=%s\n" % env['CC'])
+    rom_config_mak.write("LD=ld\n")
+
+for hwlib in ['32', '64']:
+    try:
+        dirname = "%s/libhw%s" % (env['source_path'], hwlib)
+        os.mkdir(dirname)
+    except OSError:
+        pass
+
+try:
+    dirname = "%s/libuser" % env['source_path']
+    os.mkdir(dirname)
+except OSError:
+    pass
+
+ret_str = "success"
+Return('ret_str')

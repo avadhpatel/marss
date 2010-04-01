@@ -1,0 +1,25 @@
+# SConscript for pc-bios subdirectory
+
+# Import the envrionment
+Import('env')
+
+env['LD'] = 'ld'
+
+# Create builders for .img, .raw and .bin
+img_bld = Builder(action = '$LD -Ttext 0 -e _start -s -o $TARGET $SOURCE',
+        suffix='.img', src_suffix='.o')
+raw_bld = Builder(action = 'objcopy -O binary -j .text $SOURCE $TARGET',
+        suffix='.raw', src_suffix='.img')
+bin_bld = Builder(action = 'sh %s/pc-bios/optionrom/signrom.sh $SOURCE $TARGET' % env['source_path'],
+        suffix='.bin', src_suffix='.raw')
+
+env.Append(BUILDERS = { 'Img' : img_bld, 'Raw' : raw_bld, 'Bin' : bin_bld})
+
+objs = env.Object(Glob('*.S'))
+env.Img('multiboot.img', 'multiboot.o')
+env.Raw('multiboot.raw', 'multiboot.img')
+env.Bin('multiboot.bin', 'multiboot.raw')
+
+env.Img('linuxboot.img', 'linuxboot.o')
+env.Raw('linuxboot.raw', 'linuxboot.img')
+env.Bin('linuxboot.bin', 'linuxboot.raw')

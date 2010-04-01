@@ -97,7 +97,7 @@ void ptlsim_init(void);
  *                 function is called when QEMU gets the ptlsim configuration
  *                 and its about to change to simulation mode
  */
-void ptl_machine_configure(char* config_str);
+void ptl_machine_configure(const char* config_str);
 
 /*
  * ptl_create_new_context

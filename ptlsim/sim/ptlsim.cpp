@@ -651,7 +651,11 @@ void ptl_reconfigure(char* config_str) {
 }
 
 static bool ptl_machine_configured=false;
-extern "C" void ptl_machine_configure(char* config_str) {
+extern "C" void ptl_machine_configure(const char* config_str_) {
+
+    char *config_str = (char*)qemu_mallocz(strlen(config_str_) + 1);
+    pstrcpy(config_str, strlen(config_str_)+1, config_str_);
+
     if(!ptl_machine_configured) {
         configparser.setup();
         config.reset();
@@ -680,6 +684,8 @@ extern "C" void ptl_machine_configure(char* config_str) {
         assert(machine);
         machine->initialized = 0;
     }
+
+    qemu_free(config_str);
 }
 
 static int ctx_counter = 0;
