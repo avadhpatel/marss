@@ -219,7 +219,11 @@ int rtc_td_hack = 0;
 #endif
 int usb_enabled = 0;
 int singlestep = 0;
+#ifdef MARSS_QEMU
+int smp_cpus = NUM_SIM_CORES;
+#else
 int smp_cpus = 1;
+#endif
 int max_cpus = 0;
 int smp_cores = 1;
 int smp_threads = 1;
@@ -2633,6 +2637,7 @@ static void numa_add(const char *optarg)
     return;
 }
 
+#ifndef MARSS_QEMU
 static void smp_parse(const char *optarg)
 {
     int smp, sockets = 0, threads = 0, cores = 0;
@@ -2682,6 +2687,7 @@ static void smp_parse(const char *optarg)
     if (max_cpus == 0)
         max_cpus = smp_cpus;
 }
+#endif // MARSS_QEMU
 
 /***********************************************************/
 /* USB devices */
@@ -5542,6 +5548,7 @@ int main(int argc, char **argv, char **envp)
                     exit(1);
                 }
                 break;
+#ifndef MARSS_QEMU
             case QEMU_OPTION_smp:
                 smp_parse(optarg);
                 if (smp_cpus < 1) {
@@ -5558,6 +5565,7 @@ int main(int argc, char **argv, char **envp)
                     exit(1);
                 }
                 break;
+#endif // MARSS_QEMU
 	    case QEMU_OPTION_vnc:
                 display_type = DT_VNC;
 		vnc_display = optarg;
