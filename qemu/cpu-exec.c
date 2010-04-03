@@ -232,9 +232,15 @@ int sim_cpu_exec(void)
     int ret, interrupt_request;
 	CPUState *env1;
 
-	for(env1 = first_cpu; env1 != NULL; env1 = env1->next_cpu)
-		if (cpu_halted(env1) == EXCP_HALTED)
-			return EXCP_HALTED;
+    uint8_t all_halted = 1;
+    for(env1 = first_cpu; env1 != NULL; env1 = env1->next_cpu)
+        if (cpu_halted(env1) != EXCP_HALTED) {
+            all_halted = 0;
+            break;
+        }
+    if(all_halted)
+        return EXCP_HALTED;
+
 
     /* first we save global registers */
 #define SAVE_HOST_REGS 1
@@ -372,12 +378,7 @@ exit_loop:
 
 #endif
 
-/* main execution loop */
-#ifdef MARSS_QEMU
-int cpu_x86_exec(CPUX86State *env1, uint8_t do_simulate)
-#else
 int cpu_exec(CPUState *env1)
-#endif
 {
 #define DECLARE_HOST_REGS 1
 #include "hostregs_helper.h"

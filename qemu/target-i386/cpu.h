@@ -724,11 +724,7 @@ typedef struct CPUX86State {
 } CPUX86State;
 
 CPUX86State *cpu_x86_init(const char *cpu_model);
-#ifdef MARSS_QEMU
-int cpu_x86_exec(CPUX86State *s, uint8_t do_simulate);
-#else
 int cpu_x86_exec(CPUX86State *s);
-#endif
 void cpu_x86_close(CPUX86State *s);
 void x86_cpu_list (FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt,
                                                  ...));

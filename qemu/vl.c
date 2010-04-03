@@ -4066,11 +4066,7 @@ static int qemu_cpu_exec(CPUState *env)
         env->icount_decr.u16.low = decr;
         env->icount_extra = count;
     }
-#ifdef MARSS_QEMU
-    ret = cpu_exec(env, 0);
-#else
     ret = cpu_exec(env);
-#endif
 #ifdef CONFIG_PROFILER
     qemu_time += profile_getclock() - ti;
 #endif
@@ -4240,8 +4236,8 @@ static void main_loop(void)
 #ifndef CONFIG_IOTHREAD
 #ifdef MARSS_QEMU
             if(in_simulation) {
-                sim_cpu_exec();
                 cur_cpu = first_cpu;
+                sim_cpu_exec();
             } else {
 #endif
                 tcg_cpu_exec();
