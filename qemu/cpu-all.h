@@ -763,9 +763,6 @@ extern CPUState *cpu_single_env;
 extern int64_t qemu_icount;
 extern int use_icount;
 
-#ifdef MARSS_QEMU
-#define CPU_INTERRUPT_EXIT   0x01 /* wants exit from main loop */
-#endif
 #define CPU_INTERRUPT_HARD   0x02 /* hardware interrupt pending */
 #define CPU_INTERRUPT_EXITTB 0x04 /* exit the current TB (use for x86 a20 case) */
 #define CPU_INTERRUPT_TIMER  0x08 /* internal timer exception pending */

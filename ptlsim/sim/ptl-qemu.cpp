@@ -121,7 +121,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                  */
                 vm_stop(0);
                 ptl_machine_configure(command_str);
-                cpu_interrupt(cpu, CPU_INTERRUPT_EXIT);
+                cpu_exit(cpu);
                 if(in_simulation)
                     vm_start();
                 simulation_configured = 1;
@@ -142,7 +142,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                 vm_stop(0);
 
                 if (cpu_single_env)
-                    cpu_interrupt(cpu_single_env, CPU_INTERRUPT_EXIT);
+                    cpu_exit(cpu_single_env);
 
                 if(arg3 != PTLCALL_CHECKPOINT_DUMMY) {
 
