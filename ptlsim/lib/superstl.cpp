@@ -18,9 +18,50 @@ bool force_synchronous_streams = false;
 
 #include <execinfo.h>
 
+struct assert_cb_t {
+    void (*function)();
+    assert_cb_t *next;
+};
+
+static assert_cb_t *assert_cb_head = null;
+static assert_cb_t *assert_cb = null;
+
+/*
+ * Register an assert callback function
+ */
+void register_assert_cb(void (*fn)())
+{
+    assert_cb_t *tmp_cb = new assert_cb_t;
+    tmp_cb->function = fn;
+    tmp_cb->next = null;
+
+    if(assert_cb_head == null) {
+        assert_cb_head = tmp_cb;
+    } else {
+        assert_cb->next = tmp_cb;
+    }
+    assert_cb = tmp_cb;
+}
+
 extern "C" void assert_fail(const char *__assertion, const char *__file, unsigned int __line, const char *__function) {
   stringbuf sb;
   sb << "Assert ", __assertion, " failed in ", __file, ":", __line, " (", __function, ")", endl;
+
+  sb << "Calling Assert Callback functions\n";
+
+  /* To avoid infinite recursion of assert in assert callback functions */
+  static bool in_assert_fail = 0;
+  if(in_assert_fail) {
+      return;
+  }
+  in_assert_fail = 1;
+
+  assert_cb_t *tmp_cb = assert_cb_head;
+  while(tmp_cb != null) {
+      (*tmp_cb->function)();
+      tmp_cb = tmp_cb->next;
+  }
+
   sb << "Printing stack trace:\n";
   // Print backtrace
 	void *array[10];
