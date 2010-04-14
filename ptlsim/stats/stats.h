@@ -20,11 +20,7 @@
 #include <dcache.h>
 #include <branchpred.h>
 
-#ifdef NEW_CACHE
 #include <memoryStats.h>
-#else
-#include <MemoryConfig.h>
-#endif
 
 #undef STATS_ONLY
 

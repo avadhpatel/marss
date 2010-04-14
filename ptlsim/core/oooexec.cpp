@@ -21,11 +21,7 @@
 #else
 #include <ooocore.h>
 #endif
-#ifdef NEW_CACHE
 #include <memoryHierarchy.h>
-#else
-#include <MemoryHierarchy.h>
-#endif
 #include <stats.h>
 
 #ifndef ENABLE_CHECKS
@@ -1572,7 +1568,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   // test if CPUController can accept new request:
   if(config.use_new_memory_system){
-#ifdef NEW_MEMORY
     bool cache_available = core.memoryHierarchy.is_cache_available(core.coreid, threadid, false/* icache */);
     if(!cache_available){
       msdebug << " dcache can not read core:", core.coreid, " threadid ", threadid, endl;
@@ -1581,7 +1576,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       load_store_second_phase = 1;
       return ISSUE_NEEDS_REPLAY;
     }
-#endif
   }
 
   //
@@ -1755,7 +1749,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     assert(!config.verify_cache);
     return probecache(physaddr, sfra);
   }else { // use cpu, bus, cache controllers, etc
-#ifdef NEW_MEMORY
 	  if(sfra) {
 		  // the data is partially covered by previous store..
 		  // store the data into the lsq's sfra_data and also
@@ -1792,9 +1785,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
 	  bool L1hit = core.memoryHierarchy.access_cache(request);
 
-#else
-      bool L1hit;
-#endif
       per_context_ooocore_stats_update(threadid, dcache.load.issue.miss++);
 
       cycles_left = 0;
@@ -2744,7 +2734,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
       LSQ.annul(annulrob.lsq);
 
 	  if(config.use_new_memory_system) {
-#ifdef NEW_MEMORY
 		  // annul any cache requests for this entry
 
 		  bool is_store = isclass(annulrob.uop.opcode, OPCLASS_STORE);
@@ -2754,7 +2743,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 				  annulrob.lsq->physaddr,
 				  false/* icache */,
 				  is_store);
-#endif
 	  }
     }
 

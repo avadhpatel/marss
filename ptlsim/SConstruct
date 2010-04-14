@@ -57,8 +57,6 @@ env.Append(CCFLAGS = '-DMARSS_QEMU')
 # To use AMD ooocore file uncomment this
 # env.Append(CCFLAGS = '-DUSE_AMD_OOOCORE')
 
-# enable new cache code (TODO: Make this default when we release)
-env.Append(CCFLAGS = '-DNEW_CACHE')
 # Check for 64bit machine
 arch_type = platform.architecture()[0]
 if arch_type == '64bit':

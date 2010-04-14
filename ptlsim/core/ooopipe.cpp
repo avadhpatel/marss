@@ -21,11 +21,7 @@
 #else
 #include <ooocore.h>
 #endif
-#ifdef NEW_CACHE
 #include <memoryHierarchy.h>
-#else
-#include <MemoryHierarchy.h>
-#endif
 
 #include <stats.h>
 
@@ -123,9 +119,7 @@ void ThreadContext::flush_pipeline() {
   if (logable(3)) ptl_logfile << " core[", core.coreid,"] TH[", threadid, "] flush_pipeline()",endl;
   core.caches.complete(threadid);
 
-#ifdef NEW_MEMORY
   core.machine.memoryHierarchyPtr->flush(core.coreid);
-#endif
 
   annul_fetchq();
 
@@ -506,16 +500,13 @@ bool ThreadContext::fetch() {
     if ((!current_basic_block->invalidblock) && (req_icache_block != current_icache_block)) {
 
       // test if icache is available:
-#ifdef NEW_MEMORY
       bool cache_available = core.memoryHierarchy.is_cache_available(core.coreid, threadid, true/* icache */);
       if(!cache_available){
         msdebug << " icache can not read core:", core.coreid, " threadid ", threadid, endl;
         per_context_ooocore_stats_update(threadid, fetch.stop.icache_stalled++);
         break;
       }
-#endif
 
-#ifdef NEW_MEMORY
       bool hit;
       if(config.use_new_memory_system){
         assert(!waiting_for_icache_fill);
@@ -531,9 +522,6 @@ bool ThreadContext::fetch() {
       }else{
         hit =  core.caches.probe_icache(fetchrip, physaddr);
       }
-#else
-      bool hit = core.caches.probe_icache(fetchrip, physaddr);
-#endif
       hit |= config.perfect_cache;
       if unlikely (!hit) {
         int missbuf = -1;
@@ -1876,13 +1864,11 @@ int ReorderBufferEntry::commit() {
   bool br = isbranch(uop.opcode);
 
   // check if we can access dcache for store
-#ifdef NEW_MEMORY
   if(st && !core.memoryHierarchy.is_cache_available(core.coreid, threadid, false/* icache */)){
     msdebug << " dcache can not write. core:", core.coreid, " threadid ", threadid, endl;
     per_context_ooocore_stats_update(threadid, commit.result.dcache_stall++);
     return COMMIT_RESULT_NONE;
   }
-#endif
 
   per_context_ooocore_stats_update(threadid, commit.opclass[opclassof(uop.opcode)]++);
 
@@ -2145,7 +2131,6 @@ int ReorderBufferEntry::commit() {
         assert(core.caches.commitstore(*lsq, thread.threadid) == 0);
       }
     }else{
-#ifdef NEW_MEMORY
 		if(uop.internal) {
 			thread.ctx.store_internal(lsq->virtaddr, lsq->data,
 					lsq->bytemask);
@@ -2167,7 +2152,6 @@ int ReorderBufferEntry::commit() {
 			thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
 			lsq->datavalid = 1;
       }
-#endif
     }
 
   }

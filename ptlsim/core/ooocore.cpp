@@ -25,11 +25,7 @@
 #else
 #include <ooocore.h>
 #endif
-#ifdef NEW_CACHE
 #include <memoryHierarchy.h>
-#else
-#include <MemoryHierarchy.h>
-#endif
 
 #include <stats.h>
 
@@ -148,9 +144,7 @@ void ThreadContext::init() {
 
 OutOfOrderCore::OutOfOrderCore(W8 coreid_, OutOfOrderMachine& machine_):
   coreid(coreid_), caches(coreid_), machine(machine_), cache_callbacks(*this)
-#ifdef NEW_MEMORY
 , memoryHierarchy(*machine_.memoryHierarchyPtr)
-#endif
 {
   threadcount = 0;
   setzero(threads);
@@ -758,10 +752,8 @@ bool OutOfOrderCore::runcycle() {
       ptl_logfile << sb, flush;
       cerr << sb, flush;
 	  dump_smt_state(ptl_logfile);
-#ifdef NEW_MEMORY
 	  ptl_logfile << " memoryHierarchy: ",endl;
 	  machine.memoryHierarchyPtr->dump_info(ptl_logfile);
-#endif
 	  ptl_logfile.flush();
       exiting = 1;
 	  assert(0);
@@ -1927,11 +1919,9 @@ bool OutOfOrderMachine::init(PTLsimConfig& config) {
   assert(NUMBER_OF_CORES * NUMBER_OF_THREAD_PER_CORE == contextcount);
   int context_idx = 0;
   // create a memoryHierarchy
-#ifdef NEW_MEMORY
   memoryHierarchyPtr = new Memory::MemoryHierarchy(*this);
   assert(memoryHierarchyPtr);
   msdebug << " after create memoryHierarchyPtr", endl;
-#endif
 
   foreach (cur_core, NUMBER_OF_CORES){
     if(cores[cur_core]) delete cores[cur_core];
@@ -2003,11 +1993,6 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
   }
   first_run = 0;
 
-#ifdef NEW_MEMORY
-#ifndef NEW_CACHE
-  memoryHierarchyPtr->init_event_log();
-#endif
-#endif
 
   bool exiting = false;
   bool stopping = false;
@@ -2038,9 +2023,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
 	  int running_thread_count = 0;
 
-#ifdef NEW_MEMORY
 	  memoryHierarchyPtr->clock();
-#endif
 
           foreach (cur_core, NUMBER_OF_CORES){
                   OutOfOrderCore& core =* cores[cur_core];
@@ -2171,10 +2154,8 @@ void OutOfOrderMachine::dump_state(ostream& os) {
     os << thread.ctx;
   }
 #endif
-#ifdef NEW_MEMORY
   os << " memoryHierarchy: ",endl;
   memoryHierarchyPtr->dump_info(os);
-#endif
 }
 
 namespace OutOfOrderModel {
@@ -2290,16 +2271,11 @@ OutOfOrderCore& OutOfOrderModel::coreof(W8 coreid) {
 }
 
 
-#ifdef NEW_MEMORY
 namespace Memory{
   using namespace OutOfOrderModel;
 
   void MemoryHierarchy::icache_wakeup_wrapper(MemoryRequest *request){
-#ifdef NEW_CACHE
     OutOfOrderCore* core = machine_.cores[request->get_coreid()];
-#else
-    OutOfOrderCore* core = machine.cores[request->get_coreid()];
-#endif
     OutOfOrderCoreCacheCallbacks& callbacks = core->cache_callbacks;
 
     callbacks.icache_wakeup(request);
@@ -2308,15 +2284,10 @@ namespace Memory{
   void MemoryHierarchy::dcache_wakeup_wrapper(MemoryRequest *request) {
 
 	  msdebug << "Dcache Wakeup Request: ", *request, endl;
-#ifdef NEW_CACHE
     OutOfOrderCore* core = machine_.cores[request->get_coreid()];
-#else
-    OutOfOrderCore* core = machine.cores[request->get_coreid()];
-#endif
     OutOfOrderCoreCacheCallbacks& callbacks = core->cache_callbacks;
 
     callbacks.dcache_wakeup(request);
   }
 
 };
-#endif

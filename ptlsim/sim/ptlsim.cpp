@@ -14,11 +14,7 @@
 #define CPT_STATS
 #include <stats.h>
 #undef CPT_STATS
-#ifndef NEW_CACHE
-#include <MemoryConfig.h>
-#else
 #include <memoryStats.h>
-#endif
 #include <elf.h>
 
 #include <fstream>
