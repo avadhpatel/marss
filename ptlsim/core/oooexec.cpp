@@ -159,9 +159,6 @@ bool IssueQueue<size, operandcount>::insert(tag_t uopid, const tag_t* operands, 
     else tags[operand].insertslot(slot, operands[operand]);
   }
 
-#ifdef WATTCH //write to the issue queue slot   ---right
-	power_ooo_core_stats_update(coreid, window.write)++;
-#endif
   return true;
 }
 
@@ -219,9 +216,6 @@ bool IssueQueue<size, operandcount>::broadcast(tag_t uopid) {
     foreach (operand, operandcount) tags[operand].invalidate(tagvec);
   }
 
-#ifdef WATTCH
-	power_ooo_core_stats_update(coreid, bypass.write)++;
-#endif
 
   return true;
 }
@@ -642,49 +636,6 @@ int ReorderBufferEntry::issue() {
   }
 
 
-
-#ifdef WATTCH
-	if((isclass(uop.opcode, OPCLASS_ALU_SIZE_MERGING))||(isclass(uop.opcode, OPCLASS_VEC_ALU)))
-		power_ooo_core_stats_update(coreid, alu.access)++;
-	 else if (!((isclass(uop.opcode,OPCLASS_CONDITIONAL))||(isclass(uop.opcode,OPCLASS_BRANCH))||(isclass(uop.opcode,OPCLASS_MEM))))
-		power_ooo_core_stats_update(coreid, falu.access)++;
-
-	if(ra.state == PHYSREG_BYPASS)
-	{
-		power_ooo_core_stats_update(coreid, bypass.access)++;
-		if(st)
-			power_ooo_core_stats_update(coreid, stq_wakeup.access)++;
-		else
-			power_ooo_core_stats_update(coreid, window_wakeup.access)++;
-	}
-	if(rb.state == PHYSREG_BYPASS)
-	{
-		power_ooo_core_stats_update(coreid, bypass.access)++;
-		power_ooo_core_stats_update(coreid, window_wakeup.access)++;
-	}
-	else
-	{
-		power_ooo_core_stats_update(coreid, window_preg.read)++;
-#ifdef DYNAMIC_AF
-		power_ooo_core_stats_update(coreid, window_preg.total_pop_count) += popcount64(rb.data);
-		power_ooo_core_stats_update(coreid, window_preg.num_pop_count)++;
-	}
-#endif
-	if(rc.state == PHYSREG_BYPASS)
-	{
-		power_ooo_core_stats_update(coreid, bypass.access)++;
-		power_ooo_core_stats_update(coreid, window_wakeup.access)++;
-	}
-	else
-	{
-		power_ooo_core_stats_update(coreid, window_preg.read)++;
-#ifdef DYNAMIC_AF
-		power_ooo_core_stats_update(coreid, window_preg.total_pop_count) += popcount64(rb.data);
-		power_ooo_core_stats_update(coreid, window_preg.num_pop_count)++;
-	}
-#endif
-#endif
-
   return 1;
 }
 
@@ -821,13 +772,6 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
   }
 
   state.mmio = mmio;
-
-#ifdef WATTCH //The address is generated and tell (wakeup) the ldq
-	if(st)
-		power_ooo_core_stats_update(coreid, stq_wakeup.access)++;
-	else
-		power_ooo_core_stats_update(coreid, ldq_wakeup.access)++;
-#endif
 
   return physaddr;
 }
@@ -1291,16 +1235,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   load_store_second_phase = 1;
 
   per_context_ooocore_stats_update(threadid, dcache.store.issue.complete++);
-
-#ifdef WATTCH //store ready data
-	power_ooo_core_stats_update(coreid, stq_preg.write)++;
-	power_ooo_core_stats_update(coreid, stq.write)++;
-	power_ooo_core_stats_update(coreid, stq_store_data.access)++;
-#ifdef DYNAMIC_AF
-	power_ooo_core_stats_update(coreid, stq_preg.total_pop_count) += popcount64(operands[RA]->data);
-	power_ooo_core_stats_update(coreid, stq_preg.num_pop_count) += 1;
-#endif
-#endif
 
   return ISSUE_COMPLETED;
 }
@@ -1932,12 +1866,6 @@ int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
     per_context_dcache_stats_update(core.coreid, threadid, load.hit.L1++);
     return ISSUE_COMPLETED;
   }
-#ifdef WATTCH //dcache1 write
-	else{
-		power_ooo_core_stats_update(coreid, L1d.write)++;
-	}
-#endif
-
   per_context_ooocore_stats_update(threadid, dcache.load.issue.miss++);
 
   cycles_left = 0;
@@ -2357,10 +2285,6 @@ void ReorderBufferEntry::loadwakeup() {
     forward_cycle = 0;
     fu = 0;
 
-#ifdef WATTCH //wakeup load
-	power_ooo_core_stats_update(coreid, ldq_wakeup.access)++;
-#endif
-
   }
 }
 
@@ -2561,10 +2485,6 @@ int OutOfOrderCore::issue(int cluster) {
     // Is anything ready?
     if unlikely (iqslot < 0) break;
 
-#ifdef WATTCH
-	power_ooo_core_stats_update(coreid, window_selection.access)++;
-#endif
-
     int robid;
     issueq_operation_on_cluster_with_result(getcore(), cluster, robid, uopof(iqslot));
     int threadid, idx;
@@ -2740,10 +2660,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 
     annulrob.iqslot = -1;
 
-#ifdef WATTCH //for iqslot annul rob
-	power_ooo_core_stats_update(coreid, window.write)++;
-#endif
-
     if unlikely (idx == startidx) break;
     idx = add_index_modulo(idx, -1, ROB_SIZE);
   }
@@ -2774,11 +2690,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
   //
   foreach (i, TRANSREG_COUNT) { specrrt[i]->unspecref(i, thread.threadid); }
   specrrt = commitrrt;
-
-#ifdef WATTCH //recover speculative rename table
-	power_ooo_core_stats_update(coreid, rename.read)++;
-	power_ooo_core_stats_update(coreid, spec_rename.write)++;
-#endif
 
   foreach (i, TRANSREG_COUNT) { specrrt[i]->addspecref(i, thread.threadid); }
 
@@ -2832,11 +2743,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
       annulrob.lsq->reset();
       LSQ.annul(annulrob.lsq);
 
-#ifdef WATTCH
-	if(isclass(annulrob.uop.opcode, OPCLASS_LOAD))
-		power_ooo_core_stats_update(coreid, ldq.write)++;
-	else power_ooo_core_stats_update(coreid, stq.write)++;
-#endif
 	  if(config.use_new_memory_system) {
 #ifdef NEW_MEMORY
 		  // annul any cache requests for this entry
@@ -3007,10 +2913,6 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
   physreg->data = 0;
   physreg->flags = FLAG_WAIT;
   physreg->changestate(PHYSREG_WAITING);
-
-#ifdef WATTCH //write preg of rob
-	power_ooo_core_stats_update(coreid, window_preg.write)++;
-#endif
 
   // Force ROB to be re-dispatched in program order
   cycles_left = 0;

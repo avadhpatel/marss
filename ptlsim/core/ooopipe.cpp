@@ -874,9 +874,6 @@ void ThreadContext::rename() {
     rob.operands[RC] = specrrt[transop.rc];
     rob.operands[RS] = &core.physregfiles[0][PHYS_REG_NULL]; // used for loads and stores only
 
-#ifdef WATTCH //Don't access regfile, it does during issue when the instruction is ready with all source operands
-	power_ooo_core_stats_update(core.coreid, spec_rename.read)+=3;
-#endif
 
     // See notes above on Physical Register Recycling Complications
     foreach (i, MAX_OPERANDS) {
@@ -926,12 +923,6 @@ void ThreadContext::rename() {
     physreg->rob = &rob;
     physreg->archreg = rob.uop.rd;
     rob.physreg = physreg;
-
-#ifdef WATTCH
-	power_ooo_core_stats_update(core.coreid, spec_rename.write)++;
-	power_ooo_core_stats_update(core.coreid, window.write)++;
-	// It should make an access to the speculative rename table, allocation is a write
-#endif
 
     //
     // Logging
@@ -1212,16 +1203,6 @@ bool ReorderBufferEntry::find_sources() {
       // No need to wait for it
       uopids[operand] = 0;
       preready[operand] = 1;
-
-#ifdef WATTCH  //Source is read from registre file
-	power_ooo_core_stats_update(coreid, window_preg.read)++;
-#endif
-
-#ifdef DYNAMIC_AF
-	power_ooo_core_stats_update(coreid, regfile.num_pop_count) += popcount64(source_physreg.data);
-	power_ooo_core_stats_update(coreid, regfile.total_pop_count)++;
-#endif
-
     }
 
     if likely (source_physreg.nonnull()) {
@@ -1548,21 +1529,6 @@ int ThreadContext::writeback(int cluster) {
 
     core.writecount++;
 
-#ifdef WATTCH
-	//The operation has completed
-	power_ooo_core_stats_update(core.coreid, window.access)++;
-	power_ooo_core_stats_update(core.coreid, window_preg.write)++;
-	power_ooo_core_stats_update(core.coreid, window_wakeup.access)++;
-	power_ooo_core_stats_update(core.coreid, resultbus.access)++;
-#endif
-
-#ifdef DYNAMIC_AF
-	power_ooo_core_stats_update(core.coreid, window_preg.total_pop_count) += popcount64(rob->physreg->data);
-	power_ooo_core_stats_update(core.coreid, window_preg.num_pop_count)++;
-	power_ooo_core_stats_update(core.coreid, resultbus.total_pop_count) += popcount64(rob->physreg->data);
-	power_ooo_core_stats_update(core.coreid, resultbus.num_pop_count)++;
-#endif
-
     //
     // For simulation purposes, final value is already in rob->physreg,
     // so we don't need to actually write anything back here.
@@ -1668,12 +1634,6 @@ int ThreadContext::commit() {
 					"simcycle: ", sim_cycle, "\tkernel: ",
 					rob.uop.rip.kernel, endl;
 #endif
-
-#ifdef WATTCH //read from spec_rename and write to rename(commit)
-	power_ooo_core_stats_update(core.coreid, spec_rename.read)++;
-	power_ooo_core_stats_update(core.coreid, rename.write)++;
-#endif
-
     } else {
       break;
     }
@@ -2076,15 +2036,6 @@ int ReorderBufferEntry::commit() {
 	  merged_data = physreg->data;
   }
 
-#ifdef WATTCH
-	//Commit accesses architectural register file (or this should be moved to writeback)
-	power_ooo_core_stats_update(core.coreid, regfile.write)++;
-#ifdef DYNAMIC_AF
-	power_ooo_core_stats_update(core.coreid, regfile.total_pop_count) += popcount64(physreg->data);
-	power_ooo_core_stats_update(core.coreid, regfile.num_pop_count) += 1;
-#endif
-#endif
-
   if (logable(10)) {
 	  ptl_logfile << "ROB Commit RIP check...\n", flush;
   }
@@ -2300,9 +2251,6 @@ int ReorderBufferEntry::commit() {
     stats.summary.insns++;
 	// if(uop.rip.rip > 0x7f0000000000)
 		// per_core_event_update(core.coreid, insns_in_mode.userlib++);
-#ifdef WATTCH
-	power_ooo_core_stats_update(core.coreid, committed)++;
-#endif
   }
 
   if (logable(10)) {

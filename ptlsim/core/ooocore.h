@@ -1491,8 +1491,6 @@ namespace OutOfOrderModel {
 
         byte round_robin_tid;
 
-        //Power Manager Variables
-        int freq_divider;
 
         //
         // Issue Queues (one per cluster)

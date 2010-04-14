@@ -13,9 +13,6 @@
 
 #include <ptlsim.h>
 
-#ifdef WATTCH
-#include <wattch.h>
-#endif
 
 #define BRANCH_HINT_UNCOND      0
 #define BRANCH_HINT_COND        (1 << 0)
@@ -76,9 +73,6 @@ struct BranchPredictorInterface {
   void updateras(PredictorUpdate& predinfo, W64 branchaddr);
   void annulras(const PredictorUpdate& predinfo);
   void flush();
-#ifdef WATTCH
-  void init_power_values(OOOCorePower*);
-#endif
 };
 
 ostream& operator <<(ostream& os, const BranchPredictorInterface& branchpred);

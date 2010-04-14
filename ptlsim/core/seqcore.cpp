@@ -13,9 +13,6 @@
 #include <datastore.h>
 #include <stats.h>
 
-#ifdef WATTCH
-#include <wattch.h>
-#endif
 
 // With these disabled, simulation is faster
 #define ENABLE_CHECKS
@@ -1405,10 +1402,6 @@ struct SequentialCore {
       user_insns += uop.eom;
       stats.summary.insns += uop.eom;
       stats.summary.uops++;
-
-//#ifdef WATTCH
-//  power_ooo_core_stats_update(coreid, commited) += uop.eom;
-//#endif
 
 
       current_uuid++;
