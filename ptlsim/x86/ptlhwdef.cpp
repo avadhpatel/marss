@@ -434,7 +434,6 @@ ostream& operator <<(ostream& os, const TransOpBase& op) {
 }
 
 ostream& RIPVirtPhysBase::print(ostream& os) const {
-#ifdef PTLSIM_HYPERVISOR
   os << "[", (void*)(Waddr)rip;
   os << (use64 ? " ss64" : "");
   os << (kernel ? " krn" : "");
@@ -446,9 +445,6 @@ ostream& RIPVirtPhysBase::print(ostream& os) const {
     if (mfnhi != INVALID) os << mfnhi; else os << "inv";
   }
   os << "]";
-#else
-  os << (void*)(Waddr)rip;
-#endif
   return os;
 }
 
@@ -568,13 +564,7 @@ ostream& operator <<(ostream& os, const UserContext& arf) {
     os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(arf[i], 64), "  ";
     if ((i % width) == (width-1)) os << endl;
   }
-#ifndef PTLSIM_HYPERVISOR
-  for (int i = 7; i >= 0; i--) {
-    int stackid = (i - (arf[REG_fptos] >> 3)) & 0x7;
-    os << "  fp", i, "  st(", stackid, ")  ", /* (bit(arf[REG_fptags], i*8) ? "Valid" : "Empty"), */ "  0x", hexstring(ctx.fpregs[i], 64), " => ", *((double*)&ctx.fpregs[i]), endl;
-  }
-#endif
-  return os;
+    return os;
 }
 
 ostream& operator <<(ostream& os, const IssueState& state) {
@@ -646,7 +636,6 @@ ostream& operator <<(ostream& os, const SegmentDescriptorCache& seg) {
   return os;
 }
 
-#ifdef PTLSIM_HYPERVISOR
 ostream& operator <<(ostream& os, const CR0& cr0) {
   os << hexstring(cr0, 64);
   os << " ";
@@ -680,7 +669,6 @@ ostream& operator <<(ostream& os, const CR4& cr4) {
   os << (cr4.osxmmexcpt ? " MME" : " mme");
   return os;
 }
-#endif
 
 ostream& operator <<(ostream& os, const Context& ctx) {
   static const int arfwidth = 4;
@@ -717,7 +705,6 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   os << "  ", padstring(arch_reg_names[62], -6), " 0x", hexstring(ctx.reg_ar2, 64);
   os << "  ", padstring(arch_reg_names[63], -6), " 0x", hexstring(ctx.reg_zero, 64), endl;
 
-#ifdef PTLSIM_HYPERVISOR
   os << "  Flags:", endl;
   os << "    Running?   ", ((ctx.running) ? "running" : "blocked"), endl;
   if unlikely (ctx.dirty) os << "    Context is dirty: refresh any internal state cached by active core model", endl;
@@ -725,7 +712,6 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   os << "    32/64:     ", ((ctx.use64) ? "64-bit x86-64" : "32-bit x86"), endl;
   os << "    IntEFLAGS: ", hexstring(ctx.internal_eflags, 32), " (df ", ((ctx.internal_eflags & FLAG_DF) != 0), ")", endl;
   os << "    hflags: ", hexstring(ctx.hflags, 32), " (QEMU internal flags)", endl;
-#endif
   os << "  Segment Registers:", endl;
   os << "    cs ", ctx.segs[SEGID_CS], endl;
   os << "    ss ", ctx.segs[SEGID_SS], endl;
@@ -733,7 +719,6 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   os << "    es ", ctx.segs[SEGID_ES], endl;
   os << "    fs ", ctx.segs[SEGID_FS], endl;
   os << "    gs ", ctx.segs[SEGID_GS], endl;
-#ifdef PTLSIM_HYPERVISOR
   os << "  Segment Control Registers:", endl;
 //  os << "    ldt ", hexstring(ctx.ldtvirt, 64), "  ld# ", hexstring(ctx.ldtsize, 64), "  gd# ", hexstring(ctx.gdtsize, 64), endl;
 //  os << "    gdt mfns"; foreach (i, 16) { os << " ", ctx.gdtpages[i]; } os << endl;
@@ -753,7 +738,6 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   os << "  Exception and Event Control:", endl;
   os << "    exception ", intstring(ctx.exception_index, 2), "  errorcode ", hexstring(ctx.error_code, 32),
     endl;
-#endif
 
   os << "  FPU:", endl;
   os << "    FP Control Word: 0x", hexstring(ctx.fpuc, 32), endl;

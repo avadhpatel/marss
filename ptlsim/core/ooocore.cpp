@@ -347,14 +347,12 @@ bool OutOfOrderCore::runcycle() {
   // to the interrupt handler.
   //
 
-#ifdef PTLSIM_HYPERVISOR
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
     bool current_interrupts_pending = thread->ctx.check_events();
 	thread->handle_interrupt_at_next_eom = current_interrupts_pending;
     thread->prev_interrupts_pending = current_interrupts_pending;
   }
-#endif
 
   //
   // Compute reserved issue queue entries to avoid starvation:
@@ -485,7 +483,6 @@ bool OutOfOrderCore::runcycle() {
   // This may use up load ports, so do it before other
   // loads can issue
   //
-#ifdef PTLSIM_HYPERVISOR
   if(!config.use_new_memory_system){ // TODO MESI -Hui
     foreach (permute, threadcount) {
       int tid = add_index_modulo(round_robin_tid, +permute, threadcount);
@@ -500,7 +497,6 @@ bool OutOfOrderCore::runcycle() {
     threads[i]->tlbwalk();
   }
   */
-#endif
   //
   // Issue whatever is ready
   //
@@ -702,7 +698,6 @@ bool OutOfOrderCore::runcycle() {
 		machine.ret_qemu_env = &thread->ctx;
   }
 
-#ifdef PTLSIM_HYPERVISOR
 //  if unlikely (vcpu_online_map_changed) {
 //    vcpu_online_map_changed = 0;
 //    foreach (i, contextcount) {
@@ -727,7 +722,6 @@ bool OutOfOrderCore::runcycle() {
 //      vctx.dirty = 0;
 //    }
 //  }
-#endif
 
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
@@ -1144,12 +1138,6 @@ bool ThreadContext::handle_barrier() {
 	  reset_fetch_unit(ctx.eip);
   }
 
-#ifndef PTLSIM_HYPERVISOR
-  if (requested_switch_to_native) {
-    ptl_logfile << "PTL call requested switch to native mode at rip ", (void*)(Waddr)ctx.eip, endl;
-    return false;
-  }
-#endif
   return true;
 }
 
@@ -1190,7 +1178,6 @@ bool ThreadContext::handle_exception() {
     return true;
   }
 
-#ifdef PTLSIM_HYPERVISOR
   //
   // Map PTL internal hardware exceptions to their x86 equivalents,
   // depending on the context. The error_code field should already
@@ -1251,28 +1238,9 @@ handle_page_fault: {
   flush_pipeline();
 
   return true;
-#else
-  if (logable(6))
-    ptl_logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.eip,
-      ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
-
-  stringbuf sb;
-  ptl_logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.eip, " @ ",
-    total_user_insns_committed, " commits (", total_uops_committed, " uops): genuine user exception (",
-    exception_name(ctx.exception), "); aborting", endl;
-  ptl_logfile << ctx, endl;
-  ptl_logfile << flush;
-
-  ptl_logfile << "Aborting...", endl, flush;
-  cerr << "Aborting...", endl, flush;
-
-  assert(false);
-  return false;
-#endif
 }
 
 bool ThreadContext::handle_interrupt() {
-#ifdef PTLSIM_HYPERVISOR
   // Release resources of everything in the pipeline:
   core_to_external_state();
   if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline.",endl;
@@ -1301,7 +1269,6 @@ bool ThreadContext::handle_interrupt() {
   } else {
 	  per_context_ooocore_stats_update(threadid, interrupt_requests++);
   }
-#endif
   return true;
 }
 
@@ -2030,7 +1997,6 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
                   foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) {
                           ThreadContext* thread = core.threads[cur_thread];
-#ifdef PTLSIM_HYPERVISOR
                           running_thread_count += thread->ctx.running;
                           if unlikely (!thread->ctx.running) {
                                   if unlikely (stopping) {
@@ -2049,7 +2015,6 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
                                   finished[cur_core][cur_thread] = 1;
                                   running_thread --;
                           }
-#endif
                   }
                   MYDEBUG << "cur_core: ", cur_core, " running [core ", core.coreid, "]", endl;
                   exiting |= core.runcycle();
@@ -2180,11 +2145,9 @@ void OutOfOrderMachine::update_stats(PTLsimStats& stats) {
   //  foreach (vcpuid, contextcount) {
   foreach (coreid, NUMBER_OF_CORES){
     foreach (threadid, NUMBER_OF_THREAD_PER_CORE){
-#ifdef PTLSIM_HYPERVISOR
       // need to update the count other wise the last one will be lost
       ptl_logfile << " update mode count for ctx ", cores[coreid]->threads[threadid]->ctx.cpu_index, endl;
       cores[coreid]->threads[threadid]->ctx.update_mode_count();
-#endif
       PerContextOutOfOrderCoreStats& s = per_context_ooocore_stats_ref(coreid , threadid);
       s.issue.uipc = s.issue.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
       s.commit.uipc = (double)s.commit.uops / (double)per_ooo_core_stats_ref(coreid).cycles;

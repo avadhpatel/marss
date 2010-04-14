@@ -34,9 +34,7 @@ extern "C" {
 #define USE_MSDEBUG (logable(5))
 #define msdebug if(USE_MSDEBUG) ptl_logfile << " CYC ", sim_cycle, " ", __PRETTY_FUNCTION__, "(): \n"; if(USE_MSDEBUG) ptl_logfile
 #define msdebug1 if(USE_MSDEBUG) ptl_logfile
-#ifdef PTLSIM_HYPERVISOR
 #define ENABLE_SMT
-#endif
 
 #ifdef ENABLE_SMT
 #define MAX_CONTEXTS NUM_SIM_CORES

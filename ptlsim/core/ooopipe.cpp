@@ -1666,7 +1666,6 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
   queued_mem_lock_release_count = start;
 }
 
-#ifdef PTLSIM_HYPERVISOR
 //
 // For debugging purposes only
 //
@@ -1680,7 +1679,6 @@ bool rip_is_in_spinlock(W64 rip) {
 
   return inside_spinlock_now;
 }
-#endif
 #endif
 
 int ReorderBufferEntry::commit() {
@@ -1760,13 +1758,11 @@ int ReorderBufferEntry::commit() {
 	  cant_commit_subrob = &subrob;
     }
 
-#ifdef PTLSIM_HYPERVISOR
     if unlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK)))) {
       subrob.physreg->data = EXCEPTION_FloatingPointNotAvailable;
       subrob.physreg->flags = FLAG_INV;
       if unlikely (subrob.lsq) subrob.lsq->invalid = 1;
     }
-#endif
 
     if unlikely (subrob.ready_to_commit() &&
                 (subrob.physreg->flags & FLAG_INV) &&
@@ -1782,13 +1778,11 @@ int ReorderBufferEntry::commit() {
       ctx.exception = LO32(subrob.physreg->data);
       ctx.error_code = HI32(subrob.physreg->data);
 
-#ifdef PTLSIM_HYPERVISOR
       // Capture the faulting virtual address for page faults
       if ((ctx.exception == EXCEPTION_PageFaultOnRead) |
           (ctx.exception == EXCEPTION_PageFaultOnWrite)) {
           ctx.page_fault_addr = subrob.origvirt;
       }
-#endif
 
       if unlikely (config.event_log_enabled) core.eventlog.add_commit(EVENT_COMMIT_EXCEPTION_DETECTED, &subrob);
 
@@ -1969,7 +1963,6 @@ int ReorderBufferEntry::commit() {
 
   release_mem_lock();
 
-#ifdef PTLSIM_HYPERVISOR
   //
   // For debugging purposes, check the list of address ranges specified
   // with the -deadlock-debug-range 0xAA-0xBB,0xCC-0xDD,... option. If
@@ -2003,7 +1996,6 @@ int ReorderBufferEntry::commit() {
       }
     }
   }
-#endif
 #endif
 
   if (st) assert(lsq->addrvalid && lsq->datavalid);

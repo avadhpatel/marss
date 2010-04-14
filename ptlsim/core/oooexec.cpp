@@ -1884,7 +1884,6 @@ int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
 // Hardware page table walk state machine:
 // One execution per page table tree level (4 levels)
 //
-#ifdef PTLSIM_HYPERVISOR
 void ReorderBufferEntry::tlbwalk() {
   assert(!config.use_new_memory_system); // TODO MESI - Hui
 
@@ -2004,7 +2003,6 @@ void ThreadContext::tlbwalk() {
    rob->tlbwalk();
   }
 }
-#endif
 
 //
 // Find the newest memory fence in program order before the specified ROB,

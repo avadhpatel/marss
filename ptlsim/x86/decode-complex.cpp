@@ -48,34 +48,18 @@ template bool assist_idiv<W64>(Context& ctx);
 
 bool assist_int(Context& ctx) {
   byte intid = ctx.reg_ar1;
-#ifdef PTLSIM_HYPERVISOR
   // The returned rip is nextrip for explicit intN instructions:
   ctx.eip = ctx.reg_nextrip;
   ctx.propagate_x86_exception(intid, 0);
-#else
-  if (intid == 0x80) {
-    handle_syscall_32bit(SYSCALL_SEMANTICS_INT80);
-  } else {
-    ptl_logfile << "Unknown int 0x", hexstring(intid, 8), "; aborting", endl, flush;
-    assert(false);
-  }
-#endif
+
   return true;
 }
 
 bool assist_syscall(Context& ctx) {
-#ifdef PTLSIM_HYPERVISOR
+
 	ctx.eip = ctx.reg_selfrip;
 	ASSIST_IN_QEMU(helper_syscall, ctx.reg_nextrip - ctx.reg_selfrip);
-#else
-  if (ctx.use64) {
-#ifdef __x86_64__
-    handle_syscall_64bit();
-#endif
-  } else {
-    handle_syscall_32bit(SYSCALL_SEMANTICS_SYSCALL);
-  }
-#endif
+
   // REG_rip is filled out for us
   return true;
 }
@@ -698,7 +682,6 @@ bool assist_rdmsr(Context& ctx) {
     return true;
 }
 
-#ifdef PTLSIM_HYPERVISOR
 bool assist_write_cr0(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 0, ctx.reg_ar1);
@@ -766,41 +749,6 @@ bool assist_write_debug_reg(Context& ctx) {
   ctx.eip = ctx.reg_nextrip;
   return true;
 }
-
-#else
-//
-// Userspace PTLsim does not support these:
-//
-bool assist_write_cr0(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-	return false;
-}
-
-bool assist_write_cr2(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-	return false;
-}
-
-bool assist_write_cr3(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-	return false;
-}
-
-bool assist_write_cr4(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-	return false;
-}
-
-bool assist_write_debug_reg(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-	return false;
-}
-#endif
 
 bool assist_iret16(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
@@ -878,7 +826,6 @@ static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
   return rd;
 }
 
-#ifdef PTLSIM_HYPERVISOR
 bool assist_ioport_in(Context& ctx) {
   // ar1 = 16-bit port number
   // ar2 = sizeshift
@@ -991,20 +938,6 @@ W64 l_assist_pause(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	// thread for fix cycles.
 	return 0;
 }
-
-#else
-bool assist_ioport_in(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-	return true;
-}
-
-bool assist_ioport_out(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
-  ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
-	return true;
-}
-#endif
 
 static inline int svm_check_intercept(TraceDecoder& dec, W64 type, W64 param=0) {
 	// No SVM activated, do nothing
@@ -1744,7 +1677,6 @@ bool TraceDecoder::decode_complex() {
     break;
   }
 
-#ifdef PTLSIM_HYPERVISOR
   case 0xe6 ... 0xe7: {
     // out [imm8] = %al|%ax|%eax
     DECODE(iform, ra, b_mode);
@@ -1844,7 +1776,6 @@ bool TraceDecoder::decode_complex() {
 
     break;
   }
-#endif
 
   case 0xf0 ... 0xf3: {
     // (prefixes: lock icebrkpt repne repe)
@@ -2505,23 +2436,18 @@ bool TraceDecoder::decode_complex() {
   }
 
   case 0x10b: { // ud2a
-#ifdef PTLSIM_HYPERVISOR
 	// Simply generate NOP
 	// TODO: In actual execution we have to generate invalid opcode
 	// exception
 	EndOfDecode();
 	microcode_assist(ASSIST_UD2A, ripstart, rip);
 	end_of_block = 1;
-#else
-    MakeInvalid();
-#endif
     break;
   }
 
   case 0x120: { // mov reg,crN
     DECODE(eform, rd, v_mode);
     DECODE(gform, ra, v_mode);
-#ifdef PTLSIM_HYPERVISOR
     if (rd.type != OPTYPE_REG) MakeInvalid();
     if (ra.type != OPTYPE_REG) MakeInvalid();
     if (!kernel) { outcome = DECODE_OUTCOME_GP_FAULT; MakeInvalid(); }
@@ -2542,9 +2468,6 @@ bool TraceDecoder::decode_complex() {
     }
 
     TransOp ldp(OP_ld, arch_pseudo_reg_to_arch_reg[rd.reg.reg], REG_ctx, REG_imm, REG_zero, 3, offset); ldp.internal = 1; this << ldp;
-#else
-    MakeInvalid();
-#endif
     break;
   }
 
@@ -2562,7 +2485,6 @@ bool TraceDecoder::decode_complex() {
   case 0x122: { // mov crN,reg
     DECODE(gform, rd, v_mode);
     DECODE(eform, ra, v_mode);
-#ifdef PTLSIM_HYPERVISOR
     if (rd.type != OPTYPE_REG) MakeInvalid();
     if (ra.type != OPTYPE_REG) MakeInvalid();
     if (!kernel) { outcome = DECODE_OUTCOME_GP_FAULT; MakeInvalid(); }
@@ -2584,16 +2506,12 @@ bool TraceDecoder::decode_complex() {
     this << TransOp(OP_mov, REG_ar1, REG_zero, arch_pseudo_reg_to_arch_reg[ra.reg.reg], REG_zero, reginfo[ra.reg.reg].sizeshift);
     microcode_assist(index_to_assist[modrm.reg], ripstart, rip);
     end_of_block = 1;
-#else
-    MakeInvalid();
-#endif
     break;
   }
 
   case 0x121: { // mov reg,drN
     DECODE(eform, rd, v_mode);
     DECODE(gform, ra, v_mode);
-#ifdef PTLSIM_HYPERVISOR
     if (rd.type != OPTYPE_REG) MakeInvalid();
     if (ra.type != OPTYPE_REG) MakeInvalid();
     if (!kernel) { outcome = DECODE_OUTCOME_GP_FAULT; MakeInvalid(); }
@@ -2614,16 +2532,12 @@ bool TraceDecoder::decode_complex() {
     }
 
     TransOp ldp(OP_ld, arch_pseudo_reg_to_arch_reg[rd.reg.reg], REG_ctx, REG_imm, REG_zero, 3, offset); ldp.internal = 1; this << ldp;
-#else
-    MakeInvalid();
-#endif
     break;
   }
 
   case 0x123: { // mov drN,reg
     DECODE(gform, rd, v_mode);
     DECODE(eform, ra, v_mode);
-#ifdef PTLSIM_HYPERVISOR
     if (rd.type != OPTYPE_REG) MakeInvalid();
     if (ra.type != OPTYPE_REG) MakeInvalid();
     if (!kernel) { outcome = DECODE_OUTCOME_GP_FAULT; MakeInvalid(); }
@@ -2633,9 +2547,6 @@ bool TraceDecoder::decode_complex() {
     this << TransOp(OP_mov, REG_ar2, REG_zero, REG_imm, REG_zero, 3, modrm.reg);
     microcode_assist(ASSIST_WRITE_DEBUG_REG, ripstart, rip);
     end_of_block = 1;
-#else
-    MakeInvalid();
-#endif
     break;
   }
 
