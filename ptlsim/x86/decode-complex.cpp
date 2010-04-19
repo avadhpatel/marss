@@ -82,7 +82,7 @@ bool assist_syscall(Context& ctx) {
 
 bool assist_sysret(Context& ctx) {
 	ctx.eip = ctx.reg_selfrip;
-	int dflag = (ctx.use64 | ctx.use32 ) ? 2 : 1;
+    int dflag = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_sysret, dflag);
 
 	return true;
@@ -1250,7 +1250,7 @@ bool TraceDecoder::decode_complex() {
       rd.mem.offset += (1 << sizeshift);
 
     // There is no way to encode 32-bit pushes and pops in 64-bit mode:
-    if (rd.type == OPTYPE_MEM && rd.mem.size == 2) rd.mem.size = 3;
+    if (use64 && rd.type == OPTYPE_MEM && rd.mem.size == 2) rd.mem.size = 3;
 
     if (rd.type == OPTYPE_MEM) {
       prefixes &= ~PFX_LOCK;
@@ -3123,6 +3123,9 @@ bool TraceDecoder::decode_complex() {
   case 0x107: {
 	// sysret
 	EndOfDecode();
+    // opsize : 2 = 64 bit, 1 = 32 bit, 0 = 16 bit
+    int opsize = (rex.mode64) ? 2 : ((use32) ? 1 : 0);
+	this << TransOp(OP_mov, REG_ar1, REG_zero, REG_imm, REG_zero, 3, opsize);
 	microcode_assist(ASSIST_SYSRET, ripstart, rip);
 	end_of_block = 1;
 	break;

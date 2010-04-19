@@ -526,9 +526,17 @@ if not conf.CheckSDLX11Driver():
     exit_with_error()
 else:
     env['sdl_x11'] = True
-    libs_softmmu.append('X11')
-    # LDFLAGS += " -lX11 "
     sdl_x11 = True
+
+if not conf.CheckLib('X11'):
+    # Check if /usr/X11 exist or not
+    import os
+    if os.path.exists('/usr/X11') and os.path.exists('/usr/X11/lib64'):
+        LDFLAGS += " -L/usr/X11/lib64 -lX11"
+    else:
+        print("ERROR: X11 Library Check failed")
+else:
+    LDFLAGS  += " -lX11"
 
 # VNC TLS detection
 try:
@@ -903,8 +911,8 @@ config_mak.close()
 # config_h.close()
 
 env.Append(CCFLAGS = CFLAGS)
-env.Append(LINKFLAGS = LDFLAGS)
 env.Append(LIBS = libs_softmmu)
+env.Append(LINKFLAGS = LDFLAGS.split())
 env['aiolibs'] = AIOLIBS
 env['ARLIB_BEGIN'] = "-Wl,--whole-archive"
 env['ARLIB_END'] = "-Wl,--no-whole-archive"

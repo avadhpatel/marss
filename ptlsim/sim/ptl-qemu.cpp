@@ -413,8 +413,9 @@ void ptl_check_ptlcall_queue() {
 
 RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
 
-    kernel = ctx.kernel_mode;
     df = ((ctx.internal_eflags & FLAG_DF) != 0);
+    kernel = ctx.kernel_mode;
+    use64 = ctx.use64;
     padlo = 0;
     padhi = 0;
     mfnlo = 0;
@@ -460,7 +461,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source),
-                        " eip:", (void*)(eip), endl;
+                        " eip:", (void*)(eip), " fail: ", fail, endl;
         if (fail != 0) {
             if(logable(10))
                 ptl_logfile << "Unable to read code from ",

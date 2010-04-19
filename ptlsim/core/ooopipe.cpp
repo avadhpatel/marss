@@ -639,7 +639,21 @@ bool ThreadContext::fetch() {
       transop.predinfo.ctxid = 0;
       transop.predinfo.ripafter = fetchrip + transop.bytes;
       predrip = branchpred.predict(transop.predinfo, transop.predinfo.bptype, transop.predinfo.ripafter, transop.riptaken);
-      redirectrip = 1;
+
+      /*
+       * FIXME : Branchpredictor should never give the predicted address in
+       * different address space then fetchrip.  If its different, discard the
+       * predicted address.
+       */
+      if unlikely (bits((W64)fetchrip, 43, (64 - 43)) != bits(predrip, 43, (64-43))) {
+          if(logable(10))
+              ptl_logfile << "Predrip[", predrip, "] and fetchrip[", (W64)fetchrip, "] address space is different\n";
+          predrip = transop.riptaken;
+          redirectrip = 0;
+      } else {
+          redirectrip = 1;
+      }
+
       per_context_ooocore_stats_update(threadid, branchpred.predictions++);
     }
 
