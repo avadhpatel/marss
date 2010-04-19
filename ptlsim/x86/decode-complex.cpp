@@ -1250,7 +1250,7 @@ bool TraceDecoder::decode_complex() {
       rd.mem.offset += (1 << sizeshift);
 
     // There is no way to encode 32-bit pushes and pops in 64-bit mode:
-    if (rd.type == OPTYPE_MEM && rd.mem.size == 2) rd.mem.size = 3;
+    if (use64 && rd.type == OPTYPE_MEM && rd.mem.size == 2) rd.mem.size = 3;
 
     if (rd.type == OPTYPE_MEM) {
       prefixes &= ~PFX_LOCK;

@@ -351,7 +351,7 @@ bool TraceDecoder::decode_fast() {
     DECODE(iform, ra, b_mode);
     EndOfDecode();
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
-    this << TransOp(OP_mov, rdreg, rdreg, REG_imm, REG_zero, 0, ra.imm.imm);
+    move_reg_or_mem(rd, ra);
     break;
   }
 
