@@ -1593,7 +1593,7 @@ static const term_cmd_t term_cmds[] = {
     { "set_link", "ss", do_set_link,
       "name [up|down]", "change the link status of a network adapter" },
 #ifdef MARSS_QEMU
-	{ "simulate", "W", do_simulate, "-help for all options", "Set various simulation options" },
+	{ "simconfig", "W", do_simulate, "-help for all options", "Set various simulation options" },
 #endif
     { NULL, NULL, },
 };
