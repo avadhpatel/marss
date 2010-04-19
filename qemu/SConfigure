@@ -190,7 +190,7 @@ linux_user = True
 CFLAGS = "%s -fno-strict-aliasing" % (env['CCFLAGS'])
 CFLAGS += " -Wall -Wundef -Wendif-labels -Wwrite-strings -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls"
 #LDFLAGS = "-g" 
-LDFLAGS = " -Wl,--warn-common"
+LDFLAGS = "-Wl,--warn-common"
 
 ARCH_CFLAGS = ""
 ARCH_LDFLAGS = ""
@@ -237,8 +237,17 @@ if not conf.CheckSDLX11Driver():
     exit_with_error()
 else:
     env['sdl_x11'] = True
-    LDFLAGS += " -lX11 "
     sdl_x11 = True
+
+if not conf.CheckLib('X11'):
+    # Check if /usr/X11 exist or not
+    import os
+    if os.path.exists('/usr/X11') and os.path.exists('/usr/X11/lib64'):
+        LDFLAGS += " -L/usr/X11/lib64 -lX11"
+    else:
+        print("ERROR: X11 Library Check failed")
+else:
+    LDFLAGS  += " -lX11"
 
 # VNC TLS detection
 try:
@@ -451,7 +460,7 @@ env['tools'] = "qemu-img qemu-nbd"
 config_h.close()
 
 env.Append(CCFLAGS = CFLAGS)
-env.Append(LINKFLAGS = LDFLAGS)
+env.Append(LINKFLAGS = LDFLAGS.split())
 env['aiolibs'] = AIOLIBS
 
 env['targets'] = []

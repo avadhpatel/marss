@@ -38,6 +38,7 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 
+#define __user
 #include <linux/usbdevice_fs.h>
 #include <linux/version.h>
 #include "hw/usb.h"
