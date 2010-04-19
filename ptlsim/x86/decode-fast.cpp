@@ -652,7 +652,8 @@ bool TraceDecoder::decode_fast() {
   }
 
   case 0xff: {
-    DECODE(eform, ra, v_mode);
+    int bytemode = (use64) ? v_mode : d_mode;
+    DECODE(eform, ra, bytemode);
     EndOfDecode();
 
     switch (modrm.reg) {

@@ -865,7 +865,7 @@ struct Context: public CPUX86State {
 	  reg_flags = flags;
 	  internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
 	  eip = eip + segs[R_CS].base;
-	  cs_segment_updated();
+      cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
 	  reg_fptos = fpstt << 3;
 	  reg_fpstack = ((W64)&(fpregs[0].mmx.q));
@@ -1111,8 +1111,12 @@ struct Context: public CPUX86State {
 
   void cs_segment_updated() {
 	  SegmentCache *seg = &(this->segs[R_CS]);
-	  use64 = (seg->flags & DESC_L_MASK) ? true : false;
-	  use32 = (seg->flags & DESC_B_MASK) ? true : false;
+      if((hflags & HF_LMA_MASK)) {
+          use64 = (hflags >> HF_CS64_SHIFT) & 1;
+      } else {
+          use64 = 0;
+      }
+      use32 = (use64) ? false : (hflags >> HF_CS32_SHIFT) & 1;
 	  virt_addr_mask = (use64 ? 0xffffffffffffffffULL : 0x00000000ffffffffULL);
   }
 
