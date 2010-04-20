@@ -119,6 +119,15 @@ CPUX86State* ptl_create_new_context(void);
 void ptl_reconfigure(char* config_str);
 
 /*
+ * ptl_config_from_file
+ * filename     : input file that contains simulation config options
+ * returns void
+ * working      : Read the file given in filename and parse the simulation
+ *                configuration options
+ */
+void ptl_config_from_file(char *filename);
+
+/*
  * ptl_simulate
  * returns bool : 0 indicates that simulation is completed don't return
  *                 1 indicates simulation is remaining, return to simulation

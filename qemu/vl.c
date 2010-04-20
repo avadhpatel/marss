@@ -43,7 +43,6 @@
 #include "kvm.h"
 #include "balloon.h"
 
-#include<assert.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -3676,40 +3675,7 @@ void qemu_system_powerdown_request(void)
     if (cpu_single_env)
         cpu_interrupt(cpu_single_env, CPU_INTERRUPT_EXIT);
 }
-#ifdef MARSS_QEMU
-void constract_ptl_cmd(char *filename)
-{
-        int const MAX_CMD_SIZE=1024;
-        FILE * fp;
-        char * line = NULL;
-        size_t len = 0;
-        char *cmd_line;
-        ssize_t read;
-        int cmd_size=0;
-        cmd_line=(char*)malloc(MAX_CMD_SIZE);
-        memset(cmd_line,'\0',MAX_CMD_SIZE);
-        fp = fopen(filename, "r");
-        if (fp==NULL){
-                fprintf(stderr, "qemu: file not found\n");
-                exit(1);
-        }
 
-        while ((read=getline(&line, &len, fp)) != -1) {
-                if(line[0]!='#'){
-                        cmd_size+=read;
-                        assert(cmd_size<MAX_CMD_SIZE);
-                        if (line[read-1]='\n') line[read-1]=' ';
-                        strncat(cmd_line,line,read);
-
-                }
-        }
-        if (line) free(line);
-        printf("%s\n",cmd_line);
-	ptl_machine_configure(cmd_line);
-        simulation_configured = 1;
-        free(cmd_line);
-}
-#endif
 #ifdef _WIN32
 static void host_main_loop_wait(int *timeout)
 {
@@ -4067,7 +4033,7 @@ static void help(int exitcode)
            "-k language     use keyboard layout (for example \"fr\" for French)\n"
 #endif
 #ifdef MARSS_QEMU
-           "-f file         MARSS configuration options\n" 
+           "-simconfig file         MARSS simulation configuration options\n"
 #endif
 #ifdef HAS_AUDIO
            "-audio-help     print list of audio drivers and their options\n"
@@ -4269,7 +4235,7 @@ enum {
     QEMU_OPTION_m,
     QEMU_OPTION_k,
 #ifdef MARSS_QEMU 
-    QEMU_OPTION_f,
+    QEMU_OPTION_simconfig,
 #endif
     QEMU_OPTION_audio_help,
     QEMU_OPTION_soundhw,
@@ -4378,7 +4344,7 @@ static const QEMUOption qemu_options[] = {
     { "m", HAS_ARG, QEMU_OPTION_m },
     { "k", HAS_ARG, QEMU_OPTION_k },
 #ifdef MARSS_QEMU
-    { "f", HAS_ARG, QEMU_OPTION_f },
+    { "simconfig", HAS_ARG, QEMU_OPTION_simconfig },
 #endif
 #ifdef HAS_AUDIO
     { "audio-help", 0, QEMU_OPTION_audio_help },
@@ -5407,8 +5373,8 @@ int main(int argc, char **argv, char **envp)
                 run_as = optarg;
                 break;
 #ifdef MARSS_QEMU
-            case QEMU_OPTION_f:
-                constract_ptl_cmd(optarg);
+            case QEMU_OPTION_simconfig:
+                ptl_config_from_file(optarg);
                 break;
 #endif
             }

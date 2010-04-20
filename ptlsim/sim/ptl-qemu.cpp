@@ -252,6 +252,42 @@ void ptlsim_init() {
     register_assert_cb(&dump_bbcache_to_logfile);
 }
 
+void ptl_config_from_file(char *filename) {
+    int const MAX_CMD_SIZE = 1024;
+    char * line = NULL;
+    size_t len = 0;
+    char *cmd_line;
+    int cmd_size=0;
+    ssize_t read;
+    FILE * fp;
+
+    cmd_line = (char*)malloc(MAX_CMD_SIZE);
+    memset(cmd_line,'\0',MAX_CMD_SIZE);
+    fp = fopen(filename, "r");
+    if (fp == NULL){
+        fprintf(stderr, "qemu: file not found\n");
+        exit(1);
+    }
+
+    while ((read = getline(&line, &len, fp)) != -1) {
+        if(line[0] != '#'){
+            cmd_size+=read;
+            assert(cmd_size<MAX_CMD_SIZE);
+            if (line[read-1] = '\n')
+                line[read-1] = ' ';
+            strncat(cmd_line,line,read);
+        }
+    }
+
+    if (line)
+        free(line);
+
+    printf("%s\n",cmd_line);
+    ptl_machine_configure(cmd_line);
+    simulation_configured = 1;
+    free(cmd_line);
+}
+
 int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
         uint32_t *ecx, uint32_t *edx) {
 
