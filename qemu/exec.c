@@ -168,7 +168,7 @@ typedef struct PhysPageDesc {
  */
 #define L1_BITS (TARGET_VIRT_ADDR_SPACE_BITS - L2_BITS - TARGET_PAGE_BITS)
 #else
-#define L1_BITS (32 - L2_BITS - TARGET_PAGE_BITS)
+#define L1_BITS (TARGET_PHYS_ADDR_SPACE_BITS - L2_BITS - TARGET_PAGE_BITS)
 #endif
 
 #define L1_SIZE (1 << L1_BITS)

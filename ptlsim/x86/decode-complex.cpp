@@ -2560,8 +2560,9 @@ bool TraceDecoder::decode_complex() {
   }
 
   case 0x122: { // mov crN,reg
+    int sizeshift = (use64) ? q_mode : d_mode;
     DECODE(gform, rd, v_mode);
-    DECODE(eform, ra, v_mode);
+    DECODE(eform, ra, sizeshift);
 #ifdef PTLSIM_HYPERVISOR
     if (rd.type != OPTYPE_REG) MakeInvalid();
     if (ra.type != OPTYPE_REG) MakeInvalid();
