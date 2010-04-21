@@ -2230,7 +2230,8 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(Memory::MemoryRequest *request)
   if(logable(6)) ptl_logfile << " dcache_wakeup ", rob, " request ", *request, endl;
   if(config.use_new_memory_system){
     if(rob.lsq && request->get_owner_uuid() == rob.uop.uuid &&
-			rob.lsq->physaddr == physaddr >> 3){
+			rob.lsq->physaddr == physaddr >> 3 &&
+            rob.current_state_list == &thread->rob_cache_miss_list){
       if(logable(6)) ptl_logfile << " rob ", rob, endl;
 
 	  /*
