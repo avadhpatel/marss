@@ -54,11 +54,16 @@ You can use all the regular QEMU command here, like start VM window in VNC give
 'vnc :10' etc.  Once the system is booted, you can switch to Monitor mode using
 'Ctrl-Alt-2' key and give following command to switch to simulation mode:
 
-    (qemu) simulate -run -stopinsns 100m -stats [stats-file-name]
+    (qemu) simconfig -run -stopinsns 100m -stats [stats-file-name]
+
+You can also save simulation configuration parameters into a config file and
+pass that as argument when you start qemu with '-simconfig' option.
+
+    $ qemu/qemu-system-x86_64 -m [memory_size] [path-to-qemu-disk-image] -simconfig [simulator-config-file]
 
 To get the list of available simulation options give following command:
 
-    (qemu) simulate
+    (qemu) simconfig
 
 It will print all the simulation options on STDOUT.
 
