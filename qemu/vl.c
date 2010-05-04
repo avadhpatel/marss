@@ -5738,6 +5738,11 @@ int main(int argc, char **argv, char **envp)
                     fclose(fp);
                     break;
                 }
+#ifdef MARSS_QEMU
+            case QEMU_OPTION_simconfig:
+                ptl_config_from_file(optarg);
+                break;
+#endif
             }
         }
     }

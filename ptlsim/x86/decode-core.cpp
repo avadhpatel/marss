@@ -578,11 +578,7 @@ TraceDecoder::TraceDecoder(Context& ctx, Waddr rip) {
     ss32 = (ctx.hflags >> HF_SS32_SHIFT) & 1;
     hflags = ctx.hflags;
     cs_base = ctx.segs[R_CS].base;
-#ifdef PTLSIM_HYPERVISOR
     kernel = ctx.kernel_mode;
-#else
-    kernel = 0;
-#endif
     dirflag = ((ctx.internal_eflags & FLAG_DF) != 0);
 
     pe = (ctx.hflags >> HF_PE_SHIFT) & 1;
@@ -1822,14 +1818,10 @@ bool assist_gp_fault(Context& ctx) {
 
 bool TraceDecoder::invalidate() {
     if likely ((rip - bb.rip) > valid_byte_count) {
-        //#ifdef PTLSIM_HYPERVISOR
         //    // NOTE: contextof(0) is for debugging purposes only
         //    Level1PTE pte = contextof(0).virt_to_pte(ripstart);
         //    mfn_t mfn = (pte.p) ? pte.mfn : RIPVirtPhys::INVALID;
         //    if unlikely (!pte.p) contextof(0).flush_tlb_virt(ripstart);
-        //#else
-        //    int mfn = 0;
-        //#endif
         //    if (logable(3)) {
         //      ptl_logfile << "Translation crosses into invalid page (mfn ", mfn, "): ripstart ", (void*)ripstart, ", rip ", (void*)rip,
         //        ", faultaddr ", (void*)faultaddr, "; expected ", (rip - ripstart), " bytes but only got ", valid_byte_count,
@@ -1983,7 +1975,6 @@ int TraceDecoder::fillbuf(Context& ctx, byte* insnbytes, int insnbytes_bufsize) 
     return valid_byte_count;
 }
 
-#ifdef PTLSIM_HYPERVISOR
 int TraceDecoder::fillbuf_phys_prechecked(byte* insnbytes, int insnbytes_bufsize, Level1PTE ptelo, Level1PTE ptehi) {
     //  this->insnbytes = insnbytes;
     //  this->insnbytes_bufsize = insnbytes_bufsize;
@@ -1996,7 +1987,6 @@ int TraceDecoder::fillbuf_phys_prechecked(byte* insnbytes, int insnbytes_bufsize
     //  valid_byte_count = copy_from_user_phys_prechecked(insnbytes, bb.rip, insnbytes_bufsize, faultaddr);
     //  return valid_byte_count;
 }
-#endif
 
 //
 // Decode and translate one x86 instruction

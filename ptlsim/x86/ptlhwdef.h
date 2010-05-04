@@ -590,7 +590,8 @@ struct PTEUpdate: public PTEUpdateBase {
   RawDataAccessors(PTEUpdate, byte);
 };
 
-#ifdef PTLSIM_HYPERVISOR
+
+
 
 struct TrapTarget {
 #ifdef __x86_64__
@@ -777,13 +778,6 @@ struct RunstateInfo {
   //
   W64 time[4];
 };
-
-#else
-
-// Dummy type for usermode
-typedef W64 Level1PTE;
-
-#endif
 
 //
 // This is the complete x86 user-visible context for a single VCPU.
@@ -1134,9 +1128,6 @@ static inline ostream& operator <<(ostream& os, const SegmentCache& seg) {
 	return os;
 }
 
-#ifndef PTLSIM_HYPERVISOR
-extern Context ctx;
-#endif
 
 int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) ;
 

@@ -25,11 +25,7 @@
 #else
 #include <ooocore.h>
 #endif
-#ifdef NEW_CACHE
 #include <memoryHierarchy.h>
-#else
-#include <MemoryHierarchy.h>
-#endif
 
 #include <stats.h>
 
@@ -148,12 +144,9 @@ void ThreadContext::init() {
 
 OutOfOrderCore::OutOfOrderCore(W8 coreid_, OutOfOrderMachine& machine_):
   coreid(coreid_), caches(coreid_), machine(machine_), cache_callbacks(*this)
-#ifdef NEW_MEMORY
 , memoryHierarchy(*machine_.memoryHierarchyPtr)
-#endif
 {
   threadcount = 0;
-  freq_divider = 1; //coreid + 1; // Statically assign freq divider to each core
   setzero(threads);
 }
 
@@ -354,14 +347,12 @@ bool OutOfOrderCore::runcycle() {
   // to the interrupt handler.
   //
 
-#ifdef PTLSIM_HYPERVISOR
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
     bool current_interrupts_pending = thread->ctx.check_events();
 	thread->handle_interrupt_at_next_eom = current_interrupts_pending;
     thread->prev_interrupts_pending = current_interrupts_pending;
   }
-#endif
 
   //
   // Compute reserved issue queue entries to avoid starvation:
@@ -492,7 +483,6 @@ bool OutOfOrderCore::runcycle() {
   // This may use up load ports, so do it before other
   // loads can issue
   //
-#ifdef PTLSIM_HYPERVISOR
   if(!config.use_new_memory_system){ // TODO MESI -Hui
     foreach (permute, threadcount) {
       int tid = add_index_modulo(round_robin_tid, +permute, threadcount);
@@ -507,7 +497,6 @@ bool OutOfOrderCore::runcycle() {
     threads[i]->tlbwalk();
   }
   */
-#endif
   //
   // Issue whatever is ready
   //
@@ -709,7 +698,6 @@ bool OutOfOrderCore::runcycle() {
 		machine.ret_qemu_env = &thread->ctx;
   }
 
-#ifdef PTLSIM_HYPERVISOR
 //  if unlikely (vcpu_online_map_changed) {
 //    vcpu_online_map_changed = 0;
 //    foreach (i, contextcount) {
@@ -734,7 +722,6 @@ bool OutOfOrderCore::runcycle() {
 //      vctx.dirty = 0;
 //    }
 //  }
-#endif
 
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
@@ -759,10 +746,8 @@ bool OutOfOrderCore::runcycle() {
       ptl_logfile << sb, flush;
       cerr << sb, flush;
 	  dump_smt_state(ptl_logfile);
-#ifdef NEW_MEMORY
 	  ptl_logfile << " memoryHierarchy: ",endl;
 	  machine.memoryHierarchyPtr->dump_info(ptl_logfile);
-#endif
 	  ptl_logfile.flush();
       exiting = 1;
 	  assert(0);
@@ -1153,12 +1138,6 @@ bool ThreadContext::handle_barrier() {
 	  reset_fetch_unit(ctx.eip);
   }
 
-#ifndef PTLSIM_HYPERVISOR
-  if (requested_switch_to_native) {
-    ptl_logfile << "PTL call requested switch to native mode at rip ", (void*)(Waddr)ctx.eip, endl;
-    return false;
-  }
-#endif
   return true;
 }
 
@@ -1199,7 +1178,6 @@ bool ThreadContext::handle_exception() {
     return true;
   }
 
-#ifdef PTLSIM_HYPERVISOR
   //
   // Map PTL internal hardware exceptions to their x86 equivalents,
   // depending on the context. The error_code field should already
@@ -1260,28 +1238,9 @@ handle_page_fault: {
   flush_pipeline();
 
   return true;
-#else
-  if (logable(6))
-    ptl_logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.eip,
-      ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
-
-  stringbuf sb;
-  ptl_logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.eip, " @ ",
-    total_user_insns_committed, " commits (", total_uops_committed, " uops): genuine user exception (",
-    exception_name(ctx.exception), "); aborting", endl;
-  ptl_logfile << ctx, endl;
-  ptl_logfile << flush;
-
-  ptl_logfile << "Aborting...", endl, flush;
-  cerr << "Aborting...", endl, flush;
-
-  assert(false);
-  return false;
-#endif
 }
 
 bool ThreadContext::handle_interrupt() {
-#ifdef PTLSIM_HYPERVISOR
   // Release resources of everything in the pipeline:
   core_to_external_state();
   if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline.",endl;
@@ -1310,7 +1269,6 @@ bool ThreadContext::handle_interrupt() {
   } else {
 	  per_context_ooocore_stats_update(threadid, interrupt_requests++);
   }
-#endif
   return true;
 }
 
@@ -1928,11 +1886,9 @@ bool OutOfOrderMachine::init(PTLsimConfig& config) {
   assert(NUMBER_OF_CORES * NUMBER_OF_THREAD_PER_CORE == contextcount);
   int context_idx = 0;
   // create a memoryHierarchy
-#ifdef NEW_MEMORY
   memoryHierarchyPtr = new Memory::MemoryHierarchy(*this);
   assert(memoryHierarchyPtr);
   msdebug << " after create memoryHierarchyPtr", endl;
-#endif
 
   foreach (cur_core, NUMBER_OF_CORES){
     if(cores[cur_core]) delete cores[cur_core];
@@ -2004,11 +1960,6 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
   }
   first_run = 0;
 
-#ifdef NEW_MEMORY
-#ifndef NEW_CACHE
-  memoryHierarchyPtr->init_event_log();
-#endif
-#endif
 
   bool exiting = false;
   bool stopping = false;
@@ -2039,41 +1990,35 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
 	  int running_thread_count = 0;
 
-#ifdef NEW_MEMORY
 	  memoryHierarchyPtr->clock();
-#endif
 
-	  foreach (cur_core, NUMBER_OF_CORES){
-		  OutOfOrderCore& core =* cores[cur_core];
+          foreach (cur_core, NUMBER_OF_CORES){
+                  OutOfOrderCore& core =* cores[cur_core];
 
-		  if (sim_cycle % core.freq_divider == 0) {
-			  foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) {
-				  ThreadContext* thread = core.threads[cur_thread];
-#ifdef PTLSIM_HYPERVISOR
-				  running_thread_count += thread->ctx.running;
-				  if unlikely (!thread->ctx.running) {
-					  if unlikely (stopping) {
-						  // Thread is already waiting for an event: stop it now
-						  ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] Already stopped at cycle ", sim_cycle, endl;
-						  stopped[thread->ctx.cpu_index] = 1;
-						  ret_qemu_env = &thread->ctx;
-						  exiting = 1;
-					  }
-					  continue;
-				  }
+                  foreach (cur_thread, NUMBER_OF_THREAD_PER_CORE) {
+                          ThreadContext* thread = core.threads[cur_thread];
+                          running_thread_count += thread->ctx.running;
+                          if unlikely (!thread->ctx.running) {
+                                  if unlikely (stopping) {
+                                          // Thread is already waiting for an event: stop it now
+                                          ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] Already stopped at cycle ", sim_cycle, endl;
+                                          stopped[thread->ctx.cpu_index] = 1;
+                                          ret_qemu_env = &thread->ctx;
+                                          exiting = 1;
+                                  }
+                                  continue;
+                          }
 
-				  if unlikely ( thread->total_insns_committed >= config.stop_at_user_insns && !finished[cur_core][cur_thread]) {
-					  ptl_logfile << "TH ", thread->threadid, " reaches ",  config.stop_at_user_insns,
-								  " total_insns_committed (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl, flush;
-					  finished[cur_core][cur_thread] = 1;
-					  running_thread --;
-				  }
-#endif
-			  }
-		  }
-		  MYDEBUG << "cur_core: ", cur_core, " running [core ", core.coreid, "]", endl;
-		  exiting |= core.runcycle();
-	  }
+                          if unlikely ( thread->total_insns_committed >= config.stop_at_user_insns && !finished[cur_core][cur_thread]) {
+                                  ptl_logfile << "TH ", thread->threadid, " reaches ",  config.stop_at_user_insns,
+                                              " total_insns_committed (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl, flush;
+                                  finished[cur_core][cur_thread] = 1;
+                                  running_thread --;
+                          }
+                  }
+                  MYDEBUG << "cur_core: ", cur_core, " running [core ", core.coreid, "]", endl;
+                  exiting |= core.runcycle();
+          }
 
     stats.summary.cycles++;
     foreach (coreid, NUMBER_OF_CORES){
@@ -2174,10 +2119,8 @@ void OutOfOrderMachine::dump_state(ostream& os) {
     os << thread.ctx;
   }
 #endif
-#ifdef NEW_MEMORY
   os << " memoryHierarchy: ",endl;
   memoryHierarchyPtr->dump_info(os);
-#endif
 }
 
 namespace OutOfOrderModel {
@@ -2202,11 +2145,9 @@ void OutOfOrderMachine::update_stats(PTLsimStats& stats) {
   //  foreach (vcpuid, contextcount) {
   foreach (coreid, NUMBER_OF_CORES){
     foreach (threadid, NUMBER_OF_THREAD_PER_CORE){
-#ifdef PTLSIM_HYPERVISOR
       // need to update the count other wise the last one will be lost
       ptl_logfile << " update mode count for ctx ", cores[coreid]->threads[threadid]->ctx.cpu_index, endl;
       cores[coreid]->threads[threadid]->ctx.update_mode_count();
-#endif
       PerContextOutOfOrderCoreStats& s = per_context_ooocore_stats_ref(coreid , threadid);
       s.issue.uipc = s.issue.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
       s.commit.uipc = (double)s.commit.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
@@ -2293,16 +2234,11 @@ OutOfOrderCore& OutOfOrderModel::coreof(W8 coreid) {
 }
 
 
-#ifdef NEW_MEMORY
 namespace Memory{
   using namespace OutOfOrderModel;
 
   void MemoryHierarchy::icache_wakeup_wrapper(MemoryRequest *request){
-#ifdef NEW_CACHE
     OutOfOrderCore* core = machine_.cores[request->get_coreid()];
-#else
-    OutOfOrderCore* core = machine.cores[request->get_coreid()];
-#endif
     OutOfOrderCoreCacheCallbacks& callbacks = core->cache_callbacks;
 
     callbacks.icache_wakeup(request);
@@ -2311,15 +2247,10 @@ namespace Memory{
   void MemoryHierarchy::dcache_wakeup_wrapper(MemoryRequest *request) {
 
 	  msdebug << "Dcache Wakeup Request: ", *request, endl;
-#ifdef NEW_CACHE
     OutOfOrderCore* core = machine_.cores[request->get_coreid()];
-#else
-    OutOfOrderCore* core = machine.cores[request->get_coreid()];
-#endif
     OutOfOrderCoreCacheCallbacks& callbacks = core->cache_callbacks;
 
     callbacks.dcache_wakeup(request);
   }
 
 };
-#endif

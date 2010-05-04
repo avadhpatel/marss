@@ -1951,6 +1951,13 @@ STEXI
 @item -writeconfig @var{file}
 Write device configuration to @var{file}.
 ETEXI
+DEF("simconfig", HAS_ARG, QEMU_OPTION_simconfig,
+    "-simconfig <file>\n"
+    "               read simulation parameters from file\n")
+STEXI
+@item -simconfig @var{file}
+Read simulation parameters from @var{file}.
+ETEXI
 
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI

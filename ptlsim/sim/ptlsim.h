@@ -163,7 +163,6 @@ extern ofstream ptl_rip_trace;
 //
 struct PTLsimConfig {
   bool help;
-#ifdef PTLSIM_HYPERVISOR
   W64 domain;
   bool run;
   bool stop;
@@ -171,7 +170,6 @@ struct PTLsimConfig {
   bool kill;
   bool flush_command_queue;
   bool simswitch;
-#endif
 
   stringbuf core_name;
   stringbuf domain_name;
@@ -220,13 +218,6 @@ struct PTLsimConfig {
   W64 snapshot_cycles;
   stringbuf snapshot_now;
 
-#ifndef PTLSIM_HYPERVISOR
-  // Starting Point
-  W64 start_at_rip;
-  bool include_dyn_linker;
-  bool trigger_mode;
-  W64 pause_at_startup;
-#endif
   // prefetcher
   bool use_L1_IP_based_prefetcher;
   bool use_L2_IP_based_prefetcher;
@@ -257,7 +248,6 @@ struct PTLsimConfig {
   W64 flush_interval;
   bool kill_after_run;
 
-#ifdef PTLSIM_HYPERVISOR
   // Event tracing
   stringbuf event_trace_record_filename;
   bool event_trace_record_stop;
@@ -275,7 +265,6 @@ struct PTLsimConfig {
   bool force_native;
   bool kill_after_finish;
   bool exit_after_finish;
-#endif
 
   bool continuous_validation;
   W64 validation_start_cycle;
@@ -289,11 +278,6 @@ struct PTLsimConfig {
   bool overshoot_and_dump;
   stringbuf bbcache_dump_filename;
 
-#ifndef PTLSIM_HYPERVISOR
-  // Simulation Mode
-  W64 sequential_mode_insns;
-  bool exit_after_fullsim;
-#endif
 
   ///
   /// for memory hierarchy implementaion

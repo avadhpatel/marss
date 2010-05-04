@@ -21,11 +21,7 @@
 #else
 #include <ooocore.h>
 #endif
-#ifdef NEW_CACHE
 #include <memoryHierarchy.h>
-#else
-#include <MemoryHierarchy.h>
-#endif
 
 #include <stats.h>
 
@@ -123,9 +119,7 @@ void ThreadContext::flush_pipeline() {
   if (logable(3)) ptl_logfile << " core[", core.coreid,"] TH[", threadid, "] flush_pipeline()",endl;
   core.caches.complete(threadid);
 
-#ifdef NEW_MEMORY
   core.machine.memoryHierarchyPtr->flush(core.coreid);
-#endif
 
   annul_fetchq();
 
@@ -506,16 +500,13 @@ bool ThreadContext::fetch() {
     if ((!current_basic_block->invalidblock) && (req_icache_block != current_icache_block)) {
 
       // test if icache is available:
-#ifdef NEW_MEMORY
       bool cache_available = core.memoryHierarchy.is_cache_available(core.coreid, threadid, true/* icache */);
       if(!cache_available){
         msdebug << " icache can not read core:", core.coreid, " threadid ", threadid, endl;
         per_context_ooocore_stats_update(threadid, fetch.stop.icache_stalled++);
         break;
       }
-#endif
 
-#ifdef NEW_MEMORY
       bool hit;
       if(config.use_new_memory_system){
         assert(!waiting_for_icache_fill);
@@ -531,9 +522,6 @@ bool ThreadContext::fetch() {
       }else{
         hit =  core.caches.probe_icache(fetchrip, physaddr);
       }
-#else
-      bool hit = core.caches.probe_icache(fetchrip, physaddr);
-#endif
       hit |= config.perfect_cache;
       if unlikely (!hit) {
         int missbuf = -1;
@@ -874,9 +862,6 @@ void ThreadContext::rename() {
     rob.operands[RC] = specrrt[transop.rc];
     rob.operands[RS] = &core.physregfiles[0][PHYS_REG_NULL]; // used for loads and stores only
 
-#ifdef WATTCH //Don't access regfile, it does during issue when the instruction is ready with all source operands
-	power_ooo_core_stats_update(core.coreid, spec_rename.read)+=3;
-#endif
 
     // See notes above on Physical Register Recycling Complications
     foreach (i, MAX_OPERANDS) {
@@ -926,12 +911,6 @@ void ThreadContext::rename() {
     physreg->rob = &rob;
     physreg->archreg = rob.uop.rd;
     rob.physreg = physreg;
-
-#ifdef WATTCH
-	power_ooo_core_stats_update(core.coreid, spec_rename.write)++;
-	power_ooo_core_stats_update(core.coreid, window.write)++;
-	// It should make an access to the speculative rename table, allocation is a write
-#endif
 
     //
     // Logging
@@ -1212,16 +1191,6 @@ bool ReorderBufferEntry::find_sources() {
       // No need to wait for it
       uopids[operand] = 0;
       preready[operand] = 1;
-
-#ifdef WATTCH  //Source is read from registre file
-	power_ooo_core_stats_update(coreid, window_preg.read)++;
-#endif
-
-#ifdef DYNAMIC_AF
-	power_ooo_core_stats_update(coreid, regfile.num_pop_count) += popcount64(source_physreg.data);
-	power_ooo_core_stats_update(coreid, regfile.total_pop_count)++;
-#endif
-
     }
 
     if likely (source_physreg.nonnull()) {
@@ -1548,21 +1517,6 @@ int ThreadContext::writeback(int cluster) {
 
     core.writecount++;
 
-#ifdef WATTCH
-	//The operation has completed
-	power_ooo_core_stats_update(core.coreid, window.access)++;
-	power_ooo_core_stats_update(core.coreid, window_preg.write)++;
-	power_ooo_core_stats_update(core.coreid, window_wakeup.access)++;
-	power_ooo_core_stats_update(core.coreid, resultbus.access)++;
-#endif
-
-#ifdef DYNAMIC_AF
-	power_ooo_core_stats_update(core.coreid, window_preg.total_pop_count) += popcount64(rob->physreg->data);
-	power_ooo_core_stats_update(core.coreid, window_preg.num_pop_count)++;
-	power_ooo_core_stats_update(core.coreid, resultbus.total_pop_count) += popcount64(rob->physreg->data);
-	power_ooo_core_stats_update(core.coreid, resultbus.num_pop_count)++;
-#endif
-
     //
     // For simulation purposes, final value is already in rob->physreg,
     // so we don't need to actually write anything back here.
@@ -1668,12 +1622,6 @@ int ThreadContext::commit() {
 					"simcycle: ", sim_cycle, "\tkernel: ",
 					rob.uop.rip.kernel, endl;
 #endif
-
-#ifdef WATTCH //read from spec_rename and write to rename(commit)
-	power_ooo_core_stats_update(core.coreid, spec_rename.read)++;
-	power_ooo_core_stats_update(core.coreid, rename.write)++;
-#endif
-
     } else {
       break;
     }
@@ -1718,7 +1666,6 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
   queued_mem_lock_release_count = start;
 }
 
-#ifdef PTLSIM_HYPERVISOR
 //
 // For debugging purposes only
 //
@@ -1732,7 +1679,6 @@ bool rip_is_in_spinlock(W64 rip) {
 
   return inside_spinlock_now;
 }
-#endif
 #endif
 
 int ReorderBufferEntry::commit() {
@@ -1812,13 +1758,11 @@ int ReorderBufferEntry::commit() {
 	  cant_commit_subrob = &subrob;
     }
 
-#ifdef PTLSIM_HYPERVISOR
     if unlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK)))) {
       subrob.physreg->data = EXCEPTION_FloatingPointNotAvailable;
       subrob.physreg->flags = FLAG_INV;
       if unlikely (subrob.lsq) subrob.lsq->invalid = 1;
     }
-#endif
 
     if unlikely (subrob.ready_to_commit() &&
                 (subrob.physreg->flags & FLAG_INV) &&
@@ -1834,13 +1778,11 @@ int ReorderBufferEntry::commit() {
       ctx.exception = LO32(subrob.physreg->data);
       ctx.error_code = HI32(subrob.physreg->data);
 
-#ifdef PTLSIM_HYPERVISOR
       // Capture the faulting virtual address for page faults
       if ((ctx.exception == EXCEPTION_PageFaultOnRead) |
           (ctx.exception == EXCEPTION_PageFaultOnWrite)) {
           ctx.page_fault_addr = subrob.origvirt;
       }
-#endif
 
       if unlikely (config.event_log_enabled) core.eventlog.add_commit(EVENT_COMMIT_EXCEPTION_DETECTED, &subrob);
 
@@ -1916,13 +1858,11 @@ int ReorderBufferEntry::commit() {
   bool br = isbranch(uop.opcode);
 
   // check if we can access dcache for store
-#ifdef NEW_MEMORY
   if(st && !core.memoryHierarchy.is_cache_available(core.coreid, threadid, false/* icache */)){
     msdebug << " dcache can not write. core:", core.coreid, " threadid ", threadid, endl;
     per_context_ooocore_stats_update(threadid, commit.result.dcache_stall++);
     return COMMIT_RESULT_NONE;
   }
-#endif
 
   per_context_ooocore_stats_update(threadid, commit.opclass[opclassof(uop.opcode)]++);
 
@@ -2023,7 +1963,6 @@ int ReorderBufferEntry::commit() {
 
   release_mem_lock();
 
-#ifdef PTLSIM_HYPERVISOR
   //
   // For debugging purposes, check the list of address ranges specified
   // with the -deadlock-debug-range 0xAA-0xBB,0xCC-0xDD,... option. If
@@ -2058,7 +1997,6 @@ int ReorderBufferEntry::commit() {
     }
   }
 #endif
-#endif
 
   if (st) assert(lsq->addrvalid && lsq->datavalid);
 
@@ -2075,15 +2013,6 @@ int ReorderBufferEntry::commit() {
   } else {
 	  merged_data = physreg->data;
   }
-
-#ifdef WATTCH
-	//Commit accesses architectural register file (or this should be moved to writeback)
-	power_ooo_core_stats_update(core.coreid, regfile.write)++;
-#ifdef DYNAMIC_AF
-	power_ooo_core_stats_update(core.coreid, regfile.total_pop_count) += popcount64(physreg->data);
-	power_ooo_core_stats_update(core.coreid, regfile.num_pop_count) += 1;
-#endif
-#endif
 
   if (logable(10)) {
 	  ptl_logfile << "ROB Commit RIP check...\n", flush;
@@ -2194,7 +2123,6 @@ int ReorderBufferEntry::commit() {
         assert(core.caches.commitstore(*lsq, thread.threadid) == 0);
       }
     }else{
-#ifdef NEW_MEMORY
 		if(uop.internal) {
 			thread.ctx.store_internal(lsq->virtaddr, lsq->data,
 					lsq->bytemask);
@@ -2216,7 +2144,6 @@ int ReorderBufferEntry::commit() {
 			thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
 			lsq->datavalid = 1;
       }
-#endif
     }
 
   }
@@ -2300,9 +2227,6 @@ int ReorderBufferEntry::commit() {
     stats.summary.insns++;
 	// if(uop.rip.rip > 0x7f0000000000)
 		// per_core_event_update(core.coreid, insns_in_mode.userlib++);
-#ifdef WATTCH
-	power_ooo_core_stats_update(core.coreid, committed)++;
-#endif
   }
 
   if (logable(10)) {

@@ -2639,7 +2639,7 @@ static const mon_cmd_t info_cmds[] = {
     },
 #ifdef MARSS_QEMU
     {
-        .name       = "simulate",
+        .name       = "simconfig",
         .args_type  = "",
         .params     = "",
         .help       = "-help for all options",

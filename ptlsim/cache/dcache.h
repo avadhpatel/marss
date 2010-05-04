@@ -108,9 +108,7 @@ namespace CacheSubsystem {
   const int MAIN_MEM_LATENCY = 180; // 130; // Core 2 Duo 2.4 GHz has 160 cycle total L2 latency
 
   // TLBs
-#ifdef PTLSIM_HYPERVISOR
   //#define USE_TLB // TODO MESI - Hui
-#endif
   const int ITLB_SIZE = 32;
   const int DTLB_SIZE = 32;
 

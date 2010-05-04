@@ -11,9 +11,6 @@
 #include <branchpred.h>
 #include <stats.h>
 
-#ifdef WATTCH
-#include <wattch.h>
-#endif
 
 template <int SIZE>
 struct BimodalPredictor {
@@ -272,25 +269,6 @@ struct CombinedPredictor {
   W8 threadid; 
   CombinedPredictor(W8 coreid_, W8 threadid_): coreid(coreid_), threadid(threadid_){};
   void reset() {
-#ifdef AVAVDHHHHHHHHH
-//Initializes WATTCH with statistics from the branch predictor.
-//This could potentially be moved to a better location.
-ssfaewfawefawe
-	power_core_stats(coreid, init.twolev_config_0) = L1SIZE;
-	power_core_stats(coreid, init.twolev_config_0) = L1SIZE;
-	power_core_stats(coreid, init.twolev_config_1) = L2SIZE;
-	power_core_stats(coreid, init.twolev_config_2) = SHIFTWIDTH;
-	power_core_stats(coreid, init.twolev_config_3) = HISTORYXOR;
-
-	power_core_stats(coreid, init.bimod_config_0) = BIMODSIZE;
-
-	power_core_stats(coreid, init.comb_config_0) = METASIZE;
-
-	power_core_stats(coreid, init.btb_config_0) = BTBSETS;
-	power_core_stats(coreid, init.btb_config_1) = BTBWAYS;
-
-	power_core_stats(coreid, init.ras_size) = RASSIZE;
-#endif
 //     twolevel.reset();
 //     bimodal.reset();
 //     meta.reset();
@@ -303,21 +281,6 @@ ssfaewfawefawe
     ras.reset(coreid, threadid);
   }
 
-#ifdef WATTCH
-  void init_power_values(OOOCorePower *core_power) {
-	core_power->bimod_config_0 = BIMODSIZE;
-	core_power->comb_config_0 = METASIZE;
-	core_power->btb_config_0 = BTBSETS;
-	core_power->btb_config_1 = BTBWAYS;
-	ptl_logfile << "brancpred-init ", core_power->btb_config_0, " ", core_power->btb_config_1, endl, flush;
-	core_power->ras_size = RASSIZE;
-	core_power->twolev_config_0 = L1SIZE;
-	core_power->twolev_config_1 = L2SIZE;
-	core_power->twolev_config_2 = SHIFTWIDTH;
-	core_power->twolev_config_3 = HISTORYXOR;
-
-  }
-#endif
 
   void updateras(PredictorUpdate& predinfo, W64 rip) {
     if unlikely (predinfo.flags & BRANCH_HINT_RET) {
@@ -391,10 +354,6 @@ ssfaewfawefawe
     int type = update.flags;
 
     bool taken = (target != branchaddr);
-
-#ifdef WATTCH
-	power_ooo_core_stats_update(coreid, bpred.access)++;
-#endif
 
     //
     // keep stats about JMPs; also, but don't change any pred state for JMPs
@@ -494,12 +453,6 @@ void BranchPredictorInterface::destroy() {
 void BranchPredictorInterface::reset() {
   impl->reset();
 }
-
-#ifdef WATTCH
-void BranchPredictorInterface::init_power_values(OOOCorePower *power) {
-	impl->init_power_values(power);
-}
-#endif
 
 void BranchPredictorInterface::init(W8 coreid, W8 threadid) {
   destroy();

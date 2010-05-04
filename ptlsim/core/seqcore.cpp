@@ -13,9 +13,6 @@
 #include <datastore.h>
 #include <stats.h>
 
-#ifdef WATTCH
-#include <wattch.h>
-#endif
 
 // With these disabled, simulation is faster
 #define ENABLE_CHECKS
@@ -950,9 +947,7 @@ struct SequentialCore {
     update_assist_stats(assist);
     if (logable(6)) {
       ptl_logfile << "Before assist:", endl, ctx, endl;
-#ifdef PTLSIM_HYPERVISOR
 //      ptl_logfile << sshinfo, endl;
-#endif
     }
 
     assist(ctx);
@@ -961,26 +956,17 @@ struct SequentialCore {
       ptl_logfile << "Done with assist", endl;
       ptl_logfile << "New state:", endl;
       ptl_logfile << ctx;
-#ifdef PTLSIM_HYPERVISOR
 //      ptl_logfile << sshinfo;
-#endif
     }
 
     reset_fetch(ctx.eip);
     external_to_core_state(ctx);
-#ifndef PTLSIM_HYPERVISOR
-    if (requested_switch_to_native) {
-      ptl_logfile << "PTL call requested switch to native mode at rip ", (void*)(Waddr)ctx.eip, endl;
-      return false;
-    }
-#endif
     return true;
   }
 
   bool handle_exception() {
     core_to_external_state(ctx);
 
-#ifdef PTLSIM_HYPERVISOR
     if (logable(4)) {
       ptl_logfile << "PTL Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip, 
         " at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
@@ -1017,27 +1003,8 @@ struct SequentialCore {
     external_to_core_state(ctx);
 
     return true;
-#else
-    if (logable(6)) 
-      ptl_logfile << "Exception (", exception_name(ctx.exception), " called from ", (void*)(Waddr)ctx.eip, 
-        ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
-
-    stringbuf sb;
-    ptl_logfile << exception_name(ctx.exception), " detected at fault rip ", (void*)(Waddr)ctx.eip, " @ ", 
-      total_user_insns_committed, " commits (", total_uops_committed, " uops): genuine user exception (",
-      exception_name(ctx.exception), "); aborting", endl;
-    ptl_logfile << ctx, endl;
-    ptl_logfile << flush;
-
-    ptl_logfile << "Aborting...", endl, flush;
-    cerr << "Aborting...", endl, flush;
-
-    assert(false);
-    return false;
-#endif
   }
 
-#ifdef PTLSIM_HYPERVISOR
   bool handle_interrupt() {
     core_to_external_state(ctx);
 
@@ -1063,7 +1030,6 @@ struct SequentialCore {
 
     return true;
   }
-#endif
 
   BasicBlock* fetch_or_translate_basic_block(Waddr rip) {
     RIPVirtPhys rvp(rip);
@@ -1228,11 +1194,9 @@ struct SequentialCore {
 
       Waddr rip = arf[REG_rip];
 
-#ifdef PTLSIM_HYPERVISOR
       if unlikely (uop.is_sse|uop.is_x87) {
         force_fpu_not_avail_fault = (ctx.cr[0] & CR0_TS_MASK) | (uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK));
       }
-#endif
       if unlikely (force_fpu_not_avail_fault) {
         if unlikely (config.event_log_enabled) {
           SequentialCoreEvent* event = eventlog.add(EVENT_ISSUE, ctx.cpu_index, uop, rip, current_uop_in_macro_op, current_uuid, total_user_insns_committed);
@@ -1264,9 +1228,7 @@ struct SequentialCore {
         if (status == ISSUE_EXCEPTION) {
           ctx.exception = LO32(state.reg.rddata);
           ctx.error_code = HI32(state.reg.rddata); // page fault error code
-#ifdef PTLSIM_HYPERVISOR
           ctx.cr[2] = origvirt;
-#endif
           arf[REG_flags] = saved_flags;
           return SEQEXEC_EXCEPTION;
         } else if (status == ISSUE_REFETCH) {
@@ -1406,10 +1368,6 @@ struct SequentialCore {
       stats.summary.insns += uop.eom;
       stats.summary.uops++;
 
-//#ifdef WATTCH
-//  power_ooo_core_stats_update(coreid, commited) += uop.eom;
-//#endif
-
 
       current_uuid++;
       // Don't advance on cracked loads/stores:
@@ -1459,13 +1417,11 @@ struct SequentialCore {
       exiting = (!handle_barrier());
       ctseq.start();
       break;
-#ifdef PTLSIM_HYPERVISOR
     case SEQEXEC_INTERRUPT:
       ctseq.stop();
       handle_interrupt();
       ctseq.start();
       break;
-#endif
     default:
       assert(false);
     }
@@ -1473,7 +1429,6 @@ struct SequentialCore {
     return exiting;
   }
 
-#ifdef PTLSIM_HYPERVISOR
   int execute_in_place(W64 bbcount = limits<W64>::max, W64s insncount = limits<W64s>::max) {
     external_to_core_state(ctx);
     int result = SEQEXEC_OK;
@@ -1557,7 +1512,6 @@ struct SequentialCore {
 
     return result;
   }
-#endif
 };
 
 struct SequentialMachine: public PTLsimMachine {
@@ -1615,10 +1569,8 @@ struct SequentialMachine: public PTLsimMachine {
       ptl_logfile << ctx, endl;
     }
 
-#ifdef PTLSIM_HYPERVISOR
 //    ptl_logfile << "Shared info at start:", endl;
 //    ptl_logfile << sshinfo;
-#endif
 
     bool exiting = false;
 
@@ -1636,7 +1588,6 @@ struct SequentialMachine: public PTLsimMachine {
         SequentialCore& core =* cores[i];
         Context& ctx = contextof(i);
 
-#ifdef PTLSIM_HYPERVISOR
         if unlikely (ctx.dirty) {
           ptl_logfile << "VCPU ", ctx.cpu_index, " context was dirty: update core model internal state", endl;
           core.external_to_core_state(ctx);
@@ -1645,7 +1596,6 @@ struct SequentialMachine: public PTLsimMachine {
         if unlikely (ctx.check_events()) core.handle_interrupt();
         if unlikely (!ctx.running) continue;
         running_thread_count++;
-#endif
         exiting |= core.execute();
       }
 
@@ -1712,7 +1662,6 @@ struct SequentialMachine: public PTLsimMachine {
 
 SequentialMachine seqmodel("seq");
 
-#ifdef PTLSIM_HYPERVISOR
 int execute_sequential(Context& ctx, CommitRecord* cmtrec, W64 bbcount, W64 insncount) {
   if (config.flush_event_log_every_cycle) {
     assert(config.event_log_enabled);
@@ -1729,7 +1678,6 @@ int execute_sequential(Context& ctx, CommitRecord* cmtrec, W64 bbcount, W64 insn
     return core.execute_in_place(bbcount, insncount);
   }
 }
-#endif
 
 ostream& CommitRecord::print(ostream& os) const {
   os << "CommitRecord: ", store_count, " stores, ", pte_update_count, " PTE updates", endl;

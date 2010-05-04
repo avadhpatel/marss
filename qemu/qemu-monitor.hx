@@ -1064,7 +1064,7 @@ ETEXI
 
 #ifdef MARSS_QEMU
     {
-        .name       = "simulate",
+        .name       = "simconfig",
         .args_type  = "options:W",
         .params     = "simulation_options",
         .help       = "set various simulation options",

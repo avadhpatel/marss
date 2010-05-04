@@ -14,11 +14,7 @@
 #define CPT_STATS
 #include <stats.h>
 #undef CPT_STATS
-#ifndef NEW_CACHE
-#include <MemoryConfig.h>
-#else
 #include <memoryStats.h>
-#endif
 #include <elf.h>
 
 #include <fstream>
@@ -61,7 +57,6 @@ W64 tsc_at_start ;
 
 void PTLsimConfig::reset() {
   help=0;
-#ifdef PTLSIM_HYPERVISOR
   domain = (W64)(-1);
   run = 0;
   stop = 0;
@@ -69,7 +64,6 @@ void PTLsimConfig::reset() {
   kill = 0;
   flush_command_queue = 0;
   simswitch = 0;
-#endif
 
   quiet = 0;
   core_name = "ooo";
@@ -109,13 +103,6 @@ void PTLsimConfig::reset() {
   snapshot_cycles = infinity;
   snapshot_now.reset();
 
-#ifndef PTLSIM_HYPERVISOR
-  // Starting Point
-  start_at_rip = INVALIDRIP;
-  include_dyn_linker = 1;
-  trigger_mode = 0;
-  pause_at_startup = 0;
-#endif
 
   //prefetcher
   use_L1_IP_based_prefetcher = 0;
@@ -144,7 +131,6 @@ void PTLsimConfig::reset() {
   stop_at_user_insns_relative = infinity;
   insns_in_last_basic_block = 65536;
   flush_interval = infinity;
-#ifdef PTLSIM_HYPERVISOR
   event_trace_record_filename.reset();
   event_trace_record_stop = 0;
   event_trace_replay_filename.reset();
@@ -161,7 +147,6 @@ void PTLsimConfig::reset() {
   force_native = 0;
   kill_after_finish = 0;
   exit_after_finish = 0;
-#endif
 
   continuous_validation = 0;
   validation_start_cycle = 0;
@@ -173,10 +158,6 @@ void PTLsimConfig::reset() {
   overshoot_and_dump = 0;
   bbcache_dump_filename.reset();
 
-#ifndef PTLSIM_HYPERVISOR
-  sequential_mode_insns = 0;
-  exit_after_fullsim = 0;
-#endif
 
   ///
   /// memory hierarchy implementation
@@ -192,7 +173,6 @@ void PTLsimConfig::reset() {
 
 template <>
 void ConfigurationParser<PTLsimConfig>::setup() {
-#ifdef PTLSIM_HYPERVISOR
   // Full system only
   section("PTLmon Control");
   add(help,                       "help",               "Print this message");
@@ -205,7 +185,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(kill,                         "kill",                 "Kill PTLsim inside domain (and ptlmon), then shutdown domain");
   add(flush_command_queue,          "flush",                "Flush all queued commands, stop the current simulation run and wait");
   add(simswitch,                    "switch",               "Switch back to PTLsim while in native mode");
-#endif
 
   section("Simulation Control");
 
@@ -241,15 +220,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(stats_filename,               "stats",                "Statistics data store hierarchy root");
   add(snapshot_cycles,              "snapshot-cycles",      "Take statistical snapshot and reset every <snapshot> cycles");
   add(snapshot_now,                 "snapshot-now",         "Take statistical snapshot immediately, using specified name");
-#ifndef PTLSIM_HYPERVISOR
-  // Userspace only
-  section("Start Point");
-  add(start_at_rip,                 "startrip",             "Start at rip <startrip>");
-  add(include_dyn_linker,           "excludeld",            "Exclude dynamic linker execution");
-  add(trigger_mode,                 "trigger",              "Trigger mode: wait for user process to do simcall before entering PTL mode");
-  add(pause_at_startup,             "pause-at-startup",     "Pause for N seconds after starting up (to allow debugger to attach)");
-#endif
-
   section("Trace Stop Point");
   add(stop_at_user_insns,           "stopinsns",            "Stop after executing <stopinsns> user instructions");
   add(stop_at_cycle,                "stopcycle",            "Stop after <stop> cycles");
@@ -261,9 +231,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(insns_in_last_basic_block,    "bbinsns",              "In final basic block, only translate <bbinsns> user instructions");
   add(flush_interval,               "flushevery",           "Flush the pipeline every N committed instructions");
   add(kill_after_run,               "kill-after-run",       "Kill PTLsim after this run");
-
-#ifdef PTLSIM_HYPERVISOR
-  // Full system only
   section("Event Trace Recording");
   add(event_trace_record_filename,  "event-record",         "Save replayable events (interrupts, DMAs, etc) to this file");
   add(event_trace_record_stop,      "event-record-stop",    "Stop recording events");
@@ -281,7 +248,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(force_native,                 "force-native",         "Force native mode: ignore attempts to switch to simulation");
   add(kill_after_finish,            "kill-after-finish",     "kill both simulator and domainU after finish simulation");
   add(exit_after_finish,            "exit-after-finish",     "exit simulator keep domainU after finish simulation");
-#endif
 
   section("Validation");
   add(continuous_validation,        "validate",             "Continuous validation: validate against known-good sequential model");
@@ -295,11 +261,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(dump_at_end,                  "dump-at-end",          "Set breakpoint and dump core before first instruction executed on return to native mode");
   add(overshoot_and_dump,           "overshoot-and-dump",   "Set breakpoint and dump core after first instruction executed on return to native mode");
   add(bbcache_dump_filename,        "bbdump",               "Basic block cache dump filename");
-#ifndef PTLSIM_HYPERVISOR
-  // Userspace only
-  add(sequential_mode_insns,        "seq",                  "Run in sequential mode for <seq> instructions before switching to out of order");
-  add(exit_after_fullsim,           "exitend",              "Kill the thread after full simulation completes rather than going native");
-#endif
   // for prefetcher
   add(use_L1_IP_based_prefetcher,           "L1-IP-based-prefetch",              "use L1 IP based stride prefetcher, which will fetch to L1");
   add(use_L2_IP_based_prefetcher,           "L2-IP-based-prefetch",              "use L2 IP based stride prefetcher, which will fetch to L2 not L1");
@@ -358,11 +319,7 @@ void print_banner(ostream& os, const PTLsimStats& stats, int argc, char** argv) 
 
   os << "//  ", endl;
 #ifdef __x86_64__
-#ifdef PTLSIM_HYPERVISOR
   os << "//  PTLsim: Cycle Accurate x86-64 Full System SMP/SMT Simulator", endl;
-#else
-  os << "//  PTLsim: Cycle Accurate x86-64 Simulator", endl;
-#endif
 #else
   os << "//  PTLsim: Cycle Accurate x86 Simulator (32-bit version)", endl;
 #endif
@@ -373,16 +330,6 @@ void print_banner(ostream& os, const PTLsimStats& stats, int argc, char** argv) 
     stringify(__GNUC__), ".", stringify(__GNUC_MINOR__), endl;
   os << "//  Running on ", hostinfo.nodename, ".", hostinfo.domainname, endl;
   os << "//  ", endl;
-#ifndef PTLSIM_HYPERVISOR
-  os << "//  Arguments: ";
-  foreach (i, argc) {
-    os << argv[i];
-    if (i != (argc-1)) os << ' ';
-  }
-  os << endl;
-  os << "//  Thread ", sys_getpid(), " is running in ", (ctx.use64 ? "64-bit x86-64" : "32-bit x86"), " mode", endl;
-  os << "//  ", endl;
-#endif
   os << endl;
   os << flush;
 }
@@ -543,9 +490,6 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 #ifdef __x86_64__
   config.start_log_at_rip = signext64(config.start_log_at_rip, 48);
   config.log_backwards_from_trigger_rip = signext64(config.log_backwards_from_trigger_rip, 48);
-#ifndef PTLSIM_HYPERVISOR
-  config.start_at_rip = signext64(config.start_at_rip, 48);
-#endif
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif
 
@@ -565,14 +509,9 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 
   if (first_time) {
     if (!config.quiet) {
-#ifndef PTLSIM_HYPERVISOR
-      print_banner(cerr, stats, argc, argv);
-#endif
       print_sysinfo(cerr);
-#ifdef PTLSIM_HYPERVISOR
       if (!(config.run | config.native | config.kill))
         cerr << "Simulator is now waiting for a 'run' command.", endl, flush;
-#endif
     }
     print_banner(ptl_logfile, stats, argc, argv);
     print_sysinfo(ptl_logfile);
@@ -582,13 +521,11 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
     first_time = false;
   }
 
-#ifdef PTLSIM_HYPERVISOR
   int total = config.run + config.stop + config.native + config.kill;
   if (total > 1) {
     ptl_logfile << "Warning: only one action (from -run, -stop, -native, -kill) can be specified at once", endl, flush;
     cerr << "Warning: only one action (from -run, -stop, -native, -kill) can be specified at once", endl, flush;
   }
-#endif
 
   return true;
 }
@@ -706,7 +643,6 @@ CPUX86State* ptl_create_new_context() {
 void print_stats_in_log(){
 
 
-#ifdef PTLSIM_HYPERVISOR
   // 1. execution key stats:
   // uops_in_mode: kernel and user
   ptl_logfile << " kernel-insns ", (stats.external.total.insns_in_mode.kernel64 * 100.0) / total_user_insns_committed, endl;
@@ -714,7 +650,6 @@ void print_stats_in_log(){
   // cycles_in_mode: kernel and user
   ptl_logfile << " kernel-cycles ", (stats.external.total.cycles_in_mode.kernel64 * 100.0) / sim_cycle, endl;
   ptl_logfile << " user-cycles ", (stats.external.total.cycles_in_mode.user64 * 100.0) / sim_cycle, endl;
-#endif
   //#define OPCLASS_BRANCH                  (OPCLASS_COND_BRANCH|OPCLASS_INDIR_BRANCH|OPCLASS_UNCOND_BRANCH|OPCLASS_ASSIST)
 
   //#define OPCLASS_LOAD                    (1 << 11)
@@ -929,10 +864,8 @@ extern "C" uint8_t ptl_simulate() {
 		//    ostream(config.dumpcode_filename).write(insnbuf, n);
 	}
 
-#ifdef PTLSIM_HYPERVISOR
 	last_printed_status_at_ticks = 0;
 	cerr << endl;
-#endif
 	print_stats_in_log();
 
     if(config.screenshot_file.buf != "") {
@@ -976,7 +909,6 @@ extern "C" void update_progress() {
     sb << ": rip";
     foreach (i, contextcount) {
       Context& ctx = contextof(i);
-#ifdef PTLSIM_HYPERVISOR
       if (!ctx.running) {
 
 		  static const char* runstate_names[] = {"stopped", "running"};
@@ -988,7 +920,6 @@ extern "C" void update_progress() {
 		  }
 		  continue;
       }
-#endif
       sb << ' ', hexstring(contextof(i).get_cs_eip(), 64);
     }
 
@@ -1077,11 +1008,9 @@ bool simulate(const char* machinename) {
 //    ostream(config.dumpcode_filename).write(insnbuf, n);
   }
 
-#ifdef PTLSIM_HYPERVISOR
   last_printed_status_at_ticks = 0;
   update_progress();
   cerr << endl;
-#endif
   print_stats_in_log();
 
   return 0;

@@ -1464,15 +1464,12 @@ namespace OutOfOrderModel {
     //  class MemoryHierarchy;
     //
 
-#define NEW_MEMORY
 
     // checkpointed core
     //
     struct OutOfOrderCore: public PTLsimCore {
         OutOfOrderMachine& machine;
-#ifdef NEW_MEMORY
         Memory::MemoryHierarchy& memoryHierarchy;
-#endif
         W8 coreid;
         OutOfOrderCore& getcore() const { return coreof(coreid); }
 
@@ -1491,8 +1488,6 @@ namespace OutOfOrderModel {
 
         byte round_robin_tid;
 
-        //Power Manager Variables
-        int freq_divider;
 
         //
         // Issue Queues (one per cluster)
@@ -1649,9 +1644,7 @@ namespace OutOfOrderModel {
 
     struct OutOfOrderMachine: public PTLsimMachine {
         OutOfOrderCore* cores[MAX_SMT_CORES];
-#ifdef NEW_MEMORY
         Memory::MemoryHierarchy* memoryHierarchyPtr;
-#endif
 
         bitvec<MAX_CONTEXTS> stopped;
         OutOfOrderMachine(const char* name);
