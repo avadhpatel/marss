@@ -1134,6 +1134,9 @@ bool ThreadContext::handle_barrier() {
   if(flush_required) {
 	  if (logable(6)) ptl_logfile << " handle_barrier, flush_pipeline again.",endl;
 	  flush_pipeline();
+          if(config.checker_enabled) {
+            clear_checker();
+          }
   } else {
 	  reset_fetch_unit(ctx.eip);
   }

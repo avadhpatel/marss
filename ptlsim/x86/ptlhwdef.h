@@ -841,7 +841,8 @@ struct Context: public CPUX86State {
 	  W64 flags = reg_flags;
 	  // Set the 2nd bit to 1 for compatibility
 	  flags = (flags | FLAG_INV);
-	  load_eflags(flags, (CC_C | CC_P | CC_A | CC_Z | CC_S | CC_O));
+          load_eflags(flags, 0x00);
+          cc_op = CC_OP_EFLAGS;
 	  fpstt = reg_fptos >> 3;
 	  foreach(i, 8) {
           fptags[i] = !((reg_fptag >> (8*i)) & 0x1);
@@ -857,7 +858,7 @@ struct Context: public CPUX86State {
 	  // uop is executed correctly or not
 	  flags = (flags & ~(W64)(FLAG_INV));
 	  reg_flags = flags;
-	  internal_eflags = flags & ~(FLAG_ZAPS|FLAG_CF|FLAG_OF);
+          internal_eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
 	  eip = eip + segs[R_CS].base;
       cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
@@ -899,6 +900,7 @@ struct Context: public CPUX86State {
   W64 loadphys(Waddr addr, bool internal=0, int sizeshift=3);
 
   W64 storemask_virt(Waddr paddr, W64 data, byte bytemask, int sizeshift);
+  void check_store_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshift);
   W64 storemask(Waddr paddr, W64 data, byte bytemask) ;
   W64 store_internal(Waddr addr, W64 data, byte bytemask);
 

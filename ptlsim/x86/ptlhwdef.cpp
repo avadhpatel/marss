@@ -697,7 +697,7 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   os << "  ", padstring(arch_reg_names[54], -6), " 0x", hexstring(ctx.reg_trace, 64);
   os << "  ", padstring(arch_reg_names[55], -6), " 0x", hexstring(ctx.reg_ctx, 64), endl;
   os << "  ", padstring(arch_reg_names[56], -6), " 0x", hexstring(ctx.eip, 64);
-  os << "  ", padstring(arch_reg_names[57], -6), " 0x", hexstring(ctx.eflags, 64);
+  os << "  ", padstring(arch_reg_names[57], -6), " 0x", hexstring(ctx.reg_flags, 64);
   os << "  ", padstring(arch_reg_names[58], -6), " 0x", hexstring(ctx.invalid_reg, 64);
   os << "  ", padstring(arch_reg_names[59], -6), " 0x", hexstring(ctx.reg_selfrip, 64), endl;
   os << "  ", padstring(arch_reg_names[60], -6), " 0x", hexstring(ctx.reg_nextrip, 64);

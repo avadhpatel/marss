@@ -193,7 +193,7 @@ bool TraceDecoder::decode_fast() {
 
     int rdreg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     int rdshift = reginfo[rd.reg.reg].sizeshift;
-    alu_reg_or_mem(OP_mull, rd, ra, SETFLAG_CF|SETFLAG_OF, (rdshift < 2) ? rdreg : REG_zero);
+    alu_reg_or_mem(OP_mull, rd, ra, SETFLAG_CF|SETFLAG_OF|SETFLAG_ZF, (rdshift < 2) ? rdreg : REG_zero);
     break;
   }
 
@@ -446,7 +446,7 @@ bool TraceDecoder::decode_fast() {
     // of the earlier flag values in program order depending on the count. Otherwise
     // the static count (0, 1, >1) determines which flags are set.
     //
-    W32 setflags = (ra.type == OPTYPE_REG) ? FLAGS_DEFAULT_ALU : (!count) ? 0 : // count == 0
+    W32 setflags = (ra.type == OPTYPE_REG) ? (SETFLAG_ZF|SETFLAG_CF) : (!count) ? 0 : // count == 0
       (count == 1) ? (isrot ? (SETFLAG_OF|SETFLAG_CF) : (SETFLAG_ZF|SETFLAG_OF|SETFLAG_CF)) : // count == 1
       (isrot ? (SETFLAG_CF) : (SETFLAG_ZF|SETFLAG_CF)); // count > 1
 
@@ -554,7 +554,7 @@ bool TraceDecoder::decode_fast() {
 	int stack_sizeshift = (use64) ? 3 : ((ss32) ? 2 : 1);
 
     // Make idempotent by checking new rsp (aka rbp) alignment first:
-    this << TransOp(OP_ld, REG_temp0, REG_rbp, REG_imm, REG_zero, stack_sizeshift, 0);
+    //this << TransOp(OP_ld, REG_temp0, REG_rbp, REG_imm, REG_zero, stack_sizeshift, 0);
 
     this << TransOp(OP_mov, REG_rsp, REG_zero, REG_rbp, REG_zero, stack_sizeshift);
     this << TransOp(OP_ld, REG_rbp, REG_rsp, REG_imm, REG_zero, sizeshift, 0);

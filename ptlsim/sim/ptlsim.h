@@ -76,6 +76,16 @@ inline Context& contextof(W8 i) {
 	return *ptl_contexts[i];
 }
 
+/* Checker */
+extern Context* checker_context;
+
+void enable_checker();
+void setup_checker(W8 context_id);
+void clear_checker();
+void execute_checker();
+bool is_checker_valid();
+void compare_checker(W8 context_id, W64 flagmask);
+
 struct TransOpBuffer {
   TransOp uops[MAX_TRANSOP_BUFFER_SIZE];
   uopimpl_func_t synthops[MAX_TRANSOP_BUFFER_SIZE];
@@ -289,6 +299,8 @@ struct PTLsimConfig {
   W64 max_L1_req;
   stringbuf cache_config_type;
   bool use_shared_L3;
+
+  bool checker_enabled;
 
   void reset();
 };

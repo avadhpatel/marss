@@ -1001,6 +1001,43 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
     return data;
 }
 
+void Context::check_store_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshift) {
+    W64 data_r = 0;
+    W64 mask = 0;
+    switch(sizeshift) {
+        case 0: // byte write
+            (kernel_mode) ? data_r = (W64)ldub_kernel(virtaddr) :
+                data_r = (W64)ldub_user(virtaddr);
+	    mask = 0xff;
+            //data = signext64(data, 8);
+            break;
+        case 1: // word write
+            (kernel_mode) ? data_r = (W64)lduw_kernel(virtaddr) :
+                data_r = signext64((W64)lduw_user(virtaddr), 16);
+	    mask = 0xffff;
+            //data = signext64(data, 16);
+            break;
+        case 2: // double word write
+            (kernel_mode) ? data_r = (W64)ldul_kernel(virtaddr) :
+                data_r = signext64((W64)ldul_user(virtaddr), 32);
+	    mask = 0xffffffff;
+            //data = signext64(data, 32);
+            break;
+        case 3: // quad word write
+        default:
+            (kernel_mode) ? data_r = (W64)ldq_kernel(virtaddr) :
+                data_r = (W64)ldq_user(virtaddr);
+	    mask = (W64)-1;
+            break;
+    }
+    if((data & mask) != (data_r & mask)) {
+        ptl_logfile << "Stored data does not match..\n";
+        ptl_logfile << "Data: ", (void*)data, " Data_r: ", (void*)data_r, endl, flush;
+        assert_fail(__STRING(0), __FILE__, __LINE__,
+                __PRETTY_FUNCTION__);
+    }
+}
+
 W64 Context::store_internal(Waddr addr, W64 data, byte bytemask) {
     W64 old_data = W64(*(W64*)(addr));
     W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask],

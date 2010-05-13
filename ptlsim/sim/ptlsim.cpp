@@ -121,7 +121,7 @@ void PTLsimConfig::reset() {
   // memory model
   use_memory_model = 0;
   use_new_memory_system = 1;
-  kill_after_run = 1;
+  kill_after_run = 0;
   stop_at_user_insns = infinity;
   stop_at_cycle = infinity;
   stop_at_iteration = infinity;
@@ -169,6 +169,8 @@ void PTLsimConfig::reset() {
   max_L1_req = 16;
   cache_config_type = "private_L2";
   use_shared_L3 = 0;
+
+  checker_enabled = 0;
 }
 
 template <>
@@ -305,6 +307,8 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(max_L1_req,               "max-L1-req",               "max number of L1 requests");
   add(cache_config_type,               "cache-config-type",               "possible config are shared_L2, private_L2");
   add(use_shared_L3,               "use-shared-L3",               "set true to used a shared L3");
+
+  add(checker_enabled, 		"enable-checker", 		"Enable emulation based checker");
 };
 
 #ifndef CONFIG_ONLY
@@ -527,6 +531,10 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
     cerr << "Warning: only one action (from -run, -stop, -native, -kill) can be specified at once", endl, flush;
   }
 
+  if(config.checker_enabled) {
+    enable_checker();
+  }
+
   return true;
 }
 
@@ -637,6 +645,129 @@ CPUX86State* ptl_create_new_context() {
 	ctx_counter++;
 
 	return (CPUX86State*)(ctx);
+}
+
+/* Checker */
+Context* checker_context = null;
+
+void enable_checker() {
+
+    if(checker_context != null) {
+        delete checker_context;
+    }
+
+    checker_context = new Context();
+    memset(checker_context, 0, sizeof(Context));
+}
+
+void setup_checker(W8 contextid) {
+
+    /* First clear the old check_context */
+    assert(checker_context);
+
+    //checker_context->setup_ptlsim_switch();
+
+    if(checker_context->kernel_mode || checker_context->eip == 0) {
+      in_simulation = 0;
+      tb_flush(ptl_contexts[0]);
+      in_simulation = 1;
+      memset(checker_context, 0, sizeof(Context));
+
+      /* Copy the context of given contextid */
+      memcpy(checker_context, ptl_contexts[contextid], sizeof(Context));
+
+      if(logable(10)) {
+	ptl_logfile << "Checker context setup\n", *checker_context, endl;
+      }
+    }
+
+    if(logable(10)) {
+      ptl_logfile << "No change to checker context ", checker_context->kernel_mode, endl;
+    }
+}
+
+void clear_checker() {
+    assert(checker_context);
+    memset(checker_context, 0, sizeof(Context));
+}
+
+bool is_checker_valid() {
+    return (checker_context->eip == 0 ? false : true);
+}
+
+void execute_checker() {
+
+    /* Fist make sure that checker context is in User mode */
+    // TODO : Enable kernel mode checker
+    assert(checker_context->kernel_mode == 0);
+
+    /* Set the checker_context as global env */
+    checker_context->setup_qemu_switch();
+
+    /* We need to load eflag's condition flags manually */
+    load_eflags(checker_context->reg_flags, FLAG_ZAPS|FLAG_CF|FLAG_OF);
+
+    checker_context->singlestep_enabled = SSTEP_NOIRQ;
+
+    in_simulation = 0;
+
+    W64 old_eip = checker_context->eip;
+    int old_exception_index = checker_context->exception_index;
+    int ret;
+    while(checker_context->eip == old_eip)
+        ret = cpu_exec((CPUX86State*)checker_context);
+
+    checker_context->exception_index = old_exception_index;
+
+    checker_context->setup_ptlsim_switch();
+
+    if(checker_context->kernel_mode) {
+      // TODO : currently we skip the context switch from checker
+      // we 0 out the checker_context so it will setup when next time
+      // some one calls setup_checker
+      memset(checker_context, 0, sizeof(Context));
+    }
+
+    in_simulation = 1;
+
+    if(logable(4)) {
+        ptl_logfile << "Checker execution ret value: ", ret, endl;
+    }
+}
+
+void compare_checker(W8 context_id, W64 flagmask) {
+    int ret, ret1, ret_x87;
+    int check_size = (char*)(&(checker_context->eip)) - (char*)(checker_context);
+    //ptl_logfile << "check_size: ", check_size, endl;
+
+    if(checker_context->eip == 0) {
+      return;
+    }
+
+    ret = memcmp(checker_context, ptl_contexts[context_id], check_size);
+
+    check_size = (sizeof(XMMReg) * 16);
+    //ptl_logfile << "check_size: ", check_size, endl;
+
+    ret1 = memcmp(&checker_context->xmm_regs, &ptl_contexts[context_id]->xmm_regs, check_size);
+
+    check_size = (sizeof(FPReg) * 8);
+    ret_x87 = memcmp(&checker_context->fpregs, &ptl_contexts[context_id]->fpregs, check_size);
+
+    bool fail = false;
+    fail = (checker_context->eip != ptl_contexts[context_id]->eip);
+
+    W64 flag1 = checker_context->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
+    W64 flag2 = ptl_contexts[context_id]->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
+    fail |= (flag1 != flag2);
+
+    if(ret != 0 || ret1 != 0 || ret_x87 != 0 || fail) {
+        ptl_logfile << "Checker comparison failed [diff-chars: ", ret, "]\n";
+        ptl_logfile << "CPU Context:\n", *ptl_contexts[context_id], endl;
+        ptl_logfile << "Checker Context:\n", *checker_context, endl, flush;
+
+        assert(0);
+    }
 }
 
 // print selected stats to log for average of all cores
@@ -923,10 +1054,10 @@ extern "C" void update_progress() {
       sb << ' ', hexstring(contextof(i).get_cs_eip(), 64);
     }
 
-    while (sb.size() < 160) sb << ' ';
+    //while (sb.size() < 160) sb << ' ';
 
-    ptl_logfile << sb, endl, flush;
-    cerr << "\r  ", sb, flush;
+    ptl_logfile << sb, endl;
+    cerr << "\r  ", sb;
     last_printed_status_at_ticks = ticks;
     last_printed_status_at_cycle = sim_cycle;
     last_printed_status_at_user_insn = total_user_insns_committed;

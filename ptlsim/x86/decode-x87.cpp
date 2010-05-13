@@ -245,7 +245,7 @@ bool assist_x87_fld80(Context& ctx) {
     setbit(ctx.reg_fptag, tos);
 
     ctx.eip = ctx.reg_nextrip;
-    return false;
+    return true;
 }
 
 bool assist_x87_fstp80(Context& ctx) {

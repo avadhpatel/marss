@@ -2147,7 +2147,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(Memory::MemoryRequest *request)
   if(config.use_new_memory_system){
     if(rob.lsq && request->get_owner_uuid() == rob.uop.uuid &&
 			rob.lsq->physaddr == physaddr >> 3 &&
-            rob.current_state_list == &thread->rob_cache_miss_list){
+			rob.current_state_list == &thread->rob_cache_miss_list){
       if(logable(6)) ptl_logfile << " rob ", rob, endl;
 
 	  /*
@@ -2165,6 +2165,18 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(Memory::MemoryRequest *request)
 		  W64 offset = lowbits(rob.lsq->virtaddr, 3);
 		  W64 data;
 		  data = thread->ctx.loadvirt(rob.lsq->virtaddr, sizeshift);
+
+                  if unlikely (config.checker_enabled && !thread->ctx.kernel_mode) {
+                    foreach(i, checker_stores_count) {
+                      if unlikely (checker_stores[i].virtaddr == rob.lsq->virtaddr) {
+                        data = checker_stores[i].data;
+                      }
+                      if(logable(10)) {
+                        ptl_logfile << "Checker virtaddr ", (void*)(checker_stores[i].virtaddr),
+                                    " data ", (void*)(checker_stores[i].data), endl;
+                      }
+                    }
+                  }
 
 		  /*
 		   * Now check if there is most upto date data from

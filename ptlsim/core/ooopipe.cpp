@@ -1681,6 +1681,33 @@ bool rip_is_in_spinlock(W64 rip) {
 }
 #endif
 
+/* Checker - saved stores to compare after executing emulated instruction */
+namespace OutOfOrderModel {
+  CheckStores *checker_stores = null;
+  int checker_stores_count = 0;
+
+  void reset_checker_stores() {
+    if(checker_stores == null) {
+      checker_stores = new CheckStores[10];
+      assert(checker_stores != null);
+    }
+    memset(checker_stores, 0, sizeof(CheckStores)*10);
+    checker_stores_count = 0;
+  }
+
+  void add_checker_store(LoadStoreQueueEntry* lsq, W8 sizeshift) {
+    if(checker_stores == null) {
+      reset_checker_stores();
+    }
+
+    int i = checker_stores_count++;
+    checker_stores[i].virtaddr = lsq->virtaddr;
+    checker_stores[i].data = lsq->data;
+    checker_stores[i].bytemask = lsq->bytemask;
+    checker_stores[i].sizeshift = sizeshift;
+  }
+};
+
 int ReorderBufferEntry::commit() {
   OutOfOrderCore& core = getcore();
   ThreadContext& thread = getthread();
@@ -2027,6 +2054,11 @@ int ReorderBufferEntry::commit() {
 
   if likely (uop.som) assert(ctx.get_cs_eip() == uop.rip);
 
+  if unlikely (!ctx.kernel_mode && config.checker_enabled && uop.som) {
+    setup_checker(ctx.cpu_index);
+    reset_checker_stores();
+  }
+
   if (logable(10)) {
 	  ptl_logfile << "ROB Commit RIP check Done...\n", flush;
   }
@@ -2114,6 +2146,16 @@ int ReorderBufferEntry::commit() {
     }
   }
 
+  if unlikely (uop.eom && !ctx.kernel_mode && config.checker_enabled) {
+    if likely (!isclass(uop.opcode, OPCLASS_BARRIER) &&
+        uop.rip.rip != ctx.eip) {
+      execute_checker();
+      compare_checker(ctx.cpu_index, setflags_to_x86_flags[uop.setflags]);
+    } else {
+      clear_checker();
+    }
+  }
+
   if unlikely (uop.opcode == OP_st) {
     Waddr mfn = (lsq->physaddr << 3) >> 12;
     thread.ctx.smc_setdirty(lsq->physaddr << 3);
@@ -2141,11 +2183,24 @@ int ReorderBufferEntry::commit() {
 
 			assert(core.memoryHierarchy.access_cache(request));
 			assert(lsq->virtaddr > 0xfff);
-			thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
+                        if(config.checker_enabled && !ctx.kernel_mode) {
+                          add_checker_store(lsq, uop.size);
+                        } else {
+                          thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
+                        }
 			lsq->datavalid = 1;
       }
     }
 
+  }
+
+  if(uop.eom && !ctx.kernel_mode && config.checker_enabled && is_checker_valid()) {
+    foreach(i, checker_stores_count) {
+      thread.ctx.check_store_virt(checker_stores[i].virtaddr,
+          checker_stores[i].data, checker_stores[i].bytemask,
+          checker_stores[i].sizeshift);
+    }
+    reset_checker_stores();
   }
 
   //

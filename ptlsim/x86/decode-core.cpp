@@ -2392,7 +2392,9 @@ void dump_bbcache_to_logfile() {
 }
 
 extern "C" void ptl_flush_bbcache(int8_t context_id) {
-    foreach(i, NUM_SIM_CORES) {
+    if(in_simulation) {
+      foreach(i, NUM_SIM_CORES) {
         bbcache[i].flush(context_id);
+      }
     }
 }

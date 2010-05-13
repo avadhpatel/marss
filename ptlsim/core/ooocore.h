@@ -1660,6 +1660,21 @@ namespace OutOfOrderModel {
 
     };
 
+    /* Checker - saved stores to compare after executing emulated instruction */
+    struct CheckStores {
+      W64 virtaddr;
+      W64 data;
+      W8 sizeshift;
+      W8 bytemask;
+    };
+
+    extern CheckStores *checker_stores;
+    extern int checker_stores_count;
+
+    void reset_checker_stores();
+
+    void add_checker_store(LoadStoreQueueEntry* lsq, W8 sizeshift);
+
     extern CycleTimer cttotal;
     extern CycleTimer ctfetch;
     extern CycleTimer ctdecode;

@@ -91,7 +91,7 @@ if env['linux_aio'] == True:
 block_files += " " + " ".join(Glob("block/*.c", strings=True))
 block_files = block_files.replace("block/raw-win32.c", "")
 if env['curl'] == False:
-    block_files = block_files.replace("curl.c ", "")
+    block_files = block_files.replace("block/curl.c ", " ")
 
 net_files = "net.c "
 net_files += " ".join(Glob("net/*.c", strings=True))
@@ -411,7 +411,7 @@ hw_files_o = env.Object(Split(obj_files) + hw_files_list + Split(ide_files))
 
 env['ARLIB'] = libqemu_comm + libqemu + ptlsim_lib
 qemu_bin = env.QEMU_BIN(qemu_prog_name, hw_files_o + pc_bios_objs)
-env.Depends(qemu_bin, libqemu)
+env.Depends(qemu_bin, env['ARLIB'])
 
 # print env.Dump()
 

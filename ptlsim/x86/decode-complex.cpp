@@ -541,6 +541,7 @@ W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	ctx.setup_ptlsim_switch();
 
 	W64 flagmask = (setflags_to_x86_flags[7]);
+        stable_flags &= ~(flagmask);
 	stable_flags |= (ra & flagmask);
 	flags = (W16)ra;
 
@@ -1234,10 +1235,7 @@ bool TraceDecoder::decode_complex() {
     this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
     this << TransOp(OP_movccr, REG_temp0, REG_zero, REG_temp0, REG_zero, 3);
 
-    TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof_t(Context, internal_eflags)); ldp.internal = 1; this << ldp;
-    this << TransOp(OP_or, REG_temp1, REG_temp1, REG_temp0, REG_zero, 2); // merge in standard flags
-
-	TransOp ast(OP_ast, REG_temp2, REG_temp1, REG_zero, REG_zero, 3);
+	TransOp ast(OP_ast, REG_temp2, REG_temp0, REG_zero, REG_zero, 3);
 	ast.riptaken = L_ASSIST_PUSHF;
 	this << ast;
 
