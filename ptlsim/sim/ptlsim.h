@@ -183,6 +183,10 @@ struct PTLsimConfig {
 
   stringbuf core_name;
   stringbuf domain_name;
+
+  // Starting Point
+  W64 start_at_rip;
+
   // Logging
   bool quiet;
   stringbuf log_filename;

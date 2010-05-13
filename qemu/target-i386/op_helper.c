@@ -21,6 +21,10 @@
 #include "exec-all.h"
 #include "host-utils.h"
 
+#ifdef MARSS_QEMU
+#include <ptl-qemu.h>
+#endif
+
 //#define DEBUG_PCALL
 
 
@@ -585,6 +589,23 @@ target_ulong helper_inl(uint32_t port)
 {
     return cpu_inl(port);
 }
+
+#ifdef MARSS_QEMU
+/* Forward declaration to avoid compiler warnings */
+void vm_stop(int reason);
+
+void helper_switch_to_sim(void)
+{
+    ptl_machine_configure("-run");
+    vm_stop(0);
+
+    // Flush the tb-caches so it dont call this again
+    tb_flush(env);
+
+    simulation_configured = 1;
+    cpu_loop_exit();
+}
+#endif
 
 static inline unsigned int get_sp_mask(unsigned int e2)
 {

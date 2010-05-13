@@ -95,6 +95,10 @@ DEF_HELPER_1(inw, tl, i32)
 DEF_HELPER_2(outl, void, i32, i32)
 DEF_HELPER_1(inl, tl, i32)
 
+#ifdef MARSS_QEMU
+DEF_HELPER_0(switch_to_sim, void)
+#endif
+
 DEF_HELPER_2(svm_check_intercept_param, void, i32, i64)
 DEF_HELPER_2(vmexit, void, i32, i64)
 DEF_HELPER_3(svm_check_io, void, i32, i32, i32)

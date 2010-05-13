@@ -61,6 +61,7 @@ uint8_t in_simulation = 0;
 uint8_t start_simulation = 0;
 uint8_t simulation_configured = 0;
 uint8_t ptl_stable_state = 1;
+uint64_t ptl_start_sim_rip = 0;
 
 static char *pending_command_str = null;
 static int pending_call_type = -1;

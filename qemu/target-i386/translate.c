@@ -32,6 +32,10 @@
 #define GEN_HELPER 1
 #include "helper.h"
 
+#ifdef MARSS_QEMU
+#include <ptl-qemu.h>
+#endif
+
 #define PREFIX_REPZ   0x01
 #define PREFIX_REPNZ  0x02
 #define PREFIX_LOCK   0x04
@@ -4087,6 +4091,14 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
     int modrm, reg, rm, mod, reg_addr, op, opreg, offset_addr, val;
     target_ulong next_eip, tval;
     int rex_w, rex_r;
+
+#ifdef MARSS_QEMU
+    if(ptl_start_sim_rip == pc_start) {
+      gen_helper_switch_to_sim();
+      gen_eob(s);
+      ptl_start_sim_rip = -1;
+    }
+#endif
 
     if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP)))
         tcg_gen_debug_insn_start(pc_start);

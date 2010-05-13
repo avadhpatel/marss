@@ -103,6 +103,7 @@ void PTLsimConfig::reset() {
   snapshot_cycles = infinity;
   snapshot_now.reset();
 
+  start_at_rip = INVALIDRIP;
 
   //prefetcher
   use_L1_IP_based_prefetcher = 0;
@@ -222,7 +223,8 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(stats_filename,               "stats",                "Statistics data store hierarchy root");
   add(snapshot_cycles,              "snapshot-cycles",      "Take statistical snapshot and reset every <snapshot> cycles");
   add(snapshot_now,                 "snapshot-now",         "Take statistical snapshot immediately, using specified name");
-  section("Trace Stop Point");
+  section("Trace Start/Stop Point");
+  add(start_at_rip,                 "startrip",             "Start at rip <startrip>");
   add(stop_at_user_insns,           "stopinsns",            "Stop after executing <stopinsns> user instructions");
   add(stop_at_cycle,                "stopcycle",            "Stop after <stop> cycles");
   add(stop_at_iteration,            "stopiter",             "Stop after <stop> iterations (does not apply to cycle-accurate cores)");
@@ -371,6 +373,7 @@ stringbuf current_stats_filename;
 stringbuf current_log_filename;
 stringbuf current_bbcache_dump_filename;
 stringbuf current_trace_memory_updates_logfile;
+W64 current_start_sim_rip;
 
 void backup_and_reopen_logfile() {
   if (config.log_filename) {
@@ -494,11 +497,17 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 #ifdef __x86_64__
   config.start_log_at_rip = signext64(config.start_log_at_rip, 48);
   config.log_backwards_from_trigger_rip = signext64(config.log_backwards_from_trigger_rip, 48);
+  config.start_at_rip = signext64(config.start_at_rip, 48);
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif
 
   if(config.run && !config.kill) {
 	  start_simulation = 1;
+  }
+
+  if(config.start_at_rip != INVALIDRIP && current_start_sim_rip != config.start_at_rip) {
+    ptl_start_sim_rip = config.start_at_rip;
+    current_start_sim_rip = config.start_at_rip;
   }
 
   if((start_simulation || in_simulation) && config.stop) {

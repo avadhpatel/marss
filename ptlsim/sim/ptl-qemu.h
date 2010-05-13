@@ -189,6 +189,12 @@ extern uint8_t ptl_stable_state;
  */
 void qemu_take_screenshot(char* filename);
 
+/*
+ * ptl_start_sim_rip
+ * RIP location from where to switch to simulation
+ */
+extern uint64_t ptl_start_sim_rip;
+
 #ifdef __cplusplus
 }
 #endif
