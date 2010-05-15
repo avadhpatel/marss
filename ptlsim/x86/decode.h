@@ -228,7 +228,7 @@ struct TraceDecoder {
   void immediate(int rdreg, int sizeshift, W64s imm, bool issigned = true);
   void abs_code_addr_immediate(int rdreg, int sizeshift, W64 imm);
   int bias_by_segreg(int basereg);
-  void address_generate_and_load_or_store(int destreg, int srcreg, const DecodedOperand& memref, int opcode, int datatype = DATATYPE_INT, int cachelevel = 0, bool force_seg_bias = false, bool rmw = false);
+  void address_generate_and_load_or_store(int destreg, int srcreg, const DecodedOperand& memref, int opcode, int datatype = DATATYPE_INT, int cachelevel = 0, bool force_seg_bias = false, bool rmw = false, W8 sizeshift = 3);
   void operand_load(int destreg, const DecodedOperand& memref, int loadop = OP_ld, int datatype = 0, int cachelevel = 0, bool rmw = false);
   void result_store(int srcreg, int tempreg, const DecodedOperand& memref, int datatype = 0, bool rmw = false);
   void alu_reg_or_mem(int opcode, const DecodedOperand& rd, const DecodedOperand& ra, W32 setflags, int rcreg,

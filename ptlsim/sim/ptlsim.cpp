@@ -716,7 +716,7 @@ void execute_checker() {
     /* We need to load eflag's condition flags manually */
     load_eflags(checker_context->reg_flags, FLAG_ZAPS|FLAG_CF|FLAG_OF);
 
-    checker_context->singlestep_enabled = SSTEP_NOIRQ;
+    checker_context->singlestep_enabled = SSTEP_ENABLE;
 
     in_simulation = 0;
 

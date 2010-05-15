@@ -1060,7 +1060,7 @@ int TraceDecoder::bias_by_segreg(int basereg) {
     return basereg;
 }
 
-void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, const DecodedOperand& memref, int opcode, int datatype, int cachelevel, bool force_seg_bias, bool rmw) {
+void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, const DecodedOperand& memref, int opcode, int datatype, int cachelevel, bool force_seg_bias, bool rmw, W8 sizeshift) {
     //
     // In the address generation form used by internally generated
     // uops, we need the full virtual address, including the segment base
@@ -1128,7 +1128,7 @@ void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, c
             this << ldst;
         } else {
             assert(opcode == OP_add);
-            abs_code_addr_immediate(destreg, 3, Waddr(rip) + offset);
+            abs_code_addr_immediate(destreg, sizeshift, Waddr(rip) + offset);
         }
     } else if (indexreg == REG_zero) {
         // [ra + imm32] or [ra]

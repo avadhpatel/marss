@@ -279,7 +279,9 @@ bool TraceDecoder::decode_fast() {
 
     ra.mem.size = (addrsize_prefix) ? 2 : sizeshift;
 
-    address_generate_and_load_or_store(destreg, REG_zero, ra, OP_add);
+    ptl_logfile << "LEA : rd size ", reginfo[rd.reg.reg].sizeshift, " ra size ", ra.mem.size, endl;
+
+    address_generate_and_load_or_store(destreg, REG_zero, ra, OP_add, DATATYPE_INT, 0, false, false, sizeshift);
     break;
   }
 
