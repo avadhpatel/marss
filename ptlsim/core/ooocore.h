@@ -642,6 +642,7 @@ namespace OutOfOrderModel {
         void issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc, int cachelevel);
         void issueast(IssueState& state, W64 assistid, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags);
         int probecache(Waddr addr, LoadStoreQueueEntry* sfra);
+        bool probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate);
         void tlbwalk();
         int issuefence(LoadStoreQueueEntry& state);
         void release();
@@ -1323,6 +1324,74 @@ namespace OutOfOrderModel {
     //  static const int ISSUE_QUEUE_SIZE = 32;
 #endif
 
+    // TLBs
+    const int ITLB_SIZE = 32;
+    const int DTLB_SIZE = 32;
+
+    //
+    // TLB class with one-hot semantics. 36 bit tags are required since
+    // virtual addresses are 48 bits, so 48 - 12 (2^12 bytes per page)
+    // is 36 bits.
+    //
+    template <int tlbid, int size>
+      struct TranslationLookasideBuffer: public FullyAssociativeTagsNbitOneHot<size, 40> {
+        typedef FullyAssociativeTagsNbitOneHot<size, 40> base_t;
+        TranslationLookasideBuffer(): base_t() { }
+
+        void reset() {
+          base_t::reset();
+        }
+
+        // Get the 40-bit TLB tag (36 bit virtual page ID plus 4 bit threadid)
+        static W64 tagof(W64 addr, W64 threadid) {
+          return bits(addr, 12, 36) | (threadid << 36);
+        }
+
+        bool probe(W64 addr, W8 threadid = 0) {
+          W64 tag = tagof(addr, threadid);
+          return (base_t::probe(tag) >= 0);
+        }
+
+        bool insert(W64 addr, W8 threadid = 0) {
+          addr = floor(addr, PAGE_SIZE);
+          W64 tag = tagof(addr, threadid);
+          W64 oldtag;
+          int way = base_t::select(tag, oldtag);
+          W64 oldaddr = lowbits(oldtag, 36) << 12;
+          if (logable(6)) {
+            ptl_logfile << "TLB insertion of virt page ", (void*)(Waddr)addr, " (virt addr ",
+                        (void*)(Waddr)(addr), ") into way ", way, ": ",
+                        ((oldtag != tag) ? "evicted old entry" : "already present"), endl;
+          }
+          return (oldtag != tag);
+        }
+
+        int flush_all() {
+          reset();
+          return size;
+        }
+
+        int flush_thread(W64 threadid) {
+          W64 tag = threadid << 36;
+          W64 tagmask = 0xfULL << 36;
+          bitvec<size> slotmask = base_t::masked_match(tag, tagmask);
+          int n = slotmask.popcount();
+          base_t::masked_invalidate(slotmask);
+          return n;
+        }
+
+        int flush_virt(Waddr virtaddr, W64 threadid) {
+          return invalidate(tagof(virtaddr, threadid));
+        }
+      };
+
+    template <int tlbid, int size>
+      static inline ostream& operator <<(ostream& os, const TranslationLookasideBuffer<tlbid, size>& tlb) {
+        return tlb.print(os);
+      }
+
+    typedef TranslationLookasideBuffer<0, DTLB_SIZE> DTLB;
+    typedef TranslationLookasideBuffer<1, ITLB_SIZE> ITLB;
 
 
     // How many bytes of x86 code to fetch into decode buffer at once
@@ -1372,6 +1441,9 @@ namespace OutOfOrderModel {
         Queue<LoadStoreQueueEntry, LSQ_SIZE> LSQ;
         RegisterRenameTable specrrt;
         RegisterRenameTable commitrrt;
+
+        DTLB dtlb;
+        ITLB itlb;
 
         // Fetch-related structures
         RIPVirtPhys fetchrip;
@@ -1970,6 +2042,11 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 sfence;
             W64 mfence;
         } fence;
+
+        struct dtlb { // node: summable
+            W64 hits;
+            W64 misses;
+        } dtlb;
     } dcache;
 
     W64 interrupt_requests;

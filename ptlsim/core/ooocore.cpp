@@ -483,12 +483,10 @@ bool OutOfOrderCore::runcycle() {
   // This may use up load ports, so do it before other
   // loads can issue
   //
-  if(!config.use_new_memory_system){ // TODO MESI -Hui
-    foreach (permute, threadcount) {
-      int tid = add_index_modulo(round_robin_tid, +permute, threadcount);
-      ThreadContext* thread = threads[tid];
-      thread->tlbwalk();
-    }
+  foreach (permute, threadcount) {
+    int tid = add_index_modulo(round_robin_tid, +permute, threadcount);
+    ThreadContext* thread = threads[tid];
+    thread->tlbwalk();
   }
 
 

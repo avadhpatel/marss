@@ -465,10 +465,134 @@ RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
     return *this;
 }
 
-Waddr Context::virt_to_pte_phys_addr(W64 rawvirt, int level) {
-    ptl_logfile << "call to Context::virt_to_pte_phys_addr, function not implemented\n";
-    assert(0);
-    return INVALID_PHYSADDR;
+# define PHYS_ADDR_MASK 0xfffffff000LL
+
+W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
+
+    W64 ptep, pte;
+    W64 pde_addr, pte_addr;
+    W64 ret_addr;
+
+    assert(level > 0);
+
+    setup_qemu_switch();
+
+    // First check if PAE bit is enabled or not
+    if(cr[4] & CR4_PAE_MASK) {
+        W64 pde, pdpe;
+        W64 pdpe_addr;
+
+        // Check if we are in 32 bit mode or 64 bit
+        if(hflags & HF_LMA_MASK) {
+
+            W64 pml4e_addr, pml4e;
+            pml4e_addr = ((cr[3] & ~0xfff) + (((rawvirt >> 39) & 0x1ff) << 3)) & a20_mask;
+            if(level == 4) {
+                ret_addr = pml4e_addr;
+                goto finish;
+            }
+
+            pml4e = ldq_phys(pml4e_addr);
+            if(!(pml4e & PG_PRESENT_MASK)) {
+                goto dofault;
+            }
+
+            ptep = pml4e * PG_NX_MASK;
+
+            pdpe_addr = ((pml4e & PHYS_ADDR_MASK) + (((rawvirt >> 30) & 0x1ff) << 3)) & a20_mask;
+
+            if(level == 3) {
+                ret_addr = pdpe_addr;
+                goto finish;
+            }
+
+            pdpe = ldq_phys(pdpe_addr);
+            if(!(pdpe & PG_PRESENT_MASK)) {
+                goto dofault;
+            }
+            ptep &= pdpe ^ PG_NX_MASK;
+        } else {
+
+            assert(level < 4);
+
+            pdpe_addr = ((env->cr[3] & ~0x1f) + ((rawvirt >> 27) & 0x18)) & a20_mask;
+
+            if(level == 3) {
+                ret_addr = pdpe_addr;
+                goto finish;
+            }
+
+            pdpe = ldq_phys(pdpe_addr);
+            if(!(pdpe & PG_PRESENT_MASK)) {
+                goto dofault;
+            }
+            ptep = PG_NX_MASK | PG_USER_MASK | PG_RW_MASK;
+        }
+
+        pde_addr = ((pdpe & PHYS_ADDR_MASK) + (((rawvirt >> 21) & 0x1ff) << 3)) & a20_mask;
+
+        if(level == 2) {
+            ret_addr = pde_addr;
+            goto finish;
+        }
+
+        pde = ldq_phys(pde_addr);
+        if(!(pde & PG_PRESENT_MASK)) {
+            goto dofault;
+        }
+
+        ptep &= pde ^ PG_NX_MASK;
+        if(pde & PG_PSE_MASK) {
+            // 2 MB Page size - no need to look up last level
+            level = 0;
+            ret_addr = -1;
+            goto finish;
+        } else {
+            // 4 KB page size - make sure our level
+            pte_addr = ((pde & PHYS_ADDR_MASK) + (((rawvirt >> 12) & 0x1ff) << 3)) & a20_mask;
+            ret_addr = pte_addr;
+            goto finish;
+        }
+
+    } else {
+
+        W32 pde;
+
+        assert(level < 3);
+
+        pde_addr = ((cr[3] & ~0xfff) + ((rawvirt >> 20) & 0xffc)) & env->a20_mask;
+
+        if(level == 2) {
+            ret_addr = pde_addr;
+            goto finish;
+        }
+
+        pde = ldl_phys(pde_addr);
+        if (!(pde & PG_PRESENT_MASK)) {
+            goto dofault;
+        }
+
+        assert(level == 1);
+
+        if ((pde & PG_PSE_MASK) && (cr[4] & CR4_PSE_MASK)) {
+            // 4 MB Page size - no need to look last level
+            level = 0;
+            ret_addr = -1;
+            goto finish;
+        } else {
+            // 4 KB Page size
+            pte_addr = ((pde & ~0xfff) + ((rawvirt >> 10) & 0xffc)) & a20_mask;
+            ret_addr = pte_addr;
+            goto finish;
+        }
+    }
+
+dofault:
+    ret_addr = -1;
+
+finish:
+    setup_ptlsim_switch();
+    return ret_addr;
 }
 
 int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec) {

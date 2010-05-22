@@ -908,34 +908,21 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   int exception = 0;
   PageFaultErrorCode pfec;
   bool annul;
+  bool tlb_hit;
+
+  if(!uop.internal) {
+    // First Probe the TLB
+    tlb_hit = probetlb(state, origaddr, ra, rb, rc, pteupdate);
+
+    if unlikely (!tlb_hit) {
+      // This ROB entry is moved to rob_tlb_miss_list so return success
+      return ISSUE_COMPLETED;
+    }
+  }
 
   Waddr physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
-  if unlikely (exception) {
-	// Check if the page fault can be handled without causing exception
-	bool handled = false;
-	if(exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead) {
-		handled = thread.ctx.try_handle_fault(addr, 1);
-	}
-	if(!handled)
-		return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
-
-	int size = (1 << uop.size);
-	int page_crossing = ((lowbits(origaddr, 12) + (size - 1)) >> 12);
-	if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
-		handled = thread.ctx.try_handle_fault(origaddr + (size-1), 1);
-		if(!handled) {
-            origvirt = origaddr + (size - 1);
-			return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
-        }
-	}
-
-	// else - regenerate the physical address as now tlb is filled
-	physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
-
-	assert(exception == 0);
-
-  }
+  assert(exception == 0);
 
   per_context_ooocore_stats_update(threadid, dcache.store.type.aligned += ((!uop.internal) & (aligntype == LDST_ALIGN_NORMAL)));
   per_context_ooocore_stats_update(threadid, dcache.store.type.unaligned += ((!uop.internal) & (aligntype != LDST_ALIGN_NORMAL)));
@@ -1340,39 +1327,21 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   int exception = 0;
   PageFaultErrorCode pfec;
   bool annul;
+  bool tlb_hit;
+
+  if(!uop.internal) {
+    // First Probe the TLB
+    tlb_hit = probetlb(state, origaddr, ra, rb, rc, pteupdate);
+
+    if unlikely (!tlb_hit) {
+      // This ROB entry is moved to rob_tlb_miss_list so return success
+      return ISSUE_COMPLETED;
+    }
+  }
 
   Waddr physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
-  if unlikely (exception) {
-	  if(logable(10)) {
-		  ptl_logfile << "Exception: ", exception, " caused by uop ",
-					  uop, " at rip: ", hexstring(uop.rip.rip, 64),
-					  endl;
-	  }
-
-	// Check if the page fault can be handled without causing exception
-	bool handled = false;
-	if(exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead) {
-		handled = thread.ctx.try_handle_fault(addr, 0);
-	}
-	if(!handled)
-		return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
-
-	int size = (1 << uop.size);
-	int page_crossing = ((lowbits(origaddr, 12) + (size - 1)) >> 12);
-	if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
-		handled = thread.ctx.try_handle_fault(origaddr + (size-1), 0);
-		if(!handled) {
-            origvirt = origaddr + (size - 1);
-			return (handle_common_load_store_exceptions(state, origaddr, addr, exception, pfec)) ? ISSUE_COMPLETED : ISSUE_MISSPECULATED;
-        }
-	}
-
-	// else - regenerate the physical address with new tlb entry
-	physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
-
-	assert(exception == 0);
-  }
+  assert(exception == 0);
 
   per_context_ooocore_stats_update(threadid, dcache.load.type.aligned += ((!uop.internal) & (aligntype == LDST_ALIGN_NORMAL)));
   per_context_ooocore_stats_update(threadid, dcache.load.type.unaligned += ((!uop.internal) & (aligntype != LDST_ALIGN_NORMAL)));
@@ -1467,7 +1436,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   per_context_ooocore_stats_update(threadid, dcache.load.dependency.independent += (sfra == null));
 
 #ifndef DISABLE_SF
-  bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid && all_sfra_datavalid));
+  bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid));// && all_sfra_datavalid));
   if(sfra && uop.internal) ready = false;
 #else
   bool ready = (sfra == null);
@@ -1729,7 +1698,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   }
 
 #ifdef USE_TLB
-  if unlikely (!core.caches.dtlb.probe(addr, threadid)) {
+  if unlikely (!thread.dtlb.probe(addr, threadid)) {
     //
     // TLB miss:
     //
@@ -1880,113 +1849,170 @@ int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
   return ISSUE_COMPLETED;
 }
 
+/*
+ * Probe TLB function is called before every Cache access to check if we have
+ * a valid TLB entry for the load/store.
+ */
+bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate) {
+
+  PageFaultErrorCode pfec;
+  Waddr physaddr;
+  int exception;
+  bool handled;
+  bool annul;
+  Waddr addr;
+
+  ThreadContext& thread = getthread();
+  OutOfOrderCore& core = getcore();
+  handled = true;
+  exception = 0;
+
+  physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
+
+  // First check if its a TLB hit or miss
+  if unlikely (exception != 0 || !thread.dtlb.probe(origaddr, threadid)) {
+
+    if(logable(6)) {
+        ptl_logfile << "dtlb miss origaddr: ", (void*)origaddr, endl;
+    }
+
+    // Set this ROB entry to do TLB page walk
+    cycles_left = 0;
+    changestate(thread.rob_tlb_miss_list);
+    tlb_walk_level = thread.ctx.page_table_level_count();
+    per_context_ooocore_stats_update(threadid, dcache.dtlb.misses++);
+
+    return false;
+  }
+
+  /*
+   * Its a TLB Hit. Now check if TLB entry is present in QEMU's TLB
+   * If not then set up the QEMU's TLB entry without any additional delay
+   * in pipeline.
+   */
+  per_context_ooocore_stats_update(threadid, dcache.dtlb.hits++);
+
+  if unlikely (exception) {
+    // Check if the page fault can be handled without causing exception
+    if(exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead) {
+      handled = thread.ctx.try_handle_fault(addr, 1);
+    }
+
+    int size = (1 << uop.size);
+    int page_crossing = ((lowbits(origaddr, 12) + (size - 1)) >> 12);
+    if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
+      handled = thread.ctx.try_handle_fault(origaddr + (size-1), 1);
+    }
+  }
+
+  // There should not be any scenario where we have TLB hit and page fault.
+  assert(handled == true);
+
+  return true;
+}
+
+
 //
 // Hardware page table walk state machine:
 // One execution per page table tree level (4 levels)
 //
 void ReorderBufferEntry::tlbwalk() {
-  assert(!config.use_new_memory_system); // TODO MESI - Hui
 
   OutOfOrderCore& core = getcore();
   ThreadContext& thread = getthread();
   OutOfOrderCoreEvent* event;
   W64 virtaddr = virtpage;
 
+  if(logable(6)) {
+      ptl_logfile << "cycle ", sim_cycle, " rob entry ", *this, " tlb_walk_level: ",
+                  tlb_walk_level, " virtaddr: ", (void*)virtaddr, endl;
+  }
+
   if unlikely (!tlb_walk_level) {
-    // End of walk sequence: try to probe cache
-    if unlikely (core.caches.lfrq_or_missbuf_full()) {
-      //
-      // Make sure we have at least one miss buffer entry free, to avoid deadlock.
-      // This is required because the load or store cannot be replayed if no MB
-      // entries are free (since the uop already left the scheduler).
-      //
-      if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_NO_LFRQ_MB, this, null, 0);
-      per_context_dcache_stats_update(core.coreid, threadid, load.tlbwalk.no_lfrq_mb++);
-      return;
+
+rob_cont:
+
+      if(logable(6)) {
+          ptl_logfile << "Finalizing dtlb miss rob ", *this, " virtaddr: ", (void*)origvirt, endl;
+      }
+    PageFaultErrorCode pfec;
+    bool st = isstore(uop.opcode);
+    bool handled_hi = false;
+    bool handled = false;
+    int exception = 0;
+    Waddr physaddr;
+    int mmio = 0;
+
+    physaddr = thread.ctx.check_and_translate(virtaddr, uop.size, st, uop.internal, exception,
+          mmio, pfec);
+
+    if unlikely (exception) {
+      // Check if the page fault can be handled without causing exception
+      if(exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead) {
+        handled = thread.ctx.try_handle_fault(virtaddr, st);
+        if(!handled) {
+dofault:
+            LoadStoreQueueEntry& state = *lsq;
+            handle_common_load_store_exceptions(state, virtaddr, virtaddr, exception, pfec);
+
+            physreg->flags = (state.invalid << log2(FLAG_INV)) | ((!state.datavalid) << log2(FLAG_WAIT));
+            physreg->data = state.data;
+            assert(!physreg->valid());
+
+            cycles_left = 0;
+            changestate(thread.rob_ready_to_commit_queue);
+
+            return;
+        }
+        exception = 0;
+      }
+
+      int size = (1 << uop.size);
+      int page_crossing = ((lowbits(virtaddr, 12) + (size - 1)) >> 12);
+      if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
+        handled_hi = thread.ctx.try_handle_fault(virtaddr + (size-1), st);
+        if(!handled_hi) {
+          origvirt = virtaddr + (size - 1);
+          goto dofault;
+        }
+        exception = 0;
+      }
+
+      assert(exception == 0);
     }
 
     if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_COMPLETE, this, null, virtaddr);
-    core.caches.dtlb.insert(virtaddr, threadid);
-    /* TODO: I am not sure it works for new prefetch and the fix in tlbwalk right now, which just move the change list to the top.
-    /////// every time call probecache we need to make sure there is available slot in missbuf and lf
-    /// see if hit on L1:
+    thread.dtlb.insert(origvirt, threadid);
 
-    LoadStoreQueueEntry& state = *lsq;
-    W64 physaddr = state.physaddr << 3;
-    bool L1hit = (config.perfect_cache) ? 1 : core.caches.probe_cache_and_sfr(physaddr, null, uop.size);
-
-    if(!L1hit) {
-      /// make sure we have slots in missbuf/lfrq:
-      if unlikely (core.caches.lfrq_or_missbuf_full()) {
-        if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_LFRQ_FULL, this, null, physaddr);
-        per_context_smtcore_stats_update(threadid, dcache.load.issue.replay.missbuf_full++);
-        //        ptl_logfile << "  WARNING: Cycle ", sim_cycle, " tlbwalk reaches end but L1 miss and lfrq_or_missbuf_full. rob: ", *this,  endl;
-        return;
-      }
+    if(logable(10)) {
+        ptl_logfile << "tlb miss completed for rob ", *this, " now replaying\n";
     }
-    */
-
-    if unlikely (isprefetch(uop.opcode)) {
-      physreg->flags &= ~FLAG_WAIT;
-      physreg->complete();
-      changestate(thread.rob_issued_list[cluster]);
-      forward_cycle = 0;
-      int exception;
-      PageFaultErrorCode pfec;
-      PTEUpdate pteupdate;
-      Context& ctx = getthread().ctx;
-	  int mmio;
-      Waddr physaddr = ctx.check_and_translate(virtaddr, 1, 0, 0, exception,
-			  mmio, pfec);
-      core.caches.initiate_prefetch(physaddr, uop.cachelevel);
-    } else {
-      probecache(virtaddr, null);
-    }
+    bitvec<MAX_OPERANDS> dependent_operands;
+    dependent_operands = 0;
+    redispatch(dependent_operands, null);
 
     return;
   }
 
-  W64 pteaddr = thread.ctx.virt_to_pte_phys_addr(virtaddr, tlb_walk_level - 1);
-  bool L1hit = (config.perfect_cache) ? 1 : core.caches.probe_cache_and_sfr(pteaddr, null, 3);
+  W64 pteaddr = thread.ctx.virt_to_pte_phys_addr(virtaddr, tlb_walk_level);
 
-  if likely (L1hit) {
-    //
-    // The PTE was in the cache: directly proceed to the next level
-    //
-    if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_HIT, this, null, pteaddr);
-    per_context_dcache_stats_update(core.coreid, threadid, load.tlbwalk.L1_dcache_hit++);
-
-    tlb_walk_level--;
-    return;
+  if(pteaddr == -1) {
+      goto rob_cont;
   }
-  /* still TODO:
-else{
-    if unlikely (core.caches.lfrq_or_missbuf_full()) {
-      if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_LFRQ_FULL, this, null, pteaddr);
-      per_context_smtcore_stats_update(threadid, dcache.load.issue.replay.missbuf_full++);
-      //      ptl_logfile << "  WARNING: Cycle ", sim_cycle, " tlbwalk tlb_walk_level: ", tlb_walk_level, " L1 miss and lfrq_or_missbuf_full. rob: ", *this,  endl;
+
+  if(!core.memoryHierarchy.is_cache_available(core.coreid, threadid, false)){
+      // Cache queue is full.. so simply skip this iteration
       return;
-    }
   }
-  */
+  Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
+  assert(request != null);
 
-  LoadStoreInfo lsi = 0;
-  lsi.threadid = thread.threadid;
-  lsi.rob = index();
+  request->init(core.coreid, threadid, pteaddr, idx, sim_cycle,
+      false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
 
-  SFR dummysfr;
-  setzero(dummysfr);
-  lfrqslot = core.caches.issueload_slowpath(pteaddr, dummysfr, lsi);
+  lsq->physaddr = pteaddr >> 3;
 
-  //
-  // No LFRQ or MB slots? Try again on next cycle.
-  // TODO: For prefetches, we might want to drop the TLB miss!
-  //
-  if (lfrqslot < 0) {
-    if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_NO_LFRQ_MB, this, null, pteaddr);
-    per_context_dcache_stats_update(core.coreid, threadid, load.tlbwalk.no_lfrq_mb++);
-    return;
-  }
+  core.memoryHierarchy.access_cache(request);
 
   cycles_left = 0;
   changestate(thread.rob_cache_miss_list);
@@ -2156,9 +2182,9 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(Memory::MemoryRequest *request)
 	   * so just make sure that we handle page fault at correct location
 	   */
 
-	  rob.tlb_walk_level = 0;
+	  // rob.tlb_walk_level = 0;
 	  // load the data now
-	  if (isload(rob.uop.opcode) || isprefetch(rob.uop.opcode)) {
+	  if (rob.tlb_walk_level == 0 && (isload(rob.uop.opcode) || isprefetch(rob.uop.opcode))) {
 
 		  int sizeshift = rob.uop.size;
 		  bool signext = (rob.uop.opcode == OP_ldx);
@@ -2268,6 +2294,7 @@ void ReorderBufferEntry::loadwakeup() {
     // Wake up from TLB walk wait and move to next level
     if unlikely (config.event_log_enabled) getcore().eventlog.add_load_store(EVENT_TLBWALK_WAKEUP, this);
     lfrqslot = -1;
+    tlb_walk_level--;
     changestate(getthread().rob_tlb_miss_list);
   } else {
     // Actually wake up the load

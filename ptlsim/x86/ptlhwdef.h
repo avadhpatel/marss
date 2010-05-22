@@ -958,13 +958,21 @@ struct Context: public CPUX86State {
 
   Context() : invalid_reg(-1), reg_zero(0), reg_ctx((Waddr)this) { }
 
-  W64 virt_to_pte_phys_addr(Waddr virtaddr, int level = 0);
+  W64 virt_to_pte_phys_addr(Waddr virtaddr, byte& level);
 
   void update_mode_count();
   bool check_events() const;
   bool event_upcall();
 
-  int page_table_level_count() const { return 4; }
+  int page_table_level_count() const {
+      if(cr[4] & CR4_PAE_MASK) {
+          if(hflags & HF_LMA_MASK) {
+              return 4;
+          }
+          return 3;
+      }
+      return 2;
+  }
 
   W64 get(int index) {
 	  if likely (index < 16) {
