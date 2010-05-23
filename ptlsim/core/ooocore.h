@@ -1452,6 +1452,9 @@ namespace OutOfOrderModel {
         bool stall_frontend;
         bool waiting_for_icache_fill;
         Waddr waiting_for_icache_fill_physaddr;
+        byte itlb_walk_level;
+        bool probeitlb(Waddr fetchrip);
+        void itlbwalk();
 
         // Last block in icache we fetched into our buffer
         W64 current_icache_block;
@@ -2047,6 +2050,11 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 hits;
             W64 misses;
         } dtlb;
+
+        struct itlb { // node: summable
+            W64 hits;
+            W64 misses;
+        } itlb;
     } dcache;
 
     W64 interrupt_requests;

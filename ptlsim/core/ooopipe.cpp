@@ -49,11 +49,86 @@ void OutOfOrderCoreCacheCallbacks::icache_wakeup(Memory::MemoryRequest *request)
 			if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
 			thread->waiting_for_icache_fill = 0;
 			thread->waiting_for_icache_fill_physaddr = 0;
+            if unlikely (thread->itlb_walk_level > 0) {
+                thread->itlb_walk_level--;
+                thread->itlbwalk();
+            }
 		}else{
 			if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr, " after floor : ",
 				(void*) floor(thread->waiting_for_icache_fill_physaddr, Memory::L1I_LINE_SIZE), " delivered ", (void*) physaddr,endl;
 		}
 	}
+}
+
+
+bool ThreadContext::probeitlb(Waddr icache_addr) {
+
+    if(!itlb.probe(icache_addr, threadid)) {
+
+        if(logable(6)) {
+            ptl_logfile << "itlb miss addr: ", (void*)icache_addr, endl;
+        }
+
+        itlb_walk_level = ctx.page_table_level_count();
+        per_context_ooocore_stats_update(threadid, dcache.itlb.misses++);
+
+        return false;
+    }
+
+    // Its not an exception and its not tlb miss
+    per_context_ooocore_stats_update(threadid, dcache.itlb.hits++);
+    return true;
+}
+
+void ThreadContext::itlbwalk() {
+  if(logable(6)) {
+      ptl_logfile << "itlbwalk cycle ", sim_cycle, " tlb_walk_level: ",
+                  itlb_walk_level, " virtaddr: ", (void*)(W64(fetchrip)), endl;
+  }
+
+  if unlikely (!itlb_walk_level) {
+itlb_walk_finish:
+      if(logable(6)) {
+          ptl_logfile << "itlbwalk finished for virtaddr: ", (void*)(W64(fetchrip)), endl;
+      }
+      itlb_walk_level = 0;
+      itlb.insert(fetchrip, threadid);
+      waiting_for_icache_fill = 0;
+    return;
+  }
+
+  W64 pteaddr = ctx.virt_to_pte_phys_addr(fetchrip, itlb_walk_level);
+
+  if(pteaddr == -1) {
+      goto itlb_walk_finish;
+      return;
+  }
+
+  /*
+   * if(!core.memoryHierarchy.is_cache_available(core.coreid, threadid, false)){
+   *     // Cache queue is full.. so simply skip this iteration
+   *     return;
+   * }
+   */
+  Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
+  assert(request != null);
+
+  request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
+      true, 0, 0, Memory::MEMORY_OP_READ);
+
+  waiting_for_icache_fill_physaddr = floor(pteaddr, ICACHE_FETCH_GRANULARITY);
+  waiting_for_icache_fill = 1;
+
+  bool buf_hit = core.memoryHierarchy.access_cache(request);
+
+  // We have a small buffer that returns true if the instruction access hits
+  // into that buffer. (This is implemented due to original PTLsim design...)
+  // So if we have a buffer hit, we simply reduce the itlb_walk_level and
+  // call the itlbwalk recursively.  Hope that this doesn't happen a lot
+  if(buf_hit) {
+      itlb_walk_level--;
+      itlbwalk();
+  }
 }
 
 //
@@ -196,6 +271,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
   fetchrip.update(ctx);
   stall_frontend = 0;
   waiting_for_icache_fill = 0;
+  itlb_walk_level = 0;
   fetchq.reset();
   current_basic_block_transop_index = 0;
   unaligned_ldst_buf.reset();
@@ -489,6 +565,13 @@ bool ThreadContext::fetch() {
       // Keep fetching - the decoder has injected assist microcode that
       // branches to the invalid opcode or exec page fault handler.
       //
+    }
+
+    // First probe tlb
+    if(!probeitlb(fetchrip)) {
+        // Its a itlb miss
+        itlbwalk();
+        break;
     }
 
     PageFaultErrorCode pfec;
