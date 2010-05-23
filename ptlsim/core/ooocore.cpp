@@ -944,6 +944,8 @@ void ThreadContext::dump_smt_state(ostream& os) {
   print_rename_tables(os);
   print_rob(os);
   print_lsq(os);
+  os << "ITLB: \n", itlb, endl;
+  os << "DTLB: \n", dtlb, endl;
   os << flush;
 }
 

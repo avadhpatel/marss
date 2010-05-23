@@ -339,6 +339,27 @@ int ReorderBufferEntry::issue() {
   ThreadContext& thread = getthread();
   OutOfOrderCoreEvent* event = null;
 
+  // We keep TLB miss handling entries into issue queue
+  // to make sure that when tlb miss is handled, they will
+  // be issued as quickly as possible.
+  // So check if this entry is in rob_tlb_miss_list or its in
+  // rob_cache_miss_list with tlb_walk_level > 0 then
+  // simply response ISSUE_SKIPPED.
+  // If TLB miss responds to be a page fault, then it will be
+  // in rob_ready_to_commit_queue with physreg set to invalid
+
+  if (current_state_list == &thread.rob_tlb_miss_list ||
+          (current_state_list == &thread.rob_cache_miss_list &&
+           tlb_walk_level > 0)) {
+      issueq_operation_on_cluster(core, cluster, replay(iqslot));
+      return ISSUE_SKIPPED;
+  }
+
+  if (current_state_list == &thread.rob_ready_to_commit_queue) {
+      assert(!physreg->valid());
+      return ISSUE_COMPLETED;
+  }
+
   W32 executable_on_fu = fuinfo[uop.opcode].fu & clusters[cluster].fu_mask & core.fu_avail;
 
   // Are any FUs available in this cycle?
@@ -469,6 +490,8 @@ int ReorderBufferEntry::issue() {
         return -1;
       } else if unlikely (completed == ISSUE_NEEDS_REFETCH) {
         per_context_ooocore_stats_update(threadid, issue.result.refetch++);
+        return -1;
+      } else if unlikely (completed == ISSUE_SKIPPED) {
         return -1;
       }
 
@@ -916,7 +939,8 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 
     if unlikely (!tlb_hit) {
       // This ROB entry is moved to rob_tlb_miss_list so return success
-      return ISSUE_COMPLETED;
+      issueq_operation_on_cluster(core, cluster, replay(iqslot));
+      return ISSUE_SKIPPED;
     }
   }
 
@@ -1335,7 +1359,8 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     if unlikely (!tlb_hit) {
       // This ROB entry is moved to rob_tlb_miss_list so return success
-      return ISSUE_COMPLETED;
+      issueq_operation_on_cluster(core, cluster, replay(iqslot));
+      return ISSUE_SKIPPED;
     }
   }
 
@@ -1985,11 +2010,10 @@ dofault:
     thread.dtlb.insert(origvirt, threadid);
 
     if(logable(10)) {
-        ptl_logfile << "tlb miss completed for rob ", *this, " now replaying\n";
+        ptl_logfile << "tlb miss completed for rob ", *this, " now issuing cache access\n";
     }
-    bitvec<MAX_OPERANDS> dependent_operands;
-    dependent_operands = 0;
-    redispatch(dependent_operands, null);
+
+    changestate(get_ready_to_issue_list());
 
     return;
   }
@@ -2027,6 +2051,7 @@ void ThreadContext::tlbwalk() {
   ReorderBufferEntry* rob;
   foreach_list_mutable(rob_tlb_miss_list, rob, entry, nextentry) {
    rob->tlbwalk();
+   // logfuncwith(rob->tlbwalk(), 6);
   }
 }
 

@@ -319,8 +319,14 @@ extern bool logenable;
 
 #ifdef DISABLE_LOGGING
 #define logable(l) (0)
+#define logfuncwith(func, new_loglevel) (func)
 #else
 #define logable(level) (unlikely (logenable && (config.loglevel >= level)))
+#define logfuncwith(func, new_loglevel) {\
+    int old_loglevel = config.loglevel; config.loglevel = new_loglevel; \
+    func ; \
+    config.loglevel = old_loglevel; \
+    }
 #endif
 
 void force_logging_enabled();
