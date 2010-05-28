@@ -79,7 +79,7 @@ extern "C" {
 //
 // Registers
 //
-#define ARCHREG_COUNT 64
+#define ARCHREG_COUNT 72
 
 #define REG_rax     0
 #define REG_rcx     1
@@ -149,27 +149,36 @@ extern "C" {
 #define REG_ar2     62
 #define REG_zero    63
 
+#define REG_mmx0    64
+#define REG_mmx1    65
+#define REG_mmx2    66
+#define REG_mmx3    67
+#define REG_mmx4    68
+#define REG_mmx5    69
+#define REG_mmx6    70
+#define REG_mmx7    71
+
 // For renaming only:
 
-#define REG_temp0   64
-#define REG_temp1   65
-#define REG_temp2   66
-#define REG_temp3   67
-#define REG_temp4   68
-#define REG_temp5   69
-#define REG_temp6   70
-#define REG_temp7   71
+#define REG_temp0   72
+#define REG_temp1   73
+#define REG_temp2   74
+#define REG_temp3   75
+#define REG_temp4   76
+#define REG_temp5   77
+#define REG_temp6   78
+#define REG_temp7   79
 
-#define REG_zf      72
-#define REG_cf      73
-#define REG_of      74
-#define REG_imm     75
-#define REG_mem     76
-#define REG_temp8   77
-#define REG_temp9   78
-#define REG_temp10  79
+#define REG_zf      80
+#define REG_cf      81
+#define REG_of      82
+#define REG_imm     83
+#define REG_mem     84
+#define REG_temp8   85
+#define REG_temp9   86
+#define REG_temp10  87
 
-#define TRANSREG_COUNT (64+16)
+#define TRANSREG_COUNT (ARCHREG_COUNT+16)
 
 #define ARCHREG_NULL REG_zero
 
@@ -1037,7 +1046,9 @@ struct Context: public CPUX86State {
 	  else if(index == 63) {
 		  return reg_zero;
 	  }
-
+      else if(index <= REG_mmx7 && index >= REG_mmx0) {
+          return fpregs[(index - REG_mmx0)].mmx.q;
+      }
 	  return invalid_reg;
   }
 
@@ -1106,6 +1117,9 @@ struct Context: public CPUX86State {
 	  else if(index == 63) {
 		  reg_zero = 0;
 	  }
+      else if(index <= REG_mmx7 && index >= REG_mmx0) {
+          fpregs[(index - REG_mmx0)].mmx.q = value;
+      }
 
 	  return ;
   }

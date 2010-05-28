@@ -168,13 +168,20 @@ bool TraceDecoder::decode_sse() {
   }
 
   //
-  // Integer SSE Arithmetic
+  // Integer SSE/MMX Arithmetic
   //
   //        0        1        2        3        4          5         6         7          8           9           a          b        c           d           e          f
   // 0x5d0: -------- psrlw    psrld    psrlq    paddq      pmullw    movq      pmovmskb   psubusb     psubusw     pminub     pand     paddusb     paddusw     pmaxub     pandn
   // 0x5e0: pavgb    psraw    psrad    pavgw    pmulhuw    pmulhw    cvttpd2dq movntdq    psubsb      psubsw      pminsw     por      paddsb      paddsw      pmaxsw     pxor
   // 0x5f0: -------- psllw    pslld    psllq    pmuludq    pmaddwd   psadbw    maskmovdqu psubb       psubw       psubd      psubq    paddb       paddw       paddd      --------
   //
+
+  case 0x3d1 ... 0x3d5:
+  case 0x3d8 ... 0x3df:
+  case 0x3e0 ... 0x3e5:
+  case 0x3e8 ... 0x3ef:
+  case 0x3f1 ... 0x3f6:
+  case 0x3f8 ... 0x3fe:
   case 0x5d1 ... 0x5d5:
   case 0x5d8 ... 0x5df:
   case 0x5e0 ... 0x5e5:
@@ -228,9 +235,12 @@ bool TraceDecoder::decode_sse() {
 
     if (ra.type == OPTYPE_MEM) {
       rareg = REG_temp0;
-      operand_load(REG_temp0, ra, OP_ld, DATATYPE_VEC_128BIT);
-      ra.mem.offset += 8;
-        operand_load(REG_temp1, ra, OP_ld, DATATYPE_VEC_128BIT);
+      W8 datatype = (use_mmx) ? DATATYPE_VEC_DOUBLE : DATATYPE_VEC_128BIT;
+      operand_load(REG_temp0, ra, OP_ld, datatype);
+      if likely (!use_mmx) {
+          ra.mem.offset += 8;
+          operand_load(REG_temp1, ra, OP_ld, DATATYPE_VEC_128BIT);
+      }
     } else {
       rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     }
@@ -238,21 +248,25 @@ bool TraceDecoder::decode_sse() {
     // Special case dependency chain breaker: xorXX A,A => xorXX zero,zero
     if unlikely ((uop == OP_xor) && (ra.type == OPTYPE_REG) && (rdreg == rareg)) {
       this << TransOp(OP_xor, rdreg+0, REG_zero, REG_zero, REG_zero, 3);
-      this << TransOp(OP_xor, rdreg+1, REG_zero, REG_zero, REG_zero, 3);
+      if likely (!use_mmx)
+        this << TransOp(OP_xor, rdreg+1, REG_zero, REG_zero, REG_zero, 3);
       break;
     }
 
     bool isshift = (uop == OP_vshr) | (uop == OP_vsar) | (uop == OP_vshl);
 
     this << TransOp(uop, rdreg+0, rdreg+0, rareg+0, REG_zero, sizeshift);
-    this << TransOp(uop, rdreg+1, rdreg+1, rareg+(!isshift), REG_zero, sizeshift);
+    if likely (!use_mmx)
+      this << TransOp(uop, rdreg+1, rdreg+1, rareg+(!isshift), REG_zero, sizeshift);
     break;
   }
 
+  case 0x3d7: // pmovmskb mmx
   case 0x5d7: // pmovmskb
   case 0x550: // movmskpd
   case 0x350: { // movmskps
-    DECODE(gform, rd, d_mode);
+    int bytemode = (use_mmx) ? (rex.mode64 ? d_mode : w_mode) : d_mode;
+    DECODE(gform, rd, bytemode);
     DECODE(eform, ra, x_mode);
     if (ra.type == OPTYPE_MEM) MakeInvalid();
     EndOfDecode();
@@ -264,22 +278,31 @@ bool TraceDecoder::decode_sse() {
       (op == 0x5d7) ? MaskControlInfo(56, 8, 56) : // pmovmskb (16-bit mask)
       (op == 0x350) ? MaskControlInfo(62, 2, 62) : // movmskps (4-bit mask)
       (op == 0x550) ? MaskControlInfo(63, 1, 63) : // movmskpd (2-bit mask)
+      (op == 0x3d7) ? MaskControlInfo(60, 4, 60) : // pmovmskb mmx (8-bit mask)
       MaskControlInfo(0);
 
     int sizeshift =
       (op == 0x5d7) ? 0 :                          // pmovmskb (16-bit mask)
       (op == 0x350) ? 2 :                          // movmskps (4-bit mask)
-      (op == 0x550) ? 3 : 0;                       // movmskpd (2-bit mask)
+      (op == 0x550) ? 3 :                          // movmskpd (2-bit mask)
+      (op == 0x3d7) ? 0 : 0;                       // pmovmskb mmx (8-bit mask)
 
     int highbit = ((1 << sizeshift)*8)-1;
 
     this << TransOp(OP_vbt, REG_temp0, rareg+0, REG_imm, REG_zero, sizeshift, highbit);
-    this << TransOp(OP_vbt, REG_temp1, rareg+1, REG_imm, REG_zero, sizeshift, highbit);
+
+    if unlikely (use_mmx)
+        this << TransOp(OP_mov, REG_temp1, REG_zero, REG_zero, REG_zero, sizeshift);
+    else
+        this << TransOp(OP_vbt, REG_temp1, rareg+1, REG_imm, REG_zero, sizeshift, highbit);
+
     this << TransOp(OP_maskb, rdreg, REG_temp0, REG_temp1, REG_imm, 3, 0, maskctl);
 
     break;
   }
 
+  case 0x364 ... 0x366: // pcmpgtX mmx
+  case 0x374 ... 0x376: // pcmpeqX mmx
   case 0x564 ... 0x566: // pcmpgtX
   case 0x574 ... 0x576: { // pcmpeqX
     DECODE(gform, rd, x_mode);
@@ -294,20 +317,28 @@ bool TraceDecoder::decode_sse() {
 
     if (ra.type == OPTYPE_MEM) {
       rareg = REG_temp0;
-      operand_load(REG_temp0, ra, OP_ld, DATATYPE_VEC_128BIT);
-      ra.mem.offset += 8;
-        operand_load(REG_temp1, ra, OP_ld, DATATYPE_VEC_128BIT);
+      W8 datatype = (use_mmx) ? DATATYPE_VEC_DOUBLE : DATATYPE_VEC_128BIT;
+      operand_load(REG_temp0, ra, OP_ld, datatype);
+      if likely (!use_mmx) {
+          ra.mem.offset += 8;
+          operand_load(REG_temp1, ra, OP_ld, DATATYPE_VEC_128BIT);
+      }
     } else {
       rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     }
 
     TransOp lo(OP_vcmp, rdreg+0, rdreg+0, rareg+0, REG_zero, sizeshift);
     lo.cond = cond; this << lo;
-    TransOp hi(OP_vcmp, rdreg+1, rdreg+1, rareg+1, REG_zero, sizeshift);
-    hi.cond = cond; this << hi;
+    if likely (!use_mmx) {
+        TransOp hi(OP_vcmp, rdreg+1, rdreg+1, rareg+1, REG_zero, sizeshift);
+        hi.cond = cond; this << hi;
+    }
     break;
   }
 
+  case 0x371: // psxxw imm8 mmx
+  case 0x372: // psxxd imm8 mmx
+  case 0x373: // psxxq imm8 or psrldq|pslldq imm8 (byte count) mmx
   case 0x571: // psxxw imm8
   case 0x572: // psxxd imm8
   case 0x573: { // psxxq imm8 or psrldq|pslldq imm8 (byte count)
@@ -384,19 +415,32 @@ bool TraceDecoder::decode_sse() {
         // NOTE: for psraX, we must propagate the sign bit instead of zero
         if unlikely (opcode == OP_vsar) {
           TransOp lo(OP_vcmp, rdreg+0, rdreg+0, REG_zero, REG_zero, sizeshift); lo.cond = COND_s; this << lo;
-          TransOp hi(OP_vcmp, rdreg+1, rdreg+1, REG_zero, REG_zero, sizeshift); hi.cond = COND_s; this << hi;
+          if likely (!use_mmx) {
+            TransOp hi(OP_vcmp, rdreg+1, rdreg+1, REG_zero, REG_zero, sizeshift); hi.cond = COND_s; this << hi;
+          }
         } else {
           this << TransOp(OP_mov, rdreg+0, REG_zero, REG_zero, REG_zero, 3);
-          this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3);
+          if likely (!use_mmx)
+            this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3);
         }
       } else {
         this << TransOp(opcode, rdreg+0, rdreg+0, REG_imm, REG_zero, sizeshift, imm);
-        this << TransOp(opcode, rdreg+1, rdreg+1, REG_imm, REG_zero, sizeshift, imm);
+        if likely (!use_mmx)
+          this << TransOp(opcode, rdreg+1, rdreg+1, REG_imm, REG_zero, sizeshift, imm);
       }
     }
     break;
   }
 
+  case 0x360: // punpcklbw mmx
+  case 0x361: // punpcklwd mmx
+  case 0x362: // punpckldq mmx
+  case 0x363: // packsswb mmx
+  case 0x367: // packuswb mmx
+  case 0x368: // punpckhbw mmx
+  case 0x369: // punpckhwd mmx
+  case 0x36a: // punpckhdq mmx
+  case 0x36b: // packssdw mmx
   case 0x560: // punpcklbw
   case 0x561: // punpcklwd
   case 0x562: // punpckldq
@@ -466,9 +510,12 @@ bool TraceDecoder::decode_sse() {
 
     if (ra.type == OPTYPE_MEM) {
       rareg = REG_temp0;
-      operand_load(REG_temp0, ra, OP_ld, DATATYPE_VEC_128BIT);
-      ra.mem.offset += 8;
-        operand_load(REG_temp1, ra, OP_ld, DATATYPE_VEC_128BIT);
+      W8 datatype = (use_mmx) ? DATATYPE_VEC_DOUBLE : DATATYPE_VEC_128BIT;
+      operand_load(REG_temp0, ra, OP_ld, datatype);
+      if likely (!use_mmx) {
+          ra.mem.offset += 8;
+          operand_load(REG_temp1, ra, OP_ld, DATATYPE_VEC_128BIT);
+      }
     } else {
       rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     }
@@ -482,13 +529,16 @@ bool TraceDecoder::decode_sse() {
       // using rename table tricks.
       //
       this << TransOp(OP_permb, REG_temp2, rdreg+hi, rareg+hi, REG_imm, 3, 0, permute_control_info[sel][1]);
-      this << TransOp(OP_permb, REG_temp3, rdreg+hi, rareg+hi, REG_imm, 3, 0, permute_control_info[sel][0]);
+      if likely (!use_mmx)
+        this << TransOp(OP_permb, REG_temp3, rdreg+hi, rareg+hi, REG_imm, 3, 0, permute_control_info[sel][0]);
       this << TransOp(OP_mov, rdreg+0, REG_zero, REG_temp2, REG_zero, 3);
-      this << TransOp(OP_mov, rdreg+1, REG_zero, REG_temp3, REG_zero, 3);
+      if likely (!use_mmx)
+        this << TransOp(OP_mov, rdreg+1, REG_zero, REG_temp3, REG_zero, 3);
     } else {
       // pack.xx uop
       this << TransOp(uop, rdreg+0, rdreg+0, rdreg+1, REG_zero, sizeshift);
-      this << TransOp(uop, rdreg+1, rareg+0, rareg+1, REG_zero, sizeshift);
+      if likely (!use_mmx)
+        this << TransOp(uop, rdreg+1, rareg+0, rareg+1, REG_zero, sizeshift);
     }
     break;
   }
@@ -1002,6 +1052,7 @@ bool TraceDecoder::decode_sse() {
     break;
   }
 
+  case 0x3c5:   // pextrw mmx
   case 0x5c5: { // pextrw
     DECODE(gform, rd, w_mode);
     DECODE(eform, ra, x_mode);
@@ -1012,12 +1063,13 @@ bool TraceDecoder::decode_sse() {
     int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
 
-    int which = bit(imm.imm.imm, 2);
+    int which = (use_mmx) ? 0 : bit(imm.imm.imm, 2);
     int shift = lowbits(imm.imm.imm, 3) * 16;
     this << TransOp(OP_maskb, rdreg, REG_zero, rareg + which, REG_imm, 3, 0, MaskControlInfo(0, 16, lowbits(shift, 6)));
     break;
   }
 
+  case 0x3c4:   // pinsrw mmx
   case 0x5c4: { // pinsrw
     DECODE(gform, rd, x_mode);
     DECODE(eform, ra, w_mode);
@@ -1028,7 +1080,7 @@ bool TraceDecoder::decode_sse() {
     int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
 
-    int which = bit(imm.imm.imm, 2);
+    int which = (use_mmx) ? 0 : bit(imm.imm.imm, 2);
     int shift = lowbits(imm.imm.imm, 3) * 16;
 
     this << TransOp(OP_maskb, rdreg + which, rdreg + which, rareg, REG_imm, 3, 0, MaskControlInfo(64 - shift, 16, 64 - lowbits(shift, 6)));
@@ -1284,31 +1336,37 @@ bool TraceDecoder::decode_sse() {
     break;
   }
 
+  case 0x36e:   // movd mmx,rm32/rm64
   case 0x56e: { // movd xmm,rm32/rm64
     DECODE(gform, rd, x_mode);
     DECODE(eform, ra, v_mode);
     EndOfDecode();
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     int datatype = sse_float_datatype_to_ptl_datatype[(op >> 8) - 2];
+    if(use_mmx) datatype = DATATYPE_DOUBLE;
     if (ra.type == OPTYPE_MEM) {
       // Load
       operand_load(rdreg+0, ra, OP_ld, datatype);
-      this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
+      if(!use_mmx)
+          this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
     } else {
       int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
       int rashift = reginfo[ra.reg.reg].sizeshift;
       this << TransOp(OP_mov, rdreg+0, REG_zero, rareg, REG_zero, rashift);
-      this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
+      if(!use_mmx)
+          this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
     }
     break;
   }
 
+  case 0x37e:   // movd rm32/rm64,mmx
   case 0x57e: { // movd rm32/rm64,xmm
     DECODE(eform, rd, v_mode);
     DECODE(gform, ra, x_mode);
     EndOfDecode();
     int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     int datatype = sse_float_datatype_to_ptl_datatype[(op >> 8) - 2];
+    if(use_mmx) datatype = DATATYPE_DOUBLE;
     if (rd.type == OPTYPE_MEM) {
       result_store(rareg, REG_temp0, rd, datatype);
     } else {
@@ -1319,39 +1377,53 @@ bool TraceDecoder::decode_sse() {
     break;
   }
 
+  case 0x36f:   // movq mm,mm/mm64 mmx
   case 0x27e: { // movq xmm,xmmlo|mem64 with zero extension
     DECODE(gform, rd, x_mode);
     DECODE(eform, ra, x_mode);
     EndOfDecode();
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     int datatype = sse_float_datatype_to_ptl_datatype[(op >> 8) - 2];
+    // if (use_mmx) datatype = DATATYPE_DOUBLE;
     if (ra.type == OPTYPE_MEM) {
       // Load
       operand_load(rdreg+0, ra, OP_ld, datatype);
-      this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
+      if (!use_mmx)
+        this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
     } else {
       // Move from xmm to xmm
       int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
       this << TransOp(OP_mov, rdreg+0, REG_zero, rareg, REG_zero, 3);
-      this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
+      if (!use_mmx)
+        this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
     }
     break;
   }
 
+  case 0x37f:   // movq mm/mm64,mm mmx
   case 0x5d6: { // movq xmmlo|mem64,xmm with zero extension
     DECODE(eform, rd, x_mode);
     DECODE(gform, ra, x_mode);
     EndOfDecode();
     int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
     int datatype = sse_float_datatype_to_ptl_datatype[(op >> 8) - 2];
+    // if (use_mmx) datatype = DATATYPE_DOUBLE;
     if (rd.type == OPTYPE_MEM) {
       rd.mem.size = 3; // quadword
       result_store(rareg, REG_temp0, rd, datatype);
     } else {
       int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
       this << TransOp(OP_mov, rdreg, REG_zero, rareg, REG_zero, 3);
-      this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
+      if (!use_mmx)
+          this << TransOp(OP_mov, rdreg+1, REG_zero, REG_zero, REG_zero, 3); // zero high 64 bits
     }
+    break;
+  }
+
+  case 0x377: { // emms
+    EndOfDecode();
+    microcode_assist(ASSIST_MMX_EMMS, ripstart, rip);
+    end_of_block = 1;
     break;
   }
 

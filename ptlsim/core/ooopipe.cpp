@@ -104,12 +104,12 @@ itlb_walk_finish:
       return;
   }
 
-  /*
-   * if(!core.memoryHierarchy.is_cache_available(core.coreid, threadid, false)){
-   *     // Cache queue is full.. so simply skip this iteration
-   *     return;
-   * }
-   */
+  if(!core.memoryHierarchy.is_cache_available(core.coreid, threadid, false)){
+      // Cache queue is full.. so simply skip this iteration
+      itlb_walk_level = 0;
+      return;
+  }
+
   Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
   assert(request != null);
 
@@ -320,7 +320,7 @@ void ThreadContext::external_to_core_state() {
 #ifdef UNIFIED_INT_FP_PHYS_REG_FILE
     int rfid = (i == REG_rip) ? PHYS_REG_FILE_BR : PHYS_REG_FILE_INT;
 #else
-    bool fp = inrange((int)i, REG_xmml0, REG_xmmh15) | (inrange((int)i, REG_fptos, REG_ctx));
+    bool fp = inrange((int)i, REG_xmml0, REG_xmmh15) | (inrange((int)i, REG_fptos, REG_ctx)) | (inrange((int)i, REG_mmx0, REG_mmx1));
     int rfid = (fp) ? core.PHYS_REG_FILE_FP : (i == REG_rip) ? core.PHYS_REG_FILE_BR : core.PHYS_REG_FILE_INT;
 #endif
     PhysicalRegisterFile& rf = core.physregfiles[rfid];
@@ -2417,6 +2417,8 @@ namespace OutOfOrderModel {
     // x87 FP / MMX / special
     1, 1, 1, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
+    // MMX registers
+    1, 1, 1, 1, 1, 1, 1, 1,
     // The following are ONLY used during the translation and renaming process:
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
@@ -2435,6 +2437,8 @@ namespace OutOfOrderModel {
     // x87 FP / MMX / special
     1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 0,
+    // MMX registers
+    1, 1, 1, 1, 1, 1, 1, 1,
     // The following are ONLY used during the translation and renaming process:
     1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1,

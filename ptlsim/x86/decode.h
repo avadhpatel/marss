@@ -83,6 +83,8 @@ enum {
   APR_r8b, APR_r9b, APR_r10b, APR_r11b, APR_r12b, APR_r13b, APR_r14b, APR_r15b,
   // SSE registers
   APR_xmm0, APR_xmm1, APR_xmm2, APR_xmm3, APR_xmm4, APR_xmm5, APR_xmm6, APR_xmm7, APR_xmm8, APR_xmm9, APR_xmm10, APR_xmm11, APR_xmm12, APR_xmm13, APR_xmm14, APR_xmm15,
+  // MMX registers
+  APR_mmx0, APR_mmx1, APR_mmx2, APR_mmx3, APR_mmx4, APR_mmx5, APR_mmx6, APR_mmx7,
   // segments:
   APR_es, APR_cs, APR_ss, APR_ds, APR_fs, APR_gs,
   // special:
@@ -198,7 +200,9 @@ struct TraceDecoder {
   bool opsize_prefix;
   bool addrsize_prefix;
   bool end_of_block;
+  bool use_mmx;
   bool is_x87;
+  bool is_mmx;
   bool is_sse;
   bool used_microcode_assist;
   bool some_insns_complex;
@@ -334,6 +338,7 @@ enum {
   ASSIST_X87_FBLD,
   ASSIST_X87_FNSAVE,
   ASSIST_X87_FLDCW,
+  ASSIST_MMX_EMMS,
   // SSE save/restore
   ASSIST_LDMXCSR,
   ASSIST_FXSAVE,
@@ -468,6 +473,7 @@ static const char* assist_names[ASSIST_COUNT] = {
   "x87_fbld",
   "x87_fnsave",
   "x87_fldcw",
+  "mmx_emms",
   // SSE save/restore
   "ldmxcsr",
   "fxsave",
@@ -618,6 +624,7 @@ bool assist_x87_fbstp(Context& ctx);
 bool assist_x87_fbld(Context& ctx);
 bool assist_x87_fnsave(Context& ctx);
 bool assist_x87_fldcw(Context& ctx);
+bool assist_mmx_emms(Context& ctx);
 // SSE save/restore
 bool assist_ldmxcsr(Context& ctx);
 bool assist_fxsave(Context& ctx);

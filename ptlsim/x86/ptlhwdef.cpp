@@ -269,10 +269,12 @@ const char* arch_reg_names[TRANSREG_COUNT] = {
   "xmml4", "xmmh4", "xmml5", "xmmh5", "xmml6", "xmmh6", "xmml7", "xmmh7",
   "xmml8", "xmmh8", "xmml9", "xmmh9", "xmml10", "xmmh10", "xmml11", "xmmh11",
   "xmml12", "xmmh12", "xmml13", "xmmh13", "xmml14", "xmmh14", "xmml15", "xmmh15",
-  // x87 FP/MMX
+  // x87 FP
   "fptos", "fpsw", "fptags", "fpstack", "msr", "dlptr", "trace", "ctx",
   // Special
   "rip", "flags", "dlend", "selfrip","nextrip", "ar1", "ar2", "zero",
+  // MMX
+  "mmx0", "mmx1", "mmx2", "mmx3", "mmx4", "mmx5", "mmx6", "mmx7",
   // The following are ONLY used during the translation and renaming process:
   "tr0", "tr1", "tr2", "tr3", "tr4", "tr5", "tr6", "tr7",
   "zf", "cf", "of", "imm", "mem", "tr8", "tr9", "tr10",

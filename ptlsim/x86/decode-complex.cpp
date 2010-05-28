@@ -940,6 +940,13 @@ W64 l_assist_pause(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	return 0;
 }
 
+bool assist_mmx_emms(Context& ctx) {
+  ctx.eip = ctx.reg_selfrip;
+  ASSIST_IN_QEMU(helper_emms);
+  ctx.eip = ctx.reg_nextrip;
+  return true;
+}
+
 static inline int svm_check_intercept(TraceDecoder& dec, W64 type, W64 param=0) {
 	// No SVM activated, do nothing
 	if likely(!(dec.hflags & HF_SVMI_MASK))

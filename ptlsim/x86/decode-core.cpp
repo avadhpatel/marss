@@ -87,6 +87,7 @@ const assist_func_t assistid_to_func[ASSIST_COUNT] = {
     assist_x87_fbld,
     assist_x87_fnsave,
     assist_x87_fldcw,
+    assist_mmx_emms,
     // SSE save/restore
     assist_ldmxcsr,
     assist_fxsave,
@@ -345,6 +346,8 @@ const char* uniform_arch_reg_names[APR_COUNT] = {
     "r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b",
     // SSE registers
     "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
+    // MMX registers
+    "mmx0", "mmx1", "mmx2", "mmx3", "mmx4", "mmx5", "mmx6", "mmx7",
     // segments
     "es", "cs", "ss", "ds", "fs", "gs",
     // special:
@@ -365,6 +368,8 @@ const ArchPseudoRegInfo reginfo[APR_COUNT] = {
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
     // SSE registers
     {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0},
+    // MMX registers
+    {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0}, {3, 0},
     // segments:
     {1, 0}, {1, 0}, {1, 0}, {1, 0}, {1, 0}, {1, 0},
     // special:
@@ -372,6 +377,7 @@ const ArchPseudoRegInfo reginfo[APR_COUNT] = {
 };
 
 const byte reg64_to_uniform_reg[16] = { APR_rax, APR_rcx, APR_rdx, APR_rbx, APR_rsp, APR_rbp, APR_rsi, APR_rdi, APR_r8, APR_r9, APR_r10, APR_r11, APR_r12, APR_r13, APR_r14, APR_r15 };
+const byte mmxreg_to_uniform_reg[8] = { APR_mmx0, APR_mmx1, APR_mmx2, APR_mmx3, APR_mmx4, APR_mmx5, APR_mmx6, APR_mmx7};
 const byte xmmreg_to_uniform_reg[16] = { APR_xmm0, APR_xmm1, APR_xmm2, APR_xmm3, APR_xmm4, APR_xmm5, APR_xmm6, APR_xmm7, APR_xmm8, APR_xmm9, APR_xmm10, APR_xmm11, APR_xmm12, APR_xmm13, APR_xmm14, APR_xmm15 };
 const byte reg32_to_uniform_reg[16] = { APR_eax, APR_ecx, APR_edx, APR_ebx, APR_esp, APR_ebp, APR_esi, APR_edi, APR_r8d, APR_r9d, APR_r10d, APR_r11d, APR_r12d, APR_r13d, APR_r14d, APR_r15d };
 const byte reg16_to_uniform_reg[16] = { APR_ax, APR_cx, APR_dx, APR_bx, APR_sp, APR_bp, APR_si, APR_di, APR_r8w, APR_r9w, APR_r10w, APR_r11w, APR_r12w, APR_r13w, APR_r14w, APR_r15w };
@@ -393,6 +399,8 @@ const byte arch_pseudo_reg_to_arch_reg[APR_COUNT] = {
     REG_r8, REG_r9, REG_r10, REG_r11, REG_r12, REG_r13, REG_r14, REG_r15,
     // SSE registers
     REG_xmml0, REG_xmml1, REG_xmml2, REG_xmml3, REG_xmml4, REG_xmml5, REG_xmml6, REG_xmml7, REG_xmml8, REG_xmml9, REG_xmml10, REG_xmml11, REG_xmml12, REG_xmml13, REG_xmml14, REG_xmml15,
+    // MMX registers
+    REG_mmx0, REG_mmx1, REG_mmx2, REG_mmx3, REG_mmx4, REG_mmx5, REG_mmx6, REG_mmx7,
     // segments:
     REG_zero, REG_zero, REG_zero, REG_zero, REG_zero, REG_zero,
     // special:
@@ -455,7 +463,7 @@ static const byte twobyte_uses_SSE_prefix[256] = {
     /* 40 */ _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_, /* 4f */
     /* 50 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 5f */
     /* 60 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 6f */
-    /* 70 */ 1,1,1,1,1,1,1,_,_,_,_,_,1,1,1,1, /* 7f */
+    /* 70 */ 1,1,1,1,1,1,1,1,1,1,_,_,1,1,1,1, /* 7f */
     /* 80 */ _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_, /* 8f */
     /* 90 */ _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_, /* 9f */
     /* a0 */ _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_, /* af */
@@ -773,7 +781,13 @@ bool DecodedOperand::gform_ext(TraceDecoder& state, int bytemode, int regfield, 
                          ((!state.opsize_prefix) | (bytemode == dq_mode)) ? reg32_to_uniform_reg[regfield + add] :
                          reg16_to_uniform_reg[regfield + add];
                      break;
-        case x_mode: this->reg.reg = xmmreg_to_uniform_reg[regfield + add]; break;
+        case x_mode: {
+                if(state.use_mmx)
+                    this->reg.reg = mmxreg_to_uniform_reg[regfield + add];
+                else
+                    this->reg.reg = xmmreg_to_uniform_reg[regfield + add];
+                break;
+                     }
         default: return false;
     }
 
@@ -2010,13 +2024,18 @@ bool TraceDecoder::translate() {
 
         if (twobyte_uses_SSE_prefix[op]) {
             uses_sse = 1;
+            use_mmx = false;
             if (prefixes & PFX_DATA) // prefix byte 0x66, typically OPpd
                 op |= 0x500;
             else if (prefixes & PFX_REPNZ) // prefix byte 0xf2, typically OPsd
                 op |= 0x400;
             else if (prefixes & PFX_REPZ) // prefix byte 0xf3, typically OPss
                 op |= 0x200;
-            else op |= 0x300; // no prefix byte, typically OPps
+            else {
+                if(!((op >= 0x10 && op <= 0x5f) || op == 0xc2 || op == 0xc6))
+                    use_mmx = true;
+                op |= 0x300; // no prefix byte, typically OPps
+            }
         } else {
             op |= 0x100;
         }
@@ -2039,6 +2058,7 @@ bool TraceDecoder::translate() {
 
     is_x87 = 0;
     is_sse = 0;
+    is_mmx = 0;
 
     invalid |= ((rip - (Waddr)bb.rip) > valid_byte_count);
 
