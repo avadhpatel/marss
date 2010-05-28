@@ -117,6 +117,19 @@ void ThreadContext::reset() {
   branchpred.init(coreid, threadid);
 }
 
+void ThreadContext::setupTLB() {
+    foreach(i, CPU_TLB_SIZE) {
+        W64 dtlb_addr = ctx.tlb_table[!ctx.kernel_mode][i].addr_read;
+        W64 itlb_addr = ctx.tlb_table[!ctx.kernel_mode][i].addr_code;
+        if((dtlb_addr ) != -1) {
+            dtlb.insert(dtlb_addr);
+        }
+        if((itlb_addr) != -1) {
+            itlb.insert(itlb_addr);
+        }
+    }
+}
+
 void ThreadContext::init() {
   rob_states.reset();
   //
@@ -136,6 +149,9 @@ void ThreadContext::init() {
   rob_tlb_miss_list("tlb-miss", rob_states, 0);
   rob_memory_fence_list("memory-fence", rob_states, 0);
   rob_ready_to_commit_queue("ready-to-commit", rob_states, ROB_STATE_READY);
+
+  // Setup TLB of each thread
+  setupTLB();
 
   reset();
   coreid = core.coreid;
@@ -2236,6 +2252,18 @@ OutOfOrderCore& OutOfOrderModel::coreof(W8 coreid) {
   return *ooomodel.cores[coreid];
 }
 
+extern "C" void ptl_flush_bbcache(int8_t context_id) {
+    if(in_simulation) {
+      foreach(i, NUM_SIM_CORES) {
+        bbcache[i].flush(context_id);
+        OutOfOrderCore& core = coreof(i);
+        foreach(i, NUMBER_OF_THREAD_PER_CORE) {
+            core.threads[i]->dtlb.flush_all();
+            core.threads[i]->itlb.flush_all();
+        }
+      }
+    }
+}
 
 namespace Memory{
   using namespace OutOfOrderModel;

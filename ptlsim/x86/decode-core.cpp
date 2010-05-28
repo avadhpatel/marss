@@ -2410,11 +2410,3 @@ void dump_bbcache_to_logfile() {
         ptl_logfile << flush;
     }
 }
-
-extern "C" void ptl_flush_bbcache(int8_t context_id) {
-    if(in_simulation) {
-      foreach(i, NUM_SIM_CORES) {
-        bbcache[i].flush(context_id);
-      }
-    }
-}

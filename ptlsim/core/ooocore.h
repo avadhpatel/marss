@@ -1444,6 +1444,7 @@ namespace OutOfOrderModel {
 
         DTLB dtlb;
         ITLB itlb;
+        void setupTLB();
 
         // Fetch-related structures
         RIPVirtPhys fetchrip;
