@@ -4094,9 +4094,11 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
 
 #ifdef MARSS_QEMU
     if(ptl_start_sim_rip == pc_start) {
+      gen_jmp_im(pc_start - s->cs_base);
       gen_helper_switch_to_sim();
       gen_eob(s);
       ptl_start_sim_rip = -1;
+      return s->pc;
     }
 #endif
 

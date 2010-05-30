@@ -865,7 +865,7 @@ struct Context: public CPUX86State {
 
 	  // Clear the 2nd and 3rd bit as its used by PTLSim to indicate if
 	  // uop is executed correctly or not
-	  flags = (flags & ~(W64)(FLAG_INV));
+	  flags = (flags & ~(W64)(FLAG_INV|FLAG_WAIT));
 	  reg_flags = flags;
           internal_eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
 	  eip = eip + segs[R_CS].base;

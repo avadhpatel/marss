@@ -787,6 +787,10 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 		  exception = exception2;
 		  pfec = pfec2;
 		  physaddr = INVALID_PHYSADDR;
+
+          // Change the virtpage to exception address
+          // because TLB walk will check the virtaddr of the lsq entry
+          virtpage += (op_size - 1);
 	  }
   }
 
@@ -1946,6 +1950,11 @@ void ReorderBufferEntry::tlbwalk() {
   OutOfOrderCore& core = getcore();
   ThreadContext& thread = getthread();
   OutOfOrderCoreEvent* event;
+
+  // The virtpage contains the page address of exception.
+  // In case when load/store access is in two pages, and if
+  // the exception is in upper page, then virtpage contains the
+  // upper page addres.
   W64 virtaddr = virtpage;
 
   if(logable(6)) {
@@ -1976,10 +1985,12 @@ rob_cont:
       if(exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead) {
         handled = thread.ctx.try_handle_fault(virtaddr, st);
         if(!handled) {
-dofault:
             LoadStoreQueueEntry& state = *lsq;
-            handle_common_load_store_exceptions(state, virtaddr, virtaddr, exception, pfec);
+            handle_common_load_store_exceptions(state, origvirt, virtaddr, exception, pfec);
 
+            // Store the virtpage to origvirt, as origvirt is used for
+            // storing the page fault address
+            origvirt = virtpage;
             physreg->flags = (state.invalid << log2(FLAG_INV)) | ((!state.datavalid) << log2(FLAG_WAIT));
             physreg->data = state.data;
             assert(!physreg->valid());
@@ -1988,17 +1999,6 @@ dofault:
             changestate(thread.rob_ready_to_commit_queue);
 
             return;
-        }
-        exception = 0;
-      }
-
-      int size = (1 << uop.size);
-      int page_crossing = ((lowbits(virtaddr, 12) + (size - 1)) >> 12);
-      if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
-        handled_hi = thread.ctx.try_handle_fault(virtaddr + (size-1), st);
-        if(!handled_hi) {
-          origvirt = virtaddr + (size - 1);
-          goto dofault;
         }
         exception = 0;
       }
