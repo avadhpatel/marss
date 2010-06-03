@@ -103,8 +103,10 @@ class CPUController : public Controller
 		Interconnect *int_L1_d_;
 		int icacheLineBits_;
 		int dcacheLineBits_;
-		CacheStats *stats_;
-		CacheStats *totalStats_;
+		CacheStats *userStats_;
+		CacheStats *totalUserStats_;
+		CacheStats *kernelStats_;
+		CacheStats *totalKernelStats_;
 
 		Signal cacheAccess_;
 		Signal queueAccess_;

@@ -35,8 +35,12 @@
 #include <cacheConstants.h>
 #include <memoryStats.h>
 
-#define UPDATE_MESI_TRANS_STATS(old_state, new_state) \
-    stats_->mesi_stats.state_transition[(old_state << 2) | new_state]++;
+#define UPDATE_MESI_TRANS_STATS(old_state, new_state, mode) \
+    if(mode) { /* kernel mode */ \
+        kernelStats_->mesi_stats.state_transition[(old_state << 2) | new_state]++; \
+    } else { \
+        userStats_->mesi_stats.state_transition[(old_state << 2) | new_state]++; \
+    }
 
 namespace Memory {
 
@@ -262,8 +266,10 @@ namespace Memory {
 
                 CacheType type_;
                 CacheLinesBase *cacheLines_;
-                CacheStats *stats_;
-                CacheStats *totalStats_;
+                CacheStats *userStats_;
+                CacheStats *totalUserStats_;
+                CacheStats *kernelStats_;
+                CacheStats *totalKernelStats_;
 
                 // No of bits needed to find Cache Line address
                 int cacheLineBits_;

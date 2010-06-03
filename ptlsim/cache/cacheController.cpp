@@ -152,7 +152,6 @@ void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::print(ostream& os) co
 	}
 }
 
-
 CacheController::CacheController(W8 coreid, char *name,
 		MemoryHierarchy *memoryHierarchy, CacheType type) :
 	Controller(coreid, name, memoryHierarchy)
@@ -167,30 +166,26 @@ CacheController::CacheController(W8 coreid, char *name,
 			cacheLines_ = new L1ICacheLines(L1I_READ_PORT, L1I_WRITE_PORT);
 			cacheLineBits_ = log2(L1I_LINE_SIZE);
 			cacheAccessLatency_ = L1I_LATENCY;
-			stats_ = &(per_core_cache_stats_ref(coreid).L1I);
-			totalStats_ = &(stats.memory.total.L1I);
+            SETUP_STATS(L1I);
 			break;
 		case L1_D_CACHE:
 			cacheLines_ = new L1DCacheLines(L1D_READ_PORT, L1D_WRITE_PORT);
 			cacheLineBits_ = log2(L1D_LINE_SIZE);
 			cacheAccessLatency_ = L1D_LATENCY;
-			stats_ = &(per_core_cache_stats_ref(coreid).L1D);
-			totalStats_ = &(stats.memory.total.L1D);
+            SETUP_STATS(L1D);
 			break;
 		case L2_CACHE:
 			cacheLines_ = new L2CacheLines(L2_READ_PORT, L2_WRITE_PORT);
 			cacheLineBits_ = log2(L2_LINE_SIZE);
 			cacheAccessLatency_ = L2_LATENCY;
-			stats_ = &(per_core_cache_stats_ref(coreid).L2);
-			totalStats_ = &(stats.memory.total.L2);
+            SETUP_STATS(L2);
 			prefetchEnabled_ = true;
 			break;
 		case L3_CACHE:
 			cacheLines_ = new L3CacheLines(L3_READ_PORT, L3_WRITE_PORT);
 			cacheLineBits_ = log2(L3_LINE_SIZE);
 			cacheAccessLatency_ = L3_LATENCY;
-			stats_ = &(per_core_cache_stats_ref(coreid).L3);
-			totalStats_ = &(stats.memory.total.L3);
+            SETUP_STATS(L3);
 			break;
 		default:
 			memdebug("Unknown type of cache: ", type_, endl);
@@ -375,10 +370,11 @@ bool CacheController::handle_interconnect_cb(void *arg)
 			memdebug("dependent entry: ", *dependsOn, endl);
 			dependsOn->depends = queueEntry->idx;
 			OP_TYPE type = queueEntry->request->get_type();
+            bool kernel_req = queueEntry->request->is_kernel();
 			if(type == MEMORY_OP_READ) {
-				STAT_UPDATE(cpurequest.stall.read.dependency++);
+				STAT_UPDATE(cpurequest.stall.read.dependency++, kernel_req);
 			} else if(type == MEMORY_OP_WRITE) {
-				STAT_UPDATE(cpurequest.stall.write.dependency++);
+				STAT_UPDATE(cpurequest.stall.write.dependency++, kernel_req);
 			}
 		} else {
 			cache_access_cb(queueEntry);
@@ -512,7 +508,7 @@ int CacheController::access_fast_path(Interconnect *interconnect,
      * level cache has to be updated
      */
 	if(hit && request->get_type() != MEMORY_OP_WRITE) {
-		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++);
+		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, request->is_kernel());
 		return cacheLines_->latency();
 	}
 
@@ -546,10 +542,11 @@ bool CacheController::cache_hit_cb(void *arg)
 			*queueEntry, endl);
 
 	OP_TYPE type = queueEntry->request->get_type();
+    bool kernel_req = queueEntry->request->is_kernel();
 	if(type == MEMORY_OP_READ) {
-		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++);
+		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, kernel_req);
 	} else if(type == MEMORY_OP_WRITE) {
-		STAT_UPDATE(cpurequest.count.hit.write.hit.hit++);
+		STAT_UPDATE(cpurequest.count.hit.write.hit.hit++, kernel_req);
 	}
 
 	if(queueEntry->prefetch) {
@@ -580,10 +577,11 @@ bool CacheController::cache_miss_cb(void *arg)
 	queueEntry->eventFlags[CACHE_MISS_EVENT]--;
 
 	OP_TYPE type = queueEntry->request->get_type();
+    bool kernel_req = queueEntry->request->is_kernel();
 	if(type == MEMORY_OP_READ) {
-		STAT_UPDATE(cpurequest.count.miss.read++);
+		STAT_UPDATE(cpurequest.count.miss.read++, kernel_req);
 	} else if(type == MEMORY_OP_WRITE) {
-		STAT_UPDATE(cpurequest.count.miss.write++);
+		STAT_UPDATE(cpurequest.count.miss.write++, kernel_req);
 	}
 
 	queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
@@ -721,10 +719,11 @@ bool CacheController::cache_access_cb(void *arg)
 		return true;
 	} else {
 		OP_TYPE type = queueEntry->request->get_type();
+        bool kernel_req = queueEntry->request->is_kernel();
 		if(type == MEMORY_OP_READ) {
-			STAT_UPDATE(cpurequest.stall.read.cache_port++);
+			STAT_UPDATE(cpurequest.stall.read.cache_port++, kernel_req);
 		} else if(type == MEMORY_OP_WRITE) {
-			STAT_UPDATE(cpurequest.stall.write.cache_port++);
+			STAT_UPDATE(cpurequest.stall.write.cache_port++, kernel_req);
 		}
 	}
 

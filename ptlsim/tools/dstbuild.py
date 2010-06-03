@@ -10,12 +10,17 @@ handlers=[]
 stack = []
 node = "root"
 topnode = ""
+ignore_line = False
+block_end_regex = None
 
 def register_handler(regex,handler):
     global handlers
     global regexs
+    global block_end_regex
     handlers+=[handler]
     regexs+=[re.compile(regex)]
+    if handler == block_end_handler:
+        block_end_regex = re.compile(regex)
 
 def rootnode_handler(matchstring):
     global node,topnode,depth,stack
@@ -49,6 +54,10 @@ def struct_handler(matchstring):
     print("%sDataStoreNodeTemplate& %s = %s(\"%s\"); {") \
         %(depth,node,prevnode,node)
     depth+='  '
+
+def operator_handler(matchstring):
+    global ignore_line
+    ignore_line = True
 
 def block_end_handler(matchstring):
     global stack, depth,node
@@ -106,7 +115,8 @@ def blank_handler(matchstring):
     pass
 
 def unrecognized_line(matchstring):
-    raise NameError("error")
+    print >> sys.stderr, "error in line: %s" % (matchstring.string)
+    raise NameError("error:")
 
 infile = open(sys.argv[1],'r')
 target =  sys.argv[2]
@@ -114,6 +124,7 @@ target =  sys.argv[2]
 register_handler("\s*struct\s+(\w+)\s*\{\s*\/\/\s*rootnode\:\s*(.*)",rootnode_handler)
 register_handler("^\s*struct\s+(\w+)\s*\{\s*\/\/\s*node:\s*(.*)",node_handler)
 register_handler("^\s*struct\s+(\w+)\s*\{",struct_handler)
+register_handler("^\s*[\s\w\+-=\(\)&]+\{\s*\/\/\s*operator\s*(.*)",operator_handler)
 register_handler("^\s*\}",block_end_handler)
 register_handler("^\s*(\w+)\s+(\w+)\s*\;",scalar_handler)
 register_handler("^\s*(\w+)\s+(\w+)\s*\[(.+)\]\s*\;\s*$",array_handler)
@@ -128,6 +139,12 @@ print("int main(int argc, char** argv) {");
 
 for line in f:
     line=line.rstrip()
+    # Ignore the lines if ignore_line flag is enabled
+    if ignore_line == True:
+        matchstring = block_end_regex.search(line)
+        if (matchstring) :
+            ignore_line = False
+        continue
     for regex, handler in zip(regexs,handlers):
         matchstring=regex.search(line)
         if(matchstring):

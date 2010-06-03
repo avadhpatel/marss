@@ -30,7 +30,34 @@
 
 //#include <dcache.h>
 
-#define STAT_UPDATE(expr) stats_->expr, totalStats_->expr
+#define SETUP_STATS(type) \
+   userStats_ = &(per_core_cache_stats_ref_with_stats(user_stats, coreid).type); \
+   totalUserStats_ = &(user_stats.memory.total.type); \
+   kernelStats_ = &(per_core_cache_stats_ref_with_stats(kernel_stats, coreid).type); \
+   totalKernelStats_ = &(kernel_stats.memory.total.type);
+
+
+// #define STAT_UPDATE(expr) stats_->expr, totalStats_->expr
+#define STAT_UPDATE(expr, mode) { \
+    if(mode) { /* kernel mode */ \
+        kernelStats_->expr, totalKernelStats_->expr; \
+    } else { \
+        userStats_->expr, totalUserStats_->expr; \
+    }\
+}
+
+struct stall_sub { // rootnode:summable
+    W64 dependency;
+    W64 cache_port;
+    W64 buffer_full;
+
+    stall_sub& operator+=(const stall_sub &rhs) { // operator
+        dependency += rhs.dependency;
+        cache_port += rhs.cache_port;
+        buffer_full += rhs.buffer_full;
+        return *this;
+    }
+};
 
 namespace Memory {
 
@@ -58,24 +85,32 @@ namespace Memory {
 					W64 read;
 					W64 write;
 				} miss;
+
+                count& operator+=(const count &rhs) { // operator
+                    hit.read.hit.hit += rhs.hit.read.hit.hit;
+                    hit.read.hit.forward += rhs.hit.read.hit.forward;
+                    hit.write.hit.hit += rhs.hit.write.hit.hit;
+                    hit.write.hit.forward += rhs.hit.write.hit.forward;
+                    miss.read += rhs.miss.read;
+                    miss.write += rhs.miss.write;
+                    return *this;
+                }
 			} count;
 
 			struct stall{ //node: summable
-				struct read{ //node: summable
-					W64 dependency;
-					W64 cache_port;
-					W64 buffer_full;
-				} read;
-
-				struct write{  //node: summable
-					W64 dependency;
-					W64 cache_port;
-					W64 buffer_full;
-				} write;
+                stall_sub read;
+                stall_sub write;
 			} stall;
 
 			W64 redirects;
 
+            cpurequest& operator+=(const cpurequest &rhs) { // operator
+                count += rhs.count;
+                stall.read += rhs.stall.read;
+                stall.write += rhs.stall.write;
+                redirects += rhs.redirects;
+                return *this;
+            }
 		} cpurequest ;
 
 		struct snooprequest { //node: summable
@@ -106,7 +141,33 @@ namespace Memory {
             } hit_state;
 
             W64 state_transition[17]; //histo: 0, 16, 1
+
+            mesi_stats& operator+=(const mesi_stats &rhs) { // operator
+                foreach(i, 5)
+                    hit_state.snoop[i] += rhs.hit_state.snoop[i];
+                foreach(i, 5)
+                    hit_state.cpu[i] += rhs.hit_state.cpu[i];
+                foreach(i, 17)
+                    state_transition[i] += rhs.state_transition[i];
+                return *this;
+            }
         } mesi_stats;
+
+        CacheStats& operator+=(const CacheStats &rhs) { // operator
+            cpurequest += rhs.cpurequest;
+            snooprequest.hit += rhs.snooprequest.hit;
+            snooprequest.miss += rhs.snooprequest.miss;
+            annul += rhs.annul;
+            queueFull += rhs.queueFull;
+            latency.IF += rhs.latency.IF;
+            latency.load += rhs.latency.load;
+            latency.store += rhs.latency.store;
+            lat_count.IF += rhs.lat_count.IF;
+            lat_count.load += rhs.lat_count.load;
+            lat_count.store += rhs.lat_count.store;
+            mesi_stats += rhs.mesi_stats;
+            return *this;
+        }
 	};
 
 	struct PerCoreCacheStats { // rootnode:
@@ -115,6 +176,15 @@ namespace Memory {
 		CacheStats L1D;
 		CacheStats L2;
 		CacheStats L3;
+
+        PerCoreCacheStats& operator+=(const PerCoreCacheStats &rhs) { // operator
+            CPUController += rhs.CPUController;
+            L1I += rhs.L1I;
+            L1D += rhs.L1D;
+            L2 += rhs.L2;
+            L3 += rhs.L3;
+            return *this;
+        }
 	};
 
     struct BusStats { // rootnode:
@@ -133,8 +203,22 @@ namespace Memory {
 
         W64 addr_bus_cycles;
         W64 data_bus_cycles;
-    };
 
+        BusStats& operator+=(const BusStats &rhs) { // operator
+            broadcasts.read += rhs.broadcasts.read;
+            broadcasts.write += rhs.broadcasts.write;
+            broadcasts.update += rhs.broadcasts.update;
+
+            broadcast_cycles.read += rhs.broadcast_cycles.read;
+            broadcast_cycles.write += rhs.broadcast_cycles.write;
+            broadcast_cycles.update += rhs.broadcast_cycles.update;
+
+            addr_bus_cycles += rhs.addr_bus_cycles;
+            data_bus_cycles += rhs.data_bus_cycles;
+
+            return *this;
+        }
+    };
 };
 
 #endif // MEMORY_STATS_H

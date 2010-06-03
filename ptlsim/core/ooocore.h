@@ -1407,6 +1407,8 @@ namespace OutOfOrderModel {
         OutOfOrderCore& core;
         OutOfOrderCore& getcore() const { return core; }
 
+        PTLsimStats *stats_;
+
         W8 threadid;
         W8 coreid;
         Context& ctx;
@@ -1548,6 +1550,8 @@ namespace OutOfOrderModel {
         Memory::MemoryHierarchy& memoryHierarchy;
         W8 coreid;
         OutOfOrderCore& getcore() const { return coreof(coreid); }
+
+        PTLsimStats *stats_;
 
         int threadcount;
         ThreadContext* threads[MAX_THREADS_PER_CORE];
@@ -1727,7 +1731,7 @@ namespace OutOfOrderModel {
         virtual bool init(PTLsimConfig& config);
         virtual int run(PTLsimConfig& config);
         virtual void dump_state(ostream& os);
-        virtual void update_stats(PTLsimStats& stats);
+        virtual void update_stats(PTLsimStats* stats);
         virtual void flush_tlb(Context& ctx);
         virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);
         void flush_all_pipelines();
@@ -1821,6 +1825,18 @@ namespace OutOfOrderModel {
     static const char* phys_reg_file_names[PHYS_REG_FILE_COUNT] = {"int", "fp", "st", "br"};
 };
 
+
+struct tlb_stat { // rootnode: summable
+    W64 hits;
+    W64 misses;
+
+    tlb_stat& operator+=(const tlb_stat &rhs) { // operator
+        hits += rhs.hits;
+        misses += rhs.misses;
+        return *this;
+    }
+};
+
 struct PerContextOutOfOrderCoreStats { // rootnode:
     struct fetch {
         struct stop { // node: summable
@@ -1834,12 +1850,38 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 full_width;
             W64 icache_stalled;
             W64 invalid_blocks;
+
+            stop& operator+=(const stop &rhs) { // operator
+                stalled += rhs.stalled;
+                icache_miss += rhs.icache_miss;
+                fetchq_full += rhs.fetchq_full;
+                issueq_quota_full += rhs.issueq_quota_full;
+                bogus_rip += rhs.bogus_rip;
+                microcode_assist += rhs.microcode_assist;
+                branch_taken += rhs.branch_taken;
+                full_width += rhs.full_width;
+                icache_stalled += rhs.icache_stalled;
+                invalid_blocks += rhs.invalid_blocks;
+                return *this;
+            }
         } stop;
         W64 opclass[OPCLASS_COUNT]; // label: opclass_names
         W64 width[OutOfOrderModel::FETCH_WIDTH+1]; // histo: 0, OutOfOrderModel::FETCH_WIDTH, 1
         W64 blocks;
         W64 uops;
         W64 user_insns;
+
+        fetch& operator+=(const fetch &rhs) { // operator
+            stop += rhs.stop;
+            foreach(i, OPCLASS_COUNT)
+                opclass[i] += rhs.opclass[i];
+            foreach(i, OutOfOrderModel::FETCH_WIDTH+1)
+                width[i] += rhs.width[i];
+            blocks += rhs.blocks;
+            uops += rhs.uops;
+            user_insns += rhs.user_insns;
+            return *this;
+        }
     } fetch;
 
     struct frontend {
@@ -1850,6 +1892,15 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 physregs_full;
             W64 ldq_full;
             W64 stq_full;
+            status& operator+=(const status &rhs) { // operator
+                complete += rhs.complete;
+                fetchq_empty += rhs.fetchq_empty;
+                rob_full += rhs.rob_full;
+                physregs_full += rhs.physregs_full;
+                ldq_full += rhs.ldq_full;
+                stq_full += rhs.stq_full;
+                return *this;
+            }
         } status;
         W64 width[OutOfOrderModel::FRONTEND_WIDTH+1]; // histo: 0, OutOfOrderModel::FRONTEND_WIDTH, 1
         struct renamed {
@@ -1857,15 +1908,41 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 reg;
             W64 flags;
             W64 reg_and_flags;
+            renamed& operator+=(const renamed &rhs) { // operator
+                none += rhs.none;
+                reg += rhs.reg;
+                flags += rhs.flags;
+                reg_and_flags += rhs.reg_and_flags;
+                return *this;
+            }
         } renamed;
         struct alloc {
             W64 reg;
             W64 ldreg;
             W64 sfr;
             W64 br;
+            alloc& operator+=(const alloc &rhs) { // operator
+                reg += rhs.reg;
+                ldreg += rhs.ldreg;
+                sfr += rhs.sfr;
+                br += rhs.br;
+                return *this;
+            }
         } alloc;
         // NOTE: This is capped at 255 consumers to keep the size reasonable:
         W64 consumer_count[256]; // histo: 0, 255, 1
+
+        frontend& operator+=(const frontend &rhs) { // operator
+            status += rhs.status;
+            foreach(i, OutOfOrderModel::FRONTEND_WIDTH+1)
+                width[i] += rhs.width[i];
+            renamed += rhs.renamed;
+            alloc += rhs.alloc;
+            foreach(i, 256)
+                consumer_count[i] += rhs.consumer_count[i];
+            return *this;
+        }
+
     } frontend;
 
     struct dispatch {
@@ -1875,7 +1952,22 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 deadlock_flushes;
             W64 deadlock_uops_flushed;
             W64 dependent_uops[OutOfOrderModel::ROB_SIZE+1]; // histo: 0, OutOfOrderModel::ROB_SIZE, 1
+            redispatch& operator+=(const redispatch &rhs) { // operator
+                trigger_uops += rhs.trigger_uops;
+                deadlock_flushes += rhs.deadlock_flushes;
+                deadlock_uops_flushed += rhs.deadlock_uops_flushed;
+                foreach(i, OutOfOrderModel::ROB_SIZE+1)
+                    dependent_uops[i] += rhs.dependent_uops[i];
+                return *this;
+            }
         } redispatch;
+
+        dispatch& operator+=(const dispatch &rhs) { // operator
+            foreach(i, OutOfOrderModel::MAX_CLUSTERS)
+                cluster[i] += rhs.cluster[i];
+            redispatch += rhs.redispatch;
+            return *this;
+        }
     } dispatch;
 
     struct issue {
@@ -1889,12 +1981,35 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 branch_mispredict;
             W64 exception;
             W64 complete;
+            result& operator+=(const result &rhs) { // operator
+                no_fu += rhs.no_fu;
+                replay += rhs.replay;
+                misspeculated += rhs.misspeculated;
+                refetch += rhs.refetch;
+                branch_mispredict += rhs.branch_mispredict;
+                exception += rhs.exception;
+                complete += rhs.complete;
+                return *this;
+            }
         } result;
         W64 opclass[OPCLASS_COUNT]; // label: opclass_names
+
+        issue& operator+=(const issue &rhs) { // operator
+            uops += rhs.uops;
+            result += rhs.result;
+            foreach(i, OPCLASS_COUNT)
+                opclass[i] += rhs.opclass[i];
+            return *this;
+        }
     } issue;
 
     struct writeback {
         W64 writebacks[OutOfOrderModel::PHYS_REG_FILE_COUNT]; // label: OutOfOrderModel::phys_reg_file_names
+        writeback& operator+=(const writeback &rhs) { // operator
+            foreach(i, OutOfOrderModel::PHYS_REG_FILE_COUNT)
+                writebacks[i] += rhs.writebacks[i];
+            return *this;
+        }
     } writeback;
 
     struct commit {
@@ -1913,6 +2028,18 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 memlocked;
             W64 stop;
             W64 dcache_stall;
+            result& operator+=(const result &rhs) { // operator
+                none += rhs.none;
+                ok += rhs.ok;
+                exception += rhs.exception;
+                skipblock += rhs.skipblock;
+                barrier += rhs.barrier;
+                smc += rhs.smc;
+                memlocked += rhs.memlocked;
+                stop += rhs.stop;
+                dcache_stall += rhs.dcache_stall;
+                return *this;
+            }
         } result;
 
         struct fail { // node: summable
@@ -1930,6 +2057,23 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 tlb_miss_list;
             W64 memory_fence_list;
             W64 ready_to_commit_queue;
+            fail& operator+=(const fail &rhs) { // operator
+                free_list += rhs.free_list;
+                frontend_list += rhs.frontend_list;
+                ready_to_dispatch_list += rhs.ready_to_dispatch_list;
+                dispatched_list += rhs.dispatched_list;
+                ready_to_issue_list += rhs.ready_to_issue_list;
+                ready_to_store_list += rhs.ready_to_store_list;
+                ready_to_load_list += rhs.ready_to_load_list;
+                issued_list += rhs.issued_list;
+                completed_list += rhs.completed_list;
+                ready_to_writeback_list += rhs.ready_to_writeback_list;
+                cache_miss_list += rhs.cache_miss_list;
+                tlb_miss_list += rhs.tlb_miss_list;
+                memory_fence_list += rhs.memory_fence_list;
+                ready_to_commit_queue += rhs.ready_to_commit_queue;
+                return *this;
+            }
         } fail;
 
         struct setflags { // node: summable
@@ -1938,6 +2082,17 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
         } setflags;
 
         W64 opclass[OPCLASS_COUNT]; // label: opclass_names
+
+        commit& operator+=(const commit &rhs) { // operator
+            uops += rhs.uops;
+            insns += rhs.insns;
+            // TODO : calculate correct uipc and ipc
+            result += rhs.result;
+            fail += rhs.fail;
+            setflags.yes += rhs.setflags.yes;
+            setflags.no += rhs.setflags.no;
+            return *this;
+        }
     } commit;
 
     struct branchpred {
@@ -1955,7 +2110,27 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
             W64 pops;
             W64 underflows;
             W64 annuls;
+            ras& operator+=(const ras &rhs) { // operator
+                pushes += rhs.pushes;
+                overflows += rhs.overflows;
+                pops += rhs.pops;
+                underflows += rhs.underflows;
+                annuls += rhs.annuls;
+                return *this;
+            }
         } ras;
+
+        branchpred& operator+=(const branchpred &rhs) { // operator
+            predictions += rhs.predictions;
+            updates += rhs.updates;
+            foreach(i, 2) cond[i] += rhs.cond[i];
+            foreach(i, 2) indir[i] += rhs.indir[i];
+            foreach(i, 2) ret[i] += rhs.ret[i];
+            foreach(i, 2) summary[i] += rhs.summary[i];
+            ras += rhs.ras;
+            return *this;
+        }
+
     } branchpred;
 
     struct dcache {
@@ -1976,13 +2151,41 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
                     W64 fence;
                     W64 bank_conflict;
                     W64 dcache_stall;
+                    replay& operator+=(const replay &rhs) { // operator
+                        sfr_addr_and_data_not_ready += rhs.sfr_addr_and_data_not_ready;
+                        sfr_addr_not_ready += rhs.sfr_addr_not_ready;
+                        sfr_data_not_ready += rhs.sfr_data_not_ready;
+                        missbuf_full += rhs.missbuf_full;
+                        interlocked += rhs.interlocked;
+                        interlock_overflow += rhs.interlock_overflow;
+                        fence += rhs.fence;
+                        bank_conflict += rhs.bank_conflict;
+                        dcache_stall += rhs.dcache_stall;
+                        return *this;
+                    }
                 } replay;
+
+                issue& operator+=(const issue &rhs) { // operator
+                    complete += rhs.complete;
+                    miss += rhs.miss;
+                    exception += rhs.exception;
+                    ordering += rhs.ordering;
+                    unaligned += rhs.unaligned;
+                    replay += rhs.replay;
+                    return *this;
+                }
             } issue;
 
             struct forward { // node: summable
                 W64 cache;
                 W64 sfr;
                 W64 sfr_and_cache;
+                forward& operator+=(const forward &rhs) { // operator
+                    cache += rhs.cache;
+                    sfr += rhs.sfr;
+                    sfr_and_cache += rhs.sfr_and_cache;
+                    return *this;
+                }
             } forward;
 
             struct dependency { // node: summable
@@ -1992,17 +2195,44 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
                 W64 stq_address_not_ready;
                 W64 fence;
                 W64 mmio;
+                dependency& operator+=(const dependency &rhs) { // operator
+                    independent += rhs.independent;
+                    predicted_alias_unresolved += rhs.predicted_alias_unresolved;
+                    stq_address_match += rhs.stq_address_match;
+                    stq_address_not_ready += rhs.stq_address_not_ready;
+                    fence += rhs.fence;
+                    mmio += rhs.mmio;
+                    return *this;
+                }
             } dependency;
 
             struct type { // node: summable
                 W64 aligned;
                 W64 unaligned;
                 W64 internal;
+                type& operator+=(const type &rhs) { // operator
+                    aligned += rhs.aligned;
+                    unaligned += rhs.unaligned;
+                    internal += rhs.internal;
+                    return *this;
+                }
             } type;
 
             W64 size[4]; // label: sizeshift_names
 
             W64 datatype[DATATYPE_COUNT]; // label: datatype_names
+
+            load& operator+=(const load &rhs) { // operator
+                issue += rhs.issue;
+                forward += rhs.forward;
+                dependency += rhs.dependency;
+                type += rhs.type;
+                foreach(i, 4)
+                    size[i] += rhs.size[i];
+                foreach(i, DATATYPE_COUNT)
+                    datatype[i] += rhs.datatype[i];
+                return *this;
+            }
         } load;
 
         struct store {
@@ -2022,45 +2252,104 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
                     W64 fence;
                     W64 parallel_aliasing;
                     W64 bank_conflict;
+                    replay& operator+=(const replay &rhs) { // operator
+                        sfr_addr_and_data_not_ready += rhs.sfr_addr_and_data_not_ready;
+                        sfr_addr_not_ready += rhs.sfr_addr_not_ready;
+                        sfr_data_not_ready += rhs.sfr_data_not_ready;
+                        sfr_addr_and_data_and_data_to_store_not_ready += rhs.sfr_addr_and_data_and_data_to_store_not_ready;
+                        sfr_addr_and_data_to_store_not_ready += rhs.sfr_addr_and_data_to_store_not_ready;
+                        sfr_data_and_data_to_store_not_ready += rhs.sfr_data_and_data_to_store_not_ready;
+                        interlocked += rhs.interlocked;
+                        fence += rhs.fence;
+                        parallel_aliasing += rhs.parallel_aliasing;
+                        bank_conflict += rhs.bank_conflict;
+                        return *this;
+                    }
                 } replay;
+
+                issue& operator+=(const issue &rhs) { // operator
+                    complete += rhs.complete;
+                    exception += rhs.exception;
+                    ordering += rhs.ordering;
+                    unaligned += rhs.unaligned;
+                    replay += rhs.replay;
+                    return *this;
+                }
             } issue;
 
             struct forward { // node: summable
                 W64 zero;
                 W64 sfr;
+                forward& operator+=(const forward &rhs) { // operator
+                    zero += rhs.zero;
+                    sfr += rhs.sfr;
+                    return *this;
+                }
             } forward;
 
             struct type { // node: summable
                 W64 aligned;
                 W64 unaligned;
                 W64 internal;
+                type& operator+=(const type &rhs) { // operator
+                    aligned += rhs.aligned;
+                    unaligned += rhs.unaligned;
+                    internal += rhs.internal;
+                    return *this;
+                }
             } type;
 
             W64 size[4]; // label: sizeshift_names
 
             W64 datatype[DATATYPE_COUNT]; // label: datatype_names
+            store& operator+=(const store &rhs) { // operator
+                issue += rhs.issue;
+                forward += rhs.forward;
+                type += rhs.type;
+                foreach(i, 4)
+                    size[i] += rhs.size[i];
+                foreach(i, DATATYPE_COUNT)
+                    datatype[i] += rhs.datatype[i];
+                return *this;
+            }
         } store;
 
         struct fence { // node: summable
             W64 lfence;
             W64 sfence;
             W64 mfence;
+            fence& operator+=(const fence &rhs) { // operator
+                lfence += rhs.lfence;
+                sfence += rhs.sfence;
+                mfence += rhs.mfence;
+                return *this;
+            }
         } fence;
 
-        struct dtlb { // node: summable
-            W64 hits;
-            W64 misses;
-        } dtlb;
+        tlb_stat dtlb;
+        tlb_stat itlb;
 
-        struct itlb { // node: summable
-            W64 hits;
-            W64 misses;
-        } itlb;
+        dcache& operator+=(const dcache &rhs) { // operator
+            load += rhs.load;
+            store += rhs.store;
+            fence += rhs.fence;
+            dtlb += rhs.dtlb;
+            itlb += rhs.itlb;
+            return *this;
+        }
     } dcache;
 
     W64 interrupt_requests;
     W64 cpu_exit_requests;
     W64 cycles_in_pause;
+
+    PerContextOutOfOrderCoreStats& operator+=(const PerContextOutOfOrderCoreStats &rhs) { // operator
+        dcache += rhs.dcache;
+        interrupt_requests += rhs.interrupt_requests;
+        cpu_exit_requests += rhs.cpu_exit_requests;
+        cycles_in_pause += rhs.cycles_in_pause;
+        return *this;
+    }
 };
 
 //
@@ -2077,6 +2366,20 @@ struct OutOfOrderCoreStats { // rootnode:
             W64 br[OutOfOrderModel::MAX_PHYSREG_STATE]; // label: OutOfOrderModel::physreg_state_names
         } source;
         W64 width[OutOfOrderModel::DISPATCH_WIDTH+1]; // histo: 0, OutOfOrderModel::DISPATCH_WIDTH, 1
+
+        dispatch& operator+=(const dispatch &rhs) { // operator
+            foreach(i, OutOfOrderModel::MAX_PHYSREG_STATE)
+                source.integer[i] += rhs.source.integer[i];
+            foreach(i, OutOfOrderModel::MAX_PHYSREG_STATE)
+                source.fp[i] += rhs.source.fp[i];
+            foreach(i, OutOfOrderModel::MAX_PHYSREG_STATE)
+                source.st[i] += rhs.source.st[i];
+            foreach(i, OutOfOrderModel::MAX_PHYSREG_STATE)
+                source.br[i] += rhs.source.br[i];
+            foreach(i, OutOfOrderModel::DISPATCH_WIDTH+1)
+                width[i] += rhs.width[i];
+            return *this;
+        }
     } dispatch;
 
     struct issue {
@@ -2096,6 +2399,31 @@ struct OutOfOrderCoreStats { // rootnode:
             W64 all[OutOfOrderModel::MAX_ISSUE_WIDTH+1]; // histo: 0, OutOfOrderModel::MAX_ISSUE_WIDTH, 1
 #endif
         } width;
+
+        issue& operator+=(const issue &rhs) { // operator
+            foreach(i, OutOfOrderModel::MAX_PHYSREG_STATE)
+                source.integer[i] += rhs.source.integer[i];
+            foreach(i, OutOfOrderModel::MAX_PHYSREG_STATE)
+                source.fp[i] += rhs.source.fp[i];
+            foreach(i, OutOfOrderModel::MAX_PHYSREG_STATE)
+                source.st[i] += rhs.source.st[i];
+            foreach(i, OutOfOrderModel::MAX_PHYSREG_STATE)
+                source.br[i] += rhs.source.br[i];
+#ifdef MULTI_IQ
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.int0[i] += rhs.width.int0[i];
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.int1[i] += rhs.width.int1[i];
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.ld[i] += rhs.width.ld[i];
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.fp[i] += rhs.width.fp[i];
+#else
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.all[i] += rhs.width.all[i];
+#endif
+            return *this;
+        }
     } issue;
 
     struct writeback {
@@ -2109,6 +2437,23 @@ struct OutOfOrderCoreStats { // rootnode:
             W64 all[OutOfOrderModel::MAX_ISSUE_WIDTH+1]; // histo: 0, OutOfOrderModel::MAX_ISSUE_WIDTH, 1
 #endif
         } width;
+
+        writeback& operator+=(const writeback &rhs) { // operator
+#ifdef MULTI_IQ
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.int0[i] += rhs.width.int0[i];
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.int1[i] += rhs.width.int1[i];
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.ld[i] += rhs.width.ld[i];
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.fp[i] += rhs.width.fp[i];
+#else
+            foreach(i, OutOfOrderModel::MAX_ISSUE_WIDTH+1)
+                width.all[i] += rhs.width.all[i];
+#endif
+            return *this;
+        }
     } writeback;
 
     struct commit {
@@ -2120,6 +2465,15 @@ struct OutOfOrderCoreStats { // rootnode:
         W64 free_regs_recycled;
 
         W64 width[OutOfOrderModel::COMMIT_WIDTH+1]; // histo: 0, OutOfOrderModel::COMMIT_WIDTH, 1
+
+        commit& operator+=(const commit &rhs) { // operator
+            freereg.pending += rhs.freereg.pending;
+            freereg.free += rhs.freereg.free;
+            free_regs_recycled += rhs.free_regs_recycled;
+            foreach(i, OutOfOrderModel::COMMIT_WIDTH+1)
+                width[i] += rhs.width[i];
+            return *this;
+        }
     } commit;
 
     struct branchpred {
@@ -2137,7 +2491,28 @@ struct OutOfOrderCoreStats { // rootnode:
             W64 pops;
             W64 underflows;
             W64 annuls;
+
+            ras& operator+=(const ras &rhs) { // operator
+                pushes += rhs.pushes;
+                overflows += rhs.overflows;
+                pops += rhs.pops;
+                underflows += rhs.underflows;
+                annuls += rhs.annuls;
+                return *this;
+            }
         } ras;
+
+        branchpred& operator+=(const branchpred &rhs) { // operator
+            predictions += rhs.predictions;
+            updates += rhs.updates;
+            foreach(i, 2) cond[i] += rhs.cond[i];
+            foreach(i, 2) indir[i] += rhs.indir[i];
+            foreach(i, 2) ret[i] += rhs.ret[i];
+            foreach(i, 2) summary[i] += rhs.summary[i];
+            ras += rhs.ras;
+            return *this;
+        }
+
     } branchpred;
 
     PerContextOutOfOrderCoreStats total;
@@ -2161,9 +2536,47 @@ struct OutOfOrderCoreStats { // rootnode:
             double transfer;
             double writeback;
             double commit;
+
+            cputime& operator+=(const cputime& rhs) { // operator
+                fetch += rhs.fetch;
+                decode += rhs.decode;
+                rename += rhs.rename;
+                frontend += rhs.frontend;
+                dispatch += rhs.dispatch;
+                issue += rhs.issue;
+                issueload += rhs.issueload;
+                issuestore += rhs.issuestore;
+                complete += rhs.complete;
+                transfer += rhs.transfer;
+                writeback += rhs.writeback;
+                commit += rhs.commit;
+                return *this;
+            }
         } cputime;
+
+        simulator& operator+=(const simulator &rhs) { // operator
+            total_time += rhs.total_time;
+            cputime += rhs.cputime;
+            return *this;
+        }
     } simulator;
 
+    OutOfOrderCoreStats& operator+=(const OutOfOrderCoreStats &rhs) { // operator
+
+        cycles += rhs.cycles;
+        dispatch += rhs.dispatch;
+        issue += rhs.issue;
+        writeback += rhs.writeback;
+        commit += rhs.commit;
+        branchpred += rhs.branchpred;
+        total += rhs.total;
+        vcpu0 += rhs.vcpu0;
+        vcpu1 += rhs.vcpu1;
+        vcpu2 += rhs.vcpu2;
+        vcpu3 += rhs.vcpu3;
+        simulator += rhs.simulator;
+        return *this;
+    }
 
 };
 

@@ -28,7 +28,10 @@
 //
 PTLsimConfig config;
 ConfigurationParser<PTLsimConfig> configparser;
-PTLsimStats stats;
+PTLsimStats *stats;
+PTLsimStats user_stats;
+PTLsimStats kernel_stats;
+PTLsimStats global_stats;
 PTLsimMachine ptl_machine;
 
 ofstream ptl_logfile;
@@ -421,15 +424,15 @@ void capture_stats_snapshot(const char* name) {
     PTLsimMachine::getcurrent()->update_stats(stats);
   }
 
-  setzero(stats.snapshot_name);
+  setzero(stats->snapshot_name);
 
   if (name) {
     stringbuf sb;
-    strncpy(stats.snapshot_name, name, sizeof(stats.snapshot_name));
+    strncpy(stats->snapshot_name, name, sizeof(stats->snapshot_name));
   }
 
-  stats.snapshot_uuid = statswriter.next_uuid();
-  statswriter.write(&stats, name);
+  stats->snapshot_uuid = statswriter.next_uuid();
+  statswriter.write(stats, name);
 }
 
 void flush_stats() {
@@ -526,7 +529,7 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
       if (!(config.run | config.native | config.kill))
         cerr << "Simulator is now waiting for a 'run' command.", endl, flush;
     }
-    print_banner(ptl_logfile, stats, argc, argv);
+    print_banner(ptl_logfile, *stats, argc, argv);
     print_sysinfo(ptl_logfile);
     cerr << flush;
     ptl_logfile << config;
@@ -554,7 +557,7 @@ PTLsimMachine dummymachine;
 
 bool PTLsimMachine::init(PTLsimConfig& config) { return false; }
 int PTLsimMachine::run(PTLsimConfig& config) { return 0; }
-void PTLsimMachine::update_stats(PTLsimStats& stats) { return; }
+void PTLsimMachine::update_stats(PTLsimStats* stats) { return; }
 void PTLsimMachine::dump_state(ostream& os) { return; }
 void PTLsimMachine::flush_tlb(Context& ctx) { return; }
 void PTLsimMachine::flush_tlb_virt(Context& ctx, Waddr virtaddr) { return; }
@@ -637,6 +640,10 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
         }
         assert(machine);
         machine->initialized = 0;
+        setzero(user_stats);
+        setzero(kernel_stats);
+        setzero(global_stats);
+        stats = &user_stats;
     }
 
     qemu_free(config_str);
@@ -785,72 +792,72 @@ void print_stats_in_log(){
 
   // 1. execution key stats:
   // uops_in_mode: kernel and user
-  ptl_logfile << " kernel-insns ", (stats.external.total.insns_in_mode.kernel64 * 100.0) / total_user_insns_committed, endl;
-  ptl_logfile << " user-insns ", (stats.external.total.insns_in_mode.user64 * 100.0) / total_user_insns_committed, endl;
+  ptl_logfile << " kernel-insns ", (stats->external.total.insns_in_mode.kernel64 * 100.0) / total_user_insns_committed, endl;
+  ptl_logfile << " user-insns ", (stats->external.total.insns_in_mode.user64 * 100.0) / total_user_insns_committed, endl;
   // cycles_in_mode: kernel and user
-  ptl_logfile << " kernel-cycles ", (stats.external.total.cycles_in_mode.kernel64 * 100.0) / sim_cycle, endl;
-  ptl_logfile << " user-cycles ", (stats.external.total.cycles_in_mode.user64 * 100.0) / sim_cycle, endl;
+  ptl_logfile << " kernel-cycles ", (stats->external.total.cycles_in_mode.kernel64 * 100.0) / sim_cycle, endl;
+  ptl_logfile << " user-cycles ", (stats->external.total.cycles_in_mode.user64 * 100.0) / sim_cycle, endl;
   //#define OPCLASS_BRANCH                  (OPCLASS_COND_BRANCH|OPCLASS_INDIR_BRANCH|OPCLASS_UNCOND_BRANCH|OPCLASS_ASSIST)
 
   //#define OPCLASS_LOAD                    (1 << 11)
   //#define OPCLASS_STORE                   (1 << 12)
 
   // opclass: load, store, branch,
-  W64 total_uops = stats.ooocore_context_total.commit.uops;
+  W64 total_uops = stats->ooocore_context_total.commit.uops;
   ptl_logfile << " total_uop ", total_uops, endl;
 
-  ptl_logfile << " total_load ", stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)], endl;
-  ptl_logfile << " load_percentage ", (stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)] * 100.0 )/ (total_uops * 1.0), endl;
-  ptl_logfile << " total_store ", stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)], endl;
-  ptl_logfile << " store_percentage ", (stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)] * 100.0)/(total_uops * 1.0), endl;
-  ptl_logfile << " total_branch ", stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)], endl;
-  ptl_logfile << " branch_percentage ", (stats.ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)] * 100.0)/(total_uops * 1.0), endl;
+  ptl_logfile << " total_load ", stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)], endl;
+  ptl_logfile << " load_percentage ", (stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)] * 100.0 )/ (total_uops * 1.0), endl;
+  ptl_logfile << " total_store ", stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)], endl;
+  ptl_logfile << " store_percentage ", (stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)] * 100.0)/(total_uops * 1.0), endl;
+  ptl_logfile << " total_branch ", stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)], endl;
+  ptl_logfile << " branch_percentage ", (stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)] * 100.0)/(total_uops * 1.0), endl;
   // branch prediction accuracy
-  ptl_logfile << " branch-accuracy ", double (stats.ooocore_context_total.branchpred.cond[1] * 100.0)/double (stats.ooocore_context_total.branchpred.cond[0] + stats.ooocore_context_total.branchpred.cond[1]), endl;
+  ptl_logfile << " branch-accuracy ", double (stats->ooocore_context_total.branchpred.cond[1] * 100.0)/double (stats->ooocore_context_total.branchpred.cond[0] + stats->ooocore_context_total.branchpred.cond[1]), endl;
 
   // 2. simulation speed:
-  ptl_logfile << " elapse_seconds ", stats.elapse_seconds, endl;
+  ptl_logfile << " elapse_seconds ", stats->elapse_seconds, endl;
   // CPS : number of similated cycle per second
-  ptl_logfile << " CPS ",  W64(double(sim_cycle) / double(stats.elapse_seconds)), endl;
+  ptl_logfile << " CPS ",  W64(double(sim_cycle) / double(stats->elapse_seconds)), endl;
   // IPS : number of instruction commited per second
-  ptl_logfile << " IPS ", W64(double(total_user_insns_committed) / double(stats.elapse_seconds)), endl;
+  ptl_logfile << " IPS ", W64(double(total_user_insns_committed) / double(stats->elapse_seconds)), endl;
 
   // 3. performance:
   // IPC : number of instruction per second
   ptl_logfile << " total_cycle ", sim_cycle, endl;
-  ptl_logfile << " per_vcpu_IPC ", stats.ooocore_context_total.commit.ipc, endl;
+  ptl_logfile << " per_vcpu_IPC ", stats->ooocore_context_total.commit.ipc, endl;
   ptl_logfile << " total_IPC ",  double(total_user_insns_committed) / double(sim_cycle), endl;
 
   // 4. internconnection related
-  struct CacheStats::cpurequest::count &count_L1I = stats.memory.total.L1I.cpurequest.count;
+  struct CacheStats::cpurequest::count &count_L1I = stats->memory.total.L1I.cpurequest.count;
   W64 hit_L1I = count_L1I.hit.read.hit.hit + count_L1I.hit.read.hit.forward +  count_L1I.hit.write.hit.hit + count_L1I.hit.write.hit.forward;
   W64 miss_L1I = count_L1I.miss.read +  count_L1I.miss.write;
   ptl_logfile << " L1I_hit_rate ", double(hit_L1I * 100.0) / double (hit_L1I + miss_L1I), endl;
 
-  struct CacheStats::cpurequest::count &count_L1D = stats.memory.total.L1D.cpurequest.count;
+  struct CacheStats::cpurequest::count &count_L1D = stats->memory.total.L1D.cpurequest.count;
   W64 hit_L1D = count_L1D.hit.read.hit.hit + count_L1D.hit.read.hit.forward +  count_L1D.hit.write.hit.hit + count_L1D.hit.write.hit.forward;
   W64 miss_L1D = count_L1D.miss.read +  count_L1D.miss.write;
   ptl_logfile << " L1D_hit_rate ", double(hit_L1D * 100.0) / double (hit_L1D + miss_L1D), endl;
 
-  struct CacheStats::cpurequest::count &count_L2 = stats.memory.total.L2.cpurequest.count;
+  struct CacheStats::cpurequest::count &count_L2 = stats->memory.total.L2.cpurequest.count;
   W64 hit_L2 = count_L2.hit.read.hit.hit + count_L2.hit.read.hit.forward +  count_L2.hit.write.hit.hit + count_L2.hit.write.hit.forward;
   W64 miss_L2 = count_L2.miss.read +  count_L2.miss.write;
   ptl_logfile << " L2_hit_rate ", double(hit_L2 * 100.0) / double (hit_L2 + miss_L2), endl;
 
   // average load latency
-  ptl_logfile << " L1I_IF_latency ", double (stats.memory.total.L1I.latency.IF) / double (stats.memory.total.L1I.lat_count.IF), endl;
-  ptl_logfile << " L1D_load_latency ", double (stats.memory.total.L1D.latency.load) / double (stats.memory.total.L1D.lat_count.load), endl;
-  ptl_logfile << " L1_read_latency ", double (stats.memory.total.L1I.latency.IF + stats.memory.total.L1D.latency.load) / double (stats.memory.total.L1I.lat_count.IF + stats.memory.total.L1D.lat_count.load), endl;
-  ptl_logfile << " L1D_store_latency ", double (stats.memory.total.L1D.latency.store) / double (stats.memory.total.L1D.lat_count.store), endl;
+  ptl_logfile << " L1I_IF_latency ", double (stats->memory.total.L1I.latency.IF) / double (stats->memory.total.L1I.lat_count.IF), endl;
+  ptl_logfile << " L1D_load_latency ", double (stats->memory.total.L1D.latency.load) / double (stats->memory.total.L1D.lat_count.load), endl;
+  ptl_logfile << " L1_read_latency ", double (stats->memory.total.L1I.latency.IF + stats->memory.total.L1D.latency.load) / double (stats->memory.total.L1I.lat_count.IF + stats->memory.total.L1D.lat_count.load), endl;
+  ptl_logfile << " L1D_store_latency ", double (stats->memory.total.L1D.latency.store) / double (stats->memory.total.L1D.lat_count.store), endl;
 
-  ptl_logfile << " L2_IF_latency ", double (stats.memory.total.L2.latency.IF) / double (stats.memory.total.L2.lat_count.IF), endl;
-  ptl_logfile << " L2_load_latency ", double (stats.memory.total.L2.latency.load) / double (stats.memory.total.L2.lat_count.load), endl;
-  ptl_logfile << " L2_read_latency ", double (stats.memory.total.L2.latency.IF + stats.memory.total.L2.latency.load) / double (stats.memory.total.L2.lat_count.IF + stats.memory.total.L2.lat_count.load), endl;
-  ptl_logfile << " L2_store_latency ", double (stats.memory.total.L2.latency.store) / double (stats.memory.total.L2.lat_count.store), endl;
+  ptl_logfile << " L2_IF_latency ", double (stats->memory.total.L2.latency.IF) / double (stats->memory.total.L2.lat_count.IF), endl;
+  ptl_logfile << " L2_load_latency ", double (stats->memory.total.L2.latency.load) / double (stats->memory.total.L2.lat_count.load), endl;
+  ptl_logfile << " L2_read_latency ", double (stats->memory.total.L2.latency.IF + stats->memory.total.L2.latency.load) / double (stats->memory.total.L2.lat_count.IF + stats->memory.total.L2.lat_count.load), endl;
+  ptl_logfile << " L2_store_latency ", double (stats->memory.total.L2.latency.store) / double (stats->memory.total.L2.lat_count.store), endl;
 
   // average load miss latency
-   ptl_logfile << " L1_read_miss_latency ", double (stats.memory.total.L1I.latency.IF + stats.memory.total.L1D.latency.load) / double (count_L1I.miss.read +  count_L2.miss.read), endl;
-   ptl_logfile << " L1_write_miss_latency ", double (stats.memory.total.L1D.latency.store) / double (count_L1D.miss.write), endl;
+   ptl_logfile << " L1_read_miss_latency ", double (stats->memory.total.L1I.latency.IF + stats->memory.total.L1D.latency.load) / double (count_L1I.miss.read +  count_L2.miss.read), endl;
+   ptl_logfile << " L1_write_miss_latency ", double (stats->memory.total.L1D.latency.store) / double (count_L1D.miss.write), endl;
 }
 
 void setup_qemu_switch_all_ctx(Context& last_ctx) {
@@ -986,7 +993,7 @@ extern "C" uint8_t ptl_simulate() {
 	curr_ptl_machine = null;
 
 	W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
-	stats.elapse_seconds = seconds;
+	stats->elapse_seconds = seconds;
 	stringbuf sb;
 	sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_user_insns_committed, " instructions and ",
 	   seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_user_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_user_insns_committed) / double(sim_cycle), ")", endl;
@@ -1012,10 +1019,20 @@ extern "C" uint8_t ptl_simulate() {
         qemu_take_screenshot((char*)config.screenshot_file);
     }
 
-	const char *final_name = "final";
-    strncpy(stats.snapshot_name, final_name, sizeof(final_name));
-	stats.snapshot_uuid = statswriter.next_uuid();
-	statswriter.write(&stats, final_name);
+	const char *user_name = "user";
+    strncpy(user_stats.snapshot_name, user_name, sizeof(user_name));
+	user_stats.snapshot_uuid = statswriter.next_uuid();
+	statswriter.write(&user_stats, user_name);
+
+	const char *kernel_name = "kernel";
+    strncpy(kernel_stats.snapshot_name, kernel_name, sizeof(kernel_name));
+	kernel_stats.snapshot_uuid = statswriter.next_uuid();
+	statswriter.write(&kernel_stats, kernel_name);
+
+	const char *global_name = "final";
+    strncpy(global_stats.snapshot_name, global_name, sizeof(global_name));
+	global_stats.snapshot_uuid = statswriter.next_uuid();
+	statswriter.write(&global_stats, global_name);
 
 	statswriter.close();
 
@@ -1130,7 +1147,7 @@ bool simulate(const char* machinename) {
   curr_ptl_machine = null;
 
   W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
-  stats.elapse_seconds = seconds;
+  stats->elapse_seconds = seconds;
   stringbuf sb;
   sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_user_insns_committed, " instructions and ",
     seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_user_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_user_insns_committed) / double(sim_cycle), ")", endl;

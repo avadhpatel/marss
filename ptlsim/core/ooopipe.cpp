@@ -2362,7 +2362,7 @@ int ReorderBufferEntry::commit() {
     per_context_ooocore_stats_update(threadid, commit.insns++);
     thread.total_insns_committed++;
 
-    stats.summary.insns++;
+    stats->summary.insns++;
 	// if(uop.rip.rip > 0x7f0000000000)
 		// per_core_event_update(core.coreid, insns_in_mode.userlib++);
   }
@@ -2371,7 +2371,7 @@ int ReorderBufferEntry::commit() {
 	  ptl_logfile << "ROB Commit Done...\n", flush;
   }
 
-  stats.summary.uops++;
+  stats->summary.uops++;
   total_uops_committed++;
   per_context_ooocore_stats_update(threadid, commit.uops++);
   thread.total_uops_committed++;

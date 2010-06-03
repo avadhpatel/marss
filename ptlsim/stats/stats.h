@@ -30,24 +30,25 @@ using Memory::BusStats;
 
 #define increment_clipped_histogram(h, slot, incr) h[clipto(W64(slot), W64(0), W64(lengthof(h)-1))] += incr;
 
-#define per_ooo_core_stats_ref(coreid) (*(((OutOfOrderCoreStats*)&stats.ooocore.c0) + (coreid)))
-#define per_ooo_core_stats_update(coreid, expr) stats.ooocore_total.expr, stats.ooocore.total.expr, per_ooo_core_stats_ref(coreid).expr
+#define per_ooo_core_stats_ref(coreid) (*(((OutOfOrderCoreStats*)&stats->ooocore.c0) + (coreid)))
+#define per_ooo_core_stats_update(coreid, expr) stats->ooocore_total.expr, stats->ooocore.total.expr, per_ooo_core_stats_ref(coreid).expr
 
 #define per_context_ooocore_stats_ref(coreid, threadid) (*(((PerContextOutOfOrderCoreStats*)&(per_ooo_core_stats_ref(coreid).vcpu0)) + (threadid)))
-#define per_context_ooocore_stats_update(threadid, expr)  stats.ooocore_context_total.expr, per_ooo_core_stats_ref(coreid).total.expr, per_context_ooocore_stats_ref(coreid, threadid).expr
+#define per_context_ooocore_stats_update(threadid, expr)  stats->ooocore_context_total.expr, per_ooo_core_stats_ref(coreid).total.expr, per_context_ooocore_stats_ref(coreid, threadid).expr
 
-#define per_dcache_stats_ref(coreid) (*(((DataCacheStats*)&stats.dcache.c0) + (coreid)))
-#define per_dcache_stats_update(coreid, expr) stats.dcache.total.expr, per_dcache_stats_ref(coreid).expr
+#define per_dcache_stats_ref(coreid) (*(((DataCacheStats*)&stats->dcache.c0) + (coreid)))
+#define per_dcache_stats_update(coreid, expr) stats->dcache.total.expr, per_dcache_stats_ref(coreid).expr
 
 #define per_context_dcache_stats_ref(coreid, threadid) (*(((PerContextDataCacheStats*)&(per_dcache_stats_ref(coreid).vcpu0)) + (threadid)))
 #define per_context_dcache_stats_update(coreid, threadid, expr) per_dcache_stats_ref(coreid).total.expr, per_context_dcache_stats_ref(coreid, threadid).expr
 
-#define per_core_cache_stats_ref(coreid) (*(((PerCoreCacheStats*)&stats.memory.c0) + (coreid)))
-#define per_core_cache_stats_update(coreid, expr) stats.memory.total.expr, per_core_cache_stats_ref(coreid).expr
+#define per_core_cache_stats_ref(coreid) (*(((PerCoreCacheStats*)&stats->memory.c0) + (coreid)))
+#define per_core_cache_stats_ref_with_stats(st, coreid) (*(((PerCoreCacheStats*)&st.memory.c0) + (coreid)))
+#define per_core_cache_stats_update(coreid, expr) stats->memory.total.expr, per_core_cache_stats_ref(coreid).expr
 
-#define per_core_cache_stats_L1I_update(coreid, expr) stats.memory.total.L1I.expr, per_core_cache_stats_ref(coreid).L1I.expr
-#define per_core_cache_stats_L1D_update(coreid, expr) stats.memory.total.L1D.expr, per_core_cache_stats_ref(coreid).L1D.expr
-#define per_core_cache_stats_L2_update(coreid, expr) stats.memory.total.L2.expr, per_core_cache_stats_ref(coreid).L2.expr
+#define per_core_cache_stats_L1I_update(coreid, expr) stats->memory.total.L1I.expr, per_core_cache_stats_ref(coreid).L1I.expr
+#define per_core_cache_stats_L1D_update(coreid, expr) stats->memory.total.L1D.expr, per_core_cache_stats_ref(coreid).L1D.expr
+#define per_core_cache_stats_L2_update(coreid, expr) stats->memory.total.L2.expr, per_core_cache_stats_ref(coreid).L2.expr
 
 #define per_core_cache_stats(coreid, type, expr) do { \
           switch (type) { \
@@ -65,8 +66,10 @@ using Memory::BusStats;
             abort(); \
           } } while(0);
 
-#define per_core_event_ref(coreid) (*(((PerCoreEvents*)&stats.external.c0) + (coreid)))
-#define per_core_event_update(coreid, expr) stats.external.total.expr, per_core_event_ref(coreid).expr
+// #define per_core_event_ref(coreid) (*(((PerCoreEvents*)&stats->external.c0) + (coreid)))
+// #define per_core_event_update(coreid, expr) stats->external.total.expr, per_core_event_ref(coreid).expr
+#define per_core_event_ref(coreid) (*(((PerCoreEvents*)&global_stats.external.c0) + (coreid)))
+#define per_core_event_update(coreid, expr) global_stats.external.total.expr, per_core_event_ref(coreid).expr
 
 //
 // This file is run through dstbuild to auto-generate
@@ -95,12 +98,29 @@ struct EventsInMode { // rootnode: summable
   W64 userlib;
   W64 microcode;
   W64 idle;
+  EventsInMode& operator+=(const EventsInMode &rhs) { // operator
+      user64 += rhs.user64;
+      user32 += rhs.user32;
+      kernel64 += rhs.kernel64;
+      kernel32 += rhs.kernel32;
+      legacy16 += rhs.legacy16;
+      userlib += rhs.userlib;
+      microcode += rhs.microcode;
+      idle += rhs.idle;
+      return *this;
+  }
 };
 
 struct PerCoreEvents { // rootnode:
     EventsInMode cycles_in_mode;
     EventsInMode insns_in_mode;
     EventsInMode uops_in_mode;
+    PerCoreEvents& operator+=(const PerCoreEvents &rhs) { // operator
+        cycles_in_mode += rhs.cycles_in_mode;
+        insns_in_mode += rhs.insns_in_mode;
+        uops_in_mode += rhs.uops_in_mode;
+        return *this;
+    }
 };
 
 struct PTLsimStats { // rootnode:
@@ -112,6 +132,18 @@ struct PTLsimStats { // rootnode:
     W64 insns;
     W64 uops;
     W64 basicblocks;
+
+    summary& operator +=(const summary &rhs) { // operator
+        cycles += rhs.cycles;
+        insns += rhs.insns;
+        uops += rhs.uops;
+        basicblocks += rhs.basicblocks;
+        return *this;
+    }
+
+    const summary operator +(const summary &other) { // operator
+        return summary(*this) += other;
+    }
   } summary;
 
   struct simulator {
@@ -157,6 +189,18 @@ struct PTLsimStats { // rootnode:
       W64 x86_insns;
       W64 uops;
       W64 bytes;
+
+      throughput& operator +=(const throughput &rhs) { // operator
+          basic_blocks += rhs.basic_blocks;
+          x86_insns += rhs.x86_insns;
+          uops += rhs.uops;
+          bytes += rhs.bytes;
+          return *this;
+      }
+
+      const throughput operator +(const throughput &other) { // operator
+          return throughput(*this) += other;
+      }
     } throughput;
 
     W64 x86_decode_type[DECODE_TYPE_COUNT]; // label: decode_type_names
@@ -164,6 +208,16 @@ struct PTLsimStats { // rootnode:
     struct bb_decode_type { // node: summable
       W64 all_insns_fast;
       W64 some_complex_insns;
+
+      bb_decode_type& operator+=(const bb_decode_type &rhs) { // operator
+          all_insns_fast += rhs.all_insns_fast;
+          some_complex_insns += rhs.some_complex_insns;
+          return *this;
+      }
+
+      const bb_decode_type operator +(const bb_decode_type &other) { // operator
+          return bb_decode_type(*this) += other;
+      }
     } bb_decode_type;
 
     // Alignment of instructions within pages
@@ -187,6 +241,28 @@ struct PTLsimStats { // rootnode:
     } pagecache;
 
     W64 reclaim_rounds;
+
+    decoder& operator +=(const decoder &rhs) { // operator
+        throughput += rhs.throughput;
+        foreach(i, DECODE_TYPE_COUNT)
+            x86_decode_type[i] += rhs.x86_decode_type[i];
+        bb_decode_type += rhs.bb_decode_type;
+
+        page_crossings.within_page += rhs.page_crossings.within_page;
+        page_crossings.crosses_page += rhs.page_crossings.crosses_page;
+
+        pagecache.count += rhs.pagecache.count;
+        pagecache.inserts += rhs.pagecache.inserts;
+        foreach(i, INVALIDATE_REASON_COUNT)
+            pagecache.invalidates[i] += rhs.pagecache.invalidates[i];
+
+        reclaim_rounds += rhs.reclaim_rounds;
+        return *this;
+    }
+
+    const decoder operator +(const decoder &other) { // operator
+        return decoder(*this) += other;
+    }
   } decoder;
 
   OutOfOrderCoreStats ooocore_total;
@@ -213,6 +289,30 @@ struct PTLsimStats { // rootnode:
 //     OutOfOrderCoreStats c14;
 //     OutOfOrderCoreStats c15;
 
+    ooocore& operator +=(const ooocore &rhs) { // operator
+        total += rhs.total;
+        c0 += rhs.c0;
+        c1 += rhs.c1;
+        c2 += rhs.c2;
+        c3 += rhs.c3;
+        c4 += rhs.c4;
+        c5 += rhs.c5;
+        c6 += rhs.c6;
+        c7 += rhs.c7;
+        // c8 += rhs.c8;
+        // c9 += rhs.c9;
+        // c10 += rhs.c10;
+        // c11 += rhs.c11;
+        // c12 += rhs.c12;
+        // c13 += rhs.c13;
+        // c14 += rhs.c14;
+        // c15 += rhs.c15;
+        return *this;
+    }
+
+    const ooocore operator +(const ooocore &other) { // operator
+        return ooocore(*this) += other;
+    }
   } ooocore;
 
   //  DataCacheStats dcache;
@@ -251,6 +351,28 @@ struct PTLsimStats { // rootnode:
 	PerCoreEvents c5;
 	PerCoreEvents c6;
 	PerCoreEvents c7;
+
+    external& operator +=(const external &rhs) { // operator
+        foreach(i, ASSIST_COUNT)
+            assists[i] += rhs.assists[i];
+        foreach(i, L_ASSIST_COUNT)
+            l_assists[i] += rhs.l_assists[i];
+
+        total += rhs.total;
+        c0 += rhs.c0;
+        c1 += rhs.c1;
+        c2 += rhs.c2;
+        c3 += rhs.c3;
+        c4 += rhs.c4;
+        c5 += rhs.c5;
+        c6 += rhs.c6;
+        c7 += rhs.c7;
+        return *this;
+    }
+
+    const external operator +(const external &other) { // operator
+        return external(*this) += other;
+    }
   } external;
 
 
@@ -281,10 +403,64 @@ struct PTLsimStats { // rootnode:
 	W64 dcache_latency[200]; // histo: 0, 199, 1
 	W64 icache_latency[200]; // histo: 0, 199, 1
 
+    memorysystem& operator +=(const memorysystem &rhs) { // operator
+        total += rhs.total;
+        c0 += rhs.c0;
+        c1 += rhs.c1;
+        c2 += rhs.c2;
+        c3 += rhs.c3;
+        c4 += rhs.c4;
+        c5 += rhs.c5;
+        c6 += rhs.c6;
+        c7 += rhs.c7;
+        // c8 += rhs.c8;
+        // c9 += rhs.c9;
+        // c10 += rhs.c10;
+        // c11 += rhs.c11;
+        // c12 += rhs.c12;
+        // c13 += rhs.c13;
+        // c14 += rhs.c14;
+        // c15 += rhs.c15;
+
+        bus += rhs.bus;
+
+        // FIXME : Currently dstbuild.py can't handle in function
+        // '{' so dont add them
+        foreach(i, 200)
+            dcache_latency[i] += rhs.dcache_latency[i];
+        foreach(i, 200)
+            icache_latency[i] += rhs.icache_latency[i];
+        return *this; //in memory
+    }
+
+    const memorysystem operator +(const memorysystem &other) { // operator
+        return memorysystem(*this) += other;
+    }
   } memory;
+
+  PTLsimStats& operator +=(const PTLsimStats &rhs) { // operator
+      summary += rhs.summary;
+
+      // Copy the 'simulator' struct
+      memcpy(&simulator, &(rhs.simulator), sizeof(simulator));
+
+      decoder += rhs.decoder;
+      ooocore += rhs.ooocore;
+      external += rhs.external;
+      memory += rhs.memory;
+
+      return *this;
+  }
+
+  const PTLsimStats operator +(const PTLsimStats &other) { // operator
+      return PTLsimStats(*this) += other;
+  }
 };
 
 
-extern struct PTLsimStats stats;
+extern struct PTLsimStats *stats;
+extern struct PTLsimStats user_stats;
+extern struct PTLsimStats kernel_stats;
+extern struct PTLsimStats global_stats;
 
 #endif // _STATS_H_

@@ -1365,8 +1365,8 @@ struct SequentialCore {
       seq_total_user_insns_committed += uop.eom;
       total_user_insns_committed += uop.eom && (!suppress_total_user_insn_count_updates_in_seqcore);
       user_insns += uop.eom;
-      stats.summary.insns += uop.eom;
-      stats.summary.uops++;
+      stats->summary.insns += uop.eom;
+      stats->summary.uops++;
 
 
       current_uuid++;
@@ -1610,7 +1610,7 @@ struct SequentialMachine: public PTLsimMachine {
       iterations++;
       sim_cycle++;
       unhalted_cycle_count += (running_thread_count > 0);
-      stats.summary.cycles++;
+      stats->summary.cycles++;
 
       if unlikely (exiting) break;
     }
@@ -1654,7 +1654,7 @@ struct SequentialMachine: public PTLsimMachine {
   // while it runs; this is only for cleanup tasks
   // or computing derived values.
   //
-  virtual void update_stats(PTLsimStats& stats) {
+  virtual void update_stats(PTLsimStats* stats) {
     // (nop)
   }
 

@@ -243,8 +243,10 @@ class CacheController : public Controller
 
 		CacheType type_;
 		CacheLinesBase *cacheLines_;
-		CacheStats *stats_;
-		CacheStats *totalStats_;
+		CacheStats *userStats_;
+		CacheStats *totalUserStats_;
+		CacheStats *kernelStats_;
+		CacheStats *totalKernelStats_;
 
 
 		// No of bits needed to find Cache Line address

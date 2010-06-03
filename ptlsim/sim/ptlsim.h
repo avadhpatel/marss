@@ -51,7 +51,7 @@ struct PTLsimMachine {
   PTLsimMachine() { initialized = 0; stopped = 0;}
   virtual bool init(PTLsimConfig& config);
   virtual int run(PTLsimConfig& config);
-  virtual void update_stats(PTLsimStats& stats);
+  virtual void update_stats(PTLsimStats* stats);
   virtual void dump_state(ostream& os);
   virtual void flush_tlb(Context& ctx);
   virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);

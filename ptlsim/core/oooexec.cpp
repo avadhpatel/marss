@@ -416,7 +416,7 @@ int ReorderBufferEntry::issue() {
   // needed. This is our last chance to do so.
   //
 
-  stats.summary.uops++;
+  stats->summary.uops++;
   per_context_ooocore_stats_update(threadid, issue.uops++);
 
   fu = lsbindex(executable_on_fu);
@@ -2542,6 +2542,7 @@ int OutOfOrderCore::issue(int cluster) {
     int threadid, idx;
     decode_tag(robid, threadid, idx);
     ThreadContext* thread = threads[threadid];
+    stats = thread->stats_;
     assert(inrange(idx, 0, ROB_SIZE-1));
     ReorderBufferEntry& rob = thread->ROB[idx];
 
@@ -2558,6 +2559,7 @@ int OutOfOrderCore::issue(int cluster) {
         issuecount++;
   }
 
+  stats = stats_;
   per_cluster_stats_update(per_ooo_core_stats_ref(coreid).issue.width, cluster, [min(issuecount, MAX_ISSUE_WIDTH)]++);
 
   return issuecount;

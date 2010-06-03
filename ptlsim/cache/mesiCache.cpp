@@ -145,29 +145,25 @@ CacheController::CacheController(W8 coreid, char *name,
             cacheLines_ = new L1ICacheLines(L1I_READ_PORT, L1I_WRITE_PORT);
             cacheLineBits_ = log2(L1I_LINE_SIZE);
             cacheAccessLatency_ = L1I_LATENCY;
-            stats_ = &(per_core_cache_stats_ref(coreid).L1I);
-            totalStats_ = &(stats.memory.total.L1I);
+            SETUP_STATS(L1I);
             break;
         case L1_D_CACHE:
             cacheLines_ = new L1DCacheLines(L1D_READ_PORT, L1D_WRITE_PORT);
             cacheLineBits_ = log2(L1D_LINE_SIZE);
             cacheAccessLatency_ = L1D_LATENCY;
-            stats_ = &(per_core_cache_stats_ref(coreid).L1D);
-            totalStats_ = &(stats.memory.total.L1D);
+            SETUP_STATS(L1D);
             break;
         case L2_CACHE:
             cacheLines_ = new L2CacheLines(L2_READ_PORT, L2_WRITE_PORT);
             cacheLineBits_ = log2(L2_LINE_SIZE);
             cacheAccessLatency_ = L2_LATENCY;
-            stats_ = &(per_core_cache_stats_ref(coreid).L2);
-            totalStats_ = &(stats.memory.total.L2);
+            SETUP_STATS(L2);
             break;
         case L3_CACHE:
             cacheLines_ = new L3CacheLines(L3_READ_PORT, L3_WRITE_PORT);
             cacheLineBits_ = log2(L3_LINE_SIZE);
             cacheAccessLatency_ = L3_LATENCY;
-            stats_ = &(per_core_cache_stats_ref(coreid).L3);
-            totalStats_ = &(stats.memory.total.L3);
+            SETUP_STATS(L3);
             break;
         default:
             memdebug("Unknown type of cache: ", type_, endl);
@@ -320,10 +316,11 @@ bool CacheController::handle_upper_interconnect(Message &message)
         memdebug("dependent entry: ", *dependsOn, endl);
         dependsOn->depends = queueEntry->idx;
         OP_TYPE type = queueEntry->request->get_type();
+        bool kernel_req = queueEntry->request->is_kernel();
         if(type == MEMORY_OP_READ) {
-            STAT_UPDATE(cpurequest.stall.read.dependency++);
+            STAT_UPDATE(cpurequest.stall.read.dependency++, kernel_req);
         } else if(type == MEMORY_OP_WRITE) {
-            STAT_UPDATE(cpurequest.stall.write.dependency++);
+            STAT_UPDATE(cpurequest.stall.write.dependency++, kernel_req);
         }
     } else {
         cache_access_cb(queueEntry);
@@ -395,11 +392,12 @@ MESICacheLineState CacheController::get_new_state(
     MESICacheLineState oldState = queueEntry->line->state;
     MESICacheLineState newState = MESI_INVALID;
     OP_TYPE type = queueEntry->request->get_type();
+    bool kernel_req = queueEntry->request->is_kernel();
 
     if(type == MEMORY_OP_EVICT) {
         if(isLowestPrivate_)
             send_evict_message(queueEntry);
-        UPDATE_MESI_TRANS_STATS(oldState, MESI_INVALID);
+        UPDATE_MESI_TRANS_STATS(oldState, MESI_INVALID, kernel_req);
         return MESI_INVALID;
     }
 
@@ -498,7 +496,7 @@ MESICacheLineState CacheController::get_new_state(
             memdebug("Invalid line state: ", oldState);
             assert(0);
     }
-    UPDATE_MESI_TRANS_STATS(oldState, newState);
+    UPDATE_MESI_TRANS_STATS(oldState, newState, kernel_req);
     return newState;
 }
 
@@ -507,11 +505,12 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
     MESICacheLineState oldState = queueEntry->line->state;
     MESICacheLineState newState = NO_MESI_STATES;
     OP_TYPE type = queueEntry->request->get_type();
+    bool kernel_req = queueEntry->request->is_kernel();
 
-    stats_->mesi_stats.hit_state.snoop[oldState]++;
+    STAT_UPDATE(mesi_stats.hit_state.snoop[oldState]++, kernel_req);
 
     if(type == MEMORY_OP_EVICT) {
-        UPDATE_MESI_TRANS_STATS(oldState, MESI_INVALID);
+        UPDATE_MESI_TRANS_STATS(oldState, MESI_INVALID, kernel_req);
         queueEntry->line->state = MESI_INVALID;
         clear_entry_cb(queueEntry);
         return;
@@ -574,7 +573,7 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
     }
 
     if(newState != NO_MESI_STATES)
-        UPDATE_MESI_TRANS_STATS(oldState, newState);
+        UPDATE_MESI_TRANS_STATS(oldState, newState, kernel_req);
 
     /* send back the response */
     queueEntry->sendTo = queueEntry->sender;
@@ -586,11 +585,12 @@ void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
     MESICacheLineState oldState = queueEntry->line->state;
     MESICacheLineState newState = NO_MESI_STATES;
     OP_TYPE type = queueEntry->request->get_type();
+    bool kernel_req = queueEntry->request->is_kernel();
 
-    stats_->mesi_stats.hit_state.cpu[oldState]++;
+    STAT_UPDATE(mesi_stats.hit_state.cpu[oldState]++, kernel_req);
 
     if(type == MEMORY_OP_EVICT) {
-        UPDATE_MESI_TRANS_STATS(oldState, MESI_INVALID);
+        UPDATE_MESI_TRANS_STATS(oldState, MESI_INVALID, kernel_req);
         queueEntry->line->state = MESI_INVALID;
         clear_entry_cb(queueEntry);
         return;
@@ -648,7 +648,7 @@ void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
     }
 
     if(newState != NO_MESI_STATES)
-        UPDATE_MESI_TRANS_STATS(oldState, newState);
+        UPDATE_MESI_TRANS_STATS(oldState, newState, kernel_req);
 }
 
 bool CacheController::is_line_valid(CacheLine *line)
@@ -850,7 +850,7 @@ int CacheController::access_fast_path(Interconnect *interconnect,
      */
     if(line && is_line_valid(line) &&
             request->get_type() != MEMORY_OP_WRITE) {
-        STAT_UPDATE(cpurequest.count.hit.read.hit.hit++);
+        STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, request->is_kernel());
         return cacheLines_->latency();
     }
 
@@ -892,17 +892,18 @@ bool CacheController::cache_hit_cb(void *arg)
         return true;
 
     queueEntry->eventFlags[CACHE_HIT_EVENT]--;
+    bool kernel_req = queueEntry->request->is_kernel();
 
     if(queueEntry->isSnoop) {
         handle_snoop_hit(queueEntry);
-        STAT_UPDATE(snooprequest.hit++);
+        STAT_UPDATE(snooprequest.hit++, kernel_req);
     } else {
         handle_local_hit(queueEntry);
         OP_TYPE type = queueEntry->request->get_type();
         if(type == MEMORY_OP_READ) {
-            STAT_UPDATE(cpurequest.count.hit.read.hit.hit++);
+            STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, kernel_req);
         } else if(type == MEMORY_OP_WRITE) {
-            STAT_UPDATE(cpurequest.count.hit.write.hit.hit++);
+            STAT_UPDATE(cpurequest.count.hit.write.hit.hit++, kernel_req);
         }
     }
 
@@ -933,7 +934,7 @@ bool CacheController::cache_miss_cb(void *arg)
         queueEntry->line = null;
         queueEntry->isShared = false;
         queueEntry->responseData = false;
-        STAT_UPDATE(snooprequest.miss++);
+        STAT_UPDATE(snooprequest.miss++, queueEntry->request->is_kernel());
     } else {
         if(queueEntry->line == null) {
             W64 oldTag = InvalidTag<W64>::INVALID;
@@ -947,10 +948,11 @@ bool CacheController::cache_miss_cb(void *arg)
                         request->get_physical_address()));
         }
         OP_TYPE type = queueEntry->request->get_type();
+        bool kernel_req = queueEntry->request->is_kernel();
         if(type == MEMORY_OP_READ) {
-            STAT_UPDATE(cpurequest.count.miss.read++);
+            STAT_UPDATE(cpurequest.count.miss.read++, kernel_req);
         } else if(type == MEMORY_OP_WRITE) {
-            STAT_UPDATE(cpurequest.count.miss.write++);
+            STAT_UPDATE(cpurequest.count.miss.write++, kernel_req);
         }
     }
 
@@ -1041,10 +1043,11 @@ bool CacheController::cache_access_cb(void *arg)
         return true;
     } else {
         OP_TYPE type = queueEntry->request->get_type();
+        bool kernel_req = queueEntry->request->is_kernel();
         if(type == MEMORY_OP_READ) {
-            STAT_UPDATE(cpurequest.stall.read.cache_port++);
+            STAT_UPDATE(cpurequest.stall.read.cache_port++, kernel_req);
         } else if(type == MEMORY_OP_WRITE) {
-            STAT_UPDATE(cpurequest.stall.write.cache_port++);
+            STAT_UPDATE(cpurequest.stall.write.cache_port++, kernel_req);
         }
     }
 

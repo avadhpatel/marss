@@ -69,7 +69,8 @@ BusInterconnect::BusInterconnect(char *name,
     dataBroadcastCompleted_.connect(signal_mem_ptr(*this,
                 &BusInterconnect::data_broadcast_completed_cb));
 
-    stats_ = &stats.memory.bus;
+    // FIXME : Currenlty all bus stats are going to global stats
+    stats_ = &global_stats.memory.bus;
 }
 
 void BusInterconnect::register_controller(Controller *controller)

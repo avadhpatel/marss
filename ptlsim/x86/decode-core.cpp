@@ -191,7 +191,7 @@ const char* assist_name(assist_func_t assist) {
 void update_assist_stats(assist_func_t assist) {
     int idx = assist_index(assist);
     assert(inrange(idx, 0, ASSIST_COUNT-1));
-    stats.external.assists[idx]++;
+    stats->external.assists[idx]++;
 }
 
 const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT] = {
@@ -224,7 +224,7 @@ const char* light_assist_name(light_assist_func_t assist) {
 }
 
 void update_light_assist_stats(int idx) {
-    stats.external.l_assists[idx]++;
+    stats->external.l_assists[idx]++;
 }
 
 void split_unaligned(const TransOp& transop, TransOpBuffer& buf) {
@@ -736,13 +736,13 @@ bool TraceDecoder::flush() {
         if (transop.rc < ARCHREG_COUNT) setbit(bb.usedregs, transop.rc);
     }
 
-    stats.decoder.throughput.uops += transbufcount;
+    stats->decoder.throughput.uops += transbufcount;
 
     if (!join_with_prev_insn) {
         bb.user_insn_count++;
         bb.bytes += bytes;
-        stats.decoder.throughput.x86_insns++;
-        stats.decoder.throughput.bytes += bytes;
+        stats->decoder.throughput.x86_insns++;
+        stats->decoder.throughput.bytes += bytes;
     }
 
     transbufcount = 0;
@@ -1574,8 +1574,8 @@ bool BasicBlockCache::invalidate(BasicBlock* bb, int reason) {
     }
 
     remove(bb);
-    stats.decoder.bbcache.count = bbcache[cpuid].count;
-    stats.decoder.bbcache.invalidates[reason]++;
+    stats->decoder.bbcache.count = bbcache[cpuid].count;
+    stats->decoder.bbcache.invalidates[reason]++;
 
     bb->free();
     return true;
@@ -1639,8 +1639,8 @@ bool BasicBlockCache::invalidate_page(Waddr mfn, int reason) {
     //  assert(pagelist->count() == 0);
 
     pagelist->clear();
-    stats.decoder.pagecache.count = bbpages.count;
-    stats.decoder.pagecache.invalidates[reason]++;
+    stats->decoder.pagecache.count = bbpages.count;
+    stats->decoder.pagecache.invalidates[reason]++;
 
     return true;
 }
@@ -1657,7 +1657,7 @@ int BasicBlockCache::reclaim(size_t bytesreq, int urgency) {
 
     if (DEBUG) ptl_logfile << "Reclaiming cached basic blocks at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits:", endl;
 
-    stats.decoder.reclaim_rounds++;
+    stats->decoder.reclaim_rounds++;
 
     W64 oldest = limits<W64>::max;
     W64 newest = 0;
@@ -1774,7 +1774,7 @@ void BasicBlockCache::flush(int8_t context_id) {
     if (logable(1))
         ptl_logfile << "Flushing basic block cache at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits:", endl;
 
-    stats.decoder.reclaim_rounds++;
+    stats->decoder.reclaim_rounds++;
 
     {
         Iterator iter(this);
@@ -2085,10 +2085,10 @@ bool TraceDecoder::translate() {
                     if (iscomplex) rc = decode_complex();
 
                     if unlikely (used_microcode_assist) {
-                        stats.decoder.x86_decode_type[DECODE_TYPE_ASSIST]++;
+                        stats->decoder.x86_decode_type[DECODE_TYPE_ASSIST]++;
                     } else {
-                        stats.decoder.x86_decode_type[DECODE_TYPE_FAST] += (!iscomplex);
-                        stats.decoder.x86_decode_type[DECODE_TYPE_COMPLEX] += iscomplex;
+                        stats->decoder.x86_decode_type[DECODE_TYPE_FAST] += (!iscomplex);
+                        stats->decoder.x86_decode_type[DECODE_TYPE_COMPLEX] += iscomplex;
                     }
 
                     break;
@@ -2097,10 +2097,10 @@ bool TraceDecoder::translate() {
         case 3:
         case 4:
         case 5:
-                stats.decoder.x86_decode_type[DECODE_TYPE_SSE]++;
+                stats->decoder.x86_decode_type[DECODE_TYPE_SSE]++;
                 rc = decode_sse(); break;
         case 6:
-                stats.decoder.x86_decode_type[DECODE_TYPE_X87]++;
+                stats->decoder.x86_decode_type[DECODE_TYPE_X87]++;
                 rc = decode_x87(); break;
         default: {
                      assert(false);
@@ -2115,8 +2115,8 @@ bool TraceDecoder::translate() {
 
     if (end_of_block) {
         // Block ended with a branch: close the uop and exit
-        stats.decoder.bb_decode_type.all_insns_fast += (!some_insns_complex);
-        stats.decoder.bb_decode_type.some_complex_insns += some_insns_complex;
+        stats->decoder.bb_decode_type.all_insns_fast += (!some_insns_complex);
+        stats->decoder.bb_decode_type.some_complex_insns += some_insns_complex;
         flush();
         return false;
     } else {
@@ -2133,8 +2133,8 @@ bool TraceDecoder::translate() {
                 this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
             }
             split_after();
-            stats.decoder.bb_decode_type.all_insns_fast += (!some_insns_complex);
-            stats.decoder.bb_decode_type.some_complex_insns += some_insns_complex;
+            stats->decoder.bb_decode_type.all_insns_fast += (!some_insns_complex);
+            stats->decoder.bb_decode_type.some_complex_insns += some_insns_complex;
             flush();
             return false;
         } else {
@@ -2228,10 +2228,10 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     bb->acquire();
 
     add(bb);
-    stats.decoder.bbcache.count = this->count;
-    stats.decoder.bbcache.inserts++;
+    stats->decoder.bbcache.count = this->count;
+    stats->decoder.bbcache.inserts++;
 
-    stats.decoder.throughput.basic_blocks++;
+    stats->decoder.throughput.basic_blocks++;
 
     BasicBlockChunkList* pagelist;
 
@@ -2240,8 +2240,8 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
         pagelist = new BasicBlockChunkList(bb->rip.mfnlo);
         pagelist->refcount++;
         bbpages.add(pagelist);
-        stats.decoder.pagecache.inserts++;
-        stats.decoder.pagecache.count = bbpages.count;
+        stats->decoder.pagecache.inserts++;
+        stats->decoder.pagecache.count = bbpages.count;
         pagelist->refcount--;
     }
     pagelist->refcount++;
@@ -2263,8 +2263,8 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
             pagelisthi = new BasicBlockChunkList(bb->rip.mfnhi);
             pagelisthi->refcount++;
             bbpages.add(pagelisthi);
-            stats.decoder.pagecache.inserts++;
-            stats.decoder.pagecache.count = bbpages.count;
+            stats->decoder.pagecache.inserts++;
+            stats->decoder.pagecache.count = bbpages.count;
             pagelisthi->refcount--;
         }
         pagelisthi->refcount++;

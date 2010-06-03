@@ -368,7 +368,17 @@ bool OutOfOrderCore::runcycle() {
     bool current_interrupts_pending = thread->ctx.check_events();
 	thread->handle_interrupt_at_next_eom = current_interrupts_pending;
     thread->prev_interrupts_pending = current_interrupts_pending;
+
+    if(thread->ctx.kernel_mode) {
+        thread->stats_ = &kernel_stats;
+    } else {
+        thread->stats_ = &user_stats;
+    }
   }
+
+  // Each core's thread-shared stats counter will be added to
+  // the thread-0's counters for simplicity
+  stats_ = threads[0]->stats_;
 
   //
   // Compute reserved issue queue entries to avoid starvation:
@@ -385,6 +395,7 @@ bool OutOfOrderCore::runcycle() {
     ThreadContext* thread = threads[i];
     assert(thread);
 
+    stats = thread->stats_;
     total_issueq_count += thread->issueq_count;
     if(thread->issueq_count < reserved_iq_entries_per_thread){
       total_issueq_reserved_free += reserved_iq_entries_per_thread - thread->issueq_count;
@@ -406,6 +417,7 @@ bool OutOfOrderCore::runcycle() {
       ThreadContext* thread = threads[i];
       assert(thread);
 
+      stats = thread->stats_;
       MYDEBUG << " TH[", thread->threadid, "] issueq_count[", cluster, "] ", thread->issueq_count[cluster], endl;
       assert(thread->issueq_count[cluster] >=0);
       total_issueq_count += thread->issueq_count[cluster];
@@ -481,6 +493,7 @@ bool OutOfOrderCore::runcycle() {
 		continue;
 	}
 
+    stats = thread->stats_;
     commitrc[tid] = thread->commit();
     for_each_cluster(j) thread->writeback(j);
     for_each_cluster(j) thread->transfer(j);
@@ -502,6 +515,7 @@ bool OutOfOrderCore::runcycle() {
   foreach (permute, threadcount) {
     int tid = add_index_modulo(round_robin_tid, +permute, threadcount);
     ThreadContext* thread = threads[tid];
+    stats = thread->stats_;
     thread->tlbwalk();
   }
 
@@ -534,6 +548,7 @@ bool OutOfOrderCore::runcycle() {
     ThreadContext* thread = threads[tid];
     if unlikely (!thread->ctx.running) continue;
 
+    stats = thread->stats_;
     for_each_cluster(j) { thread->complete(j); }
 
     dispatchrc[tid] = thread->dispatch();
@@ -564,6 +579,7 @@ bool OutOfOrderCore::runcycle() {
     foreach (i, threadcount) {
       priority_index[i] = i;
       ThreadContext* thread = threads[i];
+      stats = thread->stats_;
       priority_value[i] = thread->get_priority();
       if unlikely (!thread->ctx.running) priority_value[i] = limits<int>::max;
     }
@@ -584,6 +600,7 @@ bool OutOfOrderCore::runcycle() {
     int i = priority_index[j];
     ThreadContext* thread = threads[i];
     assert(thread);
+    stats = thread->stats_;
 	fetch_exception[i] = true;
     if unlikely (!thread->ctx.running) {
       continue;
@@ -622,6 +639,7 @@ bool OutOfOrderCore::runcycle() {
 
   foreach (i, threadcount) {
     ThreadContext* thread = threads[i];
+    stats = thread->stats_;
     if unlikely (!thread->ctx.running) continue;
     int rc = commitrc[i];
 	if (logable(9)) {
@@ -2039,8 +2057,9 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
                   exiting |= core.runcycle();
           }
 
-    stats.summary.cycles++;
+    global_stats.summary.cycles++;
     foreach (coreid, NUMBER_OF_CORES){
+      stats = cores[coreid]->stats_;
       per_ooo_core_stats_update(coreid, cycles++);
     }
     sim_cycle++;
@@ -2159,44 +2178,49 @@ namespace OutOfOrderModel {
 };
 
 /* this assume only one core in each machine, need to be fixed. */
-void OutOfOrderMachine::update_stats(PTLsimStats& stats) {
+void OutOfOrderMachine::update_stats(PTLsimStats* stats) {
 
-  //  foreach (vcpuid, contextcount) {
-  foreach (coreid, NUMBER_OF_CORES){
-    foreach (threadid, NUMBER_OF_THREAD_PER_CORE){
-      // need to update the count other wise the last one will be lost
-      ptl_logfile << " update mode count for ctx ", cores[coreid]->threads[threadid]->ctx.cpu_index, endl;
-      cores[coreid]->threads[threadid]->ctx.update_mode_count();
-      PerContextOutOfOrderCoreStats& s = per_context_ooocore_stats_ref(coreid , threadid);
-      s.issue.uipc = s.issue.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
-      s.commit.uipc = (double)s.commit.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
-      s.commit.ipc = (double)s.commit.insns / (double)per_ooo_core_stats_ref(coreid).cycles;
-    }
+  global_stats += user_stats + kernel_stats;
 
-  PerContextOutOfOrderCoreStats& s = per_ooo_core_stats_ref(coreid).total;
-  s.issue.uipc = s.issue.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
-  s.commit.uipc = (double)s.commit.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
-  s.commit.ipc = (double)s.commit.insns / (double)per_ooo_core_stats_ref(coreid).cycles;
+  // calculate ipc and other values for each stats
+  foreach(i, 3) {
+      stats = (i == 0) ? &user_stats : ((i == 1) ? &kernel_stats : &global_stats);
+      foreach (coreid, NUMBER_OF_CORES){
+          foreach (threadid, NUMBER_OF_THREAD_PER_CORE){
+              // need to update the count other wise the last one will be lost
+              ptl_logfile << " update mode count for ctx ", cores[coreid]->threads[threadid]->ctx.cpu_index, endl;
+              cores[coreid]->threads[threadid]->ctx.update_mode_count();
+              PerContextOutOfOrderCoreStats& s = per_context_ooocore_stats_ref(coreid , threadid);
+              s.issue.uipc = s.issue.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
+              s.commit.uipc = (double)s.commit.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
+              s.commit.ipc = (double)s.commit.insns / (double)per_ooo_core_stats_ref(coreid).cycles;
+          }
 
-  per_ooo_core_stats_update(coreid, simulator.total_time = cttotal.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.fetch = ctfetch.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.decode = ctdecode.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.rename = ctrename.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.frontend = ctfrontend.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.dispatch = ctdispatch.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.issue = ctissue.seconds() - (ctissueload.seconds() + ctissuestore.seconds()));
-  per_ooo_core_stats_update(coreid, simulator.cputime.issueload = ctissueload.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.issuestore = ctissuestore.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.complete = ctcomplete.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.transfer = cttransfer.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.writeback = ctwriteback.seconds());
-  per_ooo_core_stats_update(coreid, simulator.cputime.commit = ctcommit.seconds());
+          PerContextOutOfOrderCoreStats& s = per_ooo_core_stats_ref(coreid).total;
+          s.issue.uipc = s.issue.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
+          s.commit.uipc = (double)s.commit.uops / (double)per_ooo_core_stats_ref(coreid).cycles;
+          s.commit.ipc = (double)s.commit.insns / (double)per_ooo_core_stats_ref(coreid).cycles;
 
+          per_ooo_core_stats_update(coreid, simulator.total_time = cttotal.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.fetch = ctfetch.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.decode = ctdecode.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.rename = ctrename.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.frontend = ctfrontend.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.dispatch = ctdispatch.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.issue = ctissue.seconds() - (ctissueload.seconds() + ctissuestore.seconds()));
+          per_ooo_core_stats_update(coreid, simulator.cputime.issueload = ctissueload.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.issuestore = ctissuestore.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.complete = ctcomplete.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.transfer = cttransfer.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.writeback = ctwriteback.seconds());
+          per_ooo_core_stats_update(coreid, simulator.cputime.commit = ctcommit.seconds());
+
+      }
   }
   // this ipc is in fact for threads average, so if using smt, you might need to get per core ipc first.
-  stats.ooocore_context_total.issue.uipc = (double)stats.ooocore_context_total.issue.uops / (double)stats.ooocore_total.cycles;
-  stats.ooocore_context_total.commit.uipc = (double)stats.ooocore_context_total.commit.uops / (double)stats.ooocore_total.cycles;
-  stats.ooocore_context_total.commit.ipc = (double)stats.ooocore_context_total.commit.insns / (double)stats.ooocore_total.cycles;
+  global_stats.ooocore_context_total.issue.uipc = (double)global_stats.ooocore_context_total.issue.uops / (double)global_stats.ooocore_total.cycles;
+  global_stats.ooocore_context_total.commit.uipc = (double)global_stats.ooocore_context_total.commit.uops / (double)global_stats.ooocore_total.cycles;
+  global_stats.ooocore_context_total.commit.ipc = (double)global_stats.ooocore_context_total.commit.insns / (double)global_stats.ooocore_total.cycles;
 }
 
 //

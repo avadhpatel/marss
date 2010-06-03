@@ -129,6 +129,14 @@ class MemoryRequest: public selfqueuelink
 
 		stringbuf& get_history() { return *history; }
 
+        bool is_kernel() {
+            // based on owner RIP value
+            if(bits(ownerRIP_, 48, 16) != 0) {
+                return true;
+            }
+            return false;
+        }
+
 		ostream& print(ostream& os) const
 		{
 			os << "Memory Request: core[", coreId_, "] ";
