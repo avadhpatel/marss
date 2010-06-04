@@ -988,6 +988,7 @@ extern "C" uint8_t ptl_simulate() {
 	}
 
 
+    stats = &global_stats;
 	W64 tsc_at_end = rdtsc();
 	machine->update_stats(stats);
 	curr_ptl_machine = null;

@@ -446,6 +446,8 @@ struct PTLsimStats { // rootnode:
 
       decoder += rhs.decoder;
       ooocore += rhs.ooocore;
+      ooocore_total += rhs.ooocore_total;
+      ooocore_context_total += rhs.ooocore_context_total;
       external += rhs.external;
       memory += rhs.memory;
 

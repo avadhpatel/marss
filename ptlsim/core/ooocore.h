@@ -1326,7 +1326,7 @@ namespace OutOfOrderModel {
 
     // TLBs
     const int ITLB_SIZE = 32;
-    const int DTLB_SIZE = 32;
+    const int DTLB_SIZE = 128;
 
     //
     // TLB class with one-hot semantics. 36 bit tags are required since
@@ -2344,6 +2344,13 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
     W64 cycles_in_pause;
 
     PerContextOutOfOrderCoreStats& operator+=(const PerContextOutOfOrderCoreStats &rhs) { // operator
+        fetch += rhs.fetch;
+        frontend += rhs.frontend;
+        dispatch += rhs.dispatch;
+        issue += rhs.issue;
+        writeback += rhs.writeback;
+        commit += rhs.commit;
+        branchpred += rhs.branchpred;
         dcache += rhs.dcache;
         interrupt_requests += rhs.interrupt_requests;
         cpu_exit_requests += rhs.cpu_exit_requests;
