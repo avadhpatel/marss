@@ -31,7 +31,7 @@ if int(debug):
     env.Append(CCFLAGS = '-O')
 else:
     env.Append(CCFLAGS = '-g3')
-    env.Append(CCFLAGS = '-O2')
+    env.Append(CCFLAGS = '-O3 -march=native -mtune=native')
 
 google_perftools = ARGUMENTS.get('gperf', None)
 if google_perftools != None:
