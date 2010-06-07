@@ -83,6 +83,7 @@ void PTLsimConfig::reset() {
   enable_inline_mm_logging = 0;
   enable_mm_validate = 0;
   screenshot_file = "";
+  log_user_only = 0;
 
   event_log_enabled = 0;
   event_log_ring_buffer_size = 32768;
@@ -175,6 +176,7 @@ void PTLsimConfig::reset() {
   use_shared_L3 = 0;
 
   checker_enabled = 0;
+  checker_start_rip = INVALIDRIP;
 }
 
 template <>
@@ -213,6 +215,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(enable_inline_mm_logging,     "mm-log-inline",        "Print every memory manager request in the main log file");
   add(enable_mm_validate,           "mm-validate",          "Validate every memory manager request against internal structures (slow)");
   add(screenshot_file,              "screenshot",           "Takes screenshot of VM window at the end of simulation");
+  add(log_user_only,                "log-user-only",        "Only log the user mode activities");
 
   section("Event Ring Buffer Logging Control");
   add(event_log_enabled,            "ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
@@ -314,6 +317,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(use_shared_L3,               "use-shared-L3",               "set true to used a shared L3");
 
   add(checker_enabled, 		"enable-checker", 		"Enable emulation based checker");
+  add(checker_start_rip,          "checker-startrip",     "Start checker at specified RIP");
 };
 
 #ifndef CONFIG_ONLY
@@ -544,7 +548,10 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   }
 
   if(config.checker_enabled) {
-    enable_checker();
+    if(config.checker_start_rip == INVALIDRIP)
+        enable_checker();
+    else
+        config.checker_enabled = false;
   }
 
   return true;
@@ -727,6 +734,7 @@ void execute_checker() {
 
     in_simulation = 0;
 
+    checker_context->interrupt_request = 0;
     W64 old_eip = checker_context->eip;
     int old_exception_index = checker_context->exception_index;
     int ret;
@@ -736,6 +744,9 @@ void execute_checker() {
     checker_context->exception_index = old_exception_index;
 
     checker_context->setup_ptlsim_switch();
+
+    if(checker_context->interrupt_request != 0)
+        ptl_contexts[0]->interrupt_request = checker_context->interrupt_request;
 
     if(checker_context->kernel_mode) {
       // TODO : currently we skip the context switch from checker

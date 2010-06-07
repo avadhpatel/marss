@@ -1172,7 +1172,7 @@ bool ThreadContext::handle_barrier() {
             clear_checker();
           }
   } else {
-	  reset_fetch_unit(ctx.eip);
+      reset_fetch_unit(ctx.eip);
   }
 
   return true;
@@ -1969,7 +1969,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
   // All VCPUs are running:
   stopped = 0;
-  if unlikely (config.start_log_at_iteration && iterations >= config.start_log_at_iteration) {
+  if unlikely (config.start_log_at_iteration && iterations >= config.start_log_at_iteration && !config.log_user_only) {
     if unlikely (!logenable) ptl_logfile << "Start logging at level ", config.loglevel, " in cycle ", iterations, endl, flush;
     logenable = 1;
   }
@@ -2013,7 +2013,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
   // or any pending interrupt or CPU_EXIT_REQUEST from QEMU
 
   for (;;) {
-	  if unlikely ((!logenable) && iterations >= config.start_log_at_iteration) {
+	  if unlikely ((!logenable) && iterations >= config.start_log_at_iteration && !config.log_user_only) {
 		  ptl_logfile << "Start logging at level ", config.loglevel, " in cycle ", iterations, endl, flush;
 		  logenable = 1;
 	  }

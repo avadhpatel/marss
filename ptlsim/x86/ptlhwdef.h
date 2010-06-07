@@ -1124,10 +1124,7 @@ struct Context: public CPUX86State {
 	  return ;
   }
 
-  void update_mode(bool is_kernel) {
-	  update_mode_count();
-	  kernel_mode = is_kernel;
-  }
+  void update_mode(bool is_kernel);
 
   void cs_segment_updated() {
 	  SegmentCache *seg = &(this->segs[R_CS]);

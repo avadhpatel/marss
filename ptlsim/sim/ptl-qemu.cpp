@@ -748,6 +748,18 @@ void Context::update_mode_count() {
     }
 }
 
+void Context::update_mode(bool is_kernel) {
+    update_mode_count();
+    kernel_mode = is_kernel;
+    if(config.log_user_only) {
+        if(kernel_mode)
+            logenable = 0;
+        else
+            logenable = 1;
+    }
+}
+
+
 Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, int& mmio, PageFaultErrorCode& pfec, bool is_code) {
 
     exception = 0;

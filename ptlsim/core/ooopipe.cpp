@@ -2230,14 +2230,22 @@ int ReorderBufferEntry::commit() {
   }
 
   if unlikely (uop.eom && !ctx.kernel_mode && config.checker_enabled) {
+    bool mmio = (lsq != null) ? lsq->mmio : false;
     if likely (!isclass(uop.opcode, OPCLASS_BARRIER) &&
-        uop.rip.rip != ctx.eip) {
+        uop.rip.rip != ctx.eip && !mmio) {
       execute_checker();
       compare_checker(ctx.cpu_index, setflags_to_x86_flags[uop.setflags]);
     } else {
       clear_checker();
     }
   }
+
+  if unlikely (!config.checker_enabled && config.checker_start_rip == uop.rip.rip) {
+      cout << "\nStarting the checker\n";
+      config.checker_enabled = true;
+      enable_checker();
+  }
+
 
   if unlikely (uop.opcode == OP_st) {
     Waddr mfn = (lsq->physaddr << 3) >> 12;

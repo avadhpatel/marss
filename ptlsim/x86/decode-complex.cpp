@@ -1943,10 +1943,11 @@ bool TraceDecoder::decode_complex() {
   case 0xfa: { // cli
     EndOfDecode();
 
-	this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of,
-			3, 0, 0, FLAGS_DEFAULT_ALU);
+	// this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of,
+			// 3, 0, 0, FLAGS_DEFAULT_ALU);
 	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3);
 	ast.riptaken = L_ASSIST_CLI;
+	ast.nouserflags = 1;
 	this << ast;
 
     break;
@@ -1955,10 +1956,11 @@ bool TraceDecoder::decode_complex() {
   case 0xfb: { // sti
     EndOfDecode();
 
-	this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of,
-			3, 0, 0, FLAGS_DEFAULT_ALU);
+	// this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of,
+			// 3, 0, 0, FLAGS_DEFAULT_ALU);
 	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3);
 	ast.riptaken = L_ASSIST_STI;
+	ast.nouserflags = 1;
 	this << ast;
 
     break;

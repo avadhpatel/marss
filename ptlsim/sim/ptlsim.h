@@ -202,6 +202,7 @@ struct PTLsimConfig {
   bool enable_inline_mm_logging;
   bool enable_mm_validate;
   stringbuf screenshot_file;
+  bool log_user_only;
 
   // Event Logging
   bool event_log_enabled;
@@ -305,6 +306,7 @@ struct PTLsimConfig {
   bool use_shared_L3;
 
   bool checker_enabled;
+  W64 checker_start_rip;
 
   void reset();
 };
