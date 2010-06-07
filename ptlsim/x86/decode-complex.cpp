@@ -639,6 +639,7 @@ bool assist_ldmxcsr(Context& ctx) {
   // We can't have exceptions going on inside PTLsim: virtualize this feature in uopimpl code
   // Everything else will be used by real SSE insns inside uopimpls.
   mxcsr |= MXCSR_EXCEPTION_DISABLE_MASK;
+  mxcsr &= (0xffff);
   x86_set_mxcsr(mxcsr);
 
   //
@@ -663,6 +664,7 @@ bool assist_fxrstor(Context& ctx) {
   Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
   ASSIST_IN_QEMU(helper_fxrstor, target, 1);
   W32 mxcsr = ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
+  mxcsr &= (0xffff);
   x86_set_mxcsr(mxcsr);
   ctx.eip = ctx.reg_nextrip;
   return true;
