@@ -1908,6 +1908,7 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
     // Set this ROB entry to do TLB page walk
     cycles_left = 0;
     changestate(thread.rob_tlb_miss_list);
+    tlb_miss_init_cycle = sim_cycle;
     tlb_walk_level = thread.ctx.page_table_level_count();
     per_context_ooocore_stats_update(threadid, dcache.dtlb.misses++);
 
@@ -1965,6 +1966,9 @@ void ReorderBufferEntry::tlbwalk() {
   if unlikely (!tlb_walk_level) {
 
 rob_cont:
+
+      int delay = min(sim_cycle - tlb_miss_init_cycle, (W64)1000);
+      per_context_ooocore_stats_update(threadid, dcache.dtlb_latency[delay]++);
 
       if(logable(6)) {
           ptl_logfile << "Finalizing dtlb miss rob ", *this, " virtaddr: ", (void*)origvirt, endl;

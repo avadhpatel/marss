@@ -70,6 +70,7 @@ bool ThreadContext::probeitlb(Waddr icache_addr) {
         }
 
         itlb_walk_level = ctx.page_table_level_count();
+        itlb_miss_init_cycle = sim_cycle;
         per_context_ooocore_stats_update(threadid, dcache.itlb.misses++);
 
         return false;
@@ -93,6 +94,8 @@ itlb_walk_finish:
       }
       itlb_walk_level = 0;
       itlb.insert(fetchrip, threadid);
+      int delay = min(sim_cycle - itlb_miss_init_cycle, (W64)1000);
+      per_context_ooocore_stats_update(threadid, dcache.itlb_latency[delay]++);
       waiting_for_icache_fill = 0;
     return;
   }

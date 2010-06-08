@@ -603,6 +603,7 @@ namespace OutOfOrderModel {
         W16  executable_on_cluster_mask;
         W8s  cluster;
         W8   coreid;
+        W64  tlb_miss_init_cycle;
 
         W8   threadid;
         byte fu;
@@ -1447,6 +1448,7 @@ namespace OutOfOrderModel {
         DTLB dtlb;
         ITLB itlb;
         void setupTLB();
+        W64 itlb_miss_init_cycle;
 
         // Fetch-related structures
         RIPVirtPhys fetchrip;
@@ -2329,12 +2331,19 @@ struct PerContextOutOfOrderCoreStats { // rootnode:
         tlb_stat dtlb;
         tlb_stat itlb;
 
+        W64 dtlb_latency[1001]; // histo: 0, 200, 1
+        W64 itlb_latency[1001]; // histo: 0, 200, 1
+
         dcache& operator+=(const dcache &rhs) { // operator
             load += rhs.load;
             store += rhs.store;
             fence += rhs.fence;
             dtlb += rhs.dtlb;
             itlb += rhs.itlb;
+            foreach(i, 1001)
+                dtlb_latency[i] += rhs.dtlb_latency[i];
+            foreach(i, 1001)
+                itlb_latency[i] += rhs.itlb_latency[i];
             return *this;
         }
     } dcache;
