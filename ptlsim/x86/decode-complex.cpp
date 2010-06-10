@@ -599,15 +599,17 @@ W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 //
 // CLD and STD must be barrier assists since a new RIPVirtPhys
 // context key may be active after the direction flag is altered.
-//
+// QEMU based D flag : 1 if D = 0, -1 if D = 1
 bool assist_cld(Context& ctx) {
   ctx.internal_eflags &= ~FLAG_DF;
+  ctx.df = 1;
   ctx.eip = ctx.reg_nextrip;
 	return true;
 }
 
 bool assist_std(Context& ctx) {
   ctx.internal_eflags |= FLAG_DF;
+  ctx.df = -1;
   ctx.eip = ctx.reg_nextrip;
 	return true;
 }

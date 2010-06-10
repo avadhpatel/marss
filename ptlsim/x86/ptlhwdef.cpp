@@ -295,6 +295,7 @@ bool Context::event_upcall() {
 	// to QEMU to handle the interrupts/exceptions.
 	// So there is no need to send any trigger to QEMU for this via
 	// this function.
+    handle_interrupt = 1;
 	return true;
 }
 

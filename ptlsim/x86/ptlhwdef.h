@@ -850,7 +850,8 @@ struct Context: public CPUX86State {
 	  W64 flags = reg_flags;
 	  // Set the 2nd bit to 1 for compatibility
 	  flags = (flags | FLAG_INV);
-          load_eflags(flags, 0x00);
+      cc_src = flags & (FLAG_NOT_WAIT_INV);
+          // load_eflags(flags, 0x00);
           cc_op = CC_OP_EFLAGS;
 	  fpstt = reg_fptos >> 3;
 	  foreach(i, 8) {
@@ -861,13 +862,15 @@ struct Context: public CPUX86State {
   void setup_ptlsim_switch() {
 
 	  set_cpu_env((CPUX86State*)this);
-	  W64 flags = compute_eflags();
+	  // W64 flags = compute_eflags();
 
 	  // Clear the 2nd and 3rd bit as its used by PTLSim to indicate if
 	  // uop is executed correctly or not
-	  flags = (flags & ~(W64)(FLAG_INV|FLAG_WAIT));
-	  reg_flags = flags;
-          internal_eflags = flags & (FLAG_ZAPS|FLAG_CF|FLAG_OF);
+	  // flags = (flags & ~(W64)(FLAG_INV|FLAG_WAIT));
+	  // reg_flags = eflags & ~(W64)(FLAG_INV|FLAG_WAIT);
+          internal_eflags = cc_src & (FLAG_NOT_WAIT_INV);
+          internal_eflags |= (df & DF_MASK);
+          reg_flags = internal_eflags;
 	  eip = eip + segs[R_CS].base;
       cs_segment_updated();
 	  update_mode((hflags & HF_CPL_MASK) == 0);
@@ -878,6 +881,11 @@ struct Context: public CPUX86State {
 	  foreach(i, 8) {
           reg_fptag |= ((W64(!fptags[i])) << (8*i));
 	  }
+
+      // by default disable the interrupt handling flag
+      // When the core detects the interrupt and calls
+      // event_upcall it will enable this flag
+      // handle_interrupt = 0;
   }
 
   Waddr check_and_translate(Waddr virtaddr, int sizeshift, bool store, bool internal, int& exception, int& mmio, PageFaultErrorCode& pfec, bool is_code=0); //, PTEUpdate& pteupdate, Level1PTE& pteused);

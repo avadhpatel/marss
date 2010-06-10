@@ -255,7 +255,7 @@ int sim_cpu_exec(void)
 		CC_SRC = env->eflags & (CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
 		DF = 1 - (2 * ((env->eflags >> 10) & 1));
 		CC_OP = CC_OP_EFLAGS;
-		env->eflags &= ~(DF_MASK | CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
+        env->eflags &= ~(DF_MASK | CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
 		env->exception_index = -1;
 	}
 #endif
@@ -268,7 +268,7 @@ int sim_cpu_exec(void)
 			if (setjmp(env->jmp_env) == 0) {
 				env->current_tb = NULL;
 				/* if an exception is pending, we execute it here */
-				if (env->exception_index >= 0) {
+				if (env->handle_interrupt && env->exception_index >= 0) {
 					if (env->exception_index >= EXCP_INTERRUPT) {
 						/* exit request from the cpu execution loop */
 						ret = env->exception_index;
@@ -305,7 +305,7 @@ int sim_cpu_exec(void)
 			for(env = first_cpu; env != NULL; env = env->next_cpu) {
 				cpu_single_env = env;
 				env_to_regs();
-				interrupt_request = env->interrupt_request;
+				interrupt_request = (env->handle_interrupt) ? env->interrupt_request : 0;
 				if (unlikely(interrupt_request)) {
 					if (unlikely(env->singlestep_enabled & SSTEP_NOIRQ)) {
 						/* Mask out external interrupts for this step. */
@@ -373,6 +373,10 @@ int sim_cpu_exec(void)
 	}
 
 exit_loop:
+    /* restore flags in standard format */
+    for(env = first_cpu; env != NULL; env = env->next_cpu) {
+        env->eflags = env->eflags | helper_cc_compute_all(CC_OP) | (DF & DF_MASK);
+    }
 	return ret;
 }
 

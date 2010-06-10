@@ -925,6 +925,7 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
                     this->eip, " cycle: ", sim_cycle, endl;
     setup_qemu_switch_all_ctx(*this);
     ptl_stable_state = 1;
+    handle_interrupt = 1;
     if(errorcode) {
         raise_exception_err((int)exception, (int)errorcode);
     } else {
@@ -1226,6 +1227,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
 
     exception_is_int = 0;
     ptl_stable_state = 1;
+    handle_interrupt = 1;
     int mmu_index = cpu_mmu_index((CPUState*)this);
     tlb_fill(virtaddr, is_write, mmu_index, null);
     ptl_stable_state = 0;

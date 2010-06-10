@@ -1242,6 +1242,7 @@ handle_page_fault: {
 					  " is_write: ", write_exception, endl, ctx, endl;
       assert(ctx.page_fault_addr != 0);
 	  int old_exception = ctx.exception_index;
+      ctx.handle_interrupt = 1;
 	  ctx.handle_page_fault(exception_address, write_exception);
 	  // If we return here means the QEMU has fix the page fault
 	  // witout causing any CPU faults so we can clear the pipeline
@@ -1987,6 +1988,9 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 		  if(logable(5))
 			  ptl_logfile << "Old_eip: ", (void*)(ctx.old_eip), " New_eip: " ,
 						  (void*)(ctx.eip), endl;
+          if(!first_run)
+              assert(ctx.handle_interrupt == 1);
+          ctx.handle_interrupt = 0;
 		  cores[cur_core]->flush_pipeline_all();
 	  }
 
