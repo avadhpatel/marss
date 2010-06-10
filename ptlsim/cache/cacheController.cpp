@@ -862,6 +862,8 @@ void CacheController::annul_request(MemoryRequest *request)
 			entry, nextentry) {
 		if(queueEntry->request == request) {
 			queueEntry->annuled = true;
+            queueEntry->request->decRefCounter();
+            ADD_HISTORY_REM(queueEntry->request);
 			pendingRequests_.free(queueEntry);
 		}
 	}
