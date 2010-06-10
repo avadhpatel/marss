@@ -63,6 +63,10 @@ void OutOfOrderCoreCacheCallbacks::icache_wakeup(Memory::MemoryRequest *request)
 
 bool ThreadContext::probeitlb(Waddr icache_addr) {
 
+#ifdef DISABLE_TLB
+    return true;
+#endif
+
     if(!itlb.probe(icache_addr, threadid)) {
 
         if(logable(6)) {

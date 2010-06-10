@@ -942,6 +942,10 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     tlb_hit = probetlb(state, origaddr, ra, rb, rc, pteupdate);
 
     if unlikely (!tlb_hit) {
+#ifdef DISABLE_TLB
+        // Its an exception, return ISSUE_COMPLETED
+        return ISSUE_COMPLETED;
+#endif
       // This ROB entry is moved to rob_tlb_miss_list so return success
       issueq_operation_on_cluster(core, cluster, replay(iqslot));
       return ISSUE_SKIPPED;
@@ -1362,6 +1366,10 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     tlb_hit = probetlb(state, origaddr, ra, rb, rc, pteupdate);
 
     if unlikely (!tlb_hit) {
+#ifdef DISABLE_TLB
+        // Its an exception, return ISSUE_COMPLETED
+        return ISSUE_COMPLETED;
+#endif
       // This ROB entry is moved to rob_tlb_miss_list so return success
       issueq_operation_on_cluster(core, cluster, replay(iqslot));
       return ISSUE_SKIPPED;
@@ -1890,14 +1898,21 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
   bool handled;
   bool annul;
   Waddr addr;
+  bool st;
 
   ThreadContext& thread = getthread();
   OutOfOrderCore& core = getcore();
+  st = isstore(uop.opcode);
   handled = true;
   exception = 0;
 
+#ifdef DISABLE_TLB
+  bool handle_next_page = false;
+#endif
+
   physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
+#ifndef DISABLE_TLB
   // First check if its a TLB hit or miss
   if unlikely (exception != 0 || !thread.dtlb.probe(origaddr, threadid)) {
 
@@ -1921,19 +1936,48 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
    * in pipeline.
    */
   per_context_ooocore_stats_update(threadid, dcache.dtlb.hits++);
+#endif
 
   if unlikely (exception) {
     // Check if the page fault can be handled without causing exception
     if(exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead) {
-      handled = thread.ctx.try_handle_fault(addr, 1);
+      handled = thread.ctx.try_handle_fault(addr, st);
     }
 
     int size = (1 << uop.size);
     int page_crossing = ((lowbits(origaddr, 12) + (size - 1)) >> 12);
     if unlikely (page_crossing && (exception == EXCEPTION_PageFaultOnWrite || exception == EXCEPTION_PageFaultOnRead)) {
-      handled = thread.ctx.try_handle_fault(origaddr + (size-1), 1);
+      handled = thread.ctx.try_handle_fault(origaddr + (size-1), st);
+#ifdef DISABLE_TLB
+      handle_next_page = true;
+#endif
     }
   }
+#ifdef DISABLE_TLB
+  if(handled == false) {
+      LoadStoreQueueEntry& state = *lsq;
+      PageFaultErrorCode pfec;
+
+      if(handle_next_page) {
+          int size = (1 << uop.size);
+          origaddr += (size-1);
+      }
+
+      handle_common_load_store_exceptions(state, origaddr, virtpage, exception, pfec);
+
+      // Store the virtpage to origvirt, as origvirt is used for
+      // storing the page fault address
+      origvirt = virtpage;
+      physreg->flags = (state.invalid << log2(FLAG_INV)) | ((!state.datavalid) << log2(FLAG_WAIT));
+      physreg->data = state.data;
+      assert(!physreg->valid());
+
+      cycles_left = 0;
+      changestate(thread.rob_ready_to_commit_queue);
+
+      return false;
+  }
+#endif
 
   // There should not be any scenario where we have TLB hit and page fault.
   assert(handled == true);
