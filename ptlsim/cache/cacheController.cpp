@@ -861,10 +861,9 @@ void CacheController::annul_request(MemoryRequest *request)
 	foreach_list_mutable(pendingRequests_.list(), queueEntry,
 			entry, nextentry) {
 		if(queueEntry->request == request) {
+            queueEntry->eventFlags.reset();
+            clear_entry_cb(queueEntry);
 			queueEntry->annuled = true;
-            queueEntry->request->decRefCounter();
-            ADD_HISTORY_REM(queueEntry->request);
-			pendingRequests_.free(queueEntry);
 		}
 	}
 }
