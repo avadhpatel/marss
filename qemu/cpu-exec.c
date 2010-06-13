@@ -299,7 +299,7 @@ int sim_cpu_exec(void)
 		if(setjmp(first_cpu->jmp_env) == 0) {
 			env = first_cpu;
 			cpu_single_env = env;
-			in_simulation = ptl_simulate();
+            in_simulation = ptl_simulate();
 
 			uint8_t exit_requested = 0;
 			for(env = first_cpu; env != NULL; env = env->next_cpu) {
@@ -362,13 +362,18 @@ int sim_cpu_exec(void)
 						}
 					}
 				}
-				if (env->exit_request) {
+				if (env->exit_request || in_simulation == 0) {
 					env->exit_request = 0;
 					env->exception_index = EXCP_INTERRUPT;
 					exit_requested = 1;
 				}
 			}
 		}
+
+        if(!in_simulation) {
+            ret = EXCP_INTERRUPT;
+            goto exit_loop;
+        }
 
 	}
 
