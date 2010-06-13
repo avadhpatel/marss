@@ -1550,7 +1550,7 @@ static const bool log_code_page_ops = 0;
 bool BasicBlockCache::invalidate(BasicBlock* bb, int reason) {
     BasicBlockChunkList* pagelist;
     if unlikely (bb->refcount) {
-        if(logable(0))
+        if(logable(8))
             ptl_logfile << "Warning: basic block ", bb, " ", *bb, " is still in use somewhere (refcount ", bb->refcount, ")", endl;
         return false;
     }
