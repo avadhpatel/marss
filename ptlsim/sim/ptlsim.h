@@ -308,6 +308,13 @@ struct PTLsimConfig {
   bool checker_enabled;
   W64 checker_start_rip;
 
+  // MongoDB support configuration
+  bool enable_mongo;
+  stringbuf mongo_server;
+  W64 mongo_port;
+  stringbuf bench_name;
+  stringbuf db_tags;
+
   void reset();
 };
 

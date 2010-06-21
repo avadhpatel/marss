@@ -1,0 +1,26 @@
+# -*- mode: python; -*-
+
+
+# --- options ----
+import os
+import sys
+
+# Import envrionment
+Import('env')
+
+bson_env = env.Clone()
+bson_env.Append(CCFLAGS = '-x c')
+bson_env.Append(CCFLAGS = '-DMONGO_HAVE_STDINT')
+env.Append(CCFLAGS = '-DMONGO_HAVE_STDINT')
+
+coreFiles = ["md5.c" ]
+mFiles = [ "mongo.c"]
+bFiles = [ "bson.c", "numbers.c"]
+mLibFiles = coreFiles + mFiles + bFiles
+bLibFiles = coreFiles + bFiles
+mongolib = bson_env.Library( "mongoc" ,  mLibFiles )
+bsonlib = bson_env.Library( "bson" , bLibFiles  )
+
+ret_objs = mongolib
+
+Return('ret_objs')

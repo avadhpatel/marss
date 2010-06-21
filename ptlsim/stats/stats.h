@@ -376,7 +376,7 @@ struct PTLsimStats { // rootnode:
   } external;
 
 
-  struct memorysystem{
+  struct memory{
 //	  PerCoreCacheStats total;
 //	  PerCoreCacheStats cacheStats[10];
     PerCoreCacheStats total;
@@ -403,7 +403,7 @@ struct PTLsimStats { // rootnode:
 	W64 dcache_latency[200]; // histo: 0, 199, 1
 	W64 icache_latency[200]; // histo: 0, 199, 1
 
-    memorysystem& operator +=(const memorysystem &rhs) { // operator
+    memory& operator +=(const memory &rhs) { // operator
         total += rhs.total;
         c0 += rhs.c0;
         c1 += rhs.c1;
@@ -433,8 +433,8 @@ struct PTLsimStats { // rootnode:
         return *this; //in memory
     }
 
-    const memorysystem operator +(const memorysystem &other) { // operator
-        return memorysystem(*this) += other;
+    const memory operator +(const memory &other) { // operator
+        return memory(*this) += other;
     }
   } memory;
 

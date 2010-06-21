@@ -111,7 +111,15 @@ Depends(dst_tmp_cpp, dst_script)
 Requires(dst_tmp_cpp, st_i)
 Requires(dst_tmp, dst_tmp_cpp)
 
+dst_bson_script = "%s/tools/dstbuild_bson.py" % os.getcwd()
+dst_bson_tmp_cpp = env.Command('build/bson_stats.cpp', st_i,
+        "%s $SOURCE PTLsimStats > $TARGET" % dst_bson_script)
+dst_bson_obj = env.Object(dst_bson_tmp_cpp,
+        CCFLAGS = env['CCFLAGS'] + " -DDSTBUILD -include stats.h")
+
+Depends(dst_bson_tmp_cpp, [dst_script, st_i])
+
 #lib = env.Library('build/libmptlsim', objs + ptl_dst_o)
-lib = objs + ptl_dst_o
+lib = objs + ptl_dst_o + dst_bson_obj
 
 Return('lib')

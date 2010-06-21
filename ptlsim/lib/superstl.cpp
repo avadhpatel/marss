@@ -218,7 +218,6 @@ namespace superstl {
 
   void stringbuf::split(dynarray<stringbuf*>& bufArray,
 		  const char *chr) {
-#ifdef MEM_TEST
 	  stringbuf* tmp = null;
 	  char *pch;
 	  pch = strtok(buf, chr);
@@ -228,7 +227,6 @@ namespace superstl {
 		  bufArray.push(tmp);
 		  pch = strtok(null, chr);
 	  }
-#endif
   }
 
   stringbuf::~stringbuf() {
