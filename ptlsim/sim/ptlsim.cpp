@@ -16,6 +16,9 @@
 #undef CPT_STATS
 #include <memoryStats.h>
 #include <elf.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <bson/bson.h>
 #include <bson/mongo.h>
 
@@ -1029,19 +1032,27 @@ extern "C" uint8_t ptl_simulate() {
 
         if(config.enable_mongo) {
             // Check MongoDB connection
+            hostent *host;
             mongo_connection conn[1];
             mongo_connection_options opts;
 
-            strncpy(opts.host, config.mongo_server.buf , 255);
-            opts.host[254] = '\0';
-            opts.port = config.mongo_port;
-
-            if (mongo_connect( conn , &opts )){
-                cerr << "Failed to connect to MongoDB server at ", opts.host,
-                     ":", opts.port, " , **Disabling Mongo Support**", endl;
+            host = gethostbyname(config.mongo_server.buf);
+            if(host == null) {
+                cerr << "MongoDB Server host ", config.mongo_server, " is unreachable.", endl;
                 config.enable_mongo = 0;
             } else {
-                mongo_destroy(conn);
+                config.mongo_server = inet_ntoa(*((in_addr *)host->h_addr));
+                strncpy(opts.host, config.mongo_server.buf , 255);
+                opts.host[254] = '\0';
+                opts.port = config.mongo_port;
+
+                if (mongo_connect( conn , &opts )){
+                    cerr << "Failed to connect to MongoDB server at ", opts.host,
+                         ":", opts.port, " , **Disabling Mongo Support**", endl;
+                    config.enable_mongo = 0;
+                } else {
+                    mongo_destroy(conn);
+                }
             }
         }
 	}
