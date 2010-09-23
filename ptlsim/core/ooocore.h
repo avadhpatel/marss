@@ -12,7 +12,6 @@
 #define _OOOCORE_H_
 
 #include <statelist.h>
-#define ROB_SIZE1(x) (x==0)?1280:(x==1)?2560:5120
 // With these disabled, simulation is faster
 #define ENABLE_CHECKS
 #define ENABLE_LOGGING
@@ -618,7 +617,7 @@ namespace OutOfOrderModel {
         int index() const { return idx; }
         void validate() { entry_valid = true; }
 
-        void changestate(StateList& newqueue, bool place_at_head = false, ReorderBufferEntry* prevrob = null) {
+        void changestate(StateList& newqueue, bool place_at_head = false, ReorderBufferEntry* prevrob = NULL) {
             if (current_state_list)
                 current_state_list->remove(this);
             current_state_list = &newqueue;
@@ -646,7 +645,7 @@ namespace OutOfOrderModel {
         void tlbwalk();
         int issuefence(LoadStoreQueueEntry& state);
         void release();
-        W64 annul(bool keep_misspec_uop, bool return_first_annulled_rip = false);
+        W64 annul(bool keep_misspec_uop, bool return_first_anNULLed_rip = false);
         W64 annul_after() { return annul(true); }
         W64 annul_after_and_including() { return annul(false); }
         int commit();
@@ -795,7 +794,7 @@ namespace OutOfOrderModel {
         void uncommitref(int archreg, W8 threadid) { unref();  }
 
         bool referenced() const { return (refcount > 0); }
-        bool nonnull() const { return (index() != PHYS_REG_NULL); }
+        bool nonNULL() const { return (index() != PHYS_REG_NULL); }
         bool allocated() const { return (state != PHYSREG_FREE); }
         void commit() { changestate(PHYSREG_ARCH); }
         void complete() { changestate(PHYSREG_BYPASS); }
@@ -1131,7 +1130,7 @@ namespace OutOfOrderModel {
             loadstore.sfr = *rob->lsq;
             loadstore.virtaddr = virtaddr;
             loadstore.load_store_second_phase = rob->load_store_second_phase;
-            loadstore.inherit_sfr_used = (inherit_sfr != null);
+            loadstore.inherit_sfr_used = (inherit_sfr != NULL);
             if unlikely (inherit_sfr) {
                 loadstore.inherit_sfr = *inherit_sfr;
                 loadstore.inherit_sfr_lsq = inherit_sfr->rob->lsq->index();
@@ -1254,7 +1253,7 @@ namespace OutOfOrderModel {
         ofstream* ptl_logfile;
         W8 coreid;
 
-        EventLog() { start = null; end = null; tail = null; ptl_logfile = null; }
+        EventLog() { start = NULL; end = NULL; tail = NULL; ptl_logfile = NULL; }
 
         //bool init(size_t bufsize);
         bool init(size_t bufsize, W8 coreid);
@@ -1293,7 +1292,7 @@ namespace OutOfOrderModel {
             return add()->fill_commit(type, rob);
         }
 
-        OutOfOrderCoreEvent* add_load_store(int type, const ReorderBufferEntry* rob, LoadStoreQueueEntry* inherit_sfr = null, Waddr addr = 0) {
+        OutOfOrderCoreEvent* add_load_store(int type, const ReorderBufferEntry* rob, LoadStoreQueueEntry* inherit_sfr = NULL, Waddr addr = 0) {
             return add()->fill_load_store(type, rob, inherit_sfr, addr);
         }
 

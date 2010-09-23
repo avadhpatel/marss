@@ -126,7 +126,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 	MemoryQueueEntry *queueEntry = pendingRequests_.alloc();
 
 	/* if queue is full return false to indicate failure */
-	if(queueEntry == null) {
+	if(queueEntry == NULL) {
 		memdebug("Memory queue is full\n");
 		return false;
 	}

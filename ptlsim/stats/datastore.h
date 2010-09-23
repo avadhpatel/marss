@@ -148,7 +148,7 @@ struct DataStoreNode {
   DataStoreNode& operator [](const char* key) { return get(key); }
 
   //
-  // Type: null
+  // Type: NULL
   //
 
   DataStoreNode& add(const char* key) { return add(new DataStoreNode(key)); }
@@ -239,7 +239,7 @@ struct DataStoreNode {
 
   template <class F>
   DataStoreNode* map(const F& func) const {
-    DataStoreNode* newnode = null;
+    DataStoreNode* newnode = NULL;
 
     switch (type) {
     case DataStoreNode::DS_NODE_TYPE_NULL: {
@@ -306,7 +306,7 @@ struct DataStoreNode {
 
   template <class F>
   static DataStoreNode* apply(const F& func, const DataStoreNode& a, const DataStoreNode& b) {
-    DataStoreNode* newnode = null;
+    DataStoreNode* newnode = NULL;
 
     if (!((a.type == b.type) & (a.count == b.count))) {
       cerr << "DataStoreNode::apply(", a.name, ", ", b.name, "): mismatch types (", a.type, " vs ", b.type, "), count (", a.count, " vs ", b.count, ")", endl, flush;
@@ -510,13 +510,13 @@ struct DataStoreNodeTemplate: public DataStoreNodeTemplateBase {
 
   enum NodeType { DS_NODE_TYPE_NULL, DS_NODE_TYPE_INT, DS_NODE_TYPE_FLOAT, DS_NODE_TYPE_NODE, DS_NODE_TYPE_STRING, DS_NODE_TYPE_LABELED_HISTOGRAM };
 
-  void init(const char* name, int type = DS_NODE_TYPE_NULL, int count = 1, const char** labels = null);
+  void init(const char* name, int type = DS_NODE_TYPE_NULL, int count = 1, const char** labels = NULL);
 
-  DataStoreNodeTemplate() { name = null; labels = null; parent = null; }
+  DataStoreNodeTemplate() { name = NULL; labels = NULL; parent = NULL; }
 
-  DataStoreNodeTemplate(const char* name, int type = DS_NODE_TYPE_NULL, int count = 1, const char** labels = null);
+  DataStoreNodeTemplate(const char* name, int type = DS_NODE_TYPE_NULL, int count = 1, const char** labels = NULL);
 
-  DataStoreNodeTemplate(const DataStoreNodeTemplate& base, const char* name = null);
+  DataStoreNodeTemplate(const DataStoreNodeTemplate& base, const char* name = NULL);
 
   ~DataStoreNodeTemplate();
 
@@ -529,7 +529,7 @@ struct DataStoreNodeTemplate: public DataStoreNodeTemplateBase {
 
   DataStoreNodeTemplate& add(DataStoreNodeTemplate& node) { return add(&node); }
 
-  // Simple null container node
+  // Simple NULL container node
   DataStoreNodeTemplate& add(const char* key) { return add(new DataStoreNodeTemplate(key, DS_NODE_TYPE_NULL)); }
   DataStoreNodeTemplate& operator ()(const char* key) { return add(key); }
 
@@ -540,7 +540,7 @@ struct DataStoreNodeTemplate: public DataStoreNodeTemplateBase {
   DataStoreNodeTemplate& addint(const char* key, int count = 1) { return add(new DataStoreNodeTemplate(key, DS_NODE_TYPE_INT, count)); }
 
   // Integer histogram
-  DataStoreNodeTemplate& histogram(const char* key, int count, W64 histomin, W64 histomax, W64 histostride, const char** names = null) {
+  DataStoreNodeTemplate& histogram(const char* key, int count, W64 histomin, W64 histomax, W64 histostride, const char** names = NULL) {
     DataStoreNodeTemplate& dsn = add(new DataStoreNodeTemplate(key, DS_NODE_TYPE_INT, count, names));
     dsn.histogramarray = 1;
     dsn.histomin = histomin;
@@ -550,7 +550,7 @@ struct DataStoreNodeTemplate: public DataStoreNodeTemplateBase {
   }
 
   // Integer histogram, simplified
-  DataStoreNodeTemplate& histogram(const char* key, int count, const char** names = null) {
+  DataStoreNodeTemplate& histogram(const char* key, int count, const char** names = NULL) {
     return histogram(key, count, 0, count-1, 1, names);
   }
 
@@ -646,7 +646,7 @@ struct StatsFileWriter {
   operator bool() const { return os.is_open(); }
   W64 next_uuid() const { return header.record_count; }
 
-  void write(const void* record, const char* name = null);
+  void write(const void* record, const char* name = NULL);
   void flush();
   void close();
 };
@@ -659,7 +659,7 @@ struct StatsFileReader {
   DataStoreNodeTemplate* dst;
   Hashtable<const char*, W64, 256> name_to_uuid;
 
-  StatsFileReader() { dst = null; buf = null; bufsub = null; }
+  StatsFileReader() { dst = NULL; buf = NULL; bufsub = NULL; }
 
   bool open(const char* filename);
 

@@ -17,7 +17,6 @@
 #include <logic.h>
 #include <dcache.h>
 #include <statelist.h>
-
 #define INSIDE_OOOCORE
 #define DECLARE_STRUCTURES
 #ifdef USE_AMD_OOOCORE
@@ -30,7 +29,6 @@
 #include <stats.h>
 
 #define MYDEBUG if(logable(99)) ptl_logfile
-
 
 #ifndef ENABLE_CHECKS
 #undef assert
@@ -80,7 +78,7 @@ void ThreadContext::reset() {
   setzero(commitrrt);
 
   setzero(fetchrip);
-  current_basic_block = null;
+  current_basic_block = NULL;
   current_basic_block_transop_index = -1;
   stall_frontend = false;
   waiting_for_icache_fill = false;
@@ -245,7 +243,7 @@ void PhysicalRegisterFile::init(const char* name, W8 coreid, int rfid, int size)
 
 PhysicalRegister* PhysicalRegisterFile::alloc(W8 threadid, int r) {
   PhysicalRegister* physreg = (PhysicalRegister*)((r == 0) ? &(*this)[r] : states[PHYSREG_FREE].peek());
-  if unlikely (!physreg) return null;
+  if unlikely (!physreg) return NULL;
   physreg->changestate(PHYSREG_WAITING);
   physreg->flags = FLAG_WAIT;
   physreg->threadid = threadid;
@@ -798,7 +796,7 @@ void ReorderBufferEntry::init(int idx) {
   this->idx = idx;
   entry_valid = 0;
   selfqueuelink::reset();
-  current_state_list = null;
+  current_state_list = NULL;
   reset();
 }
 
@@ -812,7 +810,7 @@ void ReorderBufferEntry::reset() {
   entry_valid = false;
   cycles_left = 0;
   uop.uuid = -1;
-  physreg = (PhysicalRegister*)null;
+  physreg = (PhysicalRegister*)NULL;
   lfrqslot = -1;
   lsq = 0;
   load_store_second_phase = 0;
@@ -1132,7 +1130,7 @@ bool ThreadContext::handle_barrier() {
   core_to_external_state();
   if(current_basic_block) {
 	  current_basic_block->release();
-	  current_basic_block = null;
+	  current_basic_block = NULL;
   }
 
   int assistid = ctx.eip;
@@ -1356,9 +1354,9 @@ void EventLog::reset() {
   if (!start) return;
 
   size_t bytes = (end - start) * sizeof(OutOfOrderCoreEvent);
-  start = null;
-  end = null;
-  tail = null;
+  start = NULL;
+  end = NULL;
+  tail = NULL;
   coreid = -1;
 }
 
@@ -1577,7 +1575,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
     os << "lk-anl", " rob ", intstring(rob, -3), " stq ", lsq,
       " r", intstring(physreg, -3), " on ", padstring(fu_names[fu], -4), " @ ",
       (void*)(Waddr)loadstore.virtaddr, " (phys ", (void*)(Waddr)(loadstore.sfr.physaddr << 3), "): ",
-      "lock annulled (original ld.acq uuid ", loadstore.locking_uuid, " rob ", loadstore.locking_rob, " on vcpu ", loadstore.locking_vcpuid, ")";
+      "lock anNULLed (original ld.acq uuid ", loadstore.locking_uuid, " rob ", loadstore.locking_rob, " on vcpu ", loadstore.locking_vcpuid, ")";
     break;
   }
   case EVENT_STORE_LOCK_REPLAY: {
@@ -1676,7 +1674,7 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
     os << (loadstore.load_store_second_phase ? "load2 " : "load  "), " rob ", intstring(rob, -3), " ldq ", lsq,
       " r", intstring(physreg, -3), " on ", padstring(fu_names[fu], -4), " @ ",
       (void*)(Waddr)loadstore.virtaddr, " (phys ", (void*)(Waddr)(loadstore.sfr.physaddr << 3), "): ";
-    os << "load was annulled (high unaligned load)";
+    os << "load was anNULLed (high unaligned load)";
     break;
   }
   case EVENT_LOAD_WAKEUP:
@@ -2081,7 +2079,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
       break;
     }
     if unlikely (exiting) {
-		if unlikely(ret_qemu_env == null)
+		if unlikely(ret_qemu_env == NULL)
 			ret_qemu_env = &contextof(0);
 		break;
 	}
@@ -2089,7 +2087,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
 
   if(logable(1))
 	ptl_logfile << "Exiting out-of-order core at ", total_user_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
-
+  
   config.dump_state_now = 0;
 
   return exiting;

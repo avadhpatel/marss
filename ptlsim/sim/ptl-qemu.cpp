@@ -63,7 +63,7 @@ uint8_t simulation_configured = 0;
 uint8_t ptl_stable_state = 1;
 uint64_t ptl_start_sim_rip = 0;
 
-static char *pending_command_str = null;
+static char *pending_command_str = NULL;
 static int pending_call_type = -1;
 static int pending_call_arg3 = -1;
 
@@ -439,7 +439,7 @@ void ptl_check_ptlcall_queue() {
         }
 
         delete pending_command_str;
-        pending_command_str = null;
+        pending_command_str = NULL;
 
         pending_call_type = -1;
         pending_call_arg3 = -1;
@@ -1229,7 +1229,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
     ptl_stable_state = 1;
     handle_interrupt = 1;
     int mmu_index = cpu_mmu_index((CPUState*)this);
-    tlb_fill(virtaddr, is_write, mmu_index, null);
+    tlb_fill(virtaddr, is_write, mmu_index, NULL);
     ptl_stable_state = 0;
 
     if(kernel_mode) {

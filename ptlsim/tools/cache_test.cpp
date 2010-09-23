@@ -139,10 +139,10 @@ void test_request_pool()
 
 	// First check if we get 100 free requests
 	// checked if we can have more than 100 , and it worked with 1500
-	MemoryRequest* memoryRequest = null;
+	MemoryRequest* memoryRequest = NULL;
 	foreach(i, 1500) {
 		memoryRequest = requestPool->get_free_request();
-		assert(memoryRequest != null);
+		assert(memoryRequest != NULL);
 	}
 
 	cout << "Done" << endl;

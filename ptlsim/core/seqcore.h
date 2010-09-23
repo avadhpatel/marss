@@ -58,7 +58,7 @@ struct CommitRecord: public Context {
 
 PrintOperator(CommitRecord);
 
-int execute_sequential(Context& ctx, CommitRecord* cmtrec = null, W64 bbcount = 1, W64 insncount = limits<W64>::max);
+int execute_sequential(Context& ctx, CommitRecord* cmtrec = NULL, W64 bbcount = 1, W64 insncount = limits<W64>::max);
 
 extern W64 suppress_total_user_insn_count_updates_in_seqcore;
 

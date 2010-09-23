@@ -348,7 +348,7 @@ bool MemoryHierarchy::access_cache(MemoryRequest *request)
 {
 	W8 coreid = request->get_coreid();
 	CPUController *cpuController = (CPUController*)cpuControllers_[coreid];
-	assert(cpuController != null);
+	assert(cpuController != NULL);
 
 	int ret_val;
 	ret_val = ((CPUController*)cpuController)->access(request);
@@ -466,7 +466,7 @@ bool MemoryHierarchy::is_cache_available(W8 coreid, W8 threadid,
 		bool is_icache)
 {
 	CPUController *cpuController = (CPUController*)cpuControllers_[coreid];
-	assert(cpuController != null);
+	assert(cpuController != NULL);
 	return !(cpuController->is_full());
 }
 
@@ -593,7 +593,7 @@ void MemoryHierarchy::annul_request(W8 coreid,
 		W8 threadid, int robid, W64 physaddr,
 		bool is_icache, bool is_write)
 {
-	MemoryRequest* annul_request = null;
+	MemoryRequest* annul_request = NULL;
 
     /*
 	 * Flushin of the caches is disabled currently because we need to

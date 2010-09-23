@@ -1509,7 +1509,7 @@ uopimpl_func_t implmap_vcmp[16][4] = {
 #undef sizes
 
 uopimpl_func_t get_synthcode_for_uop(int op, int size, bool setflags, int cond, int extshift, bool except, bool internal) {
-  uopimpl_func_t func = null;
+  uopimpl_func_t func = NULL;
 
   switch (op) {
   case OP_nop:

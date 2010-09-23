@@ -1379,7 +1379,7 @@ bool TraceDecoder::decode_complex() {
         It is assumed that rcx is almost never zero, so a check can be inserted at the top of the loop:
 
         # set checkcond MSR to CONST_LOOP_ITER_IS_ZERO and CHECK_RESULT to TARGET_AFTER_LOOP
-        chk.nz  null = rcx,TARGET_AFTER_LOOP,CONST_LOOP_ITER_IS_ZERO
+        chk.nz  NULL = rcx,TARGET_AFTER_LOOP,CONST_LOOP_ITER_IS_ZERO
         chk.nz  rd = ra,imm8,imm8
 
         In response to a failed check of this type, an EXCEPTION_SkipBlock exception is raised and a rollback will

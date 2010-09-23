@@ -650,7 +650,7 @@ static bson_bool_t mongo_cmd_get_error_helper(mongo_connection * conn, const cha
 
     if(mongo_simple_int_command(conn, db, cmdtype, 1, &out)){
         bson_iterator it;
-        haserror = (bson_find(&it, &out, "err") != bson_null);
+        haserror = (bson_find(&it, &out, "err") != bson_NULL);
     }
     
     if(realout)

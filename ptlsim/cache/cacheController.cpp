@@ -243,9 +243,9 @@ CacheController::CacheController(W8 coreid, char *name,
 	cacheInsertComplete_.connect(signal_mem_ptr(*this,
 				&CacheController::cache_insert_complete_cb));
 
-	upperInterconnect_ = null;
-	upperInterconnect2_ = null;
-	lowerInterconnect_= null;
+	upperInterconnect_ = NULL;
+	upperInterconnect2_ = NULL;
+	lowerInterconnect_= NULL;
 }
 
 CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
@@ -270,7 +270,7 @@ CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
 			return queueEntry;
 		}
 	}
-	return null;
+	return NULL;
 }
 
 CacheQueueEntry* CacheController::find_match(MemoryRequest *request)
@@ -284,7 +284,7 @@ CacheQueueEntry* CacheController::find_match(MemoryRequest *request)
 			return queueEntry;
 	}
 
-	return null;
+	return NULL;
 }
 
 void CacheController::print(ostream& os) const
@@ -334,7 +334,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 			memoryHierarchy_->set_controller_full(this, true);
 		}
 
-		if(queueEntry == null) {
+		if(queueEntry == NULL) {
 			return false;
 		}
 
@@ -393,7 +393,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
              */
 			CacheQueueEntry *queueEntry = find_match(msg->request);
 
-			if(queueEntry != null) {
+			if(queueEntry != NULL) {
                 /*
 				 * Do the following only when:
 				 *  - we received response to our request
@@ -659,7 +659,7 @@ bool CacheController::cache_access_cb(void *arg)
 
 	if(cacheLines_->get_port(queueEntry->request)) {
 		CacheLine *line = cacheLines_->probe(queueEntry->request);
-		bool hit = (line == null) ? false : line->isValid;
+		bool hit = (line == NULL) ? false : line->isValid;
 
 		// Testing 100 % L2 Hit
         //		if(type_ == L2_CACHE)
@@ -881,7 +881,7 @@ bool CacheController::send_update_message(CacheQueueEntry *queueEntry,
 	}
 
 	CacheQueueEntry *new_entry = pendingRequests_.alloc();
-	if(new_entry == null)
+	if(new_entry == NULL)
 		return false;
 
 	assert(new_entry);
@@ -892,7 +892,7 @@ bool CacheController::send_update_message(CacheQueueEntry *queueEntry,
 	}
 
 	new_entry->request = request;
-	new_entry->sender = null;
+	new_entry->sender = NULL;
 	new_entry->sendTo = lowerInterconnect_;
 	request->incRefCounter();
 	ADD_HISTORY_ADD(request);
@@ -931,7 +931,7 @@ void CacheController::do_prefetch(MemoryRequest *request, int additional_delay)
 	assert(new_entry);
 
 	new_entry->request = new_request;
-	new_entry->sender = null;
+	new_entry->sender = NULL;
 	new_entry->sendTo = lowerInterconnect_;
 	new_entry->prefetch = true;
 	new_entry->annuled = false;

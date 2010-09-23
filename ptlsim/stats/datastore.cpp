@@ -24,7 +24,7 @@ selflistlink* DataStoreNodeLinkManager::linkof(DataStoreNode* obj) {
 }
 
 DataStoreNode::DataStoreNode() {
-  init(null, DS_NODE_TYPE_NULL, 0);
+  init(NULL, DS_NODE_TYPE_NULL, 0);
 }
 
 DataStoreNode::DataStoreNode(const char* name) {
@@ -37,11 +37,11 @@ DataStoreNode::DataStoreNode(const char* name, NodeType type, int count) {
 
 void DataStoreNode::init(const char* name, int type, int count) {
   this->type = type;
-  this->name = (name) ? strdup(name) : null;
+  this->name = (name) ? strdup(name) : NULL;
   this->count = count;
   value.w = 0;
-  subnodes = null;
-  parent = null;
+  subnodes = NULL;
+  parent = NULL;
   summable = 0;
   histogramarray = 0;
   labeled_histogram = 0;
@@ -50,9 +50,9 @@ void DataStoreNode::init(const char* name, int type, int count) {
   histomax = 0;
   histostride = 0;
   dynamic = 0;
-  sum_of_subtrees_cache = null;
-  average_of_subtrees_cache = null;
-  labels = null;
+  sum_of_subtrees_cache = NULL;
+  average_of_subtrees_cache = NULL;
+  labels = NULL;
   total_sum_cache = -1;
 }
 
@@ -70,9 +70,9 @@ void DataStoreNode::rename(const char* newname) {
 
 void DataStoreNode::invalidate_caches() {
   if (sum_of_subtrees_cache) delete sum_of_subtrees_cache;
-  sum_of_subtrees_cache = null;
+  sum_of_subtrees_cache = NULL;
   if (average_of_subtrees_cache) delete average_of_subtrees_cache;
-  average_of_subtrees_cache = null;
+  average_of_subtrees_cache = NULL;
   total_sum_cache = -1;
   if (parent) parent->invalidate_caches();
 }
@@ -108,9 +108,9 @@ DataStoreNode::~DataStoreNode() {
   if (subnodes)
     delete subnodes;
   free(name);
-  subnodes = null;
-  parent = null;
-  name = null;
+  subnodes = NULL;
+  parent = NULL;
+  name = NULL;
   type = DS_NODE_TYPE_NULL;
   count = 0;
 }
@@ -159,7 +159,7 @@ DataStoreNode::DataType DataStoreNode::getdata() const {
 
 DataStoreNode* DataStoreNode::search(const char* key) const {
   if (!subnodes)
-    return null;
+    return NULL;
 
   if (strequal(key, "[total]")) {
     return sum_of_subtrees();
@@ -170,7 +170,7 @@ DataStoreNode* DataStoreNode::search(const char* key) const {
   }
 
   DataStoreNode** nodeptr = (*subnodes)(key);
-  return (nodeptr) ? *nodeptr : null;
+  return (nodeptr) ? *nodeptr : NULL;
 }
 
 DataStoreNode* DataStoreNode::searchpath(const char* path) const {
@@ -189,7 +189,7 @@ DataStoreNode* DataStoreNode::searchpath(const char* path) const {
 
     if (!dsn) {
       delete pbase;
-      return null;
+      return NULL;
     }
     ds = dsn;
   }
@@ -210,7 +210,7 @@ DataStoreNode& DataStoreNode::get(const char* key) {
 }
 
 //
-// Type: null
+// Type: NULL
 //
 
 //
@@ -224,7 +224,7 @@ DataStoreNode::DataStoreNode(const char* name, W64s value) {
 
 DataStoreNode::DataStoreNode(const char* name, const W64s* values, int count, bool histogram) {
   init(name, DS_NODE_TYPE_INT, count);
-  this->values = (count) ? (new DataType[count]) : null;
+  this->values = (count) ? (new DataType[count]) : NULL;
   if (this->values) arraycopy(this->values, (DataType*)values, count);
 }
 
@@ -252,7 +252,7 @@ DataStoreNode::operator W64s() const {
   case DS_NODE_TYPE_FLOAT:
     return (W64s)getdata().f; break;
   case DS_NODE_TYPE_STRING:
-    return strtoll(getdata().s, (char**)null, 10); break;
+    return strtoll(getdata().s, (char**)NULL, 10); break;
   case DS_NODE_TYPE_NULL:
     return 0;
   }
@@ -261,7 +261,7 @@ DataStoreNode::operator W64s() const {
 
 DataStoreNode::operator W64s*() const {
   assert(type == DS_NODE_TYPE_INT);
-  return (!count) ? null : (count == 1) ? (W64s*)&value : (W64s*)values;
+  return (!count) ? NULL : (count == 1) ? (W64s*)&value : (W64s*)values;
 }
 
 DataStoreNode::operator W64*() const {
@@ -279,7 +279,7 @@ DataStoreNode::DataStoreNode(const char* name, double data) {
 
 DataStoreNode::DataStoreNode(const char* name, const double* values, int count) {
   init(name, DS_NODE_TYPE_FLOAT, count);
-  this->values = (count) ? (new DataType[count]) : null;
+  this->values = (count) ? (new DataType[count]) : NULL;
   if (this->values) arraycopy(this->values, (DataType*)values, count);
 }
 
@@ -306,7 +306,7 @@ DataStoreNode::operator double() const {
 
 DataStoreNode::operator double*() const {
   assert(type == DS_NODE_TYPE_FLOAT);
-  return (!count) ? null : (count == 1) ? (double*)&value : (double*)values;
+  return (!count) ? NULL : (count == 1) ? (double*)&value : (double*)values;
 }
 
 DataStoreNode::operator float() const {
@@ -324,7 +324,7 @@ DataStoreNode::DataStoreNode(const char* name, const char* value) {
 
 DataStoreNode::DataStoreNode(const char* name, const char** values, int count) {
   init(name, DS_NODE_TYPE_FLOAT, count);
-  this->values = (count) ? (new DataType[count]) : null;
+  this->values = (count) ? (new DataType[count]) : NULL;
   if (this->values) {
     foreach (i, count) {
       this->values[i].s = strdup(values[i]);
@@ -346,7 +346,7 @@ const char* DataStoreNode::string() const {
 
 DataStoreNode::operator const char**() const {
   assert(type == DS_NODE_TYPE_STRING);
-  return (!count) ? null : (count == 1) ? (const char**)&value : (const char**)values;
+  return (!count) ? NULL : (count == 1) ? (const char**)&value : (const char**)values;
 }
 
 DataStoreNodeDirectory& DataStoreNode::getentries() const {
@@ -656,7 +656,7 @@ struct DataStoreNodeHeader {
   W16 isarray:1, summable:1, histogramarray:1, identical_subtrees:1, labeled_histogram:1;
   W32 subcount;
   // (optional DataStoreNodeArrayInfo iff (isarray == 1)
-  // (null-terminated name)
+  // (NULL-terminated name)
   // (count * sizeof(type) bytes)
   // (all subnodes)
 };
@@ -707,8 +707,8 @@ bool DataStoreNode::read(ifstream& is) {
   labeled_histogram = h.labeled_histogram;
 
   count = (h.isarray) ? ah.count : 1;
-  subnodes = null;
-  parent = null;
+  subnodes = NULL;
+  parent = NULL;
 
   if (h.isarray & h.histogramarray & h.labeled_histogram) {
     // Read the <count> histogram slot labels
@@ -986,14 +986,14 @@ void DataStoreNodeTemplate::init(const char* name, int type, int count, const ch
   this->type = type;
   this->count = count;
 
-  parent = null;
+  parent = NULL;
 
   subcount = 0;
   summable = 0;
   histogramarray = 0;
   identical_subtrees = 0;
   labeled_histogram = 0;
-  this->labels = null;
+  this->labels = NULL;
 
   histomin = 0;
   histomax = 0;
@@ -1149,12 +1149,12 @@ DataStoreNodeTemplate::DataStoreNodeTemplate(ifstream& is) {
   assert(magic == DataStoreNodeTemplateBase::MAGIC);
   assert(length == sizeof(DataStoreNodeTemplateBase));
 
-  parent = null;
+  parent = NULL;
 
   W16 n;
   is >> n; name = new char[n+1]; is.read(name, n); name[n] = 0;
 
-  labels = null;
+  labels = NULL;
   if (labeled_histogram) {
     labels = new char*[count];
     foreach (i, count) {
@@ -1292,7 +1292,7 @@ void StatsFileWriter::open(const char* filename, const void* dst, size_t dstsize
 //  os.open(filename, std::ofstream::binary | std::ofstream::out);
   os.open(filename, std::ios_base::binary | std::ios_base::out);
 
-  namelist = null;
+  namelist = NULL;
 
   header.magic = StatsFileHeader::MAGIC;
   header.template_offset = sizeof(StatsFileHeader);
@@ -1375,7 +1375,7 @@ void StatsFileWriter::close() {
   }
 
   assert(n == header.index_count);
-  namelist = null;
+  namelist = NULL;
 
   os.flush();
   os.close();
@@ -1446,13 +1446,13 @@ bool StatsFileReader::open(const char* filename) {
 }
 
 DataStoreNode* StatsFileReader::get(W64 uuid) {
-  if unlikely (uuid >= header.record_count) return null;
+  if unlikely (uuid >= header.record_count) return NULL;
   W64 offset = header.record_offset + (header.record_size * uuid);
 
   is.seekg(offset);
   is.read((char*)(buf), header.record_size);
   assert(is.good());
-  if unlikely (is.gcount() != header.record_size) return null;
+  if unlikely (is.gcount() != header.record_size) return NULL;
 
   const W64* p = (const W64*)buf;
   DataStoreNode* dsn = dst->reconstruct(p);
@@ -1461,20 +1461,20 @@ DataStoreNode* StatsFileReader::get(W64 uuid) {
 }
 
 DataStoreNode* StatsFileReader::getdelta(W64 uuid, W64 uuidsub) {
-  if unlikely (uuid >= header.record_count) return null;
-  if unlikely (uuidsub >= header.record_count) return null;
+  if unlikely (uuid >= header.record_count) return NULL;
+  if unlikely (uuidsub >= header.record_count) return NULL;
   W64 offset = header.record_offset + (header.record_size * uuid);
   W64 offsetsub = header.record_offset + (header.record_size * uuidsub);
 
   is.seekg(offset);
   is.read((char*)(buf), header.record_size);
   int size = strlen((char*)(buf));
-  if unlikely (size != header.record_size) return null;
+  if unlikely (size != header.record_size) return NULL;
 
   is.seekg(offsetsub);
   is.read((char*)(bufsub), header.record_size);
   size = strlen((char*)(buf));
-  if unlikely (size != header.record_size) return null;
+  if unlikely (size != header.record_size) return NULL;
 
   const W64* p = (const W64*)buf;
   W64* porig = (W64*)p;
@@ -1509,21 +1509,21 @@ W64s StatsFileReader::uuid_of_name(const char* name) {
 
 DataStoreNode* StatsFileReader::get(const char* name) {
   W64s uuid = uuid_of_name(name);
-  if unlikely (uuid < 0) return null;
+  if unlikely (uuid < 0) return NULL;
   return get(uuid);
 }
 
 DataStoreNode* StatsFileReader::getdelta(const char* name, const char* namesub) {
   W64s uuid = uuid_of_name(name);
   W64s uuidsub = uuid_of_name(namesub);
-  if unlikely ((uuid < 0) || (uuidsub < 0)) return null;
+  if unlikely ((uuid < 0) || (uuidsub < 0)) return NULL;
   return getdelta(uuid, uuidsub);
 }
 
 void StatsFileReader::close() {
-  if (dst) { delete dst; dst = null; }
-  if (buf) { delete[] buf; buf = null; }
-  if (bufsub) { delete[] bufsub; bufsub = null; }
+  if (dst) { delete dst; dst = NULL; }
+  if (buf) { delete[] buf; buf = NULL; }
+  if (bufsub) { delete[] bufsub; bufsub = NULL; }
 
   name_to_uuid.clear();
 

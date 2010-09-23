@@ -8,11 +8,12 @@ src_files = Glob('*.cpp')
 
 objs = env.Object(src_files)
 
+yaml_objs = SConscript('yaml/SConscript')
 bson_objs = SConscript('bson/SConscript')
 
 # specific list of objects for dstbuild
 dst_objs = env.Object(Split("superstl.cpp statelist.cpp"))
 
-ret_objs = [objs + bson_objs, dst_objs]
+ret_objs = [objs + bson_objs + yaml_objs, dst_objs]
 
 Return('ret_objs')

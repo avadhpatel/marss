@@ -525,7 +525,7 @@ namespace CacheSubsystem {
 
     static const int SIZE = size;
 
-    LoadFillReqQueue(): hierarchy(*((CacheHierarchy*)null)) { reset(); }
+    LoadFillReqQueue(): hierarchy(*((CacheHierarchy*)NULL)) { reset(); }
     LoadFillReqQueue(CacheHierarchy& hierarchy_): hierarchy(hierarchy_) { reset(); }
 
     // Clear entries belonging to one thread
@@ -630,7 +630,7 @@ namespace CacheSubsystem {
       }
     };
 #endif
-    MissBuffer(): hierarchy(*((CacheHierarchy*)null)) { reset(); }
+    MissBuffer(): hierarchy(*((CacheHierarchy*)NULL)) { reset(); }
     MissBuffer(CacheHierarchy& hierarchy_): hierarchy(hierarchy_) { reset(); }
 
     CacheHierarchy& hierarchy;
@@ -678,7 +678,7 @@ namespace CacheSubsystem {
 
     PerCoreCacheCallbacks* callback;
 
-    CacheHierarchy(W8 coreid_): coreid(coreid_), lfrq(*this), missbuf(*this) { callback = null; }
+    CacheHierarchy(W8 coreid_): coreid(coreid_), lfrq(*this), missbuf(*this) { callback = NULL; }
 
     bool probe_cache_and_sfr(W64 addr, const SFR* sfra, int sizeshift);
     bool covered_by_sfr(W64 addr, SFR* sfr, int sizeshift);

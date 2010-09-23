@@ -79,7 +79,7 @@ Opening bracket for class/function must be started in next line. For example:
 12.
 Opening bracket for loops/conditions like 'if/for/while/switch' should start in
 same line. For example:
-	if(line != null) {
+	if(line != NULL) {
 
 13.
 Any line should not exceed a width of 80 characters. Please follow this

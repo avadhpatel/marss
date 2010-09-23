@@ -47,7 +47,7 @@ class P2PInterconnect : public Interconnect
 				return controllers_[0];
 			else
 				assert(0); // Should never happen
-			return null;
+			return NULL;
 		}
 
 

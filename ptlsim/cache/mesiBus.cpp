@@ -45,7 +45,7 @@ BusInterconnect::BusInterconnect(char *name,
     Interconnect(name,memoryHierarchy),
     busBusy_(false),
     dataBusBusy_(false),
-    lastAccessQueue(null)
+    lastAccessQueue(NULL)
 {
     GET_STRINGBUF_PTR(broadcast_name, name, "_broadcast");
     broadcast_.set_name(broadcast_name->buf);
@@ -209,7 +209,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
 
     if(!is_busy()) {
         /* address bus */
-        memoryHierarchy_->add_event(&broadcast_, 1, null);
+        memoryHierarchy_->add_event(&broadcast_, 1, NULL);
         set_bus_busy(true);
     } else {
         memdebug("Bus is busy\n");
@@ -242,7 +242,7 @@ BusQueueEntry* BusInterconnect::arbitrate_round_robin()
         }
     } while(controllerQueue != lastAccessQueue);
 
-    return null;
+    return NULL;
 }
 
 bool BusInterconnect::can_broadcast(BusControllerQueue *queue)
@@ -262,12 +262,12 @@ bool BusInterconnect::can_broadcast(BusControllerQueue *queue)
 bool BusInterconnect::broadcast_cb(void *arg)
 {
     BusQueueEntry *queueEntry;
-    if(arg != null)
+    if(arg != NULL)
         queueEntry = (BusQueueEntry*)arg;
     else
         queueEntry = arbitrate_round_robin();
 
-    if(queueEntry == null || queueEntry->annuled) { // nothing to broadcast
+    if(queueEntry == NULL || queueEntry->annuled) { // nothing to broadcast
         set_bus_busy(false);
         return true;
     }
@@ -311,15 +311,15 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
     assert(is_busy());
     BusQueueEntry *queueEntry = (BusQueueEntry*)arg;
 
-    if(queueEntry == null || queueEntry->annuled) {
-        broadcast_cb(null);
+    if(queueEntry == NULL || queueEntry->annuled) {
+        broadcast_cb(NULL);
         return true;
     }
 
     memdebug("Broadcasing entry: ", *queueEntry, endl);
 
     /* now create an entry into pendingRequests_ */
-    PendingQueueEntry *pendingEntry = null;
+    PendingQueueEntry *pendingEntry = NULL;
     if(queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
         pendingEntry = pendingRequests_.alloc();
         assert(pendingEntry);
@@ -385,7 +385,7 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
      * call broadcast_cb that will check if any pending
      * requests are there or not
      */
-    broadcast_cb(null);
+    broadcast_cb(NULL);
 
     return true ;
 }

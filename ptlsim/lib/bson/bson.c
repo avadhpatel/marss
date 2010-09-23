@@ -156,7 +156,7 @@ void bson_print_raw( const char * data , int depth ){
         case bson_double: printf( "%f" , bson_iterator_double( &i ) ); break;
         case bson_bool: printf( "%s" , bson_iterator_bool( &i ) ? "true" : "false" ); break;
         case bson_string: printf( "%s" , bson_iterator_string( &i ) ); break;
-        case bson_null: printf( "null" ); break;
+        case bson_NULL: printf( "NULL" ); break;
         case bson_oid: bson_oid_to_string(bson_iterator_oid(&i), oidhex); printf( "%s" , oidhex ); break;
         case bson_object:
         case bson_array:
@@ -203,7 +203,7 @@ bson_type bson_iterator_next( bson_iterator * i ){
     switch ( bson_iterator_type(i) ){
     case bson_eoo: return bson_eoo; /* don't advance */
     case bson_undefined:
-    case bson_null: ds = 0; break;
+    case bson_NULL: ds = 0; break;
     case bson_bool: ds = 1; break;
     case bson_int: ds = 4; break;
     case bson_long:
@@ -313,7 +313,7 @@ bson_bool_t bson_iterator_bool( const bson_iterator * i ){
         case bson_long: return bson_iterator_long_raw(i) != 0;
         case bson_double: return bson_iterator_double_raw(i) != 0;
         case bson_eoo:
-        case bson_null: return 0;
+        case bson_NULL: return 0;
         default: return 1;
     }
 }
@@ -483,8 +483,8 @@ bson_buffer * bson_append_bool( bson_buffer * b , const char * name , const bson
     bson_append_byte( b , i != 0 );
     return b;
 }
-bson_buffer * bson_append_null( bson_buffer * b , const char * name ){
-    if ( ! bson_append_estart( b , bson_null , name , 0 ) ) return 0;
+bson_buffer * bson_append_NULL( bson_buffer * b , const char * name ){
+    if ( ! bson_append_estart( b , bson_NULL , name , 0 ) ) return 0;
     return b;
 }
 bson_buffer * bson_append_undefined( bson_buffer * b , const char * name ){
@@ -552,20 +552,20 @@ bson_buffer * bson_append_bson( bson_buffer * b , const char * name , const bson
     return b;
 }
 
-bson_buffer * bson_append_element( bson_buffer * b, const char * name_or_null, const bson_iterator* elem){
+bson_buffer * bson_append_element( bson_buffer * b, const char * name_or_NULL, const bson_iterator* elem){
     bson_iterator next = *elem;
     int size;
 
     bson_iterator_next(&next);
     size = next.cur - elem->cur;
 
-    if (name_or_null == NULL){
+    if (name_or_NULL == NULL){
         bson_ensure_space(b, size);
         bson_append(b, elem->cur, size);
     }else{
         int data_size = size - 1 - strlen(bson_iterator_key(elem));
-        bson_append_estart(b, elem->cur[0], name_or_null, data_size);
-        bson_append(b, name_or_null, strlen(name_or_null));
+        bson_append_estart(b, elem->cur[0], name_or_NULL, data_size);
+        bson_append(b, name_or_NULL, strlen(name_or_NULL));
         bson_append(b, bson_iterator_value(elem), data_size);
     }
 

@@ -261,7 +261,7 @@ void split_unaligned(const TransOp& transop, TransOpBuffer& buf) {
     lo.cond = LDST_ALIGN_LO;
     lo.unaligned = 0;
     lo.eom = 0;
-    buf.synthops[idx] = null; // loads and stores are not synthesized
+    buf.synthops[idx] = NULL; // loads and stores are not synthesized
 
     idx = buf.put();
     TransOp& hi = buf.uops[idx];
@@ -272,7 +272,7 @@ void split_unaligned(const TransOp& transop, TransOpBuffer& buf) {
     hi.cond = LDST_ALIGN_HI;
     hi.unaligned = 0;
     hi.som = 0;
-    buf.synthops[idx] = null; // loads and stores are not synthesized
+    buf.synthops[idx] = NULL; // loads and stores are not synthesized
 
     if (ld) {
         // ld rd = [ra+rb]        =>   ld.lo rd = [rt]           and    ld.hi rd = [rt],rd
@@ -2171,12 +2171,12 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     /*
        if unlikely (smc_isdirty(rvp.mfnlo)) {
        if (logable(5) | log_code_page_ops) ptl_logfile << "Pre-invalidate low mfn for ", rvp, endl;
-       if unlikely (!invalidate_page(rvp.mfnlo, INVALIDATE_REASON_DIRTY)) return null;
+       if unlikely (!invalidate_page(rvp.mfnlo, INVALIDATE_REASON_DIRTY)) return NULL;
        }
 
        if unlikely (smc_isdirty(rvp.mfnhi)) {
        if (logable(5) | log_code_page_ops) ptl_logfile << "Pre-invalidate high mfn for ", rvp, endl;
-       if unlikely (!invalidate_page(rvp.mfnhi, INVALIDATE_REASON_DIRTY)) return null;
+       if unlikely (!invalidate_page(rvp.mfnhi, INVALIDATE_REASON_DIRTY)) return NULL;
        }
        */
 
@@ -2185,7 +2185,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
         return bb;
     }
 
-    bb = null;
+    bb = NULL;
 
     translate_timer.start();
 
@@ -2193,7 +2193,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
 
     TraceDecoder trans(rvp);
     if(trans.fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
-        return null;
+        return NULL;
     }
 
     if (logable(10) | log_code_page_ops) {
@@ -2214,7 +2214,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     }
 
     if(trans.handle_exec_fault) {
-        return null;
+        return NULL;
     }
 
     trans.bb.hitcount = 0;

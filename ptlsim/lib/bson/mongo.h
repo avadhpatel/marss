@@ -108,7 +108,7 @@ typedef enum {
 } mongo_conn_return;
 
 /**
- * @param options can be null
+ * @param options can be NULL
  */
 mongo_conn_return mongo_connect( mongo_connection * conn , mongo_connection_options * options );
 mongo_conn_return mongo_connect_pair( mongo_connection * conn , mongo_connection_options * left, mongo_connection_options * right );

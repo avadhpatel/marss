@@ -45,7 +45,7 @@ struct BusQueueEntry : public FixStateListObject
 	bool annuled;
 
 	void init() {
-		request = null;
+		request = NULL;
 		hasData = false;
 		annuled = false;
 	}
@@ -78,7 +78,7 @@ struct PendingQueueEntry : public FixStateListObject
     W64 initCycle;
 
 	void init() {
-		request = null;
+		request = NULL;
 		shared = false;
 		hasData = false;
 		annuled = false;

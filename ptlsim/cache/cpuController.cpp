@@ -43,8 +43,8 @@ CPUController::CPUController(W8 coreid, char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Controller(coreid, name, memoryHierarchy)
 {
-	int_L1_i_ = null;
-	int_L1_d_ = null;
+	int_L1_i_ = NULL;
+	int_L1_d_ = NULL;
 	icacheLineBits_ = log2(L1I_LINE_SIZE);
 	dcacheLineBits_ = log2(L1D_LINE_SIZE);
     SETUP_STATS(CPUController);
@@ -75,7 +75,7 @@ bool CPUController::handle_interconnect_cb(void *arg)
 		return true;
 
 	CPUControllerQueueEntry *queueEntry = find_entry(message->request);
-	if(queueEntry == null) {
+	if(queueEntry == NULL) {
 		return true;
 	}
 
@@ -92,7 +92,7 @@ CPUControllerQueueEntry* CPUController::find_entry(MemoryRequest *request)
 		if(entry->request == request)
 			return entry;
 	}
-	return null;
+	return NULL;
 }
 
 void CPUController::annul_request(MemoryRequest *request)
@@ -146,7 +146,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 		MemoryRequest *request)
 {
 	int fastPathLat ;
-	if(interconnect == null) {
+	if(interconnect == NULL) {
 		// From CPU
 		if(request->is_instruction()) {
 
@@ -167,7 +167,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
-	if(queueEntry == null) {
+	if(queueEntry == NULL) {
 		memoryHierarchy_->add_event(&queueAccess_, 1, request);
 		return -1;
 	}
@@ -252,7 +252,7 @@ CPUControllerQueueEntry* CPUController::find_dependency(
 			return retEntry;
 		}
 	}
-	return null;
+	return NULL;
 }
 
 void CPUController::wakeup_dependents(CPUControllerQueueEntry *queueEntry)
@@ -361,7 +361,7 @@ bool CPUController::queue_access_cb(void *arg)
 
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
-	if(queueEntry == null) {
+	if(queueEntry == NULL) {
 		memoryHierarchy_->add_event(&queueAccess_, 1, request);
 		return true;
 	}

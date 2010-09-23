@@ -192,9 +192,9 @@ struct CacheQueueEntry : public FixStateListObject
 		bool prefetchCompleted;
 
 		void init() {
-			request = null;
-			sender = null;
-			sendTo = null;
+			request = NULL;
+			sender = NULL;
+			sendTo = NULL;
 			depends = -1;
 			eventFlags.reset();
 			annuled = false;

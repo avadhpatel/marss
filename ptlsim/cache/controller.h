@@ -44,7 +44,7 @@ struct Message : public FixStateListObject {
 	void *arg;
 
 	ostream& print(ostream& os) const {
-		if(sender == null) {
+		if(sender == NULL) {
 			os << "Free Message\n";
 			return os;
 		}
@@ -57,10 +57,10 @@ struct Message : public FixStateListObject {
 	}
 
 	void init() {
-		sender = null;
-		request = null;
+		sender = NULL;
+		request = NULL;
 		hasData = false;
-		arg = null;
+		arg = NULL;
 	}
 };
 

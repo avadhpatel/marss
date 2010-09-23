@@ -44,7 +44,7 @@ struct CPUControllerQueueEntry : public FixStateListObject
 	bool annuled;
 
 	void init() {
-		request = null;
+		request = NULL;
 		cycles = -1;
 		depends = -1;
 		annuled = false;
@@ -152,7 +152,7 @@ class CPUController : public Controller
 		int flush();
 
 		int access(MemoryRequest *request) {
-			return access_fast_path(null, request);
+			return access_fast_path(NULL, request);
 		}
 
 		bool is_full(bool fromInterconnect = false) const {

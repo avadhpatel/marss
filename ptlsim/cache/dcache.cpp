@@ -118,7 +118,7 @@ int LoadFillReqQueue<Entry, size>::add(const Entry& req) {
   assert(count < size);
   count++;
   //  stats.dcache.lfrq.inserts++;
-  if(&hierarchy != null)  per_dcache_stats_update(hierarchy.coreid, lfrq.inserts++);
+  if(&hierarchy != NULL)  per_dcache_stats_update(hierarchy.coreid, lfrq.inserts++);
   return idx;
 }
 
@@ -605,7 +605,7 @@ int CacheHierarchy::issueload_slowpath(Waddr physaddr, SFR& sfra, LoadStoreInfo 
     // We had at least a partial L2 hit, but is the requested data actually mapped into the line?
     //
     bitvec<L2_LINE_SIZE> sframask, reqmask;
-    prep_L2_sframask_and_reqmask((lsi.sfrused) ? &sfra : null, physaddr, lsi.sizeshift, sframask, reqmask);
+    prep_L2_sframask_and_reqmask((lsi.sfrused) ? &sfra : NULL, physaddr, lsi.sizeshift, sframask, reqmask);
     L2hit = (lsi.sfrused) ? ((reqmask & (sframask | L2line->valid)) == reqmask) : ((reqmask & L2line->valid) == reqmask);
 #ifdef ISSUE_LOAD_STORE_DEBUG
     ptl_logfile << "L2hit = ", L2hit, endl, "  cachemask ", L2line->valid, endl,
@@ -715,7 +715,7 @@ void CacheHierarchy::annul_lfrq_slot(int lfrqslot) {
 }
   
 //
-// NOTE: lsi should specify destination of REG_null for prefetches!
+// NOTE: lsi should specify destination of REG_NULL for prefetches!
 //
 static const int PREFETCH_STOPS_AT_L2 = 0;
   
@@ -756,14 +756,14 @@ void CacheHierarchy::initiate_prefetch(W64 addr, int cachelevel) {
 
 bool CacheHierarchy::probe_icache(Waddr virtaddr, Waddr physaddr) {
   L1ICacheLine* L1line = L1I.probe(physaddr);
-  bool hit = (L1line != null);
+  bool hit = (L1line != NULL);
     
   return hit;
 }
 
 int CacheHierarchy::initiate_icache_miss(W64 addr, int rob, W8 threadid) {
   addr = floor(addr, L1I_LINE_SIZE);
-  bool line_in_L2 = (L2.probe(addr) != null);
+  bool line_in_L2 = (L2.probe(addr) != NULL);
   int mb = missbuf.initiate_miss(addr, L2.probe(addr), true, rob, threadid);
     
   if (logable(6))

@@ -205,10 +205,10 @@ namespace Memory {
                 bool responseData;
 
                 void init() {
-                    request = null;
-                    sender = null;
-                    sendTo = null;
-                    line = null;
+                    request = NULL;
+                    sender = NULL;
+                    sendTo = NULL;
+                    line = NULL;
                     depends = -1;
                     eventFlags.reset();
                     annuled = false;

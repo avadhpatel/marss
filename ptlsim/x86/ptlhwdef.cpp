@@ -479,7 +479,7 @@ void BasicBlock::reset(const RIPVirtPhys& rip) {
 //
 void BasicBlock::free() {
   if (synthops) delete[] synthops;
-  synthops = null;
+  synthops = NULL;
   ::free(this);
 }
 
@@ -488,7 +488,7 @@ BasicBlock* BasicBlock::clone() {
 
   memcpy(bb, this, sizeof(BasicBlockBase));
 
-  bb->synthops = null;
+  bb->synthops = NULL;
   // hashlink, mfnlo_loc, mfnhi_loc are always updated after cloning
   bb->hashlink.reset();
   bb->use(0);

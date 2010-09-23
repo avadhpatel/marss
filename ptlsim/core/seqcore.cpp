@@ -355,7 +355,7 @@ ostream& SequentialCoreEvent::print(ostream& os) const {
     os << "ldanul", " rip ", (void*)rip, ":", intstring(uopid, -2), "  ", padstring(sb, -60), " ", loadstore.sfr,
       " (virt 0x", hexstring(loadstore.virtaddr, 48), ")";
     if (loadstore.origaddr != loadstore.virtaddr) os << " (orig 0x", hexstring(loadstore.origaddr, 48), ")";
-    os << " was annulled (high unaligned load)";
+    os << " was anNULLed (high unaligned load)";
     break;
   }
   case EVENT_LOAD_STORE_UNALIGNED: {
@@ -404,7 +404,7 @@ struct SequentialCoreEventLog {
   SequentialCoreEvent* tail;
   ofstream* ptl_logfile;
 
-  SequentialCoreEventLog() { start = null; end = null; tail = null; ptl_logfile = null; }
+  SequentialCoreEventLog() { start = NULL; end = NULL; tail = NULL; ptl_logfile = NULL; }
 
   bool init(size_t bufsize);
   void reset();
@@ -464,9 +464,9 @@ void SequentialCoreEventLog::reset() {
   if (!start) return;
 
   size_t bytes = (end - start) * sizeof(SequentialCoreEvent);
-  start = null;
-  end = null;
-  tail = null;
+  start = NULL;
+  end = NULL;
+  tail = NULL;
 }
 
 void SequentialCoreEventLog::flush(bool only_to_tail) {
@@ -535,8 +535,8 @@ struct SequentialCore {
   Context& ctx;
   CommitRecord* cmtrec;
 
-  SequentialCore(): ctx(contextof(0)), cmtrec(null) { }
-  SequentialCore(Context& ctx_, CommitRecord* cmtrec_ = null): ctx(ctx_), cmtrec(cmtrec_) { }
+  SequentialCore(): ctx(contextof(0)), cmtrec(NULL) { }
+  SequentialCore(Context& ctx_, CommitRecord* cmtrec_ = NULL): ctx(ctx_), cmtrec(cmtrec_) { }
 
   BasicBlock* current_basic_block;
   int bytes_in_current_insn;
@@ -592,7 +592,7 @@ struct SequentialCore {
 
   void reset_fetch(W64 realrip) {
     arf[REG_rip] = realrip;
-    current_basic_block = null;
+    current_basic_block = NULL;
   }
 
   enum {
@@ -859,7 +859,7 @@ struct SequentialCore {
         data = extract_bytes(((byte*)&aligner) + offset, sizeshift, signext);
       } else {
         //
-        // annulled: we need no data from the high load anyway; only use the low data
+        // anNULLed: we need no data from the high load anyway; only use the low data
         // that was already checked for exceptions and forwarding:
         //
         W64 offset = lowbits(origaddr, 3);
@@ -1106,7 +1106,7 @@ struct SequentialCore {
 
     while ((uopindex < bb->count) & (user_insns < insnlimit)) {
       TransOp uop;
-      uopimpl_func_t synthop = null;
+      uopimpl_func_t synthop = NULL;
 
       if unlikely (arf[REG_rip] == config.stop_at_rip) {
         return SEQEXEC_EARLY_EXIT;

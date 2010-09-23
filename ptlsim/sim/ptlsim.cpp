@@ -24,7 +24,6 @@
 
 #include <fstream>
 #include <syscalls.h>
-
 #include <ptl-qemu.h>
 
 #ifndef CONFIG_ONLY
@@ -546,7 +545,7 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   return true;
 }
 
-Hashtable<const char*, PTLsimMachine*, 1>* machinetable = null;
+Hashtable<const char*, PTLsimMachine*, 1>* machinetable = NULL;
 
 // Make sure the vtable gets compiled:
 PTLsimMachine dummymachine;
@@ -570,14 +569,14 @@ void PTLsimMachine::removemachine(const char* name, PTLsimMachine* machine) {
 }
 
 PTLsimMachine* PTLsimMachine::getmachine(const char* name) {
-  if unlikely (!machinetable) return null;
+  if unlikely (!machinetable) return NULL;
   PTLsimMachine** p = machinetable->get(name);
-  if (!p) return null;
+  if (!p) return NULL;
   return *p;
 }
 
 /* Currently executing machine model: */
-PTLsimMachine* curr_ptl_machine = null;
+PTLsimMachine* curr_ptl_machine = NULL;
 
 PTLsimMachine* PTLsimMachine::getcurrent() {
   return curr_ptl_machine;
@@ -587,7 +586,7 @@ void ptl_reconfigure(char* config_str) {
 
 	char* argv[1]; argv[0] = config_str;
 
-	if(config_str == null || strlen(config_str) == 0) {
+	if(config_str == NULL || strlen(config_str) == 0) {
 		print_usage();
 		return;
 	}
@@ -597,10 +596,10 @@ void ptl_reconfigure(char* config_str) {
 	ptl_logfile << "Configuration changed: ", config, endl;
 
     /*
-	 * set the curr_ptl_machine to null so it will be automatically changed to
+	 * set the curr_ptl_machine to NULL so it will be automatically changed to
 	 * new configured machine
      */
-	curr_ptl_machine = null;
+	curr_ptl_machine = NULL;
 }
 
 static bool ptl_machine_configured=false;
@@ -627,9 +626,9 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
 
     if(!ptl_machine_configured){
         ptl_machine_configured=true;
-        PTLsimMachine* machine = null;
+        PTLsimMachine* machine = NULL;
         char* machinename = config.core_name;
-        if likely (curr_ptl_machine != null) {
+        if likely (curr_ptl_machine != NULL) {
             machine = curr_ptl_machine;
         } else {
             machine = PTLsimMachine::getmachine(machinename);
@@ -660,11 +659,11 @@ CPUX86State* ptl_create_new_context() {
 }
 
 /* Checker */
-Context* checker_context = null;
+Context* checker_context = NULL;
 
 void enable_checker() {
 
-    if(checker_context != null) {
+    if(checker_context != NULL) {
         delete checker_context;
     }
 
@@ -805,7 +804,8 @@ void print_stats_in_log(){
   // opclass: load, store, branch,
   W64 total_uops = stats->ooocore_context_total.commit.uops;
   ptl_logfile << " total_uop ", total_uops, endl;
-
+ 
+   
   ptl_logfile << " total_load ", stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)], endl;
   ptl_logfile << " load_percentage ", (stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)] * 100.0 )/ (total_uops * 1.0), endl;
   ptl_logfile << " total_store ", stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)], endl;
@@ -958,9 +958,9 @@ void write_mongo_stats() {
 }
 
 extern "C" uint8_t ptl_simulate() {
-	PTLsimMachine* machine = null;
+	PTLsimMachine* machine = NULL;
 	char* machinename = config.core_name;
-	if likely (curr_ptl_machine != null) {
+	if likely (curr_ptl_machine != NULL) {
 		machine = curr_ptl_machine;
 	} else {
 		machine = PTLsimMachine::getmachine(machinename);
@@ -1004,7 +1004,7 @@ extern "C" uint8_t ptl_simulate() {
             mongo_connection_options opts;
 
             host = gethostbyname(config.mongo_server.buf);
-            if(host == null) {
+            if(host == NULL) {
                 cerr << "MongoDB Server host ", config.mongo_server, " is unreachable.", endl;
                 config.enable_mongo = 0;
             } else {
@@ -1038,10 +1038,10 @@ extern "C" uint8_t ptl_simulate() {
     }
 
     /*
-	 * Set ret_qemu_env to null, it will be set at the exit of simulation 'run'
+	 * Set ret_qemu_env to NULL, it will be set at the exit of simulation 'run'
 	 * to the Context that has interrupts/exceptions pending
      */
-	machine->ret_qemu_env = null;
+	machine->ret_qemu_env = NULL;
 	ptl_stable_state = 0;
 
 	if(machine->stopped != 0)
@@ -1084,7 +1084,7 @@ extern "C" uint8_t ptl_simulate() {
     stats = &global_stats;
 	W64 tsc_at_end = rdtsc();
 	machine->update_stats(stats);
-	curr_ptl_machine = null;
+	curr_ptl_machine = NULL;
 
 	W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
 	stats->elapse_seconds = seconds;
@@ -1241,7 +1241,7 @@ bool simulate(const char* machinename) {
   machine->run(config);
   W64 tsc_at_end = rdtsc();
   machine->update_stats(stats);
-  curr_ptl_machine = null;
+  curr_ptl_machine = NULL;
 
   W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
   stats->elapse_seconds = seconds;

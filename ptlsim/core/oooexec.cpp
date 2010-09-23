@@ -337,7 +337,7 @@ static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
 int ReorderBufferEntry::issue() {
   OutOfOrderCore& core = getcore();
   ThreadContext& thread = getthread();
-  OutOfOrderCoreEvent* event = null;
+  OutOfOrderCoreEvent* event = NULL;
 
   // We keep TLB miss handling entries into issue queue
   // to make sure that when tlb miss is handled, they will
@@ -440,19 +440,19 @@ int ReorderBufferEntry::issue() {
   if likely ((!st || (st && load_store_second_phase)) && (uop.rc != REG_imm)) assert(rc.ready());
   if likely (!st) assert(operands[RS]->ready());
 
-  if likely (ra.nonnull()) {
+  if likely (ra.nonNULL()) {
     ra.get_state_list().issue_source_counter++;
     ra.all_consumers_sourced_from_bypass &= (ra.state == PHYSREG_BYPASS);
     per_physregfile_stats_update(per_ooo_core_stats_ref(coreid).issue.source, ra.rfid, [ra.state]++);
   }
 
-  if likely ((!uop.rbimm) & (rb.nonnull())) {
+  if likely ((!uop.rbimm) & (rb.nonNULL())) {
     rb.get_state_list().issue_source_counter++;
     rb.all_consumers_sourced_from_bypass &= (rb.state == PHYSREG_BYPASS);
     per_physregfile_stats_update(per_ooo_core_stats_ref(coreid).issue.source, rb.rfid, [rb.state]++);
   }
 
-  if unlikely ((!uop.rcimm) & (rc.nonnull())) {
+  if unlikely ((!uop.rcimm) & (rc.nonNULL())) {
     rc.get_state_list().issue_source_counter++;
     rc.all_consumers_sourced_from_bypass &= (rc.state == PHYSREG_BYPASS);
     per_physregfile_stats_update(per_ooo_core_stats_ref(coreid).issue.source, rb.rfid, [rc.state]++);
@@ -521,7 +521,7 @@ int ReorderBufferEntry::issue() {
     //
     // If the uop caused an exception, force it directly to the commit
     // state and not through writeback (this keeps dependencies waiting until
-    // they can be properly annulled by the speculation logic.) The commit
+    // they can be properly anNULLed by the speculation logic.) The commit
     // stage will detect the exception and take appropriate action.
     //
     // If the exceptional uop was speculatively executed beyond a
@@ -567,7 +567,7 @@ int ReorderBufferEntry::issue() {
 
   //
   // Release the issue queue entry, since we are beyond the point of no return:
-  // the uop cannot possibly be replayed at this point, but may still be annulled
+  // the uop cannot possibly be replayed at this point, but may still be anNULLed
   // or re-dispatched in case of speculation failures.
   //
   release();
@@ -810,7 +810,7 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
   state.data = exception | ((W64)pfec << 32);
   state.datavalid = 1;
 
-  if unlikely (config.event_log_enabled) core.eventlog.add_load_store((st) ? EVENT_STORE_EXCEPTION : EVENT_LOAD_EXCEPTION, this, null, addr);
+  if unlikely (config.event_log_enabled) core.eventlog.add_load_store((st) ? EVENT_STORE_EXCEPTION : EVENT_LOAD_EXCEPTION, this, NULL, addr);
 
   if unlikely (exception == EXCEPTION_UnalignedAccess) {
     //
@@ -821,7 +821,7 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
     // low and high parts as it is refetched.
     //
 	  assert(0);
-    if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_ALIGNMENT_FIXUP, this, null, addr);
+    if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_ALIGNMENT_FIXUP, this, NULL, addr);
 
     core.set_unaligned_hint(uop.rip, 1);
 
@@ -880,7 +880,7 @@ bool ReorderBufferEntry::release_mem_lock(bool forced) {
   ThreadContext& thread = getthread();
 
   if unlikely (config.event_log_enabled) {
-    OutOfOrderCoreEvent* event = core.eventlog.add_load_store((forced) ? EVENT_STORE_LOCK_ANNULLED : EVENT_STORE_LOCK_RELEASED, this, null, physaddr);
+    OutOfOrderCoreEvent* event = core.eventlog.add_load_store((forced) ? EVENT_STORE_LOCK_ANNULLED : EVENT_STORE_LOCK_RELEASED, this, NULL, physaddr);
     event->loadstore.locking_vcpuid = lock->vcpuid;
     event->loadstore.locking_uuid = lock->uuid;
     event->loadstore.locking_rob = lock->rob;
@@ -980,7 +980,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   // stores can depend on them using the rs dependency.
   //
 
-  LoadStoreQueueEntry* sfra = null;
+  LoadStoreQueueEntry* sfra = NULL;
 
   foreach_backward_before(LSQ, lsq, i) {
     LoadStoreQueueEntry& stbuf = LSQ[i];
@@ -998,7 +998,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 		// Stores are unaligned and the load with more than two matching stores
 		// in qeueu will not be issued, so we can issue stores that overlap
 		// without any problem.
-		sfra = null;
+		sfra = NULL;
         // sfra = &stbuf;
         break;
       }
@@ -1088,7 +1088,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   // Aliasing is detected when stores issue: the load queue is scanned
   // for earlier loads in program order which collide with the store's
   // address. In this case all uops in program order after and including
-  // the store (and by extension, the colliding load) must be annulled.
+  // the store (and by extension, the colliding load) must be anNULLed.
   //
   // To keep this from happening repeatedly, whenever a collision is
   // detected, the store looks up the rip of the colliding load and adds
@@ -1197,7 +1197,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
       // becomes unlocked.
       //
       if unlikely (config.event_log_enabled) {
-        event = core.eventlog.add_load_store(EVENT_STORE_LOCK_REPLAY, this, null, addr);
+        event = core.eventlog.add_load_store(EVENT_STORE_LOCK_REPLAY, this, NULL, addr);
         event->loadstore.locking_vcpuid = lock->vcpuid;
         event->loadstore.locking_uuid = lock->uuid;
         event->loadstore.threadid = lock->threadid;
@@ -1238,8 +1238,8 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
   if(config.trace_memory_updates){
     trace_mem_logfile << " cycle: ", sim_cycle, " generated store addr ", (void*)origaddr, " rc ", (void*)rc, " data ", (void*)state.data,  " sfr ", state, endl;
   }
-  per_context_ooocore_stats_update(threadid, dcache.store.forward.zero += (sfra == null));
-  per_context_ooocore_stats_update(threadid, dcache.store.forward.sfr += (sfra != null));
+  per_context_ooocore_stats_update(threadid, dcache.store.forward.zero += (sfra == NULL));
+  per_context_ooocore_stats_update(threadid, dcache.store.forward.sfr += (sfra != NULL));
   per_context_ooocore_stats_update(threadid, dcache.store.datatype[uop.datatype]++);
 
   if unlikely (config.event_log_enabled) {
@@ -1282,7 +1282,7 @@ W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
   int aligntype = uop.cond;
   bool signext = (uop.opcode == OP_ldx);
   bool annul = annul_flag;
-  LoadStoreQueueEntry* sfra = null;
+  LoadStoreQueueEntry* sfra = NULL;
 
 
   // Search the store queue for the most recent store to the same address.
@@ -1395,7 +1395,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   //
   W64 data;
 
-  LoadStoreQueueEntry* sfra = null;
+  LoadStoreQueueEntry* sfra = NULL;
 
 #define SMT_ENABLE_LOAD_HOISTING
 #ifdef SMT_ENABLE_LOAD_HOISTING
@@ -1434,13 +1434,13 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 	  sfra_addr_diff = (stbuf.physaddr - state.physaddr);
 	  if(-1 <= sfra_addr_diff && sfra_addr_diff <= 1) {
         per_context_ooocore_stats_update(threadid, dcache.load.dependency.stq_address_match++);
-		if(sfra == null) sfra = &stbuf;
+		if(sfra == NULL) sfra = &stbuf;
 		all_sfra_datavalid &= stbuf.datavalid;
 		continue;
       }
     } else {
 
-	  if (sfra != null) continue;
+	  if (sfra != NULL) continue;
 
 	  /* If load address is mmio then dont let it issue before unresolved store */
 	  if unlikely (state.mmio) {
@@ -1470,14 +1470,14 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     }
   }
 
-  per_context_ooocore_stats_update(threadid, dcache.load.dependency.independent += (sfra == null));
+  per_context_ooocore_stats_update(threadid, dcache.load.dependency.independent += (sfra == NULL));
 
 #ifndef DISABLE_SF
   bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid));// && all_sfra_datavalid));
   if(sfra && uop.internal) ready = false;
 #else
-  bool ready = (sfra == null);
-  sfra = null;
+  bool ready = (sfra == NULL);
+  sfra = NULL;
 #endif
 
   if(sfra && logable(10))
@@ -1508,7 +1508,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     //
     // Consider the following sequence of events:
     // - Load B issues
-    // - Store A issues and detects aliasing with load B; both A and B annulled
+    // - Store A issues and detects aliasing with load B; both A and B anNULLed
     // - Load B attempts to re-issue but aliasing is predicted, so it creates a dependency on store A
     // - Store A issues but sees that load B has already attempted to issue, so an aliasing replay is taken
     //
@@ -1549,7 +1549,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     // as well use it.
     //
     if unlikely ((prevaddr != state.physaddr) && (lowbits(prevaddr, log2(CacheSubsystem::L1_DCACHE_BANKS)) == lowbits(state.physaddr, log2(CacheSubsystem::L1_DCACHE_BANKS)))) {
-      if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_BANK_CONFLICT, this, null, addr);
+      if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_BANK_CONFLICT, this, NULL, addr);
       per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.bank_conflict++);
 
       replay();
@@ -1564,7 +1564,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   // control logic to avoid replays once we pass this point.
   //
   if unlikely (core.caches.lfrq_or_missbuf_full()) {
-    if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_LFRQ_FULL, this, null, addr);
+    if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_LFRQ_FULL, this, NULL, addr);
     per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.missbuf_full++);
 
     replay();
@@ -1616,7 +1616,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       // the uop until it becomes unlocked.
       //
       if unlikely (config.event_log_enabled) {
-        event = core.eventlog.add_load_store(EVENT_LOAD_LOCK_REPLAY, this, null, addr);
+        event = core.eventlog.add_load_store(EVENT_LOAD_LOCK_REPLAY, this, NULL, addr);
         event->loadstore.locking_vcpuid = lock->vcpuid;
         event->loadstore.locking_uuid = lock->uuid;
         event->loadstore.locking_rob = lock->rob;
@@ -1665,7 +1665,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         // bigger than this, we will eventually get an entry.
         //
         if unlikely (config.event_log_enabled) {
-          core.eventlog.add_load_store(EVENT_LOAD_LOCK_OVERFLOW, this, null, addr);
+          core.eventlog.add_load_store(EVENT_LOAD_LOCK_OVERFLOW, this, NULL, addr);
         }
 
         per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.interlock_overflow++);
@@ -1681,7 +1681,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       lock_acquired = 1;
 
       if unlikely (config.event_log_enabled) {
-        core.eventlog.add_load_store(EVENT_LOAD_LOCK_ACQUIRED, this, null, addr);
+        core.eventlog.add_load_store(EVENT_LOAD_LOCK_ACQUIRED, this, NULL, addr);
       }
     }
   }
@@ -1693,9 +1693,9 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
   // shift is how many bits to shift the 8-bit bytemask left by within the cache line;
   bool covered = core.caches.covered_by_sfr(physaddr, sfra, sizeshift);
-  per_context_ooocore_stats_update(threadid, dcache.load.forward.cache += (sfra == null));
-  per_context_ooocore_stats_update(threadid, dcache.load.forward.sfr += ((sfra != null) & covered));
-  per_context_ooocore_stats_update(threadid, dcache.load.forward.sfr_and_cache += ((sfra != null) & (!covered)));
+  per_context_ooocore_stats_update(threadid, dcache.load.forward.cache += (sfra == NULL));
+  per_context_ooocore_stats_update(threadid, dcache.load.forward.sfr += ((sfra != NULL) & covered));
+  per_context_ooocore_stats_update(threadid, dcache.load.forward.sfr_and_cache += ((sfra != NULL) & (!covered)));
   per_context_ooocore_stats_update(threadid, dcache.load.datatype[uop.datatype]++);
 
   if(!config.verify_cache){
@@ -1711,7 +1711,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   if unlikely (uop.internal) {
     cycles_left = LOADLAT;
 
-	assert(sfra == null);
+	assert(sfra == NULL);
 
     if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_HIT, this, sfra, addr);
 
@@ -1778,7 +1778,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   }
 
   Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
-  assert(request != null);
+  assert(request != NULL);
 
   request->init(core.coreid, threadid, physaddr, idx, sim_cycle,
                   false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
@@ -1807,7 +1807,7 @@ void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
 
 	// Get the ast function ID from
 	light_assist_func_t assist_func = light_assistid_to_func[assistid];
-	assert(assist_func != null);
+	assert(assist_func != NULL);
 
 	Context& ctx = getthread().ctx;
 
@@ -2046,7 +2046,7 @@ rob_cont:
       assert(exception == 0);
     }
 
-    if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_COMPLETE, this, null, virtaddr);
+    if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_COMPLETE, this, NULL, virtaddr);
     thread.dtlb.insert(origvirt, threadid);
 
     if(logable(10)) {
@@ -2069,7 +2069,7 @@ rob_cont:
       return;
   }
   Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
-  assert(request != null);
+  assert(request != NULL);
 
   request->init(core.coreid, threadid, pteaddr, idx, sim_cycle,
       false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
@@ -2081,7 +2081,7 @@ rob_cont:
   cycles_left = 0;
   changestate(thread.rob_cache_miss_list);
 
-  if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_MISS, this, null, pteaddr);
+  if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_MISS, this, NULL, pteaddr);
   per_context_dcache_stats_update(core.coreid, threadid, load.tlbwalk.L1_dcache_miss++);
 }
 
@@ -2123,7 +2123,7 @@ LoadStoreQueueEntry* ReorderBufferEntry::find_nearest_memory_fence() {
     // Stores can always pass load fences
   }
 
-  return null;
+  return NULL;
 }
 
 //
@@ -2210,7 +2210,7 @@ void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc
     // Note that most x86 processors will not prefetch beyond
     // a TLB miss, so this is disabled by default.
     //
-    if unlikely (config.event_log_enabled) OutOfOrderCoreEvent* event = core.eventlog.add_load_store(EVENT_LOAD_TLB_MISS, this, null, addr);
+    if unlikely (config.event_log_enabled) OutOfOrderCoreEvent* event = core.eventlog.add_load_store(EVENT_LOAD_TLB_MISS, this, NULL, addr);
     cycles_left = 0;
     tlb_walk_level = thread.ctx.page_table_level_count();
     changestate(thread.rob_tlb_miss_list);
@@ -2338,7 +2338,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(Memory::MemoryRequest *request)
                 }
         }else{
                 if(logable(5)) {
-                        ptl_logfile << " ignor annulled request : request uuid ",
+                        ptl_logfile << " ignor anNULLed request : request uuid ",
                                     request->get_owner_uuid(), " rob.uop.uuid ", rob.uop.uuid;
                         if(rob.lsq)
                                 ptl_logfile << " lsq_physaddr ", (void*)(rob.lsq->physaddr << 3),
@@ -2639,7 +2639,7 @@ int ReorderBufferEntry::forward() {
 // consideration for future pipeline stages and will be dropped on
 // the next cycle.
 //
-// Normally this means that mispredicted branch uops are annulled
+// Normally this means that mispredicted branch uops are anNULLed
 // even though only the code after the branch itself is invalid.
 // In this special case, the recovery rip is set to the actual
 // target of the branch rather than refetching the branch insn.
@@ -2660,7 +2660,7 @@ int ReorderBufferEntry::forward() {
 // being retained as occurs with mispredicted branches.
 //
 
-W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_rip) {
+W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_anNULLed_rip) {
   OutOfOrderCore& core = getcore();
 
   ThreadContext& thread = getthread();
@@ -2713,7 +2713,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
   }
 
   //
-  // Pass 1: invalidate issue queue slot for the annulled ROB
+  // Pass 1: invalidate issue queue slot for the anNULLed ROB
   //
   idx = endidx;
   for (;;) {
@@ -2796,7 +2796,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
   // Pass 3: For each speculative ROB, reinitialize and free speculative ROBs
   //
 
-  ReorderBufferEntry* lastrob = null;
+  ReorderBufferEntry* lastrob = NULL;
 
   idx = endidx;
   for (;;) {
@@ -2860,7 +2860,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
       //   C3
       //     C4
       //
-      // BR mispredicts, so everything after BR must be annulled.
+      // BR mispredicts, so everything after BR must be anNULLed.
       // RAS contains: C1 C3 C4, so we need to annul [C4 C3].
       //
       if unlikely (config.event_log_enabled) event->annul.annulras = 1;
@@ -2878,7 +2878,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
   }
 
   assert(ROB[startidx].uop.som);
-  if (return_first_annulled_rip) return ROB[startidx].uop.rip;
+  if (return_first_anNULLed_rip) return ROB[startidx].uop.rip;
   return (keep_misspec_uop) ? ROB[startidx].uop.riptaken : (Waddr)ROB[startidx].uop.rip;
 }
 
@@ -2901,7 +2901,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 //
 // The <prevrob> argument should be the previous ROB, in program
 // order, before this one. If this is the first ROB being
-// re-dispatched, <prevrob> should be null.
+// re-dispatched, <prevrob> should be NULL.
 //
 
 void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operands, ReorderBufferEntry* prevrob) {
@@ -2979,7 +2979,7 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
     lsq->invalid = 0;
     lsq->time_stamp = -1;
 
-    if (operands[RS]->nonnull()) {
+    if (operands[RS]->nonNULL()) {
       operands[RS]->unref(*this, thread.threadid);
       operands[RS] = &core.physregfiles[0][PHYS_REG_NULL];
       operands[RS]->addref(*this, thread.threadid);
@@ -3021,7 +3021,7 @@ void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
   //
   int count = 0;
 
-  ReorderBufferEntry* prevrob = null;
+  ReorderBufferEntry* prevrob = NULL;
 
   foreach_forward_from(ROB, this, robidx) {
     ReorderBufferEntry& reissuerob = ROB[robidx];

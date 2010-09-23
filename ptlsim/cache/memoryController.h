@@ -42,7 +42,7 @@ struct MemoryQueueEntry : public FixStateListObject
 	bool inUse;
 
 	void init() {
-		request = null;
+		request = NULL;
 		depends = -1;
 		annuled = false;
 		inUse = false;

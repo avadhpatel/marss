@@ -134,7 +134,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
 
 	if(!is_busy()) {
 		// address bus
-		memoryHierarchy_->add_event(&broadcast_, 1, null);
+		memoryHierarchy_->add_event(&broadcast_, 1, NULL);
 		set_bus_busy(true);
 	} else {
 		memdebug("Bus is busy\n");
@@ -146,7 +146,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
 BusQueueEntry* BusInterconnect::arbitrate_round_robin()
 {
 	memdebug("BUS:: doing arbitration.. \n");
-	BusControllerQueue *controllerQueue = null;
+	BusControllerQueue *controllerQueue = NULL;
 	int i;
 	if(lastAccessQueue)
 		i = lastAccessQueue->idx;
@@ -167,18 +167,18 @@ BusQueueEntry* BusInterconnect::arbitrate_round_robin()
 		}
 	} while(controllerQueue != lastAccessQueue);
 
-	return null;
+	return NULL;
 }
 
 bool BusInterconnect::broadcast_cb(void *arg)
 {
 	BusQueueEntry *queueEntry;
-	if(arg != null)
+	if(arg != NULL)
 		queueEntry = (BusQueueEntry*)arg;
 	else
 		queueEntry = arbitrate_round_robin();
 
-	if(queueEntry == null) { // nothing to broadcast
+	if(queueEntry == NULL) { // nothing to broadcast
 		set_bus_busy(false);
 		return true;
 	}
@@ -227,7 +227,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
 	}
 	queueEntry->request->decRefCounter();
 	memoryHierarchy_->add_event(&broadcastCompleted_,
-			BUS_BROADCASTS_DELAY, null);
+			BUS_BROADCASTS_DELAY, NULL);
 
 	// Free the message
 	memoryHierarchy_->free_message(&message);
@@ -241,7 +241,7 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
 
 	// call broadcast_cb that will check if any pending
 	// requests are there or not
-	broadcast_cb(null);
+	broadcast_cb(NULL);
 
 	return true ;
 }

@@ -42,7 +42,7 @@ struct BusQueueEntry : public FixStateListObject
 	bool annuled;
 
 	void init() {
-		request = null;
+		request = NULL;
 		hasData = false;
 		annuled = false;
 	}

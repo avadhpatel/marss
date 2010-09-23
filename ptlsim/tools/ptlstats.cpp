@@ -228,7 +228,7 @@ public:
     fill = RGBA(0, 0, 0, 255);
     stroke = RGBA(0, 0, 0, 255);
     strokewidth = 0.1;
-    fontinfo = null;
+    fontinfo = NULL;
     setoffset(0, 0);
     setdash(0, 0, 0);
     setfont("font-size:4;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Arial;text-anchor:middle;writing-mode:lr-tb");
@@ -273,7 +273,7 @@ public:
     *os << "<svg xmlns:svg=\"http://www.w3.org/2000/svg\" xmlns=\"http://www.w3.org/2000/svg\" id=\"svg2\" height=\"", height, "\" width=\"", width, "\" y=\"0.0\" x=\"0.0000000\" version=\"1.0\">", endl;
   }
 
-  void newlayer(const char* name = null) {
+  void newlayer(const char* name = NULL) {
     if (!name)
       *os << "<g id=\"", "layer", idcounter++, "\">", endl;
     else *os << "<g id=\"", name, "\">", endl;
@@ -303,7 +303,7 @@ public:
     *os << "\" d=\"M ", (x1 + xoffs), ",", (y1 + yoffs), " L ", (x2 + xoffs), ",", (y2 + yoffs), "\" />", endl;
   }
 
-  void startpath(float x, float y, const char* name = null) {
+  void startpath(float x, float y, const char* name = NULL) {
     *os << "<path id=\"";
     if (name)
       *os << name;
@@ -359,7 +359,7 @@ struct LineAttributes {
 
 const LineAttributes black_linetype = {1, 0, {0,   0,   0, 255}, 0.10, 0.00, 0.00, 0.00, 0, {0,   0,   0,   255}};
 
-void create_svg_of_histogram_percent_bargraph(ostream& os, W64s* histogram, int count, const char* title = null, double imagewidth = 300.0, double imageheight = 100.0) {
+void create_svg_of_histogram_percent_bargraph(ostream& os, W64s* histogram, int count, const char* title = NULL, double imagewidth = 300.0, double imageheight = 100.0) {
   double leftpad = 10.0;
   double toppad = 5.0;
   double rightpad = 4.0;
@@ -548,7 +548,7 @@ void create_svg_of_percentage_line_graph(ostream& os, double* xpoints, int xcoun
         if (i == 0) x = 0; else if (i == xcount-1) x = imagewidth;
         y = clipto(y, 0.0, imageheight - 1);
         if (i == 0) {
-          char* pathname = null;
+          char* pathname = NULL;
           stringbuf sb;
           if (ynames) {
             sb << "graph_", ynames[j];
@@ -585,7 +585,7 @@ void create_svg_of_percentage_line_graph(ostream& os, double* xpoints, int xcoun
       if (sample == 0) xp = 0; else if (sample == xcount-1) xp = imagewidth;
       yp = clipto(yp, 0.0, imageheight - 1);
       if (sample == 0) {
-        char* pathname = null;
+        char* pathname = NULL;
         stringbuf sb;
         if (ynames) {
           sb << "graph_", ynames[col];
@@ -672,7 +672,7 @@ void printbanner() {
   cerr << endl;
 }
 
-DataStoreNode* collect_into_supernode(int argc, char** argv, char* path, const char* deltastart = null, const char* deltaend = "final") {
+DataStoreNode* collect_into_supernode(int argc, char** argv, char* path, const char* deltastart = NULL, const char* deltaend = "final") {
   DataStoreNode* supernode = new DataStoreNode("super");
 
   StatsFileReader reader;
@@ -686,7 +686,7 @@ DataStoreNode* collect_into_supernode(int argc, char** argv, char* path, const c
 
     if (!reader.open(filename)) {
       cerr << "ptlstats: Cannot open '", filename, "'", endl, endl;
-      return null;
+      return NULL;
     }
 
     // Can't have slashes in tree pathnames
@@ -698,16 +698,16 @@ DataStoreNode* collect_into_supernode(int argc, char** argv, char* path, const c
     if (!dsbase) {
       cerr << "ptlstats: Error: cannot find ending snapshot '", deltaend, "' or starting snapshot '", deltastart, "'", endl;
       reader.close();
-      return null;
+      return NULL;
     }
 
-    DataStoreNode* ds = null;
+    DataStoreNode* ds = NULL;
 
     if (!(ds = dsbase->searchpath(path))) {
       cerr << "ptlstats: Error: cannot find subtree '", path, "'", endl;
       delete dsbase;
       reader.close();
-      return null;
+      return NULL;
     }
 
     ds->rename(filename);
@@ -946,7 +946,7 @@ inline double px_to_pt(double px) { return px * 1.25; }
 inline double pt_to_px(double pt) { return pt / 1.25; }
 
 void create_grouped_bargraph(ostream& os, char* statname, char* rownames, char* colnames, char* row_col_pattern,
-                             int scale_relative_to_col, const char* title = null, double imagewidth = 300.0, double imageheight = 100.0) {
+                             int scale_relative_to_col, const char* title = NULL, double imagewidth = 300.0, double imageheight = 100.0) {
 
   static const bool show_row_labels_in_group = false;
   static const bool show_average = false;
@@ -1133,7 +1133,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  char* filename = (no_args_needed) ? null : argv[n];
+  char* filename = (no_args_needed) ? NULL : argv[n];
 
   DataStoreNodePrintSettings printinfo;
   printinfo.force_sum_of_subtrees_only = config.show_sum_of_subtrees_only;
@@ -1145,8 +1145,8 @@ int main(int argc, char* argv[]) {
   printinfo.cumulative_histogram = config.cumulative_histogram;
   printinfo.show_stars_in_histogram = config.show_stars_in_histogram;
 
-  char* subtract_branch = (config.subtract_branch.set()) ? (char*)config.subtract_branch : null;
-  char* snapshot = (config.snapshot.set()) ? (char*)config.snapshot : null;
+  char* subtract_branch = (config.subtract_branch.set()) ? (char*)config.subtract_branch : NULL;
+  char* snapshot = (config.snapshot.set()) ? (char*)config.snapshot : NULL;
 
   StatsFileReader reader;
 
@@ -1340,7 +1340,7 @@ int main(int argc, char* argv[]) {
 
     if (graphing) {
       create_svg_of_percentage_line_graph(cout, xpoints, reader.header.record_count, ypoints, colnames.length, colnames,
-                                          config.graph_width, config.graph_height, null, graph_background, config.graph_stacked);
+                                          config.graph_width, config.graph_height, NULL, graph_background, config.graph_stacked);
     }
 
     foreach (j, colnames.length) {

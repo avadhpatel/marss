@@ -221,9 +221,9 @@ CacheController::CacheController(W8 coreid, char *name,
     cacheInsertComplete_.connect(signal_mem_ptr(*this,
                 &CacheController::cache_insert_complete_cb));
 
-    upperInterconnect_ = null;
-    upperInterconnect2_ = null;
-    lowerInterconnect_= null;
+    upperInterconnect_ = NULL;
+    upperInterconnect2_ = NULL;
+    lowerInterconnect_= NULL;
 }
 
 CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
@@ -250,7 +250,7 @@ CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
             return queueEntry;
         }
     }
-    return null;
+    return NULL;
 }
 
 CacheQueueEntry* CacheController::find_match(MemoryRequest *request)
@@ -267,7 +267,7 @@ CacheQueueEntry* CacheController::find_match(MemoryRequest *request)
             return queueEntry;
     }
 
-    return null;
+    return NULL;
 }
 
 void CacheController::print(ostream& os) const
@@ -297,7 +297,7 @@ bool CacheController::handle_upper_interconnect(Message &message)
 
     CacheQueueEntry *queueEntry = pendingRequests_.alloc();
 
-    if(queueEntry == null) {
+    if(queueEntry == NULL) {
         return false;
     }
 
@@ -342,8 +342,8 @@ bool CacheController::handle_lower_interconnect(Message &message)
 
     bool snoop_request = true;
 
-    if(queueEntry != null && !queueEntry->isSnoop &&
-            queueEntry->line != null &&
+    if(queueEntry != NULL && !queueEntry->isSnoop &&
+            queueEntry->line != NULL &&
             queueEntry->request == message.request) {
         if(message.hasData) {
             complete_request(message, queueEntry);
@@ -366,7 +366,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
             ADD_HISTORY_ADD(newEntry->request);
         }
     } else { // not lowestPrivate cache
-        if(queueEntry == null) {
+        if(queueEntry == NULL) {
             /* check if request is cache eviction */
             if(message.request->get_type() == MEMORY_OP_EVICT) {
                 /* alloc new queueentry and evict the cache line if present */
@@ -522,7 +522,7 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
 
     switch(oldState) {
         case MESI_INVALID:
-            queueEntry->line = null;
+            queueEntry->line = NULL;
             queueEntry->responseData = false;
             newState = MESI_INVALID;
             break;
@@ -675,7 +675,7 @@ void CacheController::send_evict_message(CacheQueueEntry *queueEntry,
 
     evictEntry->request = request;
     evictEntry->request->incRefCounter();
-    evictEntry->sender = null;
+    evictEntry->sender = NULL;
     evictEntry->sendTo = upperInterconnect_;
 
     memdebug("Created Evict message: ", *evictEntry, endl);
@@ -691,7 +691,7 @@ void CacheController::send_evict_message(CacheQueueEntry *queueEntry,
 
         evictEntry2->request = request;
         evictEntry2->request->incRefCounter();
-        evictEntry2->sender = null;
+        evictEntry2->sender = NULL;
         evictEntry2->sendTo = upperInterconnect2_;
 
         memdebug("Created Evict message: ", *evictEntry2, endl);
@@ -731,7 +731,7 @@ void CacheController::handle_cache_insert(CacheQueueEntry *queueEntry,
 
         newEntry->request = request;
         newEntry->request->incRefCounter();
-        newEntry->sender = null;
+        newEntry->sender = NULL;
         newEntry->sendTo = lowerInterconnect_;
         ADD_HISTORY_ADD(newEntry->request);
 
@@ -772,7 +772,7 @@ void CacheController::complete_request(Message &message,
      * first check that we have a valid line pointer in queue entry
      * and then check that message has data flag set
      */
-    if(queueEntry->line == null) {
+    if(queueEntry->line == NULL) {
         ptl_logfile << "Completing entry without line: ",*queueEntry, endl;
     }
     assert(queueEntry->line);
@@ -927,16 +927,16 @@ bool CacheController::cache_miss_cb(void *arg)
 
     if(queueEntry->isSnoop) {
         /*
-         * make sure that line pointer is null so when
+         * make sure that line pointer is NULL so when
          * message is sent to interconnect it will make
          * shared flag to false
          */
-        queueEntry->line = null;
+        queueEntry->line = NULL;
         queueEntry->isShared = false;
         queueEntry->responseData = false;
         STAT_UPDATE(snooprequest.miss++, queueEntry->request->is_kernel());
     } else {
-        if(queueEntry->line == null) {
+        if(queueEntry->line == NULL) {
             W64 oldTag = InvalidTag<W64>::INVALID;
             CacheLine *line = cacheLines_->insert(queueEntry->request,
                     oldTag);
@@ -1066,7 +1066,7 @@ bool CacheController::wait_interconnect_cb(void *arg)
 
     queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]--;
 
-    if(queueEntry->sendTo == null)
+    if(queueEntry->sendTo == NULL)
         ptl_logfile << "Queueentry: ", *queueEntry, endl;
     assert(queueEntry->sendTo);
 

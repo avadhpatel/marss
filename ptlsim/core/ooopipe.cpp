@@ -24,7 +24,6 @@
 #include <memoryHierarchy.h>
 
 #include <stats.h>
-
 #ifndef ENABLE_CHECKS
 #undef assert
 #define assert(x) (x)
@@ -118,7 +117,7 @@ itlb_walk_finish:
   }
 
   Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
-  assert(request != null);
+  assert(request != NULL);
 
   request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
       true, 0, 0, Memory::MEMORY_OP_READ);
@@ -268,7 +267,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
   if (current_basic_block) {
     // Release our lock on the cached basic block we're currently fetching
     current_basic_block->release();
-    current_basic_block = null;
+    current_basic_block = NULL;
   }
 
   if(logable(10))
@@ -405,7 +404,7 @@ void ThreadContext::redispatch_deadlock_recovery() {
   // deadlock-free operation in every configuration.
   //
 
-  ReorderBufferEntry* prevrob = null;
+  ReorderBufferEntry* prevrob = NULL;
   bitvec<MAX_OPERANDS> noops = 0;
 
   foreach_forward(ROB, robidx) {
@@ -553,7 +552,7 @@ bool ThreadContext::fetch() {
 		  ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
 
       fetchrip.update(ctx);
-      if(fetch_or_translate_basic_block(fetchrip) == null) {
+      if(fetch_or_translate_basic_block(fetchrip) == NULL) {
           if(fetchrip.rip == ctx.eip) {
               if(logable(10)) ptl_logfile << "Exception in Code page\n";
               return false;
@@ -601,7 +600,7 @@ bool ThreadContext::fetch() {
       assert(!waiting_for_icache_fill);
 
       Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
-      assert(request != null);
+      assert(request != NULL);
 
       request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
                       true, 0, 0, Memory::MEMORY_OP_READ);
@@ -634,7 +633,7 @@ bool ThreadContext::fetch() {
 
     FetchBufferEntry& transop = *fetchq.alloc();
 
-    uopimpl_func_t synthop = null;
+    uopimpl_func_t synthop = NULL;
 
     assert(current_basic_block->synthops);
 
@@ -778,7 +777,7 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
   if likely (current_basic_block) {
     // Release our ref to the old basic block being fetched
     current_basic_block->release();
-    current_basic_block = null;
+    current_basic_block = NULL;
   }
 
   BasicBlock* bb = bbcache[ctx.cpu_index](rvp);
@@ -787,7 +786,7 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
     current_basic_block = bb;
   } else {
     current_basic_block = bbcache[ctx.cpu_index].translate(ctx, rvp);
-    if (current_basic_block == null) return null;
+    if (current_basic_block == NULL) return NULL;
     assert(current_basic_block);
     if unlikely (config.event_log_enabled) {
       OutOfOrderCoreEvent* event = core.eventlog.add(EVENT_FETCH_TRANSLATE, rvp);
@@ -896,16 +895,16 @@ void ThreadContext::rename() {
 
     FetchBufferEntry& transop = *fetchq.dequeue();
     ReorderBufferEntry& rob = *ROB.alloc();
-    PhysicalRegister* physreg = null;
+    PhysicalRegister* physreg = NULL;
 
-    LoadStoreQueueEntry* lsqp = (ld|st) ? LSQ.alloc() : null;
+    LoadStoreQueueEntry* lsqp = (ld|st) ? LSQ.alloc() : NULL;
     LoadStoreQueueEntry& lsq = *lsqp;
 
     rob.reset();
     rob.uop = transop;
     rob.entry_valid = 1;
     rob.cycles_left = FRONTEND_STAGES;
-    rob.lsq = null;
+    rob.lsq = NULL;
     if unlikely (ld|st) {
       rob.lsq = &lsq;
       lsq.rob = &rob;
@@ -1264,7 +1263,7 @@ bool ReorderBufferEntry::find_sources() {
       preready[operand] = 1;
     }
 
-    if likely (source_physreg.nonnull()) {
+    if likely (source_physreg.nonNULL()) {
       per_physregfile_stats_update(per_ooo_core_stats_ref(coreid).dispatch.source, source_physreg.rfid, [source_physreg.state]++);
     }
   }
@@ -1754,20 +1753,20 @@ bool rip_is_in_spinlock(W64 rip) {
 
 /* Checker - saved stores to compare after executing emulated instruction */
 namespace OutOfOrderModel {
-  CheckStores *checker_stores = null;
+  CheckStores *checker_stores = NULL;
   int checker_stores_count = 0;
 
   void reset_checker_stores() {
-    if(checker_stores == null) {
+    if(checker_stores == NULL) {
       checker_stores = new CheckStores[10];
-      assert(checker_stores != null);
+      assert(checker_stores != NULL);
     }
     memset(checker_stores, 0, sizeof(CheckStores)*10);
     checker_stores_count = 0;
   }
 
   void add_checker_store(LoadStoreQueueEntry* lsq, W8 sizeshift) {
-    if(checker_stores == null) {
+    if(checker_stores == NULL) {
       reset_checker_stores();
     }
 
@@ -1844,7 +1843,7 @@ int ReorderBufferEntry::commit() {
   //
 
   bool found_eom = 0;
-  ReorderBufferEntry* cant_commit_subrob = null;
+  ReorderBufferEntry* cant_commit_subrob = NULL;
 
   foreach_forward_from(thread.ROB, this, j) {
     ReorderBufferEntry& subrob = thread.ROB[j];
@@ -1901,7 +1900,7 @@ int ReorderBufferEntry::commit() {
 
   all_ready_to_commit &= found_eom;
 
-  if unlikely (!all_ready_to_commit && cant_commit_subrob != null) {
+  if unlikely (!all_ready_to_commit && cant_commit_subrob != NULL) {
     per_context_ooocore_stats_update(threadid, commit.result.none++);
 
 	if(cant_commit_subrob->current_state_list == &getthread().rob_free_list) {
@@ -2156,7 +2155,7 @@ int ReorderBufferEntry::commit() {
 		ctx.set_reg(uop.rd, physreg->data);
 	}
 
-    physreg->rob = null;
+    physreg->rob = NULL;
   }
 
   if likely (uop.eom) {
@@ -2218,7 +2217,7 @@ int ReorderBufferEntry::commit() {
   }
 
   if unlikely (uop.eom && !ctx.kernel_mode && config.checker_enabled) {
-    bool mmio = (lsq != null) ? lsq->mmio : false;
+    bool mmio = (lsq != NULL) ? lsq->mmio : false;
     if likely (!isclass(uop.opcode, OPCLASS_BARRIER) &&
         uop.rip.rip != ctx.eip && !mmio) {
       execute_checker();
@@ -2249,7 +2248,7 @@ int ReorderBufferEntry::commit() {
                   assert(lsq->physaddr);
 
                   Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
-                  assert(request != null);
+                  assert(request != NULL);
 
                   request->init(core.coreid, threadid, lsq->physaddr << 3, 0,
                                   sim_cycle, false, uop.rip.rip, uop.uuid,
@@ -2292,7 +2291,7 @@ int ReorderBufferEntry::commit() {
   assert(oldphysreg->state == PHYSREG_ARCH);
 
   if unlikely (config.event_log_enabled) event->commit.oldphysreg = -1;
-  if likely (oldphysreg->nonnull()) {
+  if likely (oldphysreg->nonNULL()) {
     if unlikely (config.event_log_enabled) {
       event->commit.oldphysreg = oldphysreg->index();
       event->commit.oldphysreg_refcount = oldphysreg->refcount;

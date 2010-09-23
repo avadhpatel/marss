@@ -69,7 +69,6 @@ typedef signed char W8s;
 #ifndef NULL
 #define NULL 0
 #endif
-#define null NULL
 
 #ifdef __x86_64__
 typedef W64 Waddr;
@@ -172,8 +171,8 @@ template <typename T> struct ispointer_t<T*> { static const bool pointer = 1; };
 
 #ifndef offsetof_t
 // Null pointer to the specified object type, for computing field offsets
-template <typename T> static inline T* nullptr() { return (T*)(Waddr)0; }
-#define offsetof_t(T, field) ((Waddr)(&(nullptr<T>()->field)) - ((Waddr)nullptr<T>()))
+template <typename T> static inline T* NULLptr() { return (T*)(Waddr)0; }
+#define offsetof_t(T, field) ((Waddr)(&(NULLptr<T>()->field)) - ((Waddr)NULLptr<T>()))
 #endif
 #define baseof(T, field, ptr) ((T*)(((byte*)(ptr)) - offsetof_t(T, field)))
 // Restricted (non-aliased) pointers:

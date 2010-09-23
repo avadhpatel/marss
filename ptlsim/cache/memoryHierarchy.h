@@ -94,9 +94,9 @@ namespace Memory {
 
 		public:
 			void init() {
-				signal_ = null;
+				signal_ = NULL;
 				clock_ = -1;
-				arg_ = null;
+				arg_ = NULL;
 			}
 
 			void setup(Signal *signal, W64 clock, void *arg) {

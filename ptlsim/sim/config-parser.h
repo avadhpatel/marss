@@ -31,7 +31,7 @@ struct ConfigurationOption {
     this->type = type;
     this->offset = offset;
     this->fieldsize = fieldsize;
-    this->next = null;
+    this->next = NULL;
   }
 };
 
@@ -57,7 +57,7 @@ struct ConfigurationParserBase {
     lastoption = option;
   }
 
-  ConfigurationParserBase() { options = null; lastoption = null; }
+  ConfigurationParserBase() { options = NULL; lastoption = NULL; }
 
   int parse(void* baseptr, int argc, char* argv[]);
   int parse(void* baseptr, char* argstr);
@@ -88,7 +88,7 @@ struct ConfigurationParser: public T {
   }
 
   void section(const char* name) {
-    options.addentry(this, null, OPTION_TYPE_SECTION, name, name);
+    options.addentry(this, NULL, OPTION_TYPE_SECTION, name, name);
   }
 
   int parse(T& config, int argc, char* argv[]) {
