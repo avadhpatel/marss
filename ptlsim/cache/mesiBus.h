@@ -71,6 +71,7 @@ struct PendingQueueEntry : public FixStateListObject
 {
 	MemoryRequest *request;
 	BusControllerQueue *controllerQueue;
+    Controller *controllerWithData;
 	bool shared;
 	bool hasData;
 	dynarray<bool> responseReceived;
@@ -83,6 +84,7 @@ struct PendingQueueEntry : public FixStateListObject
 		hasData = false;
 		annuled = false;
         initCycle = sim_cycle;
+        controllerWithData = null;
 	}
 
 	void set_num_controllers(int no) {
@@ -101,6 +103,9 @@ struct PendingQueueEntry : public FixStateListObject
 		os << "hasData[", hasData, "]";
 		os << "responseReceived[", responseReceived, "]";
         os << "initCycle[", initCycle, "]";
+        if(controllerWithData) {
+            os << "controllerWithData[", controllerWithData->get_name(), "]";
+        }
 		return os;
 	}
 

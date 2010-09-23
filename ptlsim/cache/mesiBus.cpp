@@ -148,6 +148,11 @@ bool BusInterconnect::controller_request_cb(void *arg)
 
             pendingEntry->responseReceived[idx] = true;
 
+            /* If response has data mark this controller */
+            if(message->hasData) {
+                pendingEntry->controllerWithData = sender;
+            }
+
             if(sender->is_private()) {
                 pendingEntry->shared |= message->isShared;
 
@@ -462,6 +467,11 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
     message.isShared = pendingEntry->shared;
 
     foreach(i, controllers.count()) {
+        if(pendingEntry->controllerWithData == controllers[i]->controller) {
+            /* Don't send the data message back to the responding controller */
+            continue;
+        }
+
         bool ret = controllers[i]->controller->
             get_interconnect_signal()->emit(&message);
         assert(ret);
