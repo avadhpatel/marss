@@ -166,12 +166,14 @@ void MemoryHierarchy::shared_L2_configuration()
 	allInterconnects_.push((Interconnect*)mem_interconnect);
 
 	GET_STRINGBUF_PTR(l2_name, "L2");
-	CacheController *l2 = new CacheController(0, l2_name->buf, this,
+    SimpleWTCache::CacheController *l2 = new SimpleWTCache::CacheController(
+            0, l2_name->buf, this,
 			L2_CACHE);
 	allControllers_.push((Controller*)l2);
 	bus->register_controller(l2);
 	l2->register_upper_interconnect(bus);
 	l2->register_lower_interconnect(mem_interconnect);
+	l2->set_wt_disable(true);
 	l2->set_private(false);
 
 	GET_STRINGBUF_PTR(mem_name, "Memory");

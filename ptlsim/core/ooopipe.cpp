@@ -610,11 +610,11 @@ bool ThreadContext::fetch() {
       hit |= config.perfect_cache;
       if unlikely (!hit) {
         int missbuf = -1;
-             if unlikely (config.event_log_enabled) {
+        if unlikely (config.event_log_enabled) {
             event = eventlog.add(EVENT_FETCH_ICACHE_MISS, fetchrip);
             event->threadid = threadid;
             event->uuid = fetch_uuid;
-          }
+        }
 
         waiting_for_icache_fill = 1;
         waiting_for_icache_fill_physaddr = req_icache_block;
@@ -2262,8 +2262,7 @@ int ReorderBufferEntry::commit() {
                           thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
                   }
                   lsq->datavalid = 1;
-          }
-
+      }
   }
 
   if(uop.eom && !ctx.kernel_mode && config.checker_enabled && is_checker_valid()) {

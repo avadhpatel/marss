@@ -12,6 +12,7 @@
 #define _OOOCORE_H_
 
 #include <statelist.h>
+
 // With these disabled, simulation is faster
 #define ENABLE_CHECKS
 #define ENABLE_LOGGING
@@ -1405,7 +1406,7 @@ namespace OutOfOrderModel {
     struct ThreadContext {
         OutOfOrderCore& core;
         OutOfOrderCore& getcore() const { return core; }
-        
+
         PTLsimStats *stats_;
 
         W8 threadid;

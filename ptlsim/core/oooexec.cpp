@@ -1575,11 +1575,11 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   // test if CPUController can accept new request:
   bool cache_available = core.memoryHierarchy.is_cache_available(core.coreid, threadid, false/* icache */);
   if(!cache_available){
-          msdebug << " dcache can not read core:", core.coreid, " threadid ", threadid, endl;
-          replay();
-          per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.dcache_stall++);
-          load_store_second_phase = 1;
-          return ISSUE_NEEDS_REPLAY;
+      msdebug << " dcache can not read core:", core.coreid, " threadid ", threadid, endl;
+      replay();
+      per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.dcache_stall++);
+      load_store_second_phase = 1;
+      return ISSUE_NEEDS_REPLAY;
   }
 
   //
@@ -1734,54 +1734,54 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
 #ifdef USE_TLB
   if unlikely (!thread.dtlb.probe(addr, threadid)) {
-          //
-          // TLB miss:
-          //
-          if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_LOAD_TLB_MISS, this, sfra, addr);
-          cycles_left = 0;
-          tlb_walk_level = thread.ctx.page_table_level_count();
-          changestate(thread.rob_tlb_miss_list);
-          per_context_dcache_stats_update(core.coreid, threadid, load.dtlb.misses++);
+      //
+      // TLB miss:
+      //
+      if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_LOAD_TLB_MISS, this, sfra, addr);
+      cycles_left = 0;
+      tlb_walk_level = thread.ctx.page_table_level_count();
+      changestate(thread.rob_tlb_miss_list);
+      per_context_dcache_stats_update(core.coreid, threadid, load.dtlb.misses++);
 
-          return ISSUE_COMPLETED;
+      return ISSUE_COMPLETED;
   }
 
   per_context_dcache_stats_update(core.coreid, threadid, load.dtlb.hits++);
 #endif
 
   if(sfra) {
-          // the data is partially covered by previous store..
-          // store the data into the lsq's sfra_data and also
-          // store the sfra bytemask to we load most up-to date
-          // data when we get rest of data from cache
-          state.sfr_data = sfra->data;
-          state.sfr_bytemask = sfra->bytemask;
-          if(state.virtaddr < sfra->virtaddr) {
-                  int addr_diff = sfra->virtaddr - state.virtaddr;
-                  state.sfr_data <<= (addr_diff * 8);
-                  state.sfr_bytemask <<= addr_diff;
-          } else {
-                  int addr_diff = state.virtaddr - sfra->virtaddr;
-                  state.sfr_data >>= (addr_diff * 8);
-                  state.sfr_bytemask >>= addr_diff;
-          }
-          if(logable(10))
-                  ptl_logfile << "Partial match of load/store rip: ", hexstring(uop.rip.rip, 64),
-                              " sfr_bytemask: ", sfra->bytemask, " sfr_data: ",
-                              sfra->data, endl;
-          // Change the sfr_bytemask to 0xff to indicate the we have
-          // matching SFR entry in LSQ
-          state.sfr_bytemask = 0xff;
+      // the data is partially covered by previous store..
+      // store the data into the lsq's sfra_data and also
+      // store the sfra bytemask to we load most up-to date
+      // data when we get rest of data from cache
+      state.sfr_data = sfra->data;
+      state.sfr_bytemask = sfra->bytemask;
+      if(state.virtaddr < sfra->virtaddr) {
+          int addr_diff = sfra->virtaddr - state.virtaddr;
+          state.sfr_data <<= (addr_diff * 8);
+          state.sfr_bytemask <<= addr_diff;
+      } else {
+          int addr_diff = state.virtaddr - sfra->virtaddr;
+          state.sfr_data >>= (addr_diff * 8);
+          state.sfr_bytemask >>= addr_diff;
+      }
+      if(logable(10))
+          ptl_logfile << "Partial match of load/store rip: ", hexstring(uop.rip.rip, 64),
+                      " sfr_bytemask: ", sfra->bytemask, " sfr_data: ",
+                      sfra->data, endl;
+      // Change the sfr_bytemask to 0xff to indicate the we have
+      // matching SFR entry in LSQ
+      state.sfr_bytemask = 0xff;
   } else {
-          state.sfr_data = -1;
-          state.sfr_bytemask = 0;
+      state.sfr_data = -1;
+      state.sfr_bytemask = 0;
   }
 
   Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
   assert(request != NULL);
 
   request->init(core.coreid, threadid, physaddr, idx, sim_cycle,
-                  false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
+          false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
 
   bool L1hit = core.memoryHierarchy.access_cache(request);
 
@@ -2338,7 +2338,7 @@ void OutOfOrderCoreCacheCallbacks::dcache_wakeup(Memory::MemoryRequest *request)
                 }
         }else{
                 if(logable(5)) {
-                        ptl_logfile << " ignor anNULLed request : request uuid ",
+                        ptl_logfile << " ignor annulled request : request uuid ",
                                     request->get_owner_uuid(), " rob.uop.uuid ", rob.uop.uuid;
                         if(rob.lsq)
                                 ptl_logfile << " lsq_physaddr ", (void*)(rob.lsq->physaddr << 3),
@@ -2817,31 +2817,31 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_anNULLed_
     annulrob.physreg->free();
 
     if unlikely (isclass(annulrob.uop.opcode, OPCLASS_LOAD|OPCLASS_STORE)) {
-      //
-      // We have to be careful to not flush any locks that are about to be
-      // freed by a committing locked RMW instruction that takes more than
-      // one cycle to commit but has already declared the locks it wants
-      // to release.
-      //
-      // There are a few things we can do here: only flush if the annulrob
-      // actually held locks, and then only flush those locks (actually only
-      // a single lock) added here!
-      //
-      if (annulrob.release_mem_lock(true)) thread.flush_mem_lock_release_list(queued_locks_before);
-      loads_in_flight -= (annulrob.lsq->store == 0);
-      stores_in_flight -= (annulrob.lsq->store == 1);
-      annulrob.lsq->reset();
-      LSQ.annul(annulrob.lsq);
+        //
+        // We have to be careful to not flush any locks that are about to be
+        // freed by a committing locked RMW instruction that takes more than
+        // one cycle to commit but has already declared the locks it wants
+        // to release.
+        //
+        // There are a few things we can do here: only flush if the annulrob
+        // actually held locks, and then only flush those locks (actually only
+        // a single lock) added here!
+        //
+        if (annulrob.release_mem_lock(true)) thread.flush_mem_lock_release_list(queued_locks_before);
+        loads_in_flight -= (annulrob.lsq->store == 0);
+        stores_in_flight -= (annulrob.lsq->store == 1);
+        annulrob.lsq->reset();
+        LSQ.annul(annulrob.lsq);
 
-      // annul any cache requests for this entry
+        // annul any cache requests for this entry
 
-      bool is_store = isclass(annulrob.uop.opcode, OPCLASS_STORE);
-      core.memoryHierarchy.annul_request(core.coreid,
-                      threadid,
-                      annulrob.idx/*robid*/,
-                      annulrob.lsq->physaddr,
-                      false/* icache */,
-                      is_store);
+        bool is_store = isclass(annulrob.uop.opcode, OPCLASS_STORE);
+        core.memoryHierarchy.annul_request(core.coreid,
+                threadid,
+                annulrob.idx/*robid*/,
+                annulrob.lsq->physaddr,
+                false/* icache */,
+                is_store);
     }
 
     if unlikely (annulrob.lfrqslot >= 0) {
@@ -2962,8 +2962,8 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
   }
 
   if unlikely (lfrqslot >= 0) {
-          assert(0);
-          lfrqslot = -1;
+      assert(0);
+      lfrqslot = -1;
   }
 
   release_mem_lock(true);

@@ -256,7 +256,7 @@ CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
 	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry,
 			prevEntry) {
 
-		if(request == queueEntry->request)
+		if(request == queueEntry->request || queueEntry->annuled)
 			continue;
 
 		if(get_line_address(queueEntry->request) == requestLineAddress) {
@@ -264,8 +264,11 @@ CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
 			// entry also depends on this entry or not and to
 			// maintain a chain of dependent entries, return the
 			// last entry in the chain
-			while(queueEntry->depends >= 0)
+			while(queueEntry->depends >= 0) {
+                if(pendingRequests_[queueEntry->depends].annuled)
+                    break;
 				queueEntry = &pendingRequests_[queueEntry->depends];
+            }
 
 			return queueEntry;
 		}

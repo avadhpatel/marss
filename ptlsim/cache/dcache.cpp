@@ -720,7 +720,7 @@ void CacheHierarchy::annul_lfrq_slot(int lfrqslot) {
 static const int PREFETCH_STOPS_AT_L2 = 0;
   
 void CacheHierarchy::initiate_prefetch(W64 addr, int cachelevel) {
-  
+
  /*   static const bool DEBUG = 0;
 
   addr = floor(addr, L1_LINE_SIZE);

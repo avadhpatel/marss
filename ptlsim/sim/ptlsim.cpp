@@ -116,7 +116,7 @@ void PTLsimConfig::reset() {
   start_at_rip = INVALIDRIP;
 
   //prefetcher
-    wait_all_finished = 0;
+  wait_all_finished = 0;
   // memory model
   use_memory_model = 0;
   kill_after_run = 0;
