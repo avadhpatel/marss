@@ -1575,11 +1575,11 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
   // test if CPUController can accept new request:
   bool cache_available = core.memoryHierarchy.is_cache_available(core.coreid, threadid, false/* icache */);
   if(!cache_available){
-          msdebug << " dcache can not read core:", core.coreid, " threadid ", threadid, endl;
-          replay();
-          per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.dcache_stall++);
-          load_store_second_phase = 1;
-          return ISSUE_NEEDS_REPLAY;
+      msdebug << " dcache can not read core:", core.coreid, " threadid ", threadid, endl;
+      replay();
+      per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.dcache_stall++);
+      load_store_second_phase = 1;
+      return ISSUE_NEEDS_REPLAY;
   }
 
   //
@@ -1734,54 +1734,54 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
 #ifdef USE_TLB
   if unlikely (!thread.dtlb.probe(addr, threadid)) {
-          //
-          // TLB miss:
-          //
-          if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_LOAD_TLB_MISS, this, sfra, addr);
-          cycles_left = 0;
-          tlb_walk_level = thread.ctx.page_table_level_count();
-          changestate(thread.rob_tlb_miss_list);
-          per_context_dcache_stats_update(core.coreid, threadid, load.dtlb.misses++);
+      //
+      // TLB miss:
+      //
+      if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_LOAD_TLB_MISS, this, sfra, addr);
+      cycles_left = 0;
+      tlb_walk_level = thread.ctx.page_table_level_count();
+      changestate(thread.rob_tlb_miss_list);
+      per_context_dcache_stats_update(core.coreid, threadid, load.dtlb.misses++);
 
-          return ISSUE_COMPLETED;
+      return ISSUE_COMPLETED;
   }
 
   per_context_dcache_stats_update(core.coreid, threadid, load.dtlb.hits++);
 #endif
 
   if(sfra) {
-          // the data is partially covered by previous store..
-          // store the data into the lsq's sfra_data and also
-          // store the sfra bytemask to we load most up-to date
-          // data when we get rest of data from cache
-          state.sfr_data = sfra->data;
-          state.sfr_bytemask = sfra->bytemask;
-          if(state.virtaddr < sfra->virtaddr) {
-                  int addr_diff = sfra->virtaddr - state.virtaddr;
-                  state.sfr_data <<= (addr_diff * 8);
-                  state.sfr_bytemask <<= addr_diff;
-          } else {
-                  int addr_diff = state.virtaddr - sfra->virtaddr;
-                  state.sfr_data >>= (addr_diff * 8);
-                  state.sfr_bytemask >>= addr_diff;
-          }
-          if(logable(10))
-                  ptl_logfile << "Partial match of load/store rip: ", hexstring(uop.rip.rip, 64),
-                              " sfr_bytemask: ", sfra->bytemask, " sfr_data: ",
-                              sfra->data, endl;
-          // Change the sfr_bytemask to 0xff to indicate the we have
-          // matching SFR entry in LSQ
-          state.sfr_bytemask = 0xff;
+      // the data is partially covered by previous store..
+      // store the data into the lsq's sfra_data and also
+      // store the sfra bytemask to we load most up-to date
+      // data when we get rest of data from cache
+      state.sfr_data = sfra->data;
+      state.sfr_bytemask = sfra->bytemask;
+      if(state.virtaddr < sfra->virtaddr) {
+          int addr_diff = sfra->virtaddr - state.virtaddr;
+          state.sfr_data <<= (addr_diff * 8);
+          state.sfr_bytemask <<= addr_diff;
+      } else {
+          int addr_diff = state.virtaddr - sfra->virtaddr;
+          state.sfr_data >>= (addr_diff * 8);
+          state.sfr_bytemask >>= addr_diff;
+      }
+      if(logable(10))
+          ptl_logfile << "Partial match of load/store rip: ", hexstring(uop.rip.rip, 64),
+                      " sfr_bytemask: ", sfra->bytemask, " sfr_data: ",
+                      sfra->data, endl;
+      // Change the sfr_bytemask to 0xff to indicate the we have
+      // matching SFR entry in LSQ
+      state.sfr_bytemask = 0xff;
   } else {
-          state.sfr_data = -1;
-          state.sfr_bytemask = 0;
+      state.sfr_data = -1;
+      state.sfr_bytemask = 0;
   }
 
   Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
   assert(request != null);
 
   request->init(core.coreid, threadid, physaddr, idx, sim_cycle,
-                  false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
+          false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
 
   bool L1hit = core.memoryHierarchy.access_cache(request);
 
@@ -2229,125 +2229,125 @@ void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc
 // Data cache has delivered a load: wake up corresponding ROB/LSQ/physreg entries
 //
 void OutOfOrderCoreCacheCallbacks::dcache_wakeup(Memory::MemoryRequest *request) {
-        int idx = request->get_robid();
-        W64 physaddr = request->get_physical_address();
-        ThreadContext* thread = core.threads[request->get_threadid()];
-        assert(inrange(idx, 0, ROB_SIZE-1));
-        ReorderBufferEntry& rob = thread->ROB[idx];
-        if(logable(6)) ptl_logfile << " dcache_wakeup ", rob, " request ", *request, endl;
-        if(rob.lsq && request->get_owner_uuid() == rob.uop.uuid &&
-                        rob.lsq->physaddr == physaddr >> 3 &&
-                        rob.current_state_list == &thread->rob_cache_miss_list){
-                if(logable(6)) ptl_logfile << " rob ", rob, endl;
+    int idx = request->get_robid();
+    W64 physaddr = request->get_physical_address();
+    ThreadContext* thread = core.threads[request->get_threadid()];
+    assert(inrange(idx, 0, ROB_SIZE-1));
+    ReorderBufferEntry& rob = thread->ROB[idx];
+    if(logable(6)) ptl_logfile << " dcache_wakeup ", rob, " request ", *request, endl;
+    if(rob.lsq && request->get_owner_uuid() == rob.uop.uuid &&
+            rob.lsq->physaddr == physaddr >> 3 &&
+            rob.current_state_list == &thread->rob_cache_miss_list){
+        if(logable(6)) ptl_logfile << " rob ", rob, endl;
+
+        /*
+         * Because of QEMU's in-order execution and Simulator's
+         * out-of-order execution we may have page fault at this point
+         * so just make sure that we handle page fault at correct location
+         */
+
+        // rob.tlb_walk_level = 0;
+        // load the data now
+        if (rob.tlb_walk_level == 0 && (isload(rob.uop.opcode) || isprefetch(rob.uop.opcode))) {
+
+            int sizeshift = rob.uop.size;
+            bool signext = (rob.uop.opcode == OP_ldx);
+            W64 offset = lowbits(rob.lsq->virtaddr, 3);
+            W64 data;
+            data = thread->ctx.loadvirt(rob.lsq->virtaddr, sizeshift);
+
+            if unlikely (config.checker_enabled && !thread->ctx.kernel_mode) {
+                foreach(i, checker_stores_count) {
+                    if unlikely (checker_stores[i].virtaddr == rob.lsq->virtaddr) {
+                        data = checker_stores[i].data;
+                    }
+                    if(logable(10)) {
+                        ptl_logfile << "Checker virtaddr ", (void*)(checker_stores[i].virtaddr),
+                                    " data ", (void*)(checker_stores[i].data), endl;
+                    }
+                }
+            }
+
+            /*
+             * Now check if there is most upto date data from
+             * sfra available or not
+             */
+            if(rob.lsq->sfr_bytemask != 0) {
 
                 /*
-                 * Because of QEMU's in-order execution and Simulator's
-                 * out-of-order execution we may have page fault at this point
-                 * so just make sure that we handle page fault at correct location
+                 * Scan through all the LSQ from head to find Store that may
+                 * have the most recent data and merge all the data for this load
                  */
+                Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread->LSQ;
+                LoadStoreQueueEntry* lsq_head = &LSQ[LSQ.head];
+                foreach_forward(LSQ, i) {
+                    LoadStoreQueueEntry& stq = LSQ[i];
+                    if unlikely (&stq == rob.lsq)
+                        break;
 
-                // rob.tlb_walk_level = 0;
-                // load the data now
-                if (rob.tlb_walk_level == 0 && (isload(rob.uop.opcode) || isprefetch(rob.uop.opcode))) {
+                    if likely (!stq.store) continue;
 
-                        int sizeshift = rob.uop.size;
-                        bool signext = (rob.uop.opcode == OP_ldx);
-                        W64 offset = lowbits(rob.lsq->virtaddr, 3);
-                        W64 data;
-                        data = thread->ctx.loadvirt(rob.lsq->virtaddr, sizeshift);
+                    if likely (stq.addrvalid) {
+                        int addr_diff = stq.physaddr - rob.lsq->physaddr;
+                        if(-1 <= addr_diff && addr_diff <= 1) {
 
-                        if unlikely (config.checker_enabled && !thread->ctx.kernel_mode) {
-                                foreach(i, checker_stores_count) {
-                                        if unlikely (checker_stores[i].virtaddr == rob.lsq->virtaddr) {
-                                                data = checker_stores[i].data;
-                                        }
-                                        if(logable(10)) {
-                                                ptl_logfile << "Checker virtaddr ", (void*)(checker_stores[i].virtaddr),
-                                                            " data ", (void*)(checker_stores[i].data), endl;
-                                        }
-                                }
+                            /*
+                             * If store doesn't has valid data, load will be replayed
+                             * but we still continue with this load and if
+                             * its replayed we will access cache later
+                             */
+                            if(!stq.datavalid) {
+                                return;
+                            }
+
+                            /* Found a store that might provide recent data */
+                            W64 tmp_data = stq.data;
+                            W8 tmp_bytemask = stq.bytemask;
+                            if(rob.lsq->virtaddr < stq.virtaddr) {
+                                int addr_diff = stq.virtaddr - rob.lsq->virtaddr;
+                                tmp_data <<= (addr_diff * 8);
+                                tmp_bytemask <<= addr_diff;
+                            } else {
+                                int addr_diff = rob.lsq->virtaddr - stq.virtaddr;
+                                tmp_data >>= (addr_diff * 8);
+                                tmp_bytemask >>= addr_diff;
+                            }
+
+                            if(tmp_bytemask == 0) continue;
+
+                            W64 sel = expand_8bit_to_64bit_lut[tmp_bytemask];
+                            data = mux64(sel, data, tmp_data);
+
+                            if(logable(6)) {
+                                ptl_logfile << "Load ", *rob.lsq, " forward from store: ", stq, " tmp: ",
+                                            (void*)(tmp_data), " (", hexstring(tmp_bytemask, 8), ") ",
+                                            " data: ", (void*)(data), endl;
+                                ptl_logfile << " load_addr: ", (void*)(rob.lsq->virtaddr),
+                                            " st_addr: ", (void*)(stq.virtaddr), endl;
+                            }
+
                         }
-
-                        /*
-                         * Now check if there is most upto date data from
-                         * sfra available or not
-                         */
-                        if(rob.lsq->sfr_bytemask != 0) {
-
-                                /*
-                                 * Scan through all the LSQ from head to find Store that may
-                                 * have the most recent data and merge all the data for this load
-                                 */
-                                Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread->LSQ;
-                                LoadStoreQueueEntry* lsq_head = &LSQ[LSQ.head];
-                                foreach_forward(LSQ, i) {
-                                        LoadStoreQueueEntry& stq = LSQ[i];
-                                        if unlikely (&stq == rob.lsq)
-                                                break;
-
-                                        if likely (!stq.store) continue;
-
-                                        if likely (stq.addrvalid) {
-                                                int addr_diff = stq.physaddr - rob.lsq->physaddr;
-                                                if(-1 <= addr_diff && addr_diff <= 1) {
-
-                                                        /*
-                                                         * If store doesn't has valid data, load will be replayed
-                                                         * but we still continue with this load and if
-                                                         * its replayed we will access cache later
-                                                         */
-                                                        if(!stq.datavalid) {
-                                                                return;
-                                                        }
-
-                                                        /* Found a store that might provide recent data */
-                                                        W64 tmp_data = stq.data;
-                                                        W8 tmp_bytemask = stq.bytemask;
-                                                        if(rob.lsq->virtaddr < stq.virtaddr) {
-                                                                int addr_diff = stq.virtaddr - rob.lsq->virtaddr;
-                                                                tmp_data <<= (addr_diff * 8);
-                                                                tmp_bytemask <<= addr_diff;
-                                                        } else {
-                                                                int addr_diff = rob.lsq->virtaddr - stq.virtaddr;
-                                                                tmp_data >>= (addr_diff * 8);
-                                                                tmp_bytemask >>= addr_diff;
-                                                        }
-
-                                                        if(tmp_bytemask == 0) continue;
-
-                                                        W64 sel = expand_8bit_to_64bit_lut[tmp_bytemask];
-                                                        data = mux64(sel, data, tmp_data);
-
-                                                        if(logable(6)) {
-                                                                ptl_logfile << "Load ", *rob.lsq, " forward from store: ", stq, " tmp: ",
-                                                                            (void*)(tmp_data), " (", hexstring(tmp_bytemask, 8), ") ",
-                                                                            " data: ", (void*)(data), endl;
-                                                                ptl_logfile << " load_addr: ", (void*)(rob.lsq->virtaddr),
-                                                                            " st_addr: ", (void*)(stq.virtaddr), endl;
-                                                        }
-
-                                                }
-                                        }
-                                }
-                        }
-                        rob.lsq->data = extract_bytes(((byte*)&data) ,
-                                        sizeshift, signext);
-                        rob.loadwakeup();
-                } else {
-                        rob.loadwakeup();
+                    }
                 }
-        }else{
-                if(logable(5)) {
-                        ptl_logfile << " ignor annulled request : request uuid ",
-                                    request->get_owner_uuid(), " rob.uop.uuid ", rob.uop.uuid;
-                        if(rob.lsq)
-                                ptl_logfile << " lsq_physaddr ", (void*)(rob.lsq->physaddr << 3),
-                                            " physaddr ", (void*)physaddr;
-                        else
-                                ptl_logfile << " no lsq ";
-                        ptl_logfile << " rob ", rob, endl;
-                }
+            }
+            rob.lsq->data = extract_bytes(((byte*)&data) ,
+                    sizeshift, signext);
+            rob.loadwakeup();
+        } else {
+            rob.loadwakeup();
         }
+    }else{
+        if(logable(5)) {
+            ptl_logfile << " ignor annulled request : request uuid ",
+                        request->get_owner_uuid(), " rob.uop.uuid ", rob.uop.uuid;
+            if(rob.lsq)
+                ptl_logfile << " lsq_physaddr ", (void*)(rob.lsq->physaddr << 3),
+                            " physaddr ", (void*)physaddr;
+            else
+                ptl_logfile << " no lsq ";
+            ptl_logfile << " rob ", rob, endl;
+        }
+    }
 }
 
 void ReorderBufferEntry::loadwakeup() {
@@ -2817,31 +2817,31 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
     annulrob.physreg->free();
 
     if unlikely (isclass(annulrob.uop.opcode, OPCLASS_LOAD|OPCLASS_STORE)) {
-      //
-      // We have to be careful to not flush any locks that are about to be
-      // freed by a committing locked RMW instruction that takes more than
-      // one cycle to commit but has already declared the locks it wants
-      // to release.
-      //
-      // There are a few things we can do here: only flush if the annulrob
-      // actually held locks, and then only flush those locks (actually only
-      // a single lock) added here!
-      //
-      if (annulrob.release_mem_lock(true)) thread.flush_mem_lock_release_list(queued_locks_before);
-      loads_in_flight -= (annulrob.lsq->store == 0);
-      stores_in_flight -= (annulrob.lsq->store == 1);
-      annulrob.lsq->reset();
-      LSQ.annul(annulrob.lsq);
+        //
+        // We have to be careful to not flush any locks that are about to be
+        // freed by a committing locked RMW instruction that takes more than
+        // one cycle to commit but has already declared the locks it wants
+        // to release.
+        //
+        // There are a few things we can do here: only flush if the annulrob
+        // actually held locks, and then only flush those locks (actually only
+        // a single lock) added here!
+        //
+        if (annulrob.release_mem_lock(true)) thread.flush_mem_lock_release_list(queued_locks_before);
+        loads_in_flight -= (annulrob.lsq->store == 0);
+        stores_in_flight -= (annulrob.lsq->store == 1);
+        annulrob.lsq->reset();
+        LSQ.annul(annulrob.lsq);
 
-      // annul any cache requests for this entry
+        // annul any cache requests for this entry
 
-      bool is_store = isclass(annulrob.uop.opcode, OPCLASS_STORE);
-      core.memoryHierarchy.annul_request(core.coreid,
-                      threadid,
-                      annulrob.idx/*robid*/,
-                      annulrob.lsq->physaddr,
-                      false/* icache */,
-                      is_store);
+        bool is_store = isclass(annulrob.uop.opcode, OPCLASS_STORE);
+        core.memoryHierarchy.annul_request(core.coreid,
+                threadid,
+                annulrob.idx/*robid*/,
+                annulrob.lsq->physaddr,
+                false/* icache */,
+                is_store);
     }
 
     if unlikely (annulrob.lfrqslot >= 0) {
@@ -2962,8 +2962,8 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
   }
 
   if unlikely (lfrqslot >= 0) {
-          assert(0);
-          lfrqslot = -1;
+      assert(0);
+      lfrqslot = -1;
   }
 
   release_mem_lock(true);
