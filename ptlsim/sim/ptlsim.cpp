@@ -117,22 +117,9 @@ void PTLsimConfig::reset() {
   start_at_rip = INVALIDRIP;
 
   //prefetcher
-  use_L1_IP_based_prefetcher = 0;
-  use_L2_IP_based_prefetcher = 0;
-  use_L1_nextline_prefetcher = 0;
-  use_L2_nextline_prefetcher = 0;
-  use_GHB_prefetcher = 0;
-  prefetch_own_line = 0;
-  stride_prefetcher = 0;
-  distance_prefetcher = 0;
-  prefetch_degree = 1;
-  wait_all_finished = 0;
-
-  perfect_L2 = 0;
-
+    wait_all_finished = 0;
   // memory model
   use_memory_model = 0;
-  use_new_memory_system = 1;
   kill_after_run = 0;
   stop_at_user_insns = infinity;
   stop_at_cycle = infinity;
@@ -175,12 +162,10 @@ void PTLsimConfig::reset() {
   /// memory hierarchy implementation
   ///
 
-  use_memory_hierarchy = 0;
   number_of_cores = 1;
   cores_per_L2 = 1;
   max_L1_req = 16;
   cache_config_type = "private_L2";
-  use_shared_L3 = 0;
 
   checker_enabled = 0;
   checker_start_rip = INVALIDRIP;
@@ -286,24 +271,8 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(overshoot_and_dump,           "overshoot-and-dump",   "Set breakpoint and dump core after first instruction executed on return to native mode");
   add(bbcache_dump_filename,        "bbdump",               "Basic block cache dump filename");
   // for prefetcher
-  add(use_L1_IP_based_prefetcher,           "L1-IP-based-prefetch",              "use L1 IP based stride prefetcher, which will fetch to L1");
-  add(use_L2_IP_based_prefetcher,           "L2-IP-based-prefetch",              "use L2 IP based stride prefetcher, which will fetch to L2 not L1");
-
-  add(use_L1_nextline_prefetcher,           "L1-nextline-prefetch",              "use L1 next line prefetcher, which will fetch to L1");
-  add(use_L2_nextline_prefetcher,           "L2-nextline-prefetch",              "use L2 next line prefetcher, which will only fetch to L2 not L1");
-
-  // for GHB prefetcher
-  add(use_GHB_prefetcher,           "use_GHB_prefetcher",              "use GHB prefetcher, which will only fetch to L2 not L1");
-
- add(stride_prefetcher,           "stride-prefetcher",              "use GHB stride prefetcher");
- add(distance_prefetcher,         "distance-prefetcher",              "use GHB distance correlation prefetcher");
- add(prefetch_degree,             "prefetch-degree",              "the number of prefetch issued per miss");
- add(use_memory_model,             "use-memory-model",              "model the memory latency, memory bank contention, bus contention");
  add(wait_all_finished,             "wait-all-finished",              "wait all threads reach total number of insn before exit");
- add(perfect_L2,                   "perfect-L2",             " L2 always hit");
 
- add(prefetch_own_line,           "prefetch-own-line",              "the prefetch data only write to the cache line of same thread");
- add(use_new_memory_system,      "use-new-memory-system",          "use more detailed memory simulation(set by default)");
  add(verify_cache,               "verify-cache",                   "run simulation with storing actual data in cache");
  add(comparing_cache,               "comparing-cache",                   "run simulation with storing actual data in cache");
  add(trace_memory_updates,               "trace-memory-updates",                   "log memory updates");
@@ -323,12 +292,10 @@ void ConfigurationParser<PTLsimConfig>::setup() {
 
   section("Memory Hierarchy Configuration");
   //  add(memory_log,               "memory-log",               "log memory debugging info");
-  add(use_memory_hierarchy,               "use-memory-hierarchy",               "Using new memory hierarchy implementation");
   add(number_of_cores,               "number-of-cores",               "number of cores");
   add(cores_per_L2,               "cores-per-L2",               "number of cores sharing a L2 cache");
   add(max_L1_req,               "max-L1-req",               "max number of L1 requests");
   add(cache_config_type,               "cache-config-type",               "possible config are shared_L2, private_L2");
-  add(use_shared_L3,               "use-shared-L3",               "set true to used a shared L3");
 
   add(checker_enabled, 		"enable-checker", 		"Enable emulation based checker");
   add(checker_start_rip,          "checker-startrip",     "Start checker at specified RIP");

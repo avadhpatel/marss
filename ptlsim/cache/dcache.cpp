@@ -720,8 +720,8 @@ void CacheHierarchy::annul_lfrq_slot(int lfrqslot) {
 static const int PREFETCH_STOPS_AT_L2 = 0;
   
 void CacheHierarchy::initiate_prefetch(W64 addr, int cachelevel) {
-  if(config.use_new_memory_system) return;
-  static const bool DEBUG = 0;
+  
+ /*   static const bool DEBUG = 0;
 
   addr = floor(addr, L1_LINE_SIZE);
     
@@ -746,6 +746,8 @@ void CacheHierarchy::initiate_prefetch(W64 addr, int cachelevel) {
   missbuf.initiate_miss(addr, L2line);
   //  stats.dcache.prefetch.required++;
   per_dcache_stats_update(coreid, prefetch.required++);
+*/
+        return ;
 }
 
 //

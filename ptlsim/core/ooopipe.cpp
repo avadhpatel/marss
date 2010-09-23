@@ -598,43 +598,24 @@ bool ThreadContext::fetch() {
       }
 
       bool hit;
-      if(config.use_new_memory_system){
-        assert(!waiting_for_icache_fill);
+      assert(!waiting_for_icache_fill);
 
-		Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
-		assert(request != null);
+      Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
+      assert(request != null);
 
-		request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
-				true, 0, 0, Memory::MEMORY_OP_READ);
+      request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
+                      true, 0, 0, Memory::MEMORY_OP_READ);
 
-		hit = core.memoryHierarchy.access_cache(request);
+      hit = core.memoryHierarchy.access_cache(request);
 
-      }else{
-        hit =  core.caches.probe_icache(fetchrip, physaddr);
-      }
       hit |= config.perfect_cache;
       if unlikely (!hit) {
         int missbuf = -1;
-        if(!config.use_new_memory_system){
-          missbuf = core.caches.initiate_icache_miss(physaddr, fetch_uuid,threadid);
-          if unlikely (config.event_log_enabled) {
-            event = eventlog.add(EVENT_FETCH_ICACHE_MISS, fetchrip);
-            event->fetch.missbuf = missbuf;
-            event->threadid = threadid;
-            event->uuid = fetch_uuid;
-          }
-          if unlikely (missbuf < 0) {
-            // Try to re-allocate a miss buffer on the next cycle
-            break;
-          }
-        }else{
-          if unlikely (config.event_log_enabled) {
+             if unlikely (config.event_log_enabled) {
             event = eventlog.add(EVENT_FETCH_ICACHE_MISS, fetchrip);
             event->threadid = threadid;
             event->uuid = fetch_uuid;
           }
-        }
-
 
         waiting_for_icache_fill = 1;
         waiting_for_icache_fill_physaddr = req_icache_block;
@@ -2255,40 +2236,34 @@ int ReorderBufferEntry::commit() {
 
 
   if unlikely (uop.opcode == OP_st) {
-    Waddr mfn = (lsq->physaddr << 3) >> 12;
-    thread.ctx.smc_setdirty(lsq->physaddr << 3);
+          Waddr mfn = (lsq->physaddr << 3) >> 12;
+          thread.ctx.smc_setdirty(lsq->physaddr << 3);
 
-    if(!config.use_new_memory_system){
-      if (lsq->bytemask) {
-        assert(core.caches.commitstore(*lsq, thread.threadid) == 0);
-      }
-    }else{
-		if(uop.internal) {
-			thread.ctx.store_internal(lsq->virtaddr, lsq->data,
-					lsq->bytemask);
-		} else if(lsq->bytemask){
-			// Because of QEMU we might have page fault while storing the data
-			// so make sure that in case of page fault its handle at correct
-			// location in simulation and not here..
-			assert(lsq->physaddr);
+          if(uop.internal) {
+                  thread.ctx.store_internal(lsq->virtaddr, lsq->data,
+                                  lsq->bytemask);
+          } else if(lsq->bytemask){
+                  // Because of QEMU we might have page fault while storing the data
+                  // so make sure that in case of page fault its handle at correct
+                  // location in simulation and not here..
+                  assert(lsq->physaddr);
 
-			Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
-			assert(request != null);
+                  Memory::MemoryRequest *request = core.memoryHierarchy.get_free_request();
+                  assert(request != null);
 
-			request->init(core.coreid, threadid, lsq->physaddr << 3, 0,
-					sim_cycle, false, uop.rip.rip, uop.uuid,
-					Memory::MEMORY_OP_WRITE);
+                  request->init(core.coreid, threadid, lsq->physaddr << 3, 0,
+                                  sim_cycle, false, uop.rip.rip, uop.uuid,
+                                  Memory::MEMORY_OP_WRITE);
 
-			assert(core.memoryHierarchy.access_cache(request));
-			assert(lsq->virtaddr > 0xfff);
-                        if(config.checker_enabled && !ctx.kernel_mode) {
+                  assert(core.memoryHierarchy.access_cache(request));
+                  assert(lsq->virtaddr > 0xfff);
+                  if(config.checker_enabled && !ctx.kernel_mode) {
                           add_checker_store(lsq, uop.size);
-                        } else {
+                  } else {
                           thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
-                        }
-			lsq->datavalid = 1;
-      }
-    }
+                  }
+                  lsq->datavalid = 1;
+          }
 
   }
 

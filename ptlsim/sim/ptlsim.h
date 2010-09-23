@@ -234,22 +234,9 @@ struct PTLsimConfig {
   stringbuf snapshot_now;
 
   // prefetcher
-  bool use_L1_IP_based_prefetcher;
-  bool use_L2_IP_based_prefetcher;
-
-
-  bool use_L1_nextline_prefetcher;
-  bool use_L2_nextline_prefetcher;
-  bool use_GHB_prefetcher;
-  bool prefetch_own_line;
-  bool stride_prefetcher;
-  bool distance_prefetcher;
-  W64  prefetch_degree;
   bool wait_all_finished;
-  bool perfect_L2;
   // memory model:
   bool use_memory_model;
-  bool use_new_memory_system;
 
   // Stopping Point
   W64 stop_at_user_insns;
@@ -298,12 +285,10 @@ struct PTLsimConfig {
   /// for memory hierarchy implementaion
   ///
   //  bool memory_log;
-  bool use_memory_hierarchy;
   W64 number_of_cores;
   W64 cores_per_L2;
   W64 max_L1_req;
   stringbuf cache_config_type;
-  bool use_shared_L3;
 
   bool checker_enabled;
   W64 checker_start_rip;

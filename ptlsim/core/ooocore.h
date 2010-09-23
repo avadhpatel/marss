@@ -12,7 +12,7 @@
 #define _OOOCORE_H_
 
 #include <statelist.h>
-
+#define ROB_SIZE1(x) (x==0)?1280:(x==1)?2560:5120
 // With these disabled, simulation is faster
 #define ENABLE_CHECKS
 #define ENABLE_LOGGING
@@ -30,7 +30,6 @@ static const int MAX_ROB_IDX_BIT = 12; // up to 4096 ROB entries
 // issue queues that would normally be possible in single
 // threaded mode.
 //
-
 
 //#define ENABLE_SIM_TIMING
 #ifdef ENABLE_SIM_TIMING
@@ -1407,7 +1406,7 @@ namespace OutOfOrderModel {
     struct ThreadContext {
         OutOfOrderCore& core;
         OutOfOrderCore& getcore() const { return core; }
-
+        
         PTLsimStats *stats_;
 
         W8 threadid;
