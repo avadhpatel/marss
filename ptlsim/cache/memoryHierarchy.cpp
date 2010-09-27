@@ -50,6 +50,8 @@
 #include <mesiBus.h>
 #include <memoryController.h>
 
+#include <yaml/yaml.h>
+
 using namespace Memory;
 
 MemoryHierarchy::MemoryHierarchy(OutOfOrderMachine& machine) :
@@ -57,6 +59,8 @@ MemoryHierarchy::MemoryHierarchy(OutOfOrderMachine& machine) :
 	, coreNo_(NUMBER_OF_CORES)
     , someStructIsFull_(false)
 {
+    stats = (StatsBuilder::get()).get_new_stats();
+
 	setup_topology();
 }
 
@@ -290,6 +294,10 @@ void MemoryHierarchy::private_L2_configuration()
 #endif
 		l2->set_private(true);
 
+        // Temp Stats
+        l1_d->set_default_stats(stats);
+        l1_i->set_default_stats(stats);
+        l2->set_default_stats(stats);
 	}
 
 #ifdef ENABLE_L3_CACHE
@@ -384,6 +392,13 @@ void MemoryHierarchy::clock()
 			break;
 		}
 	}
+
+    // Test stats
+    if(sim_cycle % 1000000 == 0) {
+        YAML::Emitter out;
+        (StatsBuilder::get()).dump(stats, out);
+        ptl_logfile << out.c_str();
+    }
 }
 
 void MemoryHierarchy::reset()

@@ -36,6 +36,8 @@
 #include <controller.h>
 #include <interconnect.h>
 
+#include <statsBuilder.h>
+
 #define DEBUG_MEMORY
 //#define DEBUG_WITH_FILE_NAME
 #define ENABLE_CHECKS
@@ -235,6 +237,9 @@ namespace Memory {
 	FixStateList<Event, 1024> eventQueue_;
 
 	void sort_event_queue(Event *event);
+
+    // Temp Stats
+    Stats *stats;
 
   };
 

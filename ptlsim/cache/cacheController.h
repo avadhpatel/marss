@@ -35,6 +35,8 @@
 #include <cacheConstants.h>
 #include <memoryStats.h>
 
+#include <statsBuilder.h>
+
 namespace Memory {
 
 namespace SimpleWTCache {
@@ -237,7 +239,7 @@ static inline ostream& operator <<(ostream& os, const CacheQueueEntry&
 	return entry.print(os);
 }
 
-class CacheController : public Controller
+class CacheController : public Controller, public Statable
 {
 	private:
 
@@ -287,6 +289,10 @@ class CacheController : public Controller
 		Signal cacheUpdate_;
 		Signal cacheInsertComplete_;
 		Signal waitInterconnect_;
+
+        // Stats Objects
+        StatObj<W64> hit;
+        StatObj<W64> miss;
 
 		CacheQueueEntry* find_dependency(MemoryRequest *request);
 
