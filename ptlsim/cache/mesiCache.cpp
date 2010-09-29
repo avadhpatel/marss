@@ -137,7 +137,10 @@ void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::print(ostream& os) co
 CacheController::CacheController(W8 coreid, char *name,
         MemoryHierarchy *memoryHierarchy, CacheType type) :
     Controller(coreid, name, memoryHierarchy)
+    , Statable(name)
     , type_(type)
+    , hit("hit", this)
+    , miss("miss", this)
     , isLowestPrivate_(false)
 {
     switch(type_) {
@@ -850,6 +853,8 @@ int CacheController::access_fast_path(Interconnect *interconnect,
      */
     if(line && is_line_valid(line) &&
             request->get_type() != MEMORY_OP_WRITE) {
+            if(request->is_kernel()) this->hit(n_kernel_stats)++;
+        else this->hit(n_user_stats)++;
         STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, request->is_kernel());
         return cacheLines_->latency();
     }
@@ -900,6 +905,8 @@ bool CacheController::cache_hit_cb(void *arg)
     } else {
         handle_local_hit(queueEntry);
         OP_TYPE type = queueEntry->request->get_type();
+    if(kernel_req) hit(n_kernel_stats)++;
+    else hit(n_user_stats)++;
         if(type == MEMORY_OP_READ) {
             STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, kernel_req);
         } else if(type == MEMORY_OP_WRITE) {
@@ -956,6 +963,9 @@ bool CacheController::cache_miss_cb(void *arg)
         }
     }
 
+    bool kernel_req = queueEntry->request->is_kernel();
+    if(kernel_req) miss(n_kernel_stats)++;
+    else miss(n_user_stats)++;
     queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
     queueEntry->sendTo = lowerInterconnect_;
     memoryHierarchy_->add_event(&waitInterconnect_, 0,

@@ -34,7 +34,7 @@
 #include <interconnect.h>
 #include <cacheConstants.h>
 #include <memoryStats.h>
-
+#include <statsBuilder.h>
 #define UPDATE_MESI_TRANS_STATS(old_state, new_state, mode) \
     if(mode) { /* kernel mode */ \
         kernelStats_->mesi_stats.state_transition[(old_state << 2) | new_state]++; \
@@ -260,7 +260,7 @@ namespace Memory {
             return entry.print(os);
         }
 
-        class CacheController : public Controller
+        class CacheController : public Controller, public Statable 
         {
             private:
 
@@ -302,6 +302,10 @@ namespace Memory {
                 Signal cacheUpdate_;
                 Signal cacheInsertComplete_;
                 Signal waitInterconnect_;
+
+                // Stats Objects
+                StatObj<W64> hit;
+                StatObj<W64> miss;
 
                 CacheQueueEntry* find_dependency(MemoryRequest *request);
 

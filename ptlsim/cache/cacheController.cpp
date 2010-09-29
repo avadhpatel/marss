@@ -514,7 +514,8 @@ int CacheController::access_fast_path(Interconnect *interconnect,
      * level cache has to be updated
      */
 	if(hit && request->get_type() != MEMORY_OP_WRITE) {
-        this->hit++;
+        if(request->is_kernel()) this->hit(n_kernel_stats)++;
+        else this->hit(n_user_stats)++;
 		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, request->is_kernel());
 		return cacheLines_->latency();
 	}
@@ -550,7 +551,8 @@ bool CacheController::cache_hit_cb(void *arg)
 
 	OP_TYPE type = queueEntry->request->get_type();
     bool kernel_req = queueEntry->request->is_kernel();
-    hit++;
+    if(kernel_req) hit(n_kernel_stats)++;
+    else hit(n_user_stats)++;
 	if(type == MEMORY_OP_READ) {
 		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, kernel_req);
 	} else if(type == MEMORY_OP_WRITE) {
@@ -591,7 +593,8 @@ bool CacheController::cache_miss_cb(void *arg)
 	} else if(type == MEMORY_OP_WRITE) {
 		STAT_UPDATE(cpurequest.count.miss.write++, kernel_req);
 	}
-    miss++;
+    if(kernel_req) miss(n_kernel_stats)++;
+    else miss(n_user_stats)++;
 
 	queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
 	queueEntry->sendTo = lowerInterconnect_;

@@ -43,6 +43,7 @@ ofstream ptl_logfile;
 ofstream ptl_rip_trace;
 #endif
 ofstream trace_mem_logfile;
+ofstream yaml_stats_file;
 bool logenable = 0;
 W64 sim_cycle = 0;
 W64 unhalted_cycle_count = 0;
@@ -110,6 +111,7 @@ void PTLsimConfig::reset() {
   trace_memory_updates = 0;
   trace_memory_updates_logfile = "ptlsim.mem.log";
   stats_filename.reset();
+  yaml_stats_filename="yaml_stats.txt";
   snapshot_cycles = infinity;
   snapshot_now.reset();
 
@@ -225,6 +227,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
 
   section("Statistics Database");
   add(stats_filename,               "stats",                "Statistics data store hierarchy root");
+  add(yaml_stats_filename,          "yamlstats",                "Statistics data stores in YAML format");
   add(snapshot_cycles,              "snapshot-cycles",      "Take statistical snapshot and reset every <snapshot> cycles");
   add(snapshot_now,                 "snapshot-now",         "Take statistical snapshot immediately, using specified name");
   section("Trace Start/Stop Point");
@@ -368,6 +371,7 @@ stringbuf current_stats_filename;
 stringbuf current_log_filename;
 stringbuf current_bbcache_dump_filename;
 stringbuf current_trace_memory_updates_logfile;
+stringbuf current_yaml_stats_filename;
 W64 current_start_sim_rip;
 
 void backup_and_reopen_logfile() {
@@ -389,6 +393,17 @@ void backup_and_reopen_memory_logfile() {
     sys_unlink(oldname);
     sys_rename(config.trace_memory_updates_logfile, oldname);
     trace_mem_logfile.open(config.trace_memory_updates_logfile);
+  }
+}
+
+void backup_and_reopen_yamlstats() {
+  if (config.yaml_stats_filename) {
+    if (yaml_stats_file) yaml_stats_file.close();
+    stringbuf oldname;
+    oldname << config.yaml_stats_filename, ".backup";
+    sys_unlink(oldname);
+    sys_rename(config.yaml_stats_filename, oldname);
+    yaml_stats_file.open(config.yaml_stats_filename);
   }
 }
 
@@ -458,7 +473,12 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
     current_trace_memory_updates_logfile = config.trace_memory_updates_logfile;
   }
 
-  if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.start_log_at_iteration == infinity)) {
+  if (config.yaml_stats_filename.set() && (config.yaml_stats_filename != current_yaml_stats_filename)) {
+    backup_and_reopen_yamlstats();
+    current_yaml_stats_filename = config.yaml_stats_filename;
+  }
+
+if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.start_log_at_iteration == infinity)) {
     config.start_log_at_iteration = 0;
   }
 

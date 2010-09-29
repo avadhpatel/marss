@@ -197,6 +197,11 @@ class StatObj : public StatObjBase {
 
             return out;
         }
+
+        inline T& operator()(Stats *stats) const
+        {
+            return *(T*)(stats->base() + offset);
+        }
 };
 
 #endif // STATS_BUILDER_H

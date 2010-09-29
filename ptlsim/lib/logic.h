@@ -22,6 +22,7 @@ inline vec8w x86_sse_ldvwu(const vec8w* m) {
 inline void x86_sse_stvwu(vec8w* m, const vec8w ra) { asm("movdqu %[ra],%[m]" : [m] "=xm" (*m) : [ra] "x" (ra) : "memory"); }
 
 extern ofstream ptl_logfile;
+extern ofstream yaml_stats_file;
 
 template <typename T>
 struct latch {

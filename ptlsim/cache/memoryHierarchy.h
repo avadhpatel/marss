@@ -85,6 +85,9 @@ namespace OutOfOrderModel {
 
 namespace Memory {
 
+  extern Stats *n_user_stats;
+  extern Stats *n_kernel_stats;
+
   using namespace OutOfOrderModel;
 
   class Event : public FixStateListObject

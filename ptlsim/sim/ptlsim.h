@@ -127,6 +127,7 @@ void collect_sysinfo(PTLsimStats& stats, int argc, char** argv);
 void print_sysinfo(ostream& os);
 void backup_and_reopen_logfile();
 void backup_and_reopen_mem_logfile();
+void backup_and_reopen_yamlstats();
 void shutdown_subsystems();
 
 bool simulate(const char* machinename);
@@ -230,6 +231,7 @@ struct PTLsimConfig {
 
   // Statistics Database
   stringbuf stats_filename;
+  stringbuf yaml_stats_filename;
   W64 snapshot_cycles;
   stringbuf snapshot_now;
 
