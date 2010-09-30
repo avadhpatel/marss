@@ -155,14 +155,12 @@ void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::print(ostream& os) co
 CacheController::CacheController(W8 coreid, char *name,
 		MemoryHierarchy *memoryHierarchy, CacheType type) :
 	Controller(coreid, name, memoryHierarchy)
-    , Statable(name)
+    , new_stats(name)
 	, type_(type)
 	, isLowestPrivate_(false)
     , wt_disabled_(true)
 	, prefetchEnabled_(false)
 	, prefetchDelay_(1)
-    , hit("hit", this)
-    , miss("miss", this)
 {
 	switch(type_) {
 		case L1_I_CACHE:
@@ -514,8 +512,8 @@ int CacheController::access_fast_path(Interconnect *interconnect,
      * level cache has to be updated
      */
 	if(hit && request->get_type() != MEMORY_OP_WRITE) {
-        if(request->is_kernel()) this->hit(n_kernel_stats)++;
-        else this->hit(n_user_stats)++;
+        N_STAT_UPDATE(new_stats.cpurequest.count.hit.read.hit, ++,
+                request->is_kernel());
 		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, request->is_kernel());
 		return cacheLines_->latency();
 	}
@@ -551,13 +549,17 @@ bool CacheController::cache_hit_cb(void *arg)
 
 	OP_TYPE type = queueEntry->request->get_type();
     bool kernel_req = queueEntry->request->is_kernel();
-    if(kernel_req) hit(n_kernel_stats)++;
-    else hit(n_user_stats)++;
 	if(type == MEMORY_OP_READ) {
 		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, kernel_req);
+		N_STAT_UPDATE(new_stats.cpurequest.count.hit.read.hit, ++,
+                kernel_req);
 	} else if(type == MEMORY_OP_WRITE) {
 		STAT_UPDATE(cpurequest.count.hit.write.hit.hit++, kernel_req);
+		N_STAT_UPDATE(new_stats.cpurequest.count.hit.write.hit, ++,
+                kernel_req);
 	}
+
+    new_stats.testArr(n_kernel_stats)[2]++;
 
 	if(queueEntry->prefetch) {
 		clear_entry_cb(queueEntry);
@@ -593,8 +595,11 @@ bool CacheController::cache_miss_cb(void *arg)
 	} else if(type == MEMORY_OP_WRITE) {
 		STAT_UPDATE(cpurequest.count.miss.write++, kernel_req);
 	}
-    if(kernel_req) miss(n_kernel_stats)++;
-    else miss(n_user_stats)++;
+	if(type == MEMORY_OP_READ) {
+		N_STAT_UPDATE(new_stats.cpurequest.count.miss.read, ++, kernel_req);
+	} else if(type == MEMORY_OP_WRITE) {
+		N_STAT_UPDATE(new_stats.cpurequest.count.miss.write, ++, kernel_req);
+	}
 
 	queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
 	queueEntry->sendTo = lowerInterconnect_;

@@ -239,7 +239,8 @@ static inline ostream& operator <<(ostream& os, const CacheQueueEntry&
 	return entry.print(os);
 }
 
-class CacheController : public Controller, public Statable
+
+class CacheController : public Controller
 {
 	private:
 
@@ -291,8 +292,7 @@ class CacheController : public Controller, public Statable
 		Signal waitInterconnect_;
 
         // Stats Objects
-        StatObj<W64> hit;
-        StatObj<W64> miss;
+        BaseCacheStats new_stats;
 
 		CacheQueueEntry* find_dependency(MemoryRequest *request);
 

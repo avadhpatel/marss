@@ -300,9 +300,9 @@ void MemoryHierarchy::private_L2_configuration()
 		l2->set_private(true);
 
         // Temp Stats
-        l1_d->set_default_stats(stats);
-        l1_i->set_default_stats(stats);
-        l2->set_default_stats(stats);
+        // l1_d->set_default_stats(stats);
+        // l1_i->set_default_stats(stats);
+        // l2->set_default_stats(stats);
 	}
 
 #ifdef ENABLE_L3_CACHE
@@ -326,7 +326,7 @@ void MemoryHierarchy::private_L2_configuration()
 	allInterconnects_.push((Interconnect*)l3_mem_p2p);
 	l3_mem_p2p->register_controller(l3);
 	l3->register_lower_interconnect(l3_mem_p2p);
-    l3->set_default_stats(stats);
+    // l3->set_default_stats(stats);
 #endif
 
 	GET_STRINGBUF_PTR(mem_name, "Memory");
@@ -401,13 +401,13 @@ void MemoryHierarchy::clock()
 
     // Test stats
     if(sim_cycle % 10000000 == 0) {
-            yaml_stats_file << "# kernel stats\n";
-            YAML::Emitter k_out, u_out;
-            (StatsBuilder::get()).dump(n_kernel_stats, k_out);
-            yaml_stats_file  << k_out.c_str();
-            yaml_stats_file     << "# user stats\n";
-            (StatsBuilder::get()).dump(n_user_stats, u_out);
-            yaml_stats_file     << u_out.c_str();
+        yaml_stats_file << "# kernel stats\n";
+        YAML::Emitter k_out, u_out;
+        (StatsBuilder::get()).dump(n_kernel_stats, k_out);
+        yaml_stats_file << k_out.c_str();
+        yaml_stats_file << "# user stats\n";
+        (StatsBuilder::get()).dump(n_user_stats, u_out);
+        yaml_stats_file << u_out.c_str();
     }
 }
 

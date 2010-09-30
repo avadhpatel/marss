@@ -28,6 +28,8 @@
 #ifndef MEMORY_STATS_H
 #define MEMORY_STATS_H
 
+#include <statsBuilder.h>
+
 //#include <dcache.h>
 
 #define SETUP_STATS(type) \
@@ -44,6 +46,14 @@
     } else { \
         userStats_->expr, totalUserStats_->expr; \
     }\
+}
+
+#define N_STAT_UPDATE(counter, expr, mode) { \
+    if(mode) { /* kernel mode */ \
+        counter(n_kernel_stats)expr; \
+    } else { \
+        counter(n_user_stats)expr; \
+    } \
 }
 
 struct stall_sub { // rootnode:summable
@@ -219,6 +229,107 @@ namespace Memory {
             return *this;
         }
     };
+
+
+// New memory stats
+struct BaseCacheStats : public Statable
+{
+    struct cpurequest : public Statable
+    {
+        struct count : public Statable
+        {
+            struct hit : public Statable
+            {
+                struct hit_sub : public Statable
+                {
+                    StatObj<W64> hit;
+                    StatObj<W64> forward;
+
+                    hit_sub(const char *name, Statable *parent)
+                        : Statable(name, parent)
+                          , hit("hit", this)
+                          , forward("forward", this)
+                    {}
+                };
+
+                hit_sub read;
+                hit_sub write;
+
+                hit(Statable *parent)
+                    : Statable("hit", parent)
+                      , read("read", this)
+                      , write("write", this)
+                {}
+            } hit;
+
+            struct miss : public Statable
+            {
+                StatObj<W64> read;
+                StatObj<W64> write;
+
+                miss(Statable *parent)
+                    : Statable("miss", parent)
+                      , read("read", this)
+                      , write("write", this)
+                {}
+            } miss;
+
+            count(Statable *parent)
+                : Statable("count", parent)
+                  , hit(this)
+                  , miss(this)
+            {}
+        } count;
+
+        struct stall : public Statable
+        {
+            struct stall_sub : public Statable
+            {
+                StatObj<W64> dependency;
+                StatObj<W64> cache_port;
+                StatObj<W64> buffer_full;
+
+                stall_sub(const char *name, Statable *parent)
+                    : Statable(name, parent)
+                      , dependency("dependency", this)
+                      , cache_port("cache_port", this)
+                      , buffer_full("buffer_full", this)
+                {}
+            };
+
+            stall_sub read;
+            stall_sub write;
+
+            stall(Statable *parent)
+                : Statable("stall", parent)
+                  , read("read", this)
+                  , write("write", this)
+            {}
+        } stall;
+
+        StatObj<W64> redirects;
+
+        cpurequest(Statable *parent)
+            : Statable("cpurequest", parent)
+              , count(this)
+              , stall(this)
+              , redirects("redirects", this)
+        {}
+    } cpurequest;
+
+    StatObj<W64> annul;
+    StatObj<W64> queueFull;
+
+    StatArray<W64, 5> testArr;
+
+    BaseCacheStats(const char *name, Statable *parent=NULL)
+        : Statable(name, parent)
+          , cpurequest(this)
+          , annul("annul", this)
+          , queueFull("queueFull", this)
+          , testArr("TestArray", this)
+    {}
+};
 };
 
 #endif // MEMORY_STATS_H

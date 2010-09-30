@@ -1150,6 +1150,9 @@ extern "C" uint8_t ptl_simulate() {
 
 	statswriter.close();
 
+    if(config.yaml_stats_filename.set())
+        yaml_stats_file.close();
+
     if(config.enable_mongo)
         write_mongo_stats();
 

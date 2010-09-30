@@ -260,7 +260,7 @@ namespace Memory {
             return entry.print(os);
         }
 
-        class CacheController : public Controller, public Statable 
+        class CacheController : public Controller
         {
             private:
 
@@ -304,8 +304,8 @@ namespace Memory {
                 Signal waitInterconnect_;
 
                 // Stats Objects
-                StatObj<W64> hit;
-                StatObj<W64> miss;
+                // StatObj<W64> hit;
+                // StatObj<W64> miss;
 
                 CacheQueueEntry* find_dependency(MemoryRequest *request);
 

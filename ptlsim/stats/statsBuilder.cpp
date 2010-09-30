@@ -29,18 +29,24 @@ Statable::Statable(const char *name, Statable *parent)
     : parent(parent)
 {
     this->name = name;
-    assert(parent);
 
-    parent->add_child_node(this);
-    default_stats = parent->default_stats;
+    if(parent) {
+        parent->add_child_node(this);
+        default_stats = parent->default_stats;
+    } else {
+        (StatsBuilder::get()).add_to_root(this);
+    }
 }
 
 Statable::Statable(stringbuf &str, Statable *parent)
     : parent(parent), name(str)
 {
-    assert(parent);
-    parent->add_child_node(this);
-    default_stats = parent->default_stats;
+    if(parent) {
+        parent->add_child_node(this);
+        default_stats = parent->default_stats;
+    } else {
+        (StatsBuilder::get()).add_to_root(this);
+    }
 }
 
 void Statable::set_default_stats(Stats *stats)
@@ -58,31 +64,25 @@ void Statable::set_default_stats(Stats *stats)
     }
 }
 
-ostream& Statable::dump(ostream &os)
+ostream& Statable::dump(ostream &os, Stats *stats)
 {
-    if(!default_stats)
-        return os;
-
     os << name << "\t# Node\n";
 
     // First print all the leafs
     foreach(i, leafs.count()) {
-        leafs[i]->dump(os);
+        leafs[i]->dump(os, stats);
     }
 
     // Now print all the child nodes
     foreach(i, childNodes.count()) {
-        childNodes[i]->dump(os);
+        childNodes[i]->dump(os, stats);
     }
 
     return os;
 }
 
-YAML::Emitter& Statable::dump(YAML::Emitter &out)
+YAML::Emitter& Statable::dump(YAML::Emitter &out, Stats *stats)
 {
-    if(!default_stats)
-        return out;
-
     if(name.size()) {
         out << YAML::Key << (char *)name;
         out << YAML::Value;
@@ -93,12 +93,12 @@ YAML::Emitter& Statable::dump(YAML::Emitter &out)
 
     // First print all the leafs
     foreach(i, leafs.count()) {
-        leafs[i]->dump(out);
+        leafs[i]->dump(out, stats);
     }
 
     // Now print all the child nodes
     foreach(i, childNodes.count()) {
-        childNodes[i]->dump(out);
+        childNodes[i]->dump(out, stats);
     }
 
     out << YAML::EndMap;
@@ -130,7 +130,7 @@ ostream& StatsBuilder::dump(Stats *stats, ostream &os) const
     rootNode->set_default_stats(stats);
 
     // Now print the stats into ostream
-    rootNode->dump(os);
+    rootNode->dump(os, stats);
 
     return os;
 }
@@ -141,7 +141,7 @@ YAML::Emitter& StatsBuilder::dump(Stats *stats, YAML::Emitter &out) const
     rootNode->set_default_stats(stats);
 
     // Now print the stats into ostream
-    rootNode->dump(out);
+    rootNode->dump(out, stats);
 
     return out;
 }
