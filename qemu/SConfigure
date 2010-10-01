@@ -523,7 +523,7 @@ except OSError:
 
 if not conf.CheckSDLX11Driver():
     print("ERROR: SDL library not found")
-    exit_with_error()
+    #exit_with_error()
 else:
     env['sdl_x11'] = True
     sdl_x11 = True

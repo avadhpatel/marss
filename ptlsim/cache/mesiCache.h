@@ -41,7 +41,6 @@
     } else { \
         userStats_->mesi_stats.state_transition[(old_state << 2) | new_state]++; \
     }
-
 namespace Memory {
 
     namespace MESICache {
@@ -304,8 +303,7 @@ namespace Memory {
                 Signal waitInterconnect_;
 
                 // Stats Objects
-                // StatObj<W64> hit;
-                // StatObj<W64> miss;
+                BaseCacheStats new_stats;
 
                 CacheQueueEntry* find_dependency(MemoryRequest *request);
 

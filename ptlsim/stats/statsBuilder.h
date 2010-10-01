@@ -7,7 +7,7 @@
 
 #include <yaml/yaml.h>
 
-#define STATS_SIZE 1024*2
+#define STATS_SIZE 1024*10
 
 class StatObjBase;
 class Stats;
@@ -179,7 +179,6 @@ class StatsBuilder {
         {
             W64 ret_val = stat_offset;
             stat_offset += size;
-
             assert(stat_offset < STATS_SIZE);
             return ret_val;
         }

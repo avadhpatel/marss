@@ -317,6 +317,25 @@ struct BaseCacheStats : public Statable
         {}
     } cpurequest;
 
+    struct mesi_stats : public Statable{
+            struct hit_state : public Statable{
+                    StatArray<W64,4> snoop; 
+                    StatArray<W64,4> cpu;
+                    hit_state (const char *name,Statable *parent)
+                            :Statable(name, parent)
+                             ,snoop("snoop",this)
+                             ,cpu("cpu",this)
+                    {}
+            } hit_state;
+            StatArray<W64,16> state_transition;
+            mesi_stats(Statable *parent)
+                    :Statable("mesi_stats", parent)
+                     ,hit_state("hit_state",this)
+                     ,state_transition("state_transition",this)
+            {}
+    } mesi_stats;    
+
+    
     StatObj<W64> annul;
     StatObj<W64> queueFull;
 
@@ -327,6 +346,7 @@ struct BaseCacheStats : public Statable
           , cpurequest(this)
           , annul("annul", this)
           , queueFull("queueFull", this)
+          , mesi_stats(this)
           , testArr("TestArray", this)
     {}
 };
