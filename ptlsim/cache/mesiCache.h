@@ -303,7 +303,7 @@ namespace Memory {
                 Signal waitInterconnect_;
 
                 // Stats Objects
-                BaseCacheStats new_stats;
+                MESIStats new_stats;
 
                 CacheQueueEntry* find_dependency(MemoryRequest *request);
 
