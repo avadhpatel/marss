@@ -404,10 +404,20 @@ void MemoryHierarchy::clock()
         yaml_stats_file << "# kernel stats\n";
         YAML::Emitter k_out, u_out;
         (StatsBuilder::get()).dump(n_kernel_stats, k_out);
-        yaml_stats_file << k_out.c_str();
+        yaml_stats_file << k_out.c_str() << "\n";
         yaml_stats_file << "# user stats\n";
         (StatsBuilder::get()).dump(n_user_stats, u_out);
-        yaml_stats_file << u_out.c_str();
+        yaml_stats_file << u_out.c_str() << "\n";
+
+        Stats* tot_stats = (StatsBuilder::get()).get_new_stats();
+
+        *tot_stats += *n_user_stats;
+        *tot_stats += *n_kernel_stats;
+
+        yaml_stats_file << "total stats\n";
+        YAML::Emitter t_out;
+        (StatsBuilder::get()).dump(tot_stats, t_out);
+        yaml_stats_file << t_out.c_str() << "\n";
     }
 }
 

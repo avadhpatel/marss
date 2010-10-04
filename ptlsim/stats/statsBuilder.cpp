@@ -106,6 +106,19 @@ YAML::Emitter& Statable::dump(YAML::Emitter &out, Stats *stats)
     return out;
 }
 
+void Statable::add_stats(Stats& dest_stats, Stats& src_stats)
+{
+    // First add all the leafs
+    foreach(i, leafs.count()) {
+        leafs[i]->add_stats(dest_stats, src_stats);
+    }
+
+    // Now add all the child nodes
+    foreach(i, childNodes.count()) {
+        childNodes[i]->add_stats(dest_stats, src_stats);
+    }
+}
+
 StatsBuilder StatsBuilder::_builder;
 
 Stats* StatsBuilder::get_new_stats()

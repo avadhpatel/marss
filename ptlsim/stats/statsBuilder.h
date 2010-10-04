@@ -12,6 +12,14 @@
 class StatObjBase;
 class Stats;
 
+inline static YAML::Emitter& operator << (YAML::Emitter& out, const W64 value)
+{
+    stringbuf buf;
+    buf << value;
+    out << buf;
+    return out;
+}
+
 /**
  * @brief Base class for all classes that has Stats counters
  *
@@ -118,6 +126,8 @@ class Statable {
          * @return
          */
         YAML::Emitter& dump(YAML::Emitter &out, Stats *stats);
+
+        void add_stats(Stats& dest_stats, Stats& src_stats);
 };
 
 /**
@@ -216,6 +226,11 @@ class StatsBuilder {
          * @return
          */
         YAML::Emitter& dump(Stats *stats, YAML::Emitter &out) const;
+
+        void add_stats(Stats& dest_stats, Stats& src_stats)
+        {
+            rootNode->add_stats(dest_stats, src_stats);
+        }
 };
 
 /**
@@ -242,6 +257,12 @@ class Stats {
         {
             return (W64)mem;
         }
+
+        Stats& operator+=(Stats& rhs_stats)
+        {
+            (StatsBuilder::get()).add_stats(*this, rhs_stats);
+            return *this;
+        }
 };
 
 /**
@@ -267,6 +288,8 @@ class StatObjBase {
         virtual ostream& dump(ostream& os, Stats *stats) const = 0;
         virtual YAML::Emitter& dump(YAML::Emitter& out,
                 Stats *stats) const = 0;
+
+        virtual void add_stats(Stats& dest_stats, Stats& src_stats) = 0;
 };
 
 /**
@@ -533,13 +556,15 @@ class StatObj : public StatObjBase {
             T var = (*this)(stats);
 
             out << YAML::Key << (char *)name;
-
-            stringbuf val;
-            val << var;
-
-            out << YAML::Value << (char *)val;
+            out << YAML::Value << var;
 
             return out;
+        }
+
+        void add_stats(Stats& dest_stats, Stats& src_stats)
+        {
+            T& dest_var = (*this)(&dest_stats);
+            dest_var += (*this)(&src_stats);
         }
 };
 
@@ -580,6 +605,20 @@ class StatArray : public StatObjBase {
 
             offset = builder.get_offset(sizeof(T) * size);
 
+            set_default_var_ptr();
+        }
+
+        /**
+         * @brief Set the default Stats*
+         *
+         * @param stats A pointer to Stats structure
+         *
+         * This function will set the default Stats* to use for all future
+         * operations like ++, += etc. untill its changed.
+         */
+        void set_default_stats(Stats *stats)
+        {
+            StatObjBase::set_default_stats(stats);
             set_default_var_ptr();
         }
 
@@ -649,15 +688,22 @@ class StatArray : public StatObjBase {
 
             BaseArr& arr = (*this)(stats);
             foreach(i, size) {
-                stringbuf val;
-                val << arr[i];
-                out << val;
+                out << arr[i];
             }
 
             out << YAML::EndSeq;
             out << YAML::Block;
 
             return out;
+        }
+
+        void add_stats(Stats& dest_stats, Stats& src_stats)
+        {
+            BaseArr& dest_arr = (*this)(&dest_stats);
+            BaseArr& src_arr = (*this)(&src_stats);
+            foreach(i, size) {
+                dest_arr[i] += src_arr[i];
+            }
         }
 };
 
