@@ -49,12 +49,13 @@ CPUController::CPUController(W8 coreid, char *name,
 	dcacheLineBits_ = log2(L1D_LINE_SIZE);
     SETUP_STATS(CPUController);
 
-	stringbuf *signal_name;
-	signal_name = new stringbuf();
-	*signal_name << name, "_Cache_Access";
-	cacheAccess_.set_name(signal_name->buf);
+	stringbuf signal_name;
+	// signal_name = new stringbuf();
+	signal_name << name, "_Cache_Access";
+	cacheAccess_.set_name(signal_name.buf);
 	cacheAccess_.connect(signal_mem_ptr(*this,
 				&CPUController::cache_access_cb));
+    // delete signal_name;
 }
 
 bool CPUController::handle_request_cb(void *arg)
@@ -299,15 +300,16 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
         } else {
             user_stats.memory.icache_latency[req_latency]++;
         }
-		memoryHierarchy_->icache_wakeup_wrapper(request);
+		// memoryHierarchy_->icache_wakeup_wrapper(request);
 	} else {
         if(kernel_req) {
             kernel_stats.memory.dcache_latency[req_latency]++;
         } else {
             user_stats.memory.dcache_latency[req_latency]++;
         }
-		memoryHierarchy_->dcache_wakeup_wrapper(request);
+		// memoryHierarchy_->dcache_wakeup_wrapper(request);
 	}
+    memoryHierarchy_->core_wakeup(request);
 
 	memdebug("Entry finalized..\n");
 

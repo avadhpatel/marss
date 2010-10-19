@@ -66,6 +66,10 @@ struct PTLsimMachine {
   Context& contextof(W8 i) {
 	  return *ptl_contexts[i];
   }
+
+  virtual W8 get_num_cores() {
+      return NUMBER_OF_CORES;
+  }
 };
 
 void setup_qemu_switch_all_ctx(Context& last_ctx);

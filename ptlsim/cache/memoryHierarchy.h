@@ -157,7 +157,7 @@ namespace Memory {
 
   class MemoryHierarchy {
   public:
-    MemoryHierarchy(OutOfOrderMachine& machine);
+    MemoryHierarchy(PTLsimMachine& machine);
     ~MemoryHierarchy(); // release memory for pool
 
 	// check L1 availability
@@ -169,6 +169,21 @@ namespace Memory {
 	// callback with response
 	void icache_wakeup_wrapper(MemoryRequest *request);
 	void dcache_wakeup_wrapper(MemoryRequest *request);
+
+    // New Core wakeup function that uses Signal of MemoryRequest
+    // if Signal is not setup, it uses old wrapper functions
+    void core_wakeup(MemoryRequest *request) {
+        if(request->get_coreSignal()) {
+            request->get_coreSignal()->emit((void*)request);
+            return;
+        }
+
+        if(request->is_instruction()) {
+            icache_wakeup_wrapper(request);
+        } else {
+            dcache_wakeup_wrapper(request);
+        }
+    }
 
 	// to remove the requests if rob eviction has occured
 	void annul_request(W8 coreid,
@@ -212,7 +227,7 @@ namespace Memory {
     void private_L2_configuration();
 
     // machine
-    OutOfOrderMachine &machine_;
+    PTLsimMachine &machine_;
 
 	// array of caches and memory
 	dynarray<Controller*> cpuControllers_;

@@ -66,6 +66,7 @@ class MemoryRequest: public selfqueuelink
 			opType_ = MEMORY_OP_READ;
 			isData_ = 0;
 			history = new stringbuf();
+            coreSignal_ = NULL;
 		}
 
 		void incRefCounter(){
@@ -137,6 +138,16 @@ class MemoryRequest: public selfqueuelink
             return false;
         }
 
+        void set_coreSignal(Signal* signal)
+        {
+            coreSignal_ = signal;
+        }
+
+        Signal* get_coreSignal()
+        {
+            return coreSignal_;
+        }
+
 		ostream& print(ostream& os) const
 		{
 			os << "Memory Request: core[", coreId_, "] ";
@@ -150,6 +161,9 @@ class MemoryRequest: public selfqueuelink
 			os << "ownerUUID[", ownerUUID_, "] ";
 			os << "ownerRIP[", (void*)ownerRIP_, "] ";
 			os << "History[ " << *history << "] ";
+            if(coreSignal_) {
+                os << "Signal[ " << coreSignal_->get_name() << "] ";
+            }
 			return os;
 		}
 
@@ -165,6 +179,7 @@ class MemoryRequest: public selfqueuelink
 		int refCounter_;
 		OP_TYPE opType_;
 		stringbuf *history;
+        Signal *coreSignal_;
 
 };
 

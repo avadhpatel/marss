@@ -2116,9 +2116,17 @@ void OutOfOrderCore::flush_tlb(Context& ctx, W8 threadid, bool selective, Waddr 
 
 void OutOfOrderMachine::flush_tlb(Context& ctx) {
   // This assumes all VCPUs are mapped as threads in a single SMT core
-  W8 coreid = 0;
-  W8 threadid = ctx.cpu_index;
-  cores[coreid]->flush_tlb(ctx, threadid);
+  // W8 coreid = 0;
+  // W8 threadid = ctx.cpu_index;
+  // cores[coreid]->flush_tlb(ctx, threadid);
+
+  foreach(i, NUM_SIM_CORES) {
+      OutOfOrderCore& core = coreof(i);
+      foreach(j, core.threadcount) {
+          core.threads[j]->dtlb.flush_all();
+          core.threads[j]->itlb.flush_all();
+      }
+  }
 }
 
 void OutOfOrderMachine::flush_tlb_virt(Context& ctx, Waddr virtaddr) {
@@ -2282,11 +2290,12 @@ extern "C" void ptl_flush_bbcache(int8_t context_id) {
     if(in_simulation) {
       foreach(i, NUM_SIM_CORES) {
         bbcache[i].flush(context_id);
-        OutOfOrderCore& core = coreof(i);
-        foreach(i, NUMBER_OF_THREAD_PER_CORE) {
-            core.threads[i]->dtlb.flush_all();
-            core.threads[i]->itlb.flush_all();
-        }
+        // Get the current ptlsim machine and call its flush tlb
+        PTLsimMachine* machine = PTLsimMachine::getcurrent();
+        assert(machine);
+
+        Context& ctx = machine->contextof(context_id);
+        machine->flush_tlb(ctx);
       }
     }
 }
@@ -2295,7 +2304,7 @@ namespace Memory{
   using namespace OutOfOrderModel;
 
   void MemoryHierarchy::icache_wakeup_wrapper(MemoryRequest *request){
-    OutOfOrderCore* core = machine_.cores[request->get_coreid()];
+    OutOfOrderCore* core = ((OutOfOrderMachine*)(&machine_))->cores[request->get_coreid()];
     OutOfOrderCoreCacheCallbacks& callbacks = core->cache_callbacks;
 
     callbacks.icache_wakeup(request);
@@ -2304,7 +2313,7 @@ namespace Memory{
   void MemoryHierarchy::dcache_wakeup_wrapper(MemoryRequest *request) {
 
 	  msdebug << "Dcache Wakeup Request: ", *request, endl;
-    OutOfOrderCore* core = machine_.cores[request->get_coreid()];
+    OutOfOrderCore* core = ((OutOfOrderMachine*)(&machine_))->cores[request->get_coreid()];
     OutOfOrderCoreCacheCallbacks& callbacks = core->cache_callbacks;
 
     callbacks.dcache_wakeup(request);

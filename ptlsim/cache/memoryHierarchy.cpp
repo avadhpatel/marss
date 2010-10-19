@@ -57,11 +57,12 @@ using namespace Memory;
 Stats* Memory::n_user_stats = NULL;
 Stats* Memory::n_kernel_stats = NULL;
 
-MemoryHierarchy::MemoryHierarchy(OutOfOrderMachine& machine) :
-	machine_(machine)
-	, coreNo_(NUMBER_OF_CORES)
+MemoryHierarchy::MemoryHierarchy(PTLsimMachine& machine) :
+    machine_(machine)
+	// , coreNo_(NUMBER_OF_CORES)
     , someStructIsFull_(false)
 {
+    coreNo_ = machine_.get_num_cores();
     stats = (StatsBuilder::get()).get_new_stats();
     n_user_stats = (StatsBuilder::get()).get_new_stats();
     n_kernel_stats = (StatsBuilder::get()).get_new_stats();

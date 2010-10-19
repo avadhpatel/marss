@@ -6,5 +6,10 @@ Import('env')
 # Now get list of .cpp files
 src_files = Glob('*.cpp')
 
+def_core_objs = SConscript('default_core/SConscript')
+
 objs = env.Object(src_files)
+
+objs += def_core_objs
+
 Return('objs')

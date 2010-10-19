@@ -76,7 +76,7 @@ void PTLsimConfig::reset() {
   simswitch = 0;
 
   quiet = 0;
-  core_name = "ooo";
+  core_name = "base";
   log_filename = "ptlsim.log";
   loglevel = 0;
   start_log_at_iteration = 0;

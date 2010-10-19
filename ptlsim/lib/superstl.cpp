@@ -1424,13 +1424,13 @@ const W64 expand_8bit_to_64bit_lut[256] alignto(8) = {
 
 Signal::Signal()
 {
-	name_ = NULL;
+	// name_ = NULL;
 	func = NULL;
 }
 
 Signal::Signal(const char* name)
 {
-	name_ = name;
+	name_ << name;
 	func = NULL;
 }
 

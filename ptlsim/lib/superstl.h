@@ -3956,7 +3956,7 @@ namespace superstl {
 
   class Signal {
 	  private:
-		  const char* name_;
+		  stringbuf name_;
 		  TFunctor* func;
 
 	  public:
@@ -3965,14 +3965,14 @@ namespace superstl {
 		  bool emit(void *arg) ;
 		  void connect(TFunctor* _func);
 		  const char* get_name() {
-			  return name_;
+			  return name_.buf;
 		  }
 		  void set_name(const char *name) {
-			  name_ = name;
+			  name_ << name;
 		  }
   };
 
 
-} // namespace superstl
+}; // namespace superstl
 
 #endif // _SUPERSTL_H_
