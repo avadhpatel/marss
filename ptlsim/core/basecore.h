@@ -3,6 +3,7 @@
 #define BASE_CORE_H
 
 #include <ptlsim.h>
+#include <statsBuilder.h>
 #include <memoryHierarchy.h>
 
 namespace Core {

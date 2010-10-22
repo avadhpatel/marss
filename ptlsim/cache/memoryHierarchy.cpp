@@ -54,18 +54,11 @@
 
 using namespace Memory;
 
-Stats* Memory::n_user_stats = NULL;
-Stats* Memory::n_kernel_stats = NULL;
-
 MemoryHierarchy::MemoryHierarchy(PTLsimMachine& machine) :
     machine_(machine)
-	// , coreNo_(NUMBER_OF_CORES)
     , someStructIsFull_(false)
 {
     coreNo_ = machine_.get_num_cores();
-    stats = (StatsBuilder::get()).get_new_stats();
-    n_user_stats = (StatsBuilder::get()).get_new_stats();
-    n_kernel_stats = (StatsBuilder::get()).get_new_stats();
 
 	setup_topology();
 }
@@ -399,27 +392,6 @@ void MemoryHierarchy::clock()
 			break;
 		}
 	}
-
-    // Test stats
-    if(sim_cycle % 10000000 == 0) {
-        yaml_stats_file << "# kernel stats\n";
-        YAML::Emitter k_out, u_out;
-        (StatsBuilder::get()).dump(n_kernel_stats, k_out);
-        yaml_stats_file << k_out.c_str() << "\n";
-        yaml_stats_file << "# user stats\n";
-        (StatsBuilder::get()).dump(n_user_stats, u_out);
-        yaml_stats_file << u_out.c_str() << "\n";
-
-        Stats* tot_stats = (StatsBuilder::get()).get_new_stats();
-
-        *tot_stats += *n_user_stats;
-        *tot_stats += *n_kernel_stats;
-
-        yaml_stats_file << "total stats\n";
-        YAML::Emitter t_out;
-        (StatsBuilder::get()).dump(tot_stats, t_out);
-        yaml_stats_file << t_out.c_str() << "\n";
-    }
 }
 
 void MemoryHierarchy::reset()

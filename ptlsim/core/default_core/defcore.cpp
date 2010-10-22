@@ -82,6 +82,17 @@ static void init_luts() {
     globals_initialized = true;
 }
 
+ThreadContext::ThreadContext(DefaultCore& core_, W8 threadid_, Context& ctx_)
+    : core(core_), threadid(threadid_), ctx(ctx_)
+      , thread_stats("thread", &core_.core_stats)
+{
+    stringbuf stats_name;
+    stats_name << "thread" << threadid;
+    thread_stats.update_name(stats_name.buf);
+
+    reset();
+}
+
 void ThreadContext::reset() {
     setzero(specrrt);
     setzero(commitrrt);
@@ -165,14 +176,20 @@ void ThreadContext::init() {
 }
 
 
-    DefaultCore::DefaultCore(BaseCoreMachine& machine_, W8 num_threads)
+DefaultCore::DefaultCore(BaseCoreMachine& machine_, W8 num_threads)
 : BaseCore(machine_)
+    , core_stats("core", &machine_)
 {
     coreid = machine.get_next_coreid();
     threadcount = num_threads;
     setzero(threads);
 
     assert(num_threads > 0 && "Core has atleast 1 thread");
+
+    // Rename the stats
+    stringbuf stats_name;
+    stats_name << "core" << coreid;
+    core_stats.update_name(stats_name.buf);
 
     // Setup Cache Signals
     stringbuf sig_name;
@@ -416,14 +433,17 @@ bool DefaultCore::runcycle() {
 
         if(thread->ctx.kernel_mode) {
             thread->stats_ = &kernel_stats;
+            thread->thread_stats.set_default_stats(n_kernel_stats);
         } else {
             thread->stats_ = &user_stats;
+            thread->thread_stats.set_default_stats(n_user_stats);
         }
     }
 
     // Each core's thread-shared stats counter will be added to
     // the thread-0's counters for simplicity
     stats_ = threads[0]->stats_;
+    core_stats.set_default_stats(threads[0]->thread_stats.get_default_stats());
 
     //
     // Compute reserved issue queue entries to avoid starvation:

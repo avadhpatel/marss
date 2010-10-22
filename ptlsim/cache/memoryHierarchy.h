@@ -85,9 +85,6 @@ namespace OutOfOrderModel {
 
 namespace Memory {
 
-  extern Stats *n_user_stats;
-  extern Stats *n_kernel_stats;
-
   using namespace OutOfOrderModel;
 
   class Event : public FixStateListObject
@@ -219,6 +216,8 @@ namespace Memory {
 	void free_message(Message* msg);
 
 	int get_core_pending_offchip_miss(W8 coreid);
+
+    PTLsimMachine& get_machine() { return machine_; }
 
   private:
 

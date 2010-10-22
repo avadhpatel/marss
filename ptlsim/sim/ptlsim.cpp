@@ -63,6 +63,10 @@ W64 tsc_at_start ;
 
 const char *snapshot_names[] = {"user", "kernel", "global"};
 
+Stats *n_user_stats;
+Stats *n_kernel_stats;
+Stats *n_global_stats;
+
 #endif
 
 void PTLsimConfig::reset() {
@@ -659,6 +663,12 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
         setzero(kernel_stats);
         setzero(global_stats);
         stats = &user_stats;
+
+        // Setup YAML Stats
+        StatsBuilder& builder = StatsBuilder::get();
+        n_user_stats = builder.get_new_stats();
+        n_kernel_stats = builder.get_new_stats();
+        n_global_stats = builder.get_new_stats();
     }
 
     qemu_free(config_str);
@@ -977,6 +987,28 @@ void write_mongo_stats() {
     mongo_destroy(conn);
 }
 
+void dump_yaml_stats()
+{
+    yaml_stats_file << "# kernel stats\n";
+    YAML::Emitter k_out, u_out;
+    (StatsBuilder::get()).dump(n_kernel_stats, k_out);
+    yaml_stats_file << k_out.c_str() << "\n";
+    yaml_stats_file << "# user stats\n";
+    (StatsBuilder::get()).dump(n_user_stats, u_out);
+    yaml_stats_file << u_out.c_str() << "\n";
+
+    Stats* tot_stats = (StatsBuilder::get()).get_new_stats();
+
+    *tot_stats += *n_user_stats;
+    *tot_stats += *n_kernel_stats;
+
+    yaml_stats_file << "total stats\n";
+    YAML::Emitter t_out;
+    (StatsBuilder::get()).dump(tot_stats, t_out);
+    yaml_stats_file << t_out.c_str() << "\n";
+    yaml_stats_file.flush();
+}
+
 extern "C" uint8_t ptl_simulate() {
 	PTLsimMachine* machine = NULL;
 	char* machinename = config.core_name;
@@ -1150,8 +1182,10 @@ extern "C" uint8_t ptl_simulate() {
 
 	statswriter.close();
 
-    if(config.yaml_stats_filename.set())
+    if(config.yaml_stats_filename.set()) {
+        dump_yaml_stats();
         yaml_stats_file.close();
+    }
 
     if(config.enable_mongo)
         write_mongo_stats();

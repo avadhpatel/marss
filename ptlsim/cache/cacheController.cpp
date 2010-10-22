@@ -155,7 +155,7 @@ void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::print(ostream& os) co
 CacheController::CacheController(W8 coreid, char *name,
 		MemoryHierarchy *memoryHierarchy, CacheType type) :
 	Controller(coreid, name, memoryHierarchy)
-    , new_stats(name)
+    , new_stats(name, &memoryHierarchy->get_machine())
 	, type_(type)
 	, isLowestPrivate_(false)
     , wt_disabled_(true)

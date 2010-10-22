@@ -16,6 +16,8 @@
 #include <config-parser.h>
 #include <datastore.h>
 
+#include <statsBuilder.h>
+
 #include <sysemu.h>
 
 #define INVALID_MFN 0xffffffffffffffffULL
@@ -37,18 +39,22 @@ static const int MAX_TRANSOP_BUFFER_SIZE = 4;
 struct PTLsimConfig;
 struct PTLsimStats;
 
+extern Stats *n_user_stats;
+extern Stats *n_kernel_stats;
+extern Stats *n_global_stats;
+
 struct PTLsimCore{
   virtual PTLsimCore& getcore() const{ return (*((PTLsimCore*)NULL));}
 };
 
 extern Context* ptl_contexts[MAX_CONTEXTS];
 
-struct PTLsimMachine {
+struct PTLsimMachine : public Statable {
   bool initialized;
   bool stopped;
   bool first_run;
   Context* ret_qemu_env;
-  PTLsimMachine() { initialized = 0; stopped = 0;}
+  PTLsimMachine() : Statable("machine") { initialized = 0; stopped = 0;}
   virtual bool init(PTLsimConfig& config);
   virtual int run(PTLsimConfig& config);
   virtual void update_stats(PTLsimStats* stats);

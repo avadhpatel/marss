@@ -7,7 +7,7 @@
 
 #include <yaml/yaml.h>
 
-#define STATS_SIZE 1024*10
+#define STATS_SIZE 1024*1024
 
 class StatObjBase;
 class Stats;
@@ -38,10 +38,9 @@ class Statable {
         /**
          * @brief Constructor for Statable without any parent
          *
-         * @param name Name of the Statable class, used in YAML key
-         * @param is_root Don't use it, only for internal purpose
+         * @param name Name of this Statable class used in YAML key
          */
-        Statable(const char *name, bool is_root = false);
+        Statable(const char *name);
 
         /**
          * @brief Constructor for Statable without any parent
@@ -49,7 +48,15 @@ class Statable {
          * @param name Name of the Statable class, used in YAML key
          * @param is_root Don't use it, only for internal purpose
          */
-        Statable(stringbuf &str, bool is_root = false);
+        Statable(const char *name, bool is_root);
+
+        /**
+         * @brief Constructor for Statable without any parent
+         *
+         * @param name Name of the Statable class, used in YAML key
+         * @param is_root Don't use it, only for internal purpose
+         */
+        Statable(stringbuf &str, bool is_root);
 
         /**
          * @brief Contructor for Statable with parent
@@ -60,7 +67,7 @@ class Statable {
          * By providing parent class, we build a hierarhcy of Statable objects
          * and use it to print hierarhical Statistics.
          */
-        Statable(const char *name, Statable *parent=NULL);
+        Statable(const char *name, Statable *parent);
 
         /**
          * @brief Constructor for Statable with parent
@@ -68,7 +75,7 @@ class Statable {
          * @param str Name of the Statable class, used in YAML Key
          * @param parent Parent Statable object
          */
-        Statable(stringbuf &str, Statable *parent=NULL);
+        Statable(stringbuf &str, Statable *parent);
 
         /**
          * @brief Add a child Statable node into this object
@@ -88,6 +95,16 @@ class Statable {
         void add_leaf(StatObjBase *edge)
         {
             leafs.push(edge);
+        }
+
+        /**
+         * @brief Update the name of this Stats Object
+         *
+         * @param str String containing new name
+         */
+        void update_name(const char* str)
+        {
+            name = str;
         }
 
         /**

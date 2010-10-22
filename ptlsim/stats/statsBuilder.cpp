@@ -1,6 +1,16 @@
 
 #include "statsBuilder.h"
 
+Statable::Statable(const char *name)
+{
+    this->name = name;
+    parent = NULL;
+    default_stats = NULL;
+
+    StatsBuilder &builder = StatsBuilder::get();
+    builder.add_to_root(this);
+}
+
 Statable::Statable(const char *name, bool is_root)
 {
     this->name = name;

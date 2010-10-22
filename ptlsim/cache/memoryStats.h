@@ -28,6 +28,7 @@
 #ifndef MEMORY_STATS_H
 #define MEMORY_STATS_H
 
+#include <ptlsim.h>
 #include <statsBuilder.h>
 
 //#include <dcache.h>
