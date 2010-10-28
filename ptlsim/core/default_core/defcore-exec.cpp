@@ -377,6 +377,8 @@ int ReorderBufferEntry::issue() {
         }
 
         per_context_ooocore_stats_update(threadid, issue.result.no_fu++);
+        thread.thread_stats.issue.result.no_fu++;
+
         //
         // When this (very rarely) happens, stop issuing uops to this cluster
         // and try again with the problem uop on the next cycle. In practice
@@ -425,6 +427,7 @@ int ReorderBufferEntry::issue() {
 
     stats->summary.uops++;
     per_context_ooocore_stats_update(threadid, issue.uops++);
+    thread.thread_stats.issue.uops++;
 
     fu = lsbindex(executable_on_fu);
     clearbit(core.fu_avail, fu);
@@ -481,6 +484,7 @@ int ReorderBufferEntry::issue() {
         }
     } else {
         per_context_ooocore_stats_update(threadid, issue.opclass[opclassof(uop.opcode)]++);
+        thread.thread_stats.issue.opclass[opclassof(uop.opcode)]++;
 
         if unlikely (ld|st) {
             int completed = 0;
@@ -494,9 +498,11 @@ int ReorderBufferEntry::issue() {
 
             if unlikely (completed == ISSUE_MISSPECULATED) {
                 per_context_ooocore_stats_update(threadid, issue.result.misspeculated++);
+                thread.thread_stats.issue.result.misspeculated++;
                 return -1;
             } else if unlikely (completed == ISSUE_NEEDS_REFETCH) {
                 per_context_ooocore_stats_update(threadid, issue.result.refetch++);
+                thread.thread_stats.issue.result.refetch++;
                 return -1;
             } else if unlikely (completed == ISSUE_SKIPPED) {
                 return -1;
@@ -505,6 +511,7 @@ int ReorderBufferEntry::issue() {
             state.reg.rddata = lsq->data;
             state.reg.rdflags = (lsq->invalid << log2(FLAG_INV)) | ((!lsq->datavalid) << log2(FLAG_WAIT));
             if unlikely (completed == ISSUE_NEEDS_REPLAY) {
+                    thread.thread_stats.issue.result.replay++;
                 per_context_ooocore_stats_update(threadid, issue.result.replay++);
                 return 0;
             }
@@ -591,10 +598,15 @@ int ReorderBufferEntry::issue() {
 
             if unlikely (mispredicted) {
                 per_context_ooocore_stats_update(threadid, branchpred.cond[MISPRED] += cond);
+              
                 per_context_ooocore_stats_update(threadid, branchpred.indir[MISPRED] += (indir & !ret));
                 per_context_ooocore_stats_update(threadid, branchpred.ret[MISPRED] += ret);
                 per_context_ooocore_stats_update(threadid, branchpred.summary[MISPRED]++);
 
+                thread.thread_stats.branchpred.summary[MISPRED]++;
+                thread.thread_stats.branchpred.ret[MISPRED]+=ret;
+                thread.thread_stats.branchpred.indir[MISPRED]+= (indir & !ret) ;
+                thread.thread_stats.branchpred.cond[MISPRED] += cond;
                 W64 realrip = physreg->data;
 
                 //
@@ -645,6 +657,7 @@ int ReorderBufferEntry::issue() {
                     ptl_logfile << "Branch mispredicted: ", (void*)(realrip), " ", *this, endl;
                 thread.reset_fetch_unit(realrip);
                 per_context_ooocore_stats_update(threadid, issue.result.branch_mispredict++);
+                thread.thread_stats.issue.result.branch_mispredict++;
 
                 return -1;
             } else {
@@ -652,13 +665,21 @@ int ReorderBufferEntry::issue() {
                 per_context_ooocore_stats_update(threadid, branchpred.indir[CORRECT] += (indir & !ret));
                 per_context_ooocore_stats_update(threadid, branchpred.ret[CORRECT] += ret);
                 per_context_ooocore_stats_update(threadid, branchpred.summary[CORRECT]++);
+                 thread.thread_stats.branchpred.summary[CORRECT]++;
+                thread.thread_stats.branchpred.ret[CORRECT]+=ret;
+                thread.thread_stats.branchpred.indir[CORRECT]+= (indir & !ret) ;
+                thread.thread_stats.branchpred.cond[CORRECT] += cond;
+
                 per_context_ooocore_stats_update(threadid, issue.result.complete++);
+                thread.thread_stats.issue.result.complete++;
             }
         } else {
             per_context_ooocore_stats_update(threadid, issue.result.complete++);
+            thread.thread_stats.issue.result.complete++;
         }
     } else {
         per_context_ooocore_stats_update(threadid, issue.result.exception++);
+        thread.thread_stats.issue.result.exception++;
     }
 
 
@@ -838,8 +859,10 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
 
         if unlikely (st) {
             per_context_ooocore_stats_update(threadid, dcache.store.issue.unaligned++);
+            thread.thread_stats.dcache.store.issue.unaligned++;
         } else {
             per_context_ooocore_stats_update(threadid, dcache.load.issue.unaligned++);
+            thread.thread_stats.dcache.load.issue.unaligned++;
         }
 
         return false;
@@ -858,8 +881,10 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
 
     if unlikely (st) {
         per_context_ooocore_stats_update(threadid, dcache.store.issue.exception++);
+        thread.thread_stats.dcache.store.issue.exception++;
     } else {
         per_context_ooocore_stats_update(threadid, dcache.load.issue.exception++);
+        thread.thread_stats.dcache.load.issue.exception++;
     }
 
     return true;
@@ -967,6 +992,10 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     per_context_ooocore_stats_update(threadid, dcache.store.type.unaligned += ((!uop.internal) & (aligntype != LDST_ALIGN_NORMAL)));
     per_context_ooocore_stats_update(threadid, dcache.store.type.internal += uop.internal);
     per_context_ooocore_stats_update(threadid, dcache.store.size[sizeshift]++);
+    thread.thread_stats.dcache.store.type.aligned += ((!uop.internal) & (aligntype == LDST_ALIGN_NORMAL));
+    thread.thread_stats.dcache.store.type.unaligned += ((!uop.internal) & (aligntype != LDST_ALIGN_NORMAL));
+    thread.thread_stats.dcache.store.type.internal += uop.internal;
+    thread.thread_stats.dcache.store.size[sizeshift]++;
 
     state.physaddr = (annul) ? INVALID_PHYSADDR : (physaddr >> 3);
 
@@ -1071,6 +1100,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 
         if unlikely (sfra && sfra->sfence) {
             per_context_ooocore_stats_update(threadid, dcache.store.issue.replay.fence++);
+            thread.thread_stats.dcache.store.issue.replay.fence++;
         } else {
             per_context_ooocore_stats_update(threadid, dcache.store.issue.replay.sfr_addr_and_data_and_data_to_store_not_ready += ((!rcready) & (sfra && (!sfra->addrvalid) & (!sfra->datavalid))));
             per_context_ooocore_stats_update(threadid, dcache.store.issue.replay.sfr_addr_and_data_to_store_not_ready += ((!rcready) & (sfra && (!sfra->addrvalid))));
@@ -1079,6 +1109,9 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
             per_context_ooocore_stats_update(threadid, dcache.store.issue.replay.sfr_addr_and_data_not_ready += (rcready & (sfra && (!sfra->addrvalid) & (!sfra->datavalid))));
             per_context_ooocore_stats_update(threadid, dcache.store.issue.replay.sfr_addr_not_ready += (rcready & (sfra && ((!sfra->addrvalid) & (sfra->datavalid)))));
             per_context_ooocore_stats_update(threadid, dcache.store.issue.replay.sfr_data_not_ready += (rcready & (sfra && (sfra->addrvalid & (!sfra->datavalid)))));
+            thread.thread_stats.dcache.store.issue.replay.sfr_addr_and_data_not_ready += (rcready & (sfra && (!sfra->addrvalid) & (!sfra->datavalid)));
+            thread.thread_stats.dcache.store.issue.replay.sfr_addr_not_ready += (rcready & (sfra && ((!sfra->addrvalid) & (sfra->datavalid))));
+            thread.thread_stats.dcache.store.issue.replay.sfr_data_not_ready += (rcready & (sfra && (sfra->addrvalid & (!sfra->datavalid))));
         }
 
         return ISSUE_NEEDS_REPLAY;
@@ -1167,6 +1200,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
             redispatch_dependents();
 
             per_context_ooocore_stats_update(threadid, dcache.store.issue.ordering++);
+            thread.thread_stats.dcache.store.issue.ordering++;
 
             return ISSUE_MISSPECULATED;
         }
@@ -1211,6 +1245,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
             }
 
             per_context_ooocore_stats_update(threadid, dcache.store.issue.replay.interlocked++);
+            thread.thread_stats.dcache.store.issue.replay.interlocked++;
             replay_locked();
             return ISSUE_NEEDS_REPLAY;
         }
@@ -1248,6 +1283,8 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     per_context_ooocore_stats_update(threadid, dcache.store.forward.zero += (sfra == NULL));
     per_context_ooocore_stats_update(threadid, dcache.store.forward.sfr += (sfra != NULL));
     per_context_ooocore_stats_update(threadid, dcache.store.datatype[uop.datatype]++);
+    thread.thread_stats.dcache.store.forward.sfr += (sfra != NULL);
+    thread.thread_stats.dcache.store.datatype[uop.datatype]++;
 
     if unlikely (config.event_log_enabled) {
         event = core.eventlog.add_load_store(EVENT_STORE_ISSUED, this, sfra, addr);
@@ -1257,6 +1294,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     load_store_second_phase = 1;
 
     per_context_ooocore_stats_update(threadid, dcache.store.issue.complete++);
+    thread.thread_stats.dcache.store.issue.complete++;
 
     return ISSUE_COMPLETED;
 }
@@ -1391,6 +1429,10 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     per_context_ooocore_stats_update(threadid, dcache.load.type.unaligned += ((!uop.internal) & (aligntype != LDST_ALIGN_NORMAL)));
     per_context_ooocore_stats_update(threadid, dcache.load.type.internal += uop.internal);
     per_context_ooocore_stats_update(threadid, dcache.load.size[sizeshift]++);
+    thread.thread_stats.dcache.load.type.aligned += ((!uop.internal) & (aligntype == LDST_ALIGN_NORMAL));
+    thread.thread_stats.dcache.load.type.unaligned += ((!uop.internal) & (aligntype != LDST_ALIGN_NORMAL));
+    thread.thread_stats.dcache.load.type.internal += uop.internal;
+    thread.thread_stats.dcache.load.size[sizeshift]++;
 
     state.physaddr = (annul) ? INVALID_PHYSADDR : (physaddr >> 3);
 
@@ -1441,6 +1483,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
             sfra_addr_diff = (stbuf.physaddr - state.physaddr);
             if(-1 <= sfra_addr_diff && sfra_addr_diff <= 1) {
                 per_context_ooocore_stats_update(threadid, dcache.load.dependency.stq_address_match++);
+                thread.thread_stats.dcache.load.dependency.stq_address_match++;
                 if(sfra == NULL) sfra = &stbuf;
                 all_sfra_datavalid &= stbuf.datavalid;
                 continue;
@@ -1452,6 +1495,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
             /* If load address is mmio then dont let it issue before unresolved store */
             if unlikely (state.mmio) {
                 per_context_ooocore_stats_update(threadid, dcache.load.dependency.mmio++);
+                thread.thread_stats.dcache.load.dependency.mmio++;
                 sfra = &stbuf;
                 break;
             }
@@ -1459,6 +1503,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
             // Address is unknown: is it a memory fence that hasn't committed?
             if unlikely (stbuf.lfence) {
                 per_context_ooocore_stats_update(threadid, dcache.load.dependency.fence++);
+                thread.thread_stats.dcache.load.dependency.fence++;
                 sfra = &stbuf;
                 break;
             }
@@ -1471,6 +1516,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
             // Is this load known to alias with prior stores, and therefore cannot be hoisted?
             if unlikely (load_is_known_to_alias_with_store) {
                 per_context_ooocore_stats_update(threadid, dcache.load.dependency.predicted_alias_unresolved++);
+                thread.thread_stats.dcache.load.dependency.predicted_alias_unresolved++;
                 sfra = &stbuf;
                 break;
             }
@@ -1478,6 +1524,8 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     }
 
     per_context_ooocore_stats_update(threadid, dcache.load.dependency.independent += (sfra == NULL));
+    thread.thread_stats.dcache.load.dependency.independent += (sfra == NULL);
+
 
 #ifndef DISABLE_SF
     bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid));// && all_sfra_datavalid));
@@ -1533,10 +1581,14 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
         if unlikely (sfra->lfence | sfra->sfence) {
             per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.fence++);
+            thread.thread_stats.dcache.load.issue.replay.fence++;
         } else {
             per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.sfr_addr_and_data_not_ready += ((!sfra->addrvalid) & (!sfra->datavalid)));
             per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.sfr_addr_not_ready += ((!sfra->addrvalid) & (sfra->datavalid)));
             per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.sfr_data_not_ready += ((sfra->addrvalid) & (!sfra->datavalid)));
+            thread.thread_stats.dcache.load.issue.replay.sfr_addr_and_data_not_ready += ((!sfra->addrvalid) & (!sfra->datavalid));
+            thread.thread_stats.dcache.load.issue.replay.sfr_addr_not_ready += ((!sfra->addrvalid) & (sfra->datavalid));
+            thread.thread_stats.dcache.load.issue.replay.sfr_data_not_ready += ((sfra->addrvalid) & (!sfra->datavalid));
         }
 
 #endif
@@ -1558,6 +1610,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         if unlikely ((prevaddr != state.physaddr) && (lowbits(prevaddr, log2(CacheSubsystem::L1_DCACHE_BANKS)) == lowbits(state.physaddr, log2(CacheSubsystem::L1_DCACHE_BANKS)))) {
             if unlikely (config.event_log_enabled) core.eventlog.add_load_store(EVENT_LOAD_BANK_CONFLICT, this, NULL, addr);
             per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.bank_conflict++);
+            thread.thread_stats.dcache.load.issue.replay.bank_conflict++;
 
             replay();
             load_store_second_phase = 1;
@@ -1586,6 +1639,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         msdebug << " dcache can not read core:", core.coreid, " threadid ", threadid, endl;
         replay();
         per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.dcache_stall++);
+        thread.thread_stats.dcache.load.issue.replay.dcache_stall++;
         load_store_second_phase = 1;
         return ISSUE_NEEDS_REPLAY;
     }
@@ -1636,6 +1690,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
             assert(!(lock->coreid == core.coreid && lock->threadid == threadid));
 
             per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.interlocked++);
+            thread.thread_stats.dcache.load.issue.replay.interlocked++;
             replay_locked();
             return ISSUE_NEEDS_REPLAY;
         }
@@ -1677,6 +1732,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
                 }
 
                 per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.interlock_overflow++);
+                thread.thread_stats.dcache.load.issue.replay.interlock_overflow++;
                 replay();
                 return ISSUE_NEEDS_REPLAY;
             }
@@ -1705,6 +1761,10 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     per_context_ooocore_stats_update(threadid, dcache.load.forward.sfr += ((sfra != NULL) & covered));
     per_context_ooocore_stats_update(threadid, dcache.load.forward.sfr_and_cache += ((sfra != NULL) & (!covered)));
     per_context_ooocore_stats_update(threadid, dcache.load.datatype[uop.datatype]++);
+    thread.thread_stats.dcache.load.forward.cache += (sfra == NULL);
+    thread.thread_stats.dcache.load.forward.sfr += ((sfra != NULL) & covered);
+    thread.thread_stats.dcache.load.datatype[uop.datatype]++;
+    thread.thread_stats.dcache.load.forward.sfr_and_cache += ((sfra != NULL) & (!covered));
 
     if(!config.verify_cache){
         state.data = data;
@@ -1795,6 +1855,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     bool L1hit = core.memoryHierarchy->access_cache(request);
 
     per_context_ooocore_stats_update(threadid, dcache.load.issue.miss++);
+    thread.thread_stats.dcache.load.issue.miss++;
 
     cycles_left = 0;
     changestate(thread.rob_cache_miss_list); // TODO: change to cache access waiting list
@@ -1811,6 +1872,7 @@ void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
     // If the Assist is Pause then pause the thread for Fix cycles
     if(assistid == L_ASSIST_PAUSE) {
         getthread().pause_counter = THREAD_PAUSE_CYCLES;
+        getthread().thread_stats.cycles_in_pause += THREAD_PAUSE_CYCLES;
         per_context_ooocore_stats_update(threadid, cycles_in_pause += THREAD_PAUSE_CYCLES);
     }
 
@@ -1861,9 +1923,11 @@ int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
 
         per_context_ooocore_stats_update(threadid, dcache.load.issue.complete++);
         per_context_dcache_stats_update(core.coreid, threadid, load.hit.L1++);
+        thread.thread_stats.dcache.load.issue.complete++;
         return ISSUE_COMPLETED;
     }
     per_context_ooocore_stats_update(threadid, dcache.load.issue.miss++);
+    thread.thread_stats.dcache.load.issue.miss++;
 
     cycles_left = 0;
     changestate(thread.rob_cache_miss_list);
@@ -1928,6 +1992,7 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
         tlb_miss_init_cycle = sim_cycle;
         tlb_walk_level = thread.ctx.page_table_level_count();
         per_context_ooocore_stats_update(threadid, dcache.dtlb.misses++);
+        thread.thread_stats.dcache.dtlb.misses++;
 
         return false;
     }
@@ -1938,6 +2003,7 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
      * in pipeline.
      */
     per_context_ooocore_stats_update(threadid, dcache.dtlb.hits++);
+    thread.thread_stats.dcache.dtlb.hits++;
 #endif
 
     if unlikely (exception) {
@@ -2015,6 +2081,7 @@ rob_cont:
 
         int delay = min(sim_cycle - tlb_miss_init_cycle, (W64)1000);
         per_context_ooocore_stats_update(threadid, dcache.dtlb_latency[delay]++);
+        thread.thread_stats.dcache.dtlb_latency[delay]++;
 
         if(logable(6)) {
             ptl_logfile << "Finalizing dtlb miss rob ", *this, " virtaddr: ", (void*)origvirt, endl;
@@ -2161,6 +2228,9 @@ int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
     per_context_ooocore_stats_update(threadid, dcache.fence.lfence += (uop.extshift == MF_TYPE_LFENCE));
     per_context_ooocore_stats_update(threadid, dcache.fence.sfence += (uop.extshift == MF_TYPE_SFENCE));
     per_context_ooocore_stats_update(threadid, dcache.fence.mfence += (uop.extshift == (MF_TYPE_LFENCE|MF_TYPE_SFENCE)));
+    thread.thread_stats.dcache.fence.lfence += (uop.extshift == MF_TYPE_LFENCE);
+    thread.thread_stats.dcache.fence.sfence += (uop.extshift == MF_TYPE_SFENCE);
+    thread.thread_stats.dcache.fence.mfence += (uop.extshift == (MF_TYPE_LFENCE|MF_TYPE_SFENCE));
 
     //
     // The mf uop is issued but its "data" (for dependency purposes only)
@@ -2936,6 +3006,7 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
     }
 
     per_context_ooocore_stats_update(threadid, dispatch.redispatch.trigger_uops++);
+    thread.thread_stats.dispatch.redispatch.trigger_uops++;
 
     // Remove from issue queue, if it was already in some issue queue
     if unlikely (cluster >= 0) {
@@ -3062,6 +3133,7 @@ void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
 
     assert(inrange(count, 1, ROB_SIZE));
     per_context_ooocore_stats_update(threadid, dispatch.redispatch.dependent_uops[count-1]++);
+    thread.thread_stats.dispatch.redispatch.dependent_uops[count-1]++;
 
     if unlikely (config.event_log_enabled) {
         event = core.eventlog.add(EVENT_REDISPATCH_DEPENDENTS_DONE, this);
