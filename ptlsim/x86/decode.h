@@ -773,6 +773,7 @@ struct BasicBlockCache: public SelfHashtable<RIPVirtPhys, BasicBlock, BB_CACHE_S
   bool invalidate(BasicBlock* bb, int reason);
   bool invalidate_page(Waddr mfn, int reason);
   int get_page_bb_count(Waddr mfn);
+  void add_page(BasicBlock* bb);
   int reclaim(size_t reqbytes = 0, int urgency = 0);
   void flush(int8_t context_id);
   W8 cpuid;

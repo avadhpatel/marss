@@ -1601,6 +1601,18 @@ int BasicBlockCache::get_page_bb_count(Waddr mfn) {
     return pagelist->count();
 }
 
+void BasicBlockCache::add_page(BasicBlock* bb)
+{
+    BasicBlockChunkList* pagelist = bbpages.get(bb->rip.mfnlo);
+    if (!pagelist) {
+        pagelist = new BasicBlockChunkList(bb->rip.mfnlo);
+        pagelist->refcount++;
+        bbpages.add(pagelist);
+        pagelist->refcount--;
+    }
+    pagelist->add(bb, bb->mfnlo_loc);
+}
+
 //
 // Invalidate any basic blocks on the specified physical page.
 // This function is suitable for calling from a reclaim handler

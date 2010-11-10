@@ -684,11 +684,7 @@ ostream& operator <<(ostream& os, const Context& ctx) {
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
   for(i; i < 48; i++) {
-	  if(i % 2 == 0) {
-		  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring((W64)ctx.xmm_regs[i]._q[0], 64);
-	  } else {
-		  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring((W64)ctx.xmm_regs[i]._q[1], 64);
-	  }
+      os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.get(i), 64);
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
   os << "  ", padstring(arch_reg_names[48], -6), " 0x", hexstring(ctx.reg_fptos, 64);

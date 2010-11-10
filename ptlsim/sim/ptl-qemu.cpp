@@ -1169,6 +1169,7 @@ void Context::check_store_virt(Waddr virtaddr, W64 data, byte bytemask, int size
             break;
     }
     if((data & mask) != (data_r & mask)) {
+        // ptl_logfile << "Checker ctx\n", *checker_context, endl;
         ptl_logfile << "Stored data does not match..\n";
         ptl_logfile << "Data: ", (void*)data, " Data_r: ", (void*)data_r, endl, flush;
         assert_fail(__STRING(0), __FILE__, __LINE__,
@@ -1242,7 +1243,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
     return;
 }
 
-bool Context::try_handle_fault(Waddr virtaddr, bool store) {
+bool Context::try_handle_fault(Waddr virtaddr, int store) {
 
     setup_qemu_switch_all_ctx(*this);
 

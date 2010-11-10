@@ -292,6 +292,8 @@ struct PTLsimConfig {
   bool overshoot_and_dump;
   stringbuf bbcache_dump_filename;
 
+  // Core Design configurations
+  stringbuf core_config;
 
   ///
   /// for memory hierarchy implementaion
@@ -311,6 +313,9 @@ struct PTLsimConfig {
   W64 mongo_port;
   stringbuf bench_name;
   stringbuf db_tags;
+
+  // Test Framework
+  bool run_tests;
 
   void reset();
 };

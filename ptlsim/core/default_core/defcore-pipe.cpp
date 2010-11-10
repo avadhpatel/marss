@@ -115,7 +115,7 @@ itlb_walk_finish:
         return;
     }
 
-    if(!core.memoryHierarchy->is_cache_available(core.coreid, threadid, false)){
+    if(!core.memoryHierarchy->is_cache_available(core.coreid, threadid, true)){
         // Cache queue is full.. so simply skip this iteration
         itlb_walk_level = 0;
         return;

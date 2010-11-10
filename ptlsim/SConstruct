@@ -23,6 +23,9 @@ env['CPPPATH'] = []
 for dir in dirs:
     env['CPPPATH'].append(os.getcwd() + "/" + dir)
 
+# Add gtest directory in CPPPATH
+env['CPPPATH'].append(os.getcwd() + "/lib/gtest/include")
+
 env['CPPPATH'].append(qemu_dir)
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "target-i386"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "fpu"))

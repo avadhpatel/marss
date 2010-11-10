@@ -99,6 +99,12 @@ class Controller
 					(*this, &Controller::handle_interconnect_cb));
 		}
 
+        ~Controller()
+        {
+            memoryHierarchy_ = NULL;
+            name_ = NULL;
+        }
+
 		virtual bool handle_request_cb(void* arg)=0;
 		virtual bool handle_interconnect_cb(void* arg)=0;
 		virtual int access_fast_path(Interconnect *interconnect,

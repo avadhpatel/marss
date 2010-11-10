@@ -896,7 +896,7 @@ struct Context: public CPUX86State {
 
   void handle_page_fault(Waddr virtaddr, int is_write) ;
 
-  bool try_handle_fault(Waddr virtaddr, bool is_write);
+  bool try_handle_fault(Waddr virtaddr, int is_write);
 
   W64 get_cs_eip() {
 	  return eip;
@@ -991,23 +991,23 @@ struct Context: public CPUX86State {
       return 2;
   }
 
-  W64 get(int index) {
+  W64 get(int index) const {
 	  if likely (index < 16) {
-		  return (W64&)(regs[index]);
+		  return (W64)(regs[index]);
 	  }
 	  else if(index < 48) {
 		  int i = (index - 16) / 2;
 		  if(index % 2 == 0) {
-			  return (W64&)(xmm_regs[i]._q[0]);
+			  return (W64)(xmm_regs[i]._q[0]);
 		  } else {
-			  return (W64&)(xmm_regs[i]._q[1]);
+			  return (W64)(xmm_regs[i]._q[1]);
 		  }
 	  }
 	  else if(index == REG_fptos) {
 		  return reg_fptos;
 	  }
 	  else if(index == REG_fpsw) {
-		  return (W64&)fpus;
+		  return (W64)fpus;
 	  }
 	  else if(index == REG_fptags) {
 		  return reg_fptag;
@@ -1030,7 +1030,7 @@ struct Context: public CPUX86State {
 		  return reg_ctx;
 	  }
 	  else if(index == 56) {
-		  return (W64&)(eip);
+		  return (W64)(eip);
 	  }
 	  else if(index == REG_flags) {
 		  return reg_flags;

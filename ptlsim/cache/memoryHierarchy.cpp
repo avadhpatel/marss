@@ -63,6 +63,25 @@ MemoryHierarchy::MemoryHierarchy(PTLsimMachine& machine) :
 	setup_topology();
 }
 
+MemoryHierarchy::~MemoryHierarchy()
+{
+    // Delete all the cpu-controllers and cache-controllers
+	foreach(i, cpuControllers_.count()) {
+        delete cpuControllers_[i];
+	}
+    cpuControllers_.clear();
+
+	foreach(i, allControllers_.count()) {
+        delete allControllers_[i];
+	}
+    allControllers_.clear();
+
+	foreach(i, allInterconnects_.count()) {
+        delete allInterconnects_[i];
+	}
+    allInterconnects_.clear();
+}
+
 void MemoryHierarchy::setup_topology()
 {
     if(!strcmp(config.cache_config_type, "shared_L2")){

@@ -231,7 +231,7 @@ namespace superstl {
 
   stringbuf::~stringbuf() {
     if (buf && (buf != smallbuf))
-      delete[] buf;
+      delete buf;
     buf = NULL;
     p = NULL;
     length = 0;
@@ -1439,6 +1439,7 @@ void Signal::connect(TFunctor* _func) {
 }
 
 bool Signal::emit(void *arg) {
+    assert(name_.size() != 0);
 	bool ret_val = (*func)(arg);
 	return ret_val;
 }

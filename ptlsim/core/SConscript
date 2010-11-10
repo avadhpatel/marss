@@ -6,10 +6,14 @@ Import('env')
 # Now get list of .cpp files
 src_files = Glob('*.cpp')
 
-def_core_objs = SConscript('default_core/SConscript')
+core_model_dirs = ['default_core', 'atom-core']
+
+core_objs = []
+for core_model in core_model_dirs:
+    core_objs += SConscript('%s/SConscript' % core_model)
 
 objs = env.Object(src_files)
 
-objs += def_core_objs
+objs += core_objs
 
 Return('objs')

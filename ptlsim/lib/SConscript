@@ -11,9 +11,19 @@ objs = env.Object(src_files)
 yaml_objs = SConscript('yaml/SConscript')
 bson_objs = SConscript('bson/SConscript')
 
+# Build gtest
+gtest_helper = SConscript('gtest/scons/SConstruct.common')
+EnvCreator = gtest_helper.EnvCreator
+Export('EnvCreator')
+
+gtest_libs = SConscript('gtest/scons/SConscript')
+
 # specific list of objects for dstbuild
 dst_objs = env.Object(Split("superstl.cpp statelist.cpp"))
 
 ret_objs = [objs + bson_objs + yaml_objs, dst_objs]
+
+# Add gtest library
+ret_objs[0] += gtest_libs['gtest']
 
 Return('ret_objs')

@@ -1,0 +1,9 @@
+
+# SConscript for Default Core Model
+
+Import('env')
+
+src_files = Glob('*.cpp')
+env.Append(CCFLAGS = '-Iptlsim/core/atom-core')
+objs = env.Object(src_files)
+Return('objs')

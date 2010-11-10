@@ -26,6 +26,8 @@
 #include <syscalls.h>
 #include <ptl-qemu.h>
 
+#include <test.h>
+
 #ifndef CONFIG_ONLY
 //
 // Global variables
@@ -162,6 +164,8 @@ void PTLsimConfig::reset() {
   overshoot_and_dump = 0;
   bbcache_dump_filename.reset();
 
+  // Core Design configurations
+  core_config = "default";
 
   ///
   /// memory hierarchy implementation
@@ -181,6 +185,9 @@ void PTLsimConfig::reset() {
   mongo_port = 27017;
   bench_name = "unknown";
   db_tags = "";
+
+  // Test Framework
+  run_tests = 0;
 }
 
 template <>
@@ -292,6 +299,14 @@ void ConfigurationParser<PTLsimConfig>::setup() {
  section("bus configuration");
   add(atomic_bus_enabled,               "atomic_bus",               "Using single atomic bus instead of split bus");
 
+  section("core configuration");
+  add(core_config,      "core-config",
+          "Use given core configuration, default is set to \'default\', other" \
+          " options are :\n" \
+          "\t\t\'ht-smt\' - Hetrogenous Multi-threaded and single-threaded OOO cores\n" \
+          "\t\t             Minimum of 4 CPU-Contexts required\n" \
+          "\t\t\'atom\' - Simple Atom like In-order single-threaded cores\n" \
+          "");
  ///
  /// following are for the new memory hierarchy implementation:
  ///
@@ -313,6 +328,10 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(mongo_port,           "mongo-port",           "MongoDB server's port address");
   add(bench_name,           "bench-name",           "Benchmark Name added to database");
   add(db_tags,              "db-tags",              "tags added to database");
+
+  // Test Framework
+  section("Unit Test Framework");
+  add(run_tests,            "run-tests",            "Run Test cases");
 };
 
 #ifndef CONFIG_ONLY
@@ -571,9 +590,6 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
 
 Hashtable<const char*, PTLsimMachine*, 1>* machinetable = NULL;
 
-// Make sure the vtable gets compiled:
-PTLsimMachine dummymachine;
-
 bool PTLsimMachine::init(PTLsimConfig& config) { return false; }
 int PTLsimMachine::run(PTLsimConfig& config) { return 0; }
 void PTLsimMachine::update_stats(PTLsimStats* stats) { return; }
@@ -746,7 +762,7 @@ void execute_checker() {
     checker_context->setup_qemu_switch();
 
     /* We need to load eflag's condition flags manually */
-    load_eflags(checker_context->reg_flags, FLAG_ZAPS|FLAG_CF|FLAG_OF);
+    // load_eflags(checker_context->reg_flags, FLAG_ZAPS|FLAG_CF|FLAG_OF);
 
     checker_context->singlestep_enabled = SSTEP_ENABLE;
 
@@ -777,6 +793,7 @@ void execute_checker() {
 
     if(logable(4)) {
         ptl_logfile << "Checker execution ret value: ", ret, endl;
+        ptl_logfile << "Checker flags: ", (void*)checker_context->eflags, endl;
     }
 }
 
@@ -798,20 +815,25 @@ void compare_checker(W8 context_id, W64 flagmask) {
 
     check_size = (sizeof(FPReg) * 8);
     ret_x87 = memcmp(&checker_context->fpregs, &ptl_contexts[context_id]->fpregs, check_size);
+    ret_x87 = 0;
 
     bool fail = false;
     fail = (checker_context->eip != ptl_contexts[context_id]->eip);
 
-    W64 flag1 = checker_context->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
+    W64 flag1 = checker_context->eflags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
     W64 flag2 = ptl_contexts[context_id]->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
-    fail |= (flag1 != flag2);
+    //fail |= (flag1 != flag2);
 
     if(ret != 0 || ret1 != 0 || ret_x87 != 0 || fail) {
-        ptl_logfile << "Checker comparison failed [diff-chars: ", ret, "]\n";
+        ptl_logfile << "Checker comparison failed [diff-chars: ", ret, "] ";
+        ptl_logfile << "[xmm:", ret1, "] [x87:", ret_x87,"] ";
+        ptl_logfile << "[flags:", fail, "]\n";
         ptl_logfile << "CPU Context:\n", *ptl_contexts[context_id], endl;
         ptl_logfile << "Checker Context:\n", *checker_context, endl, flush;
 
-        assert(0);
+        cout << "\n*******************Failed checker***************\n";
+        memset(checker_context, 0, sizeof(Context));
+        // assert(0);
     }
 }
 
@@ -1023,6 +1045,11 @@ extern "C" uint8_t ptl_simulate() {
 		cerr << "Cannot find core named '", machinename, "'", endl;
 		return 0;
 	}
+
+    // If config.run_tests is enabled, then run testcases
+    if(config.run_tests) {
+        run_tests();
+    }
 
 	if (!machine->initialized) {
 		ptl_logfile << "Initializing core '", machinename, "'", endl;

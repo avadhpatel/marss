@@ -6,6 +6,8 @@
 #define INSIDE_DEFCORE
 #include <defcore.h>
 
+#include <atomcore.h>
+
 using namespace Core;
 
 BaseCore::BaseCore(BaseCoreMachine& machine)
@@ -23,6 +25,10 @@ BaseCoreMachine::BaseCoreMachine(const char *name)
     machine_name = name;
     addmachine(machine_name, this);
 
+    stringbuf stats_name;
+    stats_name << "base_machine";
+    update_name(stats_name.buf);
+
     context_used = 0;
     coreid_counter = 0;
 }
@@ -34,6 +40,21 @@ BaseCoreMachine::~BaseCoreMachine()
 
 void BaseCoreMachine::reset()
 {
+    context_used = 0;
+    context_counter = 0;
+    coreid_counter = 0;
+
+    foreach(i, cores.count()) {
+        BaseCore* core = cores[i];
+        delete core;
+    }
+
+    cores.clear();
+
+    if(memoryHierarchyPtr) {
+        delete memoryHierarchyPtr;
+        memoryHierarchyPtr = NULL;
+    }
 }
 
 W8 BaseCoreMachine::get_num_cores()
@@ -48,8 +69,15 @@ bool BaseCoreMachine::init(PTLsimConfig& config)
     // Based on the config option we create cores
     //
 
-    // setup_default_cores();
-    setup_smt_mc_cores();
+    if(!strcmp(config.core_config, "default")) {
+        setup_default_cores();
+    } else if(!strcmp(config.core_config, "ht-smt")) {
+        setup_smt_mc_cores();
+    } else if(config.core_config == "atom") {
+        setup_atom_cores();
+    } else {
+        assert(0 && "Unknown type of core config");
+    }
 
     // Make sure that all cores are initialized
     assert(context_used.allset());
@@ -208,7 +236,7 @@ void BaseCoreMachine::setup_default_cores()
 
         // From default-core create an ooo core
 
-        DefaultCoreModel::DefaultCore *core = new DefaultCoreModel::DefaultCore(*this, 2);
+        DefaultCoreModel::DefaultCore *core = new DefaultCoreModel::DefaultCore(*this, 1);
         cores.push((BaseCore*)core);
     }
 }
@@ -228,6 +256,16 @@ void BaseCoreMachine::setup_smt_mc_cores()
         cores.push((BaseCore*)core);
 
         core = new DefaultCoreModel::DefaultCore(*this, 1);
+        cores.push((BaseCore*)core);
+    }
+}
+
+void BaseCoreMachine::setup_atom_cores()
+{
+    // We create single threaded atom-cores
+
+    foreach(i, NUM_SIM_CORES) {
+        AtomCoreModel::AtomCore *core = new AtomCoreModel::AtomCore(*this, 1);
         cores.push((BaseCore*)core);
     }
 }

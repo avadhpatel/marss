@@ -1394,12 +1394,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     state.physaddr = (annul) ? INVALID_PHYSADDR : (physaddr >> 3);
 
-    //
-    // For simulation purposes only, load the data immediately
-    // so it is easier to track. In the hardware this obviously
-    // only arrives later, but it saves us from having to copy
-    // cache lines around...
-    //
     W64 data;
 
     LoadStoreQueueEntry* sfra = NULL;
@@ -1794,12 +1788,17 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     bool L1hit = core.memoryHierarchy->access_cache(request);
 
-    per_context_ooocore_stats_update(threadid, dcache.load.issue.miss++);
+    if(L1hit) {
+        changestate(thread.rob_cache_miss_list); // This is hack for 'dcache_wakeup' to work
+        core.dcache_wakeup((void*)request);
+    } else {
+        per_context_ooocore_stats_update(threadid, dcache.load.issue.miss++);
 
-    cycles_left = 0;
-    changestate(thread.rob_cache_miss_list); // TODO: change to cache access waiting list
-    physreg->changestate(PHYSREG_WAITING);
-    if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_LOAD_MISS, this, sfra, addr);
+        cycles_left = 0;
+        changestate(thread.rob_cache_miss_list); // TODO: change to cache access waiting list
+        physreg->changestate(PHYSREG_WAITING);
+        if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_LOAD_MISS, this, sfra, addr);
+    }
 
     return ISSUE_COMPLETED;
 }
@@ -2087,13 +2086,17 @@ rob_cont:
 
     lsq->physaddr = pteaddr >> 3;
 
-    core.memoryHierarchy->access_cache(request);
+    bool L1_hit = core.memoryHierarchy->access_cache(request);
 
-    cycles_left = 0;
-    changestate(thread.rob_cache_miss_list);
+    if(L1_hit) {
+        tlb_walk_level--;
+    } else {
+        cycles_left = 0;
+        changestate(thread.rob_cache_miss_list);
 
-    if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_MISS, this, NULL, pteaddr);
-    per_context_dcache_stats_update(core.coreid, threadid, load.tlbwalk.L1_dcache_miss++);
+        if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_MISS, this, NULL, pteaddr);
+        per_context_dcache_stats_update(core.coreid, threadid, load.tlbwalk.L1_dcache_miss++);
+    }
 }
 
 void ThreadContext::tlbwalk() {
@@ -2239,7 +2242,6 @@ void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc
 //
 // Data cache has delivered a load: wake up corresponding ROB/LSQ/physreg entries
 //
-// void OutOfOrderCoreCacheCallbacks::dcache_wakeup(Memory::MemoryRequest *request) {
 bool DefaultCore::dcache_wakeup(void *arg) {
 
     Memory::MemoryRequest* request = (Memory::MemoryRequest*)arg;
@@ -2266,7 +2268,6 @@ bool DefaultCore::dcache_wakeup(void *arg) {
          * so just make sure that we handle page fault at correct location
          */
 
-        // rob.tlb_walk_level = 0;
         // load the data now
         if (rob.tlb_walk_level == 0 && (isload(rob.uop.opcode) || isprefetch(rob.uop.opcode))) {
 

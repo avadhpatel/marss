@@ -55,6 +55,7 @@ namespace Core {
         // Core configuration functions
         void setup_smt_mc_cores();
         void setup_default_cores();
+        void setup_atom_cores();
     };
 };
 

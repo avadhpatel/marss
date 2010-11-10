@@ -55,6 +55,12 @@ CPUController::CPUController(W8 coreid, char *name,
 	cacheAccess_.set_name(signal_name.buf);
 	cacheAccess_.connect(signal_mem_ptr(*this,
 				&CPUController::cache_access_cb));
+
+    signal_name.reset();
+    signal_name << name, "_queue_Access";
+    queueAccess_.set_name(signal_name.buf);
+    queueAccess_.connect(signal_mem_ptr(*this,
+                &CPUController::queue_access_cb));
     // delete signal_name;
 }
 
@@ -161,7 +167,8 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 		}
 	}
 
-	if(fastPathLat == 0 && request->is_instruction())
+	// if(fastPathLat == 0 && request->is_instruction())
+    if(fastPathLat >= 0)
 		return 0;
 
 	CPUControllerQueueEntry *dependentEntry = find_dependency(request);

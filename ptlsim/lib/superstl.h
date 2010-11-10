@@ -153,8 +153,16 @@ namespace superstl {
       return strequal((char*)(*this), (char*)s);
     }
 
+    bool operator ==(const char *s) {
+        return strequal((char*)(*this), s);
+    }
+
     bool operator !=(const stringbuf& s) {
       return !strequal((char*)(*this), (char*)s);
+    }
+
+    bool operator !=(const char *s) {
+        return !strequal((char*)(*this), s);
     }
 
   public:
@@ -3962,6 +3970,9 @@ namespace superstl {
 	  public:
 		  Signal();
 		  Signal(const char* name);
+
+          ~Signal() {}
+
 		  bool emit(void *arg) ;
 		  void connect(TFunctor* _func);
 		  const char* get_name() {
