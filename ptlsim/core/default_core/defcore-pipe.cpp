@@ -80,7 +80,7 @@ bool ThreadContext::probeitlb(Waddr icache_addr) {
         itlb_walk_level = ctx.page_table_level_count();
         itlb_miss_init_cycle = sim_cycle;
         per_context_ooocore_stats_update(threadid, dcache.itlb.misses++);
-
+   
         return false;
     }
 
@@ -397,6 +397,7 @@ void ThreadContext::redispatch_deadlock_recovery() {
     if (logable(6)) core.dump_state(ptl_logfile);
 
     per_context_ooocore_stats_update(threadid, dispatch.redispatch.deadlock_flushes++);
+    thread_stats.dispatch.redispatch.deadlock_flushes++; 
     // don't want to reset the counter for no commit in this case
     W64 previous_last_commit_at_cycle = last_commit_at_cycle;
     if (logable(3)) ptl_logfile << " redispatch_deadlock_recovery, flush_pipeline.",endl;
@@ -496,6 +497,7 @@ bool ThreadContext::fetch() {
             event->threadid = threadid;
         }
         per_context_ooocore_stats_update(threadid, fetch.stop.stalled++);
+        thread_stats.fetch.stop.stalled++;
         return true;
     }
 
@@ -507,6 +509,7 @@ bool ThreadContext::fetch() {
             event->uuid = fetch_uuid;
         }
         per_context_ooocore_stats_update(threadid, fetch.stop.icache_miss++);
+        thread_stats.fetch.stop.icache_miss++;
         return true;
     }
 
@@ -520,6 +523,7 @@ bool ThreadContext::fetch() {
                 }
             }
             per_context_ooocore_stats_update(threadid, fetch.stop.fetchq_full++);
+            thread_stats.fetch.stop.fetchq_full++;
             break;
         }
 
@@ -574,6 +578,7 @@ bool ThreadContext::fetch() {
                 event->threadid = threadid;
             }
             per_context_ooocore_stats_update(threadid, fetch.stop.bogus_rip++);
+            thread_stats.fetch.stop.bogus_rip++;
             //
             // Keep fetching - the decoder has injected assist microcode that
             // branches to the invalid opcode or exec page fault handler.
@@ -600,6 +605,7 @@ bool ThreadContext::fetch() {
             if(!cache_available){
                 msdebug << " icache can not read core:", core.coreid, " threadid ", threadid, endl;
                 per_context_ooocore_stats_update(threadid, fetch.stop.icache_stalled++);
+                thread_stats.fetch.stop.icache_stalled++;
                 break;
             }
 
@@ -627,16 +633,19 @@ bool ThreadContext::fetch() {
                 waiting_for_icache_fill = 1;
                 waiting_for_icache_fill_physaddr = req_icache_block;
                 per_context_ooocore_stats_update(threadid, fetch.stop.icache_miss++);
+                thread_stats.fetch.stop.icache_miss++;
                 break;
             }
 
             per_context_ooocore_stats_update(threadid, fetch.blocks++);
+            thread_stats.fetch.blocks++;
             current_icache_block = req_icache_block;
             per_context_dcache_stats_update(core.coreid, threadid, fetch.hit.L1++);
         }
 
         if(current_basic_block->invalidblock){
             per_context_ooocore_stats_update(threadid, fetch.stop.invalid_blocks++);
+            thread_stats.fetch.stop.invalid_blocks++;
         }
 
         FetchBufferEntry& transop = *fetchq.alloc();
@@ -677,16 +686,17 @@ bool ThreadContext::fetch() {
         current_basic_block_transop_index += (unaligned_ldst_buf.empty());
 
         per_context_ooocore_stats_update(threadid, fetch.user_insns += transop.som);
-
+        thread_stats.fetch.user_insns+=transop.som;
         if unlikely (isclass(transop.opcode, OPCLASS_BARRIER)) {
             // We've hit an assist: stall the frontend until we resume or redirect
             if unlikely (config.event_log_enabled) eventlog.add(EVENT_FETCH_ASSIST, transop);
             per_context_ooocore_stats_update(threadid, fetch.stop.microcode_assist++);
+            thread_stats.fetch.stop.microcode_assist++;
             stall_frontend = 1;
         }
 
         per_context_ooocore_stats_update(threadid, fetch.uops++);
-
+        thread_stats.fetch.uops++;
         Waddr predrip = 0;
         bool redirectrip = false;
 
@@ -721,6 +731,7 @@ bool ThreadContext::fetch() {
             }
 
             per_context_ooocore_stats_update(threadid, branchpred.predictions++);
+            thread_stats.branchpred.predictions++;
         }
 
         // Set up branches so mispredicts can be calculated correctly:
@@ -743,7 +754,7 @@ bool ThreadContext::fetch() {
         }
 
         per_context_ooocore_stats_update(threadid, fetch.opclass[opclassof(transop.opcode)]++);
-
+        thread_stats.fetch.opclass[opclassof(transop.opcode)];
         if unlikely (config.event_log_enabled) {
             event = eventlog.add(EVENT_FETCH_OK, transop);
             event->fetch.predrip = predrip;
@@ -765,6 +776,7 @@ bool ThreadContext::fetch() {
                 if (taken) {
                     fetchcount++;
                     per_context_ooocore_stats_update(threadid, fetch.stop.branch_taken++);
+                    thread_stats.fetch.stop.branch_taken++;
                     break;
                 }
             }
@@ -774,8 +786,9 @@ bool ThreadContext::fetch() {
     }
 
     per_context_ooocore_stats_update(threadid, fetch.stop.full_width += (fetchcount == FETCH_WIDTH));
+    if (fetchcount == FETCH_WIDTH) thread_stats.fetch.stop.full_width++;
     per_context_ooocore_stats_update(threadid, fetch.width[fetchcount]++);
-
+    thread_stats.fetch.width[fetchcount]++;
     return true;
 }
 
@@ -840,6 +853,7 @@ void ThreadContext::rename() {
                 }
             }
             per_context_ooocore_stats_update(threadid, frontend.status.fetchq_empty++);
+            thread_stats.frontend.status.fetchq_empty++;
             break;
         }
 
@@ -851,6 +865,7 @@ void ThreadContext::rename() {
                 }
             }
             per_context_ooocore_stats_update(threadid, frontend.status.rob_full++);
+            thread_stats.frontend.status.rob_full++;
             break;
         }
 
@@ -875,6 +890,7 @@ void ThreadContext::rename() {
                 }
             }
             per_context_ooocore_stats_update(threadid, frontend.status.physregs_full++);
+            thread_stats.frontend.status.physregs_full++;
             break;
         }
 
@@ -885,12 +901,14 @@ void ThreadContext::rename() {
         if unlikely (ld && (loads_in_flight >= LDQ_SIZE)) {
             if unlikely (config.event_log_enabled) { if likely (!prepcount) core.eventlog.add(EVENT_RENAME_LDQ_FULL)->threadid = threadid; }
             per_context_ooocore_stats_update(threadid, frontend.status.ldq_full++);
+            thread_stats.frontend.status.ldq_full++;
             break;
         }
 
         if unlikely (st && (stores_in_flight >= STQ_SIZE)) {
             if unlikely (config.event_log_enabled) { if likely (!prepcount) core.eventlog.add(EVENT_RENAME_STQ_FULL)->threadid = threadid; }
             per_context_ooocore_stats_update(threadid, frontend.status.stq_full++);
+            thread_stats.frontend.status.stq_full++;
             break;
         }
 
@@ -900,6 +918,7 @@ void ThreadContext::rename() {
         }
 
         per_context_ooocore_stats_update(threadid, frontend.status.complete++);
+        thread_stats.frontend.status.complete++;
 
         FetchBufferEntry& transop = *fetchq.dequeue();
         ReorderBufferEntry& rob = *ROB.alloc();
@@ -930,7 +949,10 @@ void ThreadContext::rename() {
         per_context_ooocore_stats_update(threadid, frontend.alloc.ldreg += ld);
         per_context_ooocore_stats_update(threadid, frontend.alloc.sfr += st);
         per_context_ooocore_stats_update(threadid, frontend.alloc.br += br);
-
+        thread_stats.frontend.alloc.reg+= (!(ld|st|br));
+        thread_stats.frontend.alloc.ldreg+=ld;
+        thread_stats.frontend.alloc.sfr+=st;
+        thread_stats.frontend.alloc.br+=br;
         //
         // Rename operands:
         //
@@ -1064,12 +1086,17 @@ void ThreadContext::rename() {
         per_context_ooocore_stats_update(threadid, frontend.renamed.reg += ((renamed_reg) && (!renamed_flags)));
         per_context_ooocore_stats_update(threadid, frontend.renamed.flags += ((!renamed_reg) && (renamed_flags)));
         per_context_ooocore_stats_update(threadid, frontend.renamed.reg_and_flags += ((renamed_reg) && (renamed_flags)));
+        thread_stats.frontend.renamed.none+=((!renamed_reg) && (!renamed_flags));
+        thread_stats.frontend.renamed.reg += ((renamed_reg) && (!renamed_flags));
+        thread_stats.frontend.renamed.flags += ((!renamed_reg) && (renamed_flags));
+        thread_stats.frontend.renamed.flags += ((!renamed_reg) && (renamed_flags));
         rob.changestate(rob_frontend_list);
 
         prepcount++;
     }
 
     per_context_ooocore_stats_update(threadid, frontend.width[prepcount]++);
+    thread_stats.frontend.width[prepcount]++;
 }
 
 void ThreadContext::frontend() {
@@ -1359,6 +1386,9 @@ int ReorderBufferEntry::select_cluster() {
     }
 
     per_context_ooocore_stats_update(threadid, dispatch.cluster[cluster]++);
+    ThreadContext& thread = getthread();
+    thread.thread_stats.dispatch.cluster[cluster]++;
+    
 
     if unlikely (config.event_log_enabled) event->cluster = cluster;
 
@@ -1601,6 +1631,7 @@ int ThreadContext::writeback(int cluster) {
         //
 
         per_context_ooocore_stats_update(threadid, writeback.writebacks[rob->physreg->rfid]++);
+        thread_stats.writeback.writebacks[rob->physreg->rfid]++;
         rob->physreg->writeback();
         rob->cycles_left = -1;
         rob->changestate(rob_ready_to_commit_queue);
@@ -1909,37 +1940,50 @@ int ReorderBufferEntry::commit() {
     all_ready_to_commit &= found_eom;
 
     if unlikely (!all_ready_to_commit && cant_commit_subrob != NULL) {
-        per_context_ooocore_stats_update(threadid, commit.result.none++);
+            per_context_ooocore_stats_update(threadid, commit.result.none++);
+            thread.thread_stats.commit.result.none++;
 
-        if(cant_commit_subrob->current_state_list == &getthread().rob_free_list) {
-            per_context_ooocore_stats_update(threadid, commit.fail.free_list++);
-        } else if (cant_commit_subrob->current_state_list == &getthread().rob_frontend_list) {
-            per_context_ooocore_stats_update(threadid, commit.fail.frontend_list++);
-        } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_dispatch_list) {
-            per_context_ooocore_stats_update(threadid, commit.fail.ready_to_dispatch_list++);
-        } else if (cant_commit_subrob->current_state_list == &getthread().rob_cache_miss_list) {
-            per_context_ooocore_stats_update(threadid, commit.fail.cache_miss_list++);
-        } else if (cant_commit_subrob->current_state_list == &getthread().rob_tlb_miss_list) {
-            per_context_ooocore_stats_update(threadid, commit.fail.tlb_miss_list++);
-        } else if (cant_commit_subrob->current_state_list == &getthread().rob_memory_fence_list) {
-            per_context_ooocore_stats_update(threadid, commit.fail.memory_fence_list++);
-        } else {
-            foreach(j, MAX_CLUSTERS) {
-                if(cant_commit_subrob->current_state_list == &getthread().rob_dispatched_list[j]) {
-                    per_context_ooocore_stats_update(threadid, commit.fail.dispatched_list++);
-                } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_issue_list[j]) {
-                    per_context_ooocore_stats_update(threadid, commit.fail.ready_to_issue_list++);
-                } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_store_list[j]) {
-                    per_context_ooocore_stats_update(threadid, commit.fail.ready_to_store_list++);
-                } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_load_list[j]) {
-                    per_context_ooocore_stats_update(threadid, commit.fail.ready_to_load_list++);
-                } else if (cant_commit_subrob->current_state_list == &getthread().rob_completed_list[j]) {
-                    per_context_ooocore_stats_update(threadid, commit.fail.completed_list++);
-                } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_writeback_list[j]) {
-                    per_context_ooocore_stats_update(threadid, commit.fail.ready_to_writeback_list++);
-                }
+            if(cant_commit_subrob->current_state_list == &getthread().rob_free_list) {
+                    per_context_ooocore_stats_update(threadid, commit.fail.free_list++);
+                    thread.thread_stats.commit.fail.free_list++;
+            } else if (cant_commit_subrob->current_state_list == &getthread().rob_frontend_list) {
+                    per_context_ooocore_stats_update(threadid, commit.fail.frontend_list++);
+                    thread.thread_stats.commit.fail.frontend_list++;
+            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_dispatch_list) {
+                    per_context_ooocore_stats_update(threadid, commit.fail.ready_to_dispatch_list++);
+                    thread.thread_stats.commit.fail.ready_to_dispatch_list++;
+            } else if (cant_commit_subrob->current_state_list == &getthread().rob_cache_miss_list) {
+                    per_context_ooocore_stats_update(threadid, commit.fail.cache_miss_list++);
+                    thread.thread_stats.commit.fail.cache_miss_list++;
+            } else if (cant_commit_subrob->current_state_list == &getthread().rob_tlb_miss_list) {
+                    per_context_ooocore_stats_update(threadid, commit.fail.tlb_miss_list++);
+                    thread.thread_stats.commit.fail.tlb_miss_list++;
+            } else if (cant_commit_subrob->current_state_list == &getthread().rob_memory_fence_list) {
+                    per_context_ooocore_stats_update(threadid, commit.fail.memory_fence_list++);
+                    thread.thread_stats.commit.fail.memory_fence_list++;
+            } else {
+                    foreach(j, MAX_CLUSTERS) {
+                            if(cant_commit_subrob->current_state_list == &getthread().rob_dispatched_list[j]) {
+                                    per_context_ooocore_stats_update(threadid, commit.fail.dispatched_list++);
+                                    thread.thread_stats.commit.fail.dispatched_list++;
+                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_issue_list[j]) {
+                                    per_context_ooocore_stats_update(threadid, commit.fail.ready_to_issue_list++);
+                                    thread.thread_stats.commit.fail.ready_to_issue_list++;
+                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_store_list[j]) {
+                                    per_context_ooocore_stats_update(threadid, commit.fail.ready_to_store_list++);
+                                    thread.thread_stats.commit.fail.ready_to_store_list++;
+                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_load_list[j]) {
+                                    per_context_ooocore_stats_update(threadid, commit.fail.ready_to_load_list++);
+                                    thread.thread_stats.commit.fail.ready_to_load_list++;
+                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_completed_list[j]) {
+                                    per_context_ooocore_stats_update(threadid, commit.fail.completed_list++);
+                                    thread.thread_stats.commit.fail.completed_list++;
+                            } else if (cant_commit_subrob->current_state_list == &getthread().rob_ready_to_writeback_list[j]) {
+                                    per_context_ooocore_stats_update(threadid, commit.fail.ready_to_writeback_list++);
+                                    thread.thread_stats.commit.fail.ready_to_writeback_list++;
+                            }
+                    }
             }
-        }
 
         if(logable(5)) {
             ptl_logfile << "Can't Commit ROB entry: ", *this, " because subrob: ",
@@ -1966,11 +2010,12 @@ int ReorderBufferEntry::commit() {
     if(st && !core.memoryHierarchy->is_cache_available(core.coreid, threadid, false/* icache */)){
         msdebug << " dcache can not write. core:", core.coreid, " threadid ", threadid, endl;
         per_context_ooocore_stats_update(threadid, commit.result.dcache_stall++);
+        thread.thread_stats.commit.result.dcache_stall++;
         return COMMIT_RESULT_NONE;
     }
 
     per_context_ooocore_stats_update(threadid, commit.opclass[opclassof(uop.opcode)]++);
-
+    thread.thread_stats.commit.opclass[opclassof(uop.opcode)]++;
     if unlikely (macro_op_has_exceptions) {
         if unlikely (config.event_log_enabled) event = core.eventlog.add_commit(EVENT_COMMIT_EXCEPTION_ACKNOWLEDGED, this);
 
@@ -1979,8 +2024,10 @@ int ReorderBufferEntry::commit() {
             thread.chk_recovery_rip = ctx.eip + uop.bytes;
             if unlikely (config.event_log_enabled) event->type = EVENT_COMMIT_SKIPBLOCK;
             per_context_ooocore_stats_update(threadid, commit.result.skipblock++);
+            thread.thread_stats.commit.result.skipblock++;
         } else {
             per_context_ooocore_stats_update(threadid, commit.result.exception++);
+            thread.thread_stats.commit.result.exception++;
         }
 
         if(logable(10)) {
@@ -2011,6 +2058,7 @@ int ReorderBufferEntry::commit() {
         thread.smc_invalidate_rvp = uop.rip;
 
         per_context_ooocore_stats_update(threadid, commit.result.smc++);
+        thread.thread_stats.commit.result.smc++;
         return COMMIT_RESULT_SMC;
     }
 
@@ -2044,6 +2092,7 @@ int ReorderBufferEntry::commit() {
             if unlikely (config.event_log_enabled) core.eventlog.add_commit(EVENT_COMMIT_MEM_LOCKED, this);
 
             per_context_ooocore_stats_update(threadid, commit.result.memlocked++);
+            thread.thread_stats.commit.result.memlocked++;
             return COMMIT_RESULT_NONE;
         }
     }
@@ -2184,6 +2233,7 @@ int ReorderBufferEntry::commit() {
                 annul_after();
                 thread.reset_fetch_unit(physreg->data);
                 per_context_ooocore_stats_update(threadid, issue.result.branch_mispredict++);
+                thread.thread_stats.issue.result.branch_mispredict++;
             }
             assert(physreg->data);
             ctx.eip = physreg->data;
@@ -2204,7 +2254,8 @@ int ReorderBufferEntry::commit() {
 
         per_context_ooocore_stats_update(threadid, commit.setflags.no += (uop.setflags == 0));
         per_context_ooocore_stats_update(threadid, commit.setflags.yes += (uop.setflags != 0));
-
+        thread.thread_stats.commit.setflags.no += (uop.setflags == 0);
+        thread.thread_stats.commit.setflags.yes += (uop.setflags != 0);
         if unlikely (config.event_log_enabled) event->commit.state.reg.rdflags = ctx.reg_flags;
 
         if likely (uop.setflags & SETFLAG_ZF) {
@@ -2317,6 +2368,7 @@ int ReorderBufferEntry::commit() {
     if likely (!(br|st)) {
         int k = clipto((int)consumer_count, 0, lengthof( per_ooo_core_stats_ref(coreid).total.frontend.consumer_count) - 1);
         per_context_ooocore_stats_update(threadid, frontend.consumer_count[k]++);
+        thread.thread_stats.frontend.consumer_count[k]++;
     }
 
     physreg->changestate(PHYSREG_ARCH);
@@ -2352,11 +2404,13 @@ int ReorderBufferEntry::commit() {
 
         thread.branchpred.update(uop.predinfo, end_of_branch_x86_insn, ctx.get_cs_eip());
         per_context_ooocore_stats_update(threadid, branchpred.updates++);
+        thread.thread_stats.branchpred.updates++;
     }
 
     if likely (uop.eom) {
         total_user_insns_committed++;
         per_context_ooocore_stats_update(threadid, commit.insns++);
+        thread.thread_stats.commit.insns++;
         thread.total_insns_committed++;
 
         stats->summary.insns++;
@@ -2371,6 +2425,7 @@ int ReorderBufferEntry::commit() {
     stats->summary.uops++;
     total_uops_committed++;
     per_context_ooocore_stats_update(threadid, commit.uops++);
+    thread.thread_stats.commit.uops++;
     thread.total_uops_committed++;
 
     bool uop_is_eom = uop.eom;
@@ -2383,6 +2438,7 @@ int ReorderBufferEntry::commit() {
     if unlikely (uop_is_barrier) {
         if unlikely (config.event_log_enabled) core.eventlog.add(EVENT_COMMIT_ASSIST, RIPVirtPhys(ctx.get_cs_eip()))->threadid = thread.threadid;
         per_context_ooocore_stats_update(threadid, commit.result.barrier++);
+        thread.thread_stats.commit.result.barrier_t++;
         return COMMIT_RESULT_BARRIER;
     }
 
@@ -2397,6 +2453,7 @@ int ReorderBufferEntry::commit() {
     }
 
     per_context_ooocore_stats_update(threadid, commit.result.ok++);
+    thread.thread_stats.commit.result.ok++;
     return COMMIT_RESULT_OK;
 }
 

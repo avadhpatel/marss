@@ -441,6 +441,33 @@ class StatObj : public StatObjBase {
         }
 
         /**
+         * @brief += operator
+         *
+         * @param b value to be added
+         *
+         * @return object of type T with new value
+         */
+        inline T operator +=(const T &b) const {
+            assert(default_var);
+            *default_var += b;
+            return *default_var;;
+        }
+
+        /**
+         * @brief += operator with StatObj
+         *
+         * @param statObj
+         *
+         * @return object of type T with new value
+         */
+        inline T operator +=(const StatObj<T> &statObj) const {
+            assert(default_var);
+            assert(statObj.default_var);
+            *default_var += (*statObj.default_var);
+            return  *default_var;
+        }
+
+        /**
          * @brief - operator
          *
          * @param b value to remove

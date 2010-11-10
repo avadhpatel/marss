@@ -343,6 +343,7 @@ namespace DefaultCoreModel {
                 {
                     StatObj<W64> complete;
                     StatObj<W64> miss;
+                    StatObj<W64> hit;
                     StatObj<W64> exception;
                     StatObj<W64> ordering;
                     StatObj<W64> unaligned;
@@ -378,6 +379,7 @@ namespace DefaultCoreModel {
                           , replay(this)
                           , complete("complete", this)
                           , miss("miss", this)
+                          , hit("hit", this)
                           , exception("exception", this)
                           , ordering("ordering", this)
                           , unaligned("unaligned", this)
