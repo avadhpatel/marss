@@ -88,6 +88,8 @@ bool BaseCoreMachine::init(PTLsimConfig& config)
     foreach(i, cores.count()) {
         cores[i]->update_memory_hierarchy_ptr();
     }
+
+    return 1;
 }
 
 int BaseCoreMachine::run(PTLsimConfig& config)

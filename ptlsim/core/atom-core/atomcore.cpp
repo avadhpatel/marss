@@ -29,7 +29,7 @@ static const bool archdest_is_visible[TRANSREG_COUNT] = {
     // SSE registers, high 64 bits
     1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1,
-    // x87 FP / MMX / special
+    // x87 FP / special
     1, 1, 1, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
     // MMX registers
@@ -38,6 +38,29 @@ static const bool archdest_is_visible[TRANSREG_COUNT] = {
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
 };
+
+static const byte archreg_remap_table[TRANSREG_COUNT] = {
+  REG_rax,  REG_rcx,  REG_rdx,  REG_rbx,  REG_rsp,  REG_rbp,  REG_rsi,  REG_rdi,
+  REG_r8,  REG_r9,  REG_r10,  REG_r11,  REG_r12,  REG_r13,  REG_r14,  REG_r15,
+
+  REG_xmml0,  REG_xmmh0,  REG_xmml1,  REG_xmmh1,  REG_xmml2,  REG_xmmh2,  REG_xmml3,  REG_xmmh3,
+  REG_xmml4,  REG_xmmh4,  REG_xmml5,  REG_xmmh5,  REG_xmml6,  REG_xmmh6,  REG_xmml7,  REG_xmmh7,
+
+  REG_xmml8,  REG_xmmh8,  REG_xmml9,  REG_xmmh9,  REG_xmml10,  REG_xmmh10,  REG_xmml11,  REG_xmmh11,
+  REG_xmml12,  REG_xmmh12,  REG_xmml13,  REG_xmmh13,  REG_xmml14,  REG_xmmh14,  REG_xmml15,  REG_xmmh15,
+
+  REG_fptos,  REG_fpsw,  REG_fptags,  REG_fpstack,  REG_msr,  REG_dlptr,  REG_trace, REG_ctx,
+
+  REG_rip,  REG_flags,  REG_dlend, REG_selfrip, REG_nextrip, REG_ar1, REG_ar2, REG_zero,
+
+  REG_mmx0, REG_mmx1, REG_mmx2, REG_mmx3, REG_mmx4, REG_mmx5, REG_mmx6, REG_mmx7,
+
+  REG_temp0,  REG_temp1,  REG_temp2,  REG_temp3,  REG_temp4,  REG_temp5,  REG_temp6,  REG_temp7,
+
+  // Notice how these (REG_zf, REG_cf, REG_of) are all mapped to REG_flags in an in-order processor:
+  REG_flags,  REG_flags,  REG_flags,  REG_imm,  REG_mem,  REG_temp8,  REG_temp9,  REG_temp10,
+};
+
 
 /**
 * @brief Extract specific bytes from given 64bit value
@@ -161,7 +184,7 @@ void AtomOp::commit_flags(int idx)
     bool st = isstore(uop.opcode);
     bool ast = (uop.opcode == OP_ast);
 
-    if(ld | st || uop.nouserflags) {
+    if(ld | st || uop.nouserflags && uop.opcode != OP_ast) {
         return;
     }
 
@@ -428,9 +451,9 @@ W8 AtomOp::issue(bool first_issue)
         thread->internal_flags = thread->forwarded_flags;
     }
 
-    ATOMOPLOG2("Rflag for execution: ", hexstring(thread->internal_flags,16));
 
     foreach(i, num_uops_used) {
+        ATOMOPLOG2("Rflag for execution: ", hexstring(thread->internal_flags,16));
         W8 result = execute_uop(i);
 
         if(result != ISSUE_OK && result != ISSUE_OK_BLOCK &&
@@ -451,12 +474,6 @@ W8 AtomOp::issue(bool first_issue)
             thread->core.clear_forward(dest_registers[i]);
         }
     }
-
-    // update_flags();
-    // thread->internal_flags = rflags;
-
-    ATOMOPLOG2("fwd rflag after execution: ",
-            hexstring(thread->forwarded_flags,16));
 
     /* If not pipelined then set flag in core's fu_available */
     if(is_nonpipe) {
@@ -519,11 +536,12 @@ bool AtomOp::all_src_ready()
         if(src_registers[i] == (W8)-1)
             break;
 
-        bool reg_not_ready = thread->register_invalid[src_registers[i]];
+        W8 renamed_reg = archreg_remap_table[src_registers[i]];
+        bool reg_not_ready = thread->register_invalid[renamed_reg];
 
         if(reg_not_ready) {
             // Probe Forward buffer
-            reg_not_ready = (thread->core.forwardbuf.probe(src_registers[i])
+            reg_not_ready = (thread->core.forwardbuf.probe(renamed_reg)
                     == NULL);
         }
 
@@ -551,6 +569,14 @@ W64 AtomOp::read_reg(W16 reg, W8 uop_idx)
 {
     /* Check if register value can be forwared from a uop within the same
      * AtomOp */
+
+    reg = archreg_remap_table[reg];
+
+    /* If reg is REG_flags then forward temporary flags */
+    if(reg == REG_flags) {
+        return thread->internal_flags;
+    }
+
     for(int i = uop_idx-1; i >= 0; i--) {
         if(dest_registers[i] == reg) {
             ATOMOPLOG2("Reg ", arch_reg_names[reg],
@@ -596,9 +622,9 @@ W8 AtomOp::execute_uop(W8 idx)
     rbdata = (uop.rb == REG_imm) ? uop.rbimm : read_reg(uop.rb, idx);
     rcdata = (uop.rc == REG_imm) ? uop.rcimm : read_reg(uop.rc, idx);
 
-    raflags = thread->internal_flags;
-    rbflags = (uop.rb == REG_imm) ? 0 : raflags;
-    rcflags = (uop.rc == REG_imm) ? 0 : ((uop.rc == REG_zero) ? 0 : raflags);
+    raflags = thread->register_flags[archreg_remap_table[uop.ra]];
+    rbflags = thread->register_flags[archreg_remap_table[uop.rb]];
+    rcflags = thread->register_flags[archreg_remap_table[uop.rc]];
 
     /* Clear IssueState */
     setzero(state);
@@ -607,8 +633,10 @@ W8 AtomOp::execute_uop(W8 idx)
     bool st = isstore(uop.opcode);
 
     ATOMOPLOG2("Executing Uop ", uops[idx]);
-    ATOMOPLOG2("radata: ", (void*)radata);
-    ATOMOPLOG2("rbdata: ", (void*)rbdata, " rcdata: ", (void*)rcdata);
+    ATOMOPLOG2("radata: ", (void*)radata, " rbdata: ", (void*)rbdata,
+            " rcdata: ", (void*)rcdata);
+    ATOMOPLOG2("af: ", (void*)(raflags), " bf: ", (void*)(rbflags),
+            " cf: ", (void*)(rcflags));
 
     if(ld) {
         issue_result = execute_load(uop);
@@ -641,7 +669,7 @@ W8 AtomOp::execute_uop(W8 idx)
     }
 
     /* Update 'rflags' to new flags and save dest reg data */
-    if(!ld && !st && uop.setflags) {
+    if(!ld && !st && uop.setflags || uop.opcode == OP_ast) {
         W64 flagmask = setflags_to_x86_flags[uop.setflags];
 
         if(uop.opcode == OP_ast) {
@@ -652,10 +680,12 @@ W8 AtomOp::execute_uop(W8 idx)
 
         /* First we update internal flags */
         thread->internal_flags = rflags[idx];
+        thread->register_flags[uop.rd] = rflags[idx];
 
         /* Now if update to userflags then update forwarded flags */
         if(!uop.nouserflags) {
             thread->forwarded_flags = rflags[idx];
+            thread->register_flags[REG_flags] = rflags[idx];
         }
     }
 
@@ -752,6 +782,8 @@ W8 AtomOp::execute_ast(TransOp& uop)
             flags, flags, flags, new_flags);
 
     state.reg.rdflags = new_flags;
+
+    ATOMOPLOG2("Flags after ast: ", hexstring(new_flags, 16));
 
     return ISSUE_OK;
 }
@@ -946,7 +978,7 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
         return ISSUE_FAIL;
     }
 
-    /* For internal load, load data and save to dest_reg */
+    /* For internal store, store data and save to dest_reg */
     if(uop.internal) {
         ATOMOPLOG2("Storebuf count:", thread->storebuf.head);
         StoreBufferEntry* buf = thread->get_storebuf_entry();
@@ -1203,9 +1235,12 @@ void AtomOp::forward()
     AtomCore& core = thread->core;
 
     foreach(i, num_uops_used) {
-        assert(dest_registers[i] != (W8)-1);
+        int reg = dest_registers[i];
+        assert(reg != (W8)-1);
 
-        core.set_forward(dest_registers[i], dest_register_values[i]);
+        if(thread->register_owner[reg] == this) {
+            core.set_forward(reg, dest_register_values[i]);
+        }
     }
 
     if(is_nonpipe) {
@@ -1286,18 +1321,14 @@ int AtomOp::writeback()
             // the Store-Buffer then we discard the store entries before this
             // entry. Ideally these entries must be removed when their AtomOp
             // entries are flushed or discarded.
-            // while(thread->storebuf.peek() != buf) {
-                // StoreBufferEntry* tbuf = thread->storebuf.pophead();
-                // ATOMOPLOG2("Ignoring store to ", hexstring(tbuf->addr,48),
-                        // " value ", hexstring(tbuf->data,64));
-            // }
+            while(thread->storebuf.peek() != buf) {
+                StoreBufferEntry* tbuf = thread->storebuf.pophead();
+                ATOMOPLOG2("Ignoring store to ", hexstring(tbuf->addr,48),
+                        " value ", hexstring(tbuf->data,64));
+            }
 
-            // if(rip == 0xffffffff81391484 ||  
-                    // buf->virtaddr == 0xffff88000160af80 ||
-                    // buf->virtaddr == 0xffffffff815dc740) {
-                ATOMOPLOG1("Stroing to ", hexstring(buf->virtaddr,64), " data ",
-                        hexstring(buf->data,64));
-            // }
+            ATOMOPLOG1("Stroing to ", hexstring(buf->virtaddr,64), " data ",
+                    hexstring(buf->data,64));
             thread->storebuf.commit(*buf);
         }
 
@@ -1418,6 +1449,7 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
 
     fetch_uuid = 0;
 
+    handle_interrupt_at_next_eom = 0;
     reset();
 }
 
@@ -1430,7 +1462,7 @@ void AtomThread::reset()
     current_bb = NULL;
 
     fetchrip = ctx.eip;
-    forwarded_flags = ctx.reg_flags & setflags_to_x86_flags[7];
+    forwarded_flags = ctx.reg_flags & (setflags_to_x86_flags[7] | FLAG_IF);
     internal_flags = forwarded_flags;
 
     waiting_for_icache_miss = 0;
@@ -1442,7 +1474,6 @@ void AtomThread::reset()
 
     issue_disabled = 0;
 
-    handle_interrupt_at_next_eom = 0;
     exception_op = NULL;
     pause_counter = 0;
     running = 0;
@@ -1478,6 +1509,9 @@ void AtomThread::reset()
 
     setzero(register_invalid);
     setzero(register_owner);
+    setzero(register_flags);
+
+    register_flags[REG_flags] = ctx.reg_flags;
 }
 
 /**
@@ -2161,29 +2195,24 @@ bool AtomThread::writeback()
     }
 
     foreach_list_mutable(op_ready_to_writeback_list, op, entry, nextentry) {
-        // Push op to the commitbuf queue
-        // assert(commitbuf.remaining());
-        // BufferEntry& buf = *commitbuf.alloc();
-        // buf.op = op;
 
-        // ins_commited++;
-
-        // op->change_state(op_free_list);
-
-        if(op->had_exception) {
-            exception_op = op;
-        }
-
-        // Now check if we have found EOM AtomOp or not
-        // To check that, when we found SOM we clear 'eom_found' flag and when
-        // we find EOM we set 'eom_found' flag.
+        /*
+         * Now check if we have found EOM AtomOp or not
+         * To check that, when we found SOM we clear 'eom_found' flag and when
+         * we find EOM we set 'eom_found' flag.
+         */
         eom_found = false;
+        exception_op = NULL;
 
         foreach_forward(commitbuf, i) {
             BufferEntry& buf = commitbuf[i];
 
             if((buf.op->current_state_list == 
                     &op_ready_to_writeback_list)) {
+                if(buf.op->had_exception) {
+                    exception_op = buf.op;
+                }
+
                 if(buf.op->eom) {
                     eom_found = true;
                     break;
@@ -2193,15 +2222,7 @@ bool AtomThread::writeback()
             }
         }
 
-        // if(op->som) {
-            // eom_found = false;
-        // }
-
-        // if(op->eom) {
-            // eom_found = true;
-        // }
-
-        // If we have find EOM then call 'commit_queue' to commit all AtomOps
+        /* If we have find EOM then call 'commit_queue' to commit all AtomOps*/
         if(eom_found) {
             ret_value = commit_queue();
 
@@ -2299,6 +2320,7 @@ void AtomThread::add_to_commitbuf(AtomOp* op)
 bool AtomThread::handle_exception()
 {
     ATOMTHLOG1("handle_exception()");
+    assert(ctx.exception > 0);
 
     flush_pipeline();
 
@@ -2358,6 +2380,7 @@ handle_page_fault:
 bool AtomThread::handle_interrupt()
 {
     ctx.event_upcall();
+    handle_interrupt_at_next_eom = 0;
 
     ATOMTHLOG1("Handling interrupt ", ctx.interrupt_request, " exit ",
             ctx.exit_request, " elfags ", hexstring(ctx.eflags,32),
@@ -2613,6 +2636,7 @@ void AtomCore::set_forward(W8 reg, W64 data)
  */
 void AtomCore::clear_forward(W8 reg)
 {
+    ATOMCORELOG("Clearing forwarding reg ", arch_reg_names[reg]);
     forwardbuf.invalidate((W16)reg);
 }
 
@@ -2834,8 +2858,6 @@ void AtomCore::check_ctx_changes()
                     HEXADDR(threads[i]->ctx.eip));
             threads[i]->flush_pipeline();
 
-            // ATOMCORELOG("Changing handle_interrupt from ",
-                    // threads[i]->ctx.handle_interrupt, " to 0");
             threads[i]->ctx.handle_interrupt = 0;
         }
     }

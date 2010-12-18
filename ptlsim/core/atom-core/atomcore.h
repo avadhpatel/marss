@@ -34,6 +34,8 @@
         " Th:", thread->threadid, " AtomOp:0x", hexstring(rip,48), \
         " [", uuid, "] ", __VA_ARGS__, endl)
 
+#define ATOMCERR(...) ; //cout << __VA_ARGS__, endl;
+
 #define HEXADDR(addr) hexstring(addr,48)
 #define HEXDATA(data) hexstring(data,64)
 
@@ -664,6 +666,7 @@ namespace AtomCoreModel {
         W64     fetch_uuid;
         bool    register_invalid[TRANSREG_COUNT];
         AtomOp* register_owner[TRANSREG_COUNT];
+        W16     register_flags[TRANSREG_COUNT];
         W64     temp_registers[11];
 
         AtomCore& core;

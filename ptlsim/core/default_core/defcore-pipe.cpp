@@ -1724,13 +1724,6 @@ int ThreadContext::commit() {
         if likely (rc == COMMIT_RESULT_OK) {
             core.commitcount++;
             last_commit_at_cycle = sim_cycle;
-
-#ifdef TRACE_RIP
-            ptl_rip_trace << "commit_rip: ",
-                          hexstring(rob.uop.rip.rip, 64), " \t",
-                          "simcycle: ", sim_cycle, "\tkernel: ",
-                          rob.uop.rip.kernel, endl;
-#endif
         } else {
             break;
         }
@@ -2414,6 +2407,13 @@ int ReorderBufferEntry::commit() {
         thread.total_insns_committed++;
 
         stats->summary.insns++;
+
+#ifdef TRACE_RIP
+            ptl_rip_trace << "commit_rip: ",
+                          hexstring(uop.rip.rip, 64), " \t",
+                          "simcycle: ", sim_cycle, "\tkernel: ",
+                          uop.rip.kernel, endl;
+#endif
         // if(uop.rip.rip > 0x7f0000000000)
         // per_core_event_update(core.coreid, insns_in_mode.userlib++);
     }

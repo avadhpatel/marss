@@ -585,7 +585,8 @@ W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	}
 	W64 stable_flags = (ra & mask);
 
-	W64 flagmask = (setflags_to_x86_flags[7]);
+	//W64 flagmask = (setflags_to_x86_flags[7]);
+	W64 flagmask = (setflags_to_x86_flags[7]) | IF_MASK ;
 	flags = (W16)(ra & flagmask);
 
     ctx.setup_qemu_switch();

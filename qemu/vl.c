@@ -4242,7 +4242,7 @@ static void main_loop(void)
 #ifndef CONFIG_IOTHREAD
 #ifdef MARSS_QEMU
             if(in_simulation) {
-                cur_cpu = first_cpu;
+                cur_cpu = next_cpu = first_cpu;
                 sim_cpu_exec();
             } else {
 #endif

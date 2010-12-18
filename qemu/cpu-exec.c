@@ -362,7 +362,8 @@ int sim_cpu_exec(void)
 						}
 					}
 				}
-				if (env->exit_request || in_simulation == 0) {
+				if ((env->handle_interrupt && env->exit_request) ||
+                        in_simulation == 0) {
 					env->exit_request = 0;
 					env->exception_index = EXCP_INTERRUPT;
 					exit_requested = 1;
