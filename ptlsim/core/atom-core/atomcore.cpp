@@ -998,15 +998,6 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
         return ISSUE_OK;
     }
 
-    /* Access memory */
-    bool L1_miss = !thread->access_dcache(addr, rip,
-            Memory::MEMORY_OP_WRITE,
-            uuid);
-
-    if(L1_miss) {
-        return ISSUE_CACHE_MISS;
-    }
-
     // Allocate a store buffer entry and add data to it 
     StoreBufferEntry* buf = thread->get_storebuf_entry();
 
@@ -1276,15 +1267,38 @@ int AtomOp::writeback()
         reset_checker_stores();
     }
 
-    // Update the architecture registers and memory
+    update_reg_mem();
+
+    if(eom) {
+        writeback_eom();
+    }
+
+    /* If checker is enabled, then this will be executed */
+    update_checker();
+
+    if(is_barrier) {
+        return COMMIT_BARRIER;
+    }
+
+    return COMMIT_OK;
+}
+
+/**
+ * @brief Update Architecture registers and memory locations
+ */
+void AtomOp::update_reg_mem()
+{
+    /* Update the architecture registers and memory */
     foreach(i, num_uops_used) {
         if(dest_registers[i] != (W8)-1) {
             W8 reg = dest_registers[i];
 
             thread->ctx.set_reg(reg, dest_register_values[i]);
 
-            // We update the register invalid flag and clear the forwarding
-            // buffer only if this AtomOp is still the owner of the register.
+            /*
+             * We update the register invalid flag and clear the forwarding
+             * buffer only if this AtomOp is still the owner of the register.
+             */
             if(thread->register_owner[reg] == this) {
                 thread->register_invalid[reg] = false;
                 thread->core.clear_forward(reg);
@@ -1294,6 +1308,18 @@ int AtomOp::writeback()
         if(stores[i] != NULL) {
             StoreBufferEntry* buf = stores[i];
             assert(buf->op == this);
+
+            /*
+             * FIXME : Currently we check if this store is not at the top of
+             * the Store-Buffer then we discard the store entries before this
+             * entry. Ideally these entries must be removed when their AtomOp
+             * entries are flushed or discarded.
+             */
+            while(thread->storebuf.peek() != buf) {
+                StoreBufferEntry* tbuf = thread->storebuf.pophead();
+                ATOMOPLOG2("Ignoring store to ", hexstring(tbuf->addr,48),
+                        " value ", hexstring(tbuf->data,64));
+            }
 
             if(uops[i].internal) {
                 thread->ctx.store_internal(buf->virtaddr,
@@ -1317,16 +1343,6 @@ int AtomOp::writeback()
 
             ATOMOPLOG3("Commting Store ", i);
 
-            // FIXME : Currently we check if this store is not at the top of
-            // the Store-Buffer then we discard the store entries before this
-            // entry. Ideally these entries must be removed when their AtomOp
-            // entries are flushed or discarded.
-            while(thread->storebuf.peek() != buf) {
-                StoreBufferEntry* tbuf = thread->storebuf.pophead();
-                ATOMOPLOG2("Ignoring store to ", hexstring(tbuf->addr,48),
-                        " value ", hexstring(tbuf->data,64));
-            }
-
             ATOMOPLOG1("Stroing to ", hexstring(buf->virtaddr,64), " data ",
                     hexstring(buf->data,64));
             thread->storebuf.commit(*buf);
@@ -1334,39 +1350,51 @@ int AtomOp::writeback()
 
         commit_flags(i);
     }
+}
 
-    if(eom) {
-        int last_idx = num_uops_used - 1;
-        TransOp& last_uop = uops[last_idx];
-        assert(last_uop.eom);
+/**
+ * @brief Perform commit of EOM uop
+ *
+ * Update RIP value and if there is branch mispredict update the fetchrip etc.
+ */
+void AtomOp::writeback_eom()
+{
+    int last_idx = num_uops_used - 1;
+    TransOp& last_uop = uops[last_idx];
+    assert(last_uop.eom);
 
-        ATOMOPLOG3("Commit EOM uop: ", last_uop);
-        ATOMOPLOG3("ctx eip: ", hexstring(thread->ctx.eip,48));
+    ATOMOPLOG3("Commit EOM uop: ", last_uop);
+    ATOMOPLOG3("ctx eip: ", hexstring(thread->ctx.eip,48));
 
-        if(last_uop.rd == REG_rip) {
-            ATOMOPLOG3("Setting rip: ", arch_reg_names[last_uop.rd]);
+    if(last_uop.rd == REG_rip) {
+        ATOMOPLOG3("Setting rip: ", arch_reg_names[last_uop.rd]);
 
-            if(!isclass(last_uop.opcode, OPCLASS_BARRIER)) {
-                assert(dest_register_values[last_idx]);
-            }
-
-            thread->ctx.eip = dest_register_values[last_idx];
-        } else {
-            ATOMOPLOG3("Adding bytes: ", last_uop.bytes);
-            thread->ctx.eip += last_uop.bytes;
+        if(!isclass(last_uop.opcode, OPCLASS_BARRIER)) {
+            assert(dest_register_values[last_idx]);
         }
 
-        ATOMOPLOG2("Commited.. new eip:0x", hexstring(thread->ctx.eip, 48));
-
-#ifdef TRACE_RIP
-        ptl_rip_trace << "commit_rip: ",
-                      hexstring(rip, 64), " \t",
-                      "simcycle: ", sim_cycle, "\tkernel: ",
-                      thread->ctx.kernel_mode, endl;
-#endif
-
+        thread->ctx.eip = dest_register_values[last_idx];
+    } else {
+        ATOMOPLOG3("Adding bytes: ", last_uop.bytes);
+        thread->ctx.eip += last_uop.bytes;
     }
 
+    ATOMOPLOG2("Commited.. new eip:0x", hexstring(thread->ctx.eip, 48));
+
+#ifdef TRACE_RIP
+    ptl_rip_trace << "commit_rip: ",
+                  hexstring(rip, 64), " \t",
+                  "simcycle: ", sim_cycle, "\tkernel: ",
+                  thread->ctx.kernel_mode, endl;
+#endif
+
+}
+
+/**
+ * @brief Update/execute Checker if its enabled
+ */
+void AtomOp::update_checker()
+{
     if(config.checker_enabled && eom && !thread->ctx.kernel_mode) {
         // TODO Add a mmio checker
         if(!is_barrier && thread->ctx.eip != rip) {
@@ -1401,12 +1429,6 @@ int AtomOp::writeback()
         enable_checker();
         reset_checker_stores();
     }
-
-    if(is_barrier) {
-        return COMMIT_BARRIER;
-    }
-
-    return COMMIT_OK;
 }
 
 //---------------------------------------------//
@@ -1472,6 +1494,13 @@ void AtomThread::reset()
     itlb_exception = 0;
     stall_frontend = false;
 
+    dtlb_walk_level = 0;
+    dtlb_miss_op = NULL;
+    dtlb_miss_addr = 0;
+    init_dtlb_walk = 0;
+    mmio_pending = 0;
+    inst_in_pipe = 0;
+
     issue_disabled = 0;
 
     exception_op = NULL;
@@ -1489,7 +1518,6 @@ void AtomThread::reset()
 
     branchpred.init(core.coreid, threadid);
     branches_in_flight = 0;
-    inst_in_pipe = false;
 
     foreach(i, NUM_ATOM_OPS_PER_THREAD) {
         atomOps[i].thread = this;
@@ -1761,6 +1789,8 @@ itlb_walk_finish:
  */
 void AtomThread::dtlb_walk()
 {
+    ATOMTHLOG2("DTLB Walk [level:", dtlb_walk_level);
+
     if(!dtlb_walk_level) {
 
 dtlb_walk_finish:
@@ -1774,11 +1804,10 @@ dtlb_walk_finish:
         return;
     }
 
-    W64 pteaddr = ctx.virt_to_pte_phys_addr(fetchrip, dtlb_walk_level);
+    assert(dtlb_miss_addr);
+    W64 pteaddr = ctx.virt_to_pte_phys_addr(dtlb_miss_addr, dtlb_walk_level);
 
     if(pteaddr == -1) {
-        // Its a page fault but it will be detected when our fetchrip is same
-        // as ctx.eip
         goto dtlb_walk_finish;
     }
 
@@ -1786,7 +1815,11 @@ dtlb_walk_finish:
                 core.coreid, threadid, false)) {
         // Cache queue is full.. so simply skip this iteration
         // dtlb_walk_level = 0;
+        ATOMTHLOG1("Cache is full, will request dtlb miss later");
+        init_dtlb_walk = 1;
         return;
+    } else {
+        init_dtlb_walk = 0;
     }
 
     Memory::MemoryRequest *request = core.memoryHierarchy->
@@ -2013,6 +2046,7 @@ void AtomThread::redirect_fetch(W64 rip)
  */
 bool AtomThread::access_dcache(Waddr addr, W64 rip, W8 type, W64 uuid)
 {
+    assert(rip);
     Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
     assert(request);
 
@@ -2033,11 +2067,28 @@ bool AtomThread::access_dcache(Waddr addr, W64 rip, W8 type, W64 uuid)
 bool AtomThread::dcache_wakeup(void *arg)
 {
     MemoryRequest* req = (MemoryRequest*)arg;
+    W64 req_rip = req->get_owner_rip();
+
+    if(req->get_type() == Memory::MEMORY_OP_WRITE) {
+        return true;
+    }
 
     /* Check if we are in tlb walk */
-    if(dtlb_walk_level > 0) {
+    if(dtlb_walk_level > 0 && req_rip == 0) {
         dtlb_walk_level--;
         dtlb_walk();
+        return true;
+    }
+
+    /* First check if request entry is present in dispatch queue or not */
+    if(dispatchq.empty()) return true;
+
+    BufferEntry& buf_entry = *dispatchq.peek();
+    if(buf_entry.op == NULL || buf_entry.op->rip != req_rip) {
+        /* Requested entry is not present at the head of dispatch queue so
+         * ignore this memory access callback */
+        ATOMTHLOG2("Ignoring memory callback for RIP ",
+                HEXADDR(req_rip));
         return true;
     }
 
@@ -2687,6 +2738,11 @@ bool AtomCore::runcycle()
     // If we are waiting for DTLB to fill then just return because when cache
     // access is completed, it will call dtlb_walk
     if(running_thread->dtlb_walk_level) {
+
+        if(running_thread->init_dtlb_walk) {
+            running_thread->dtlb_walk();
+        }
+
         return false;
     }
 

@@ -459,27 +459,30 @@ namespace AtomCoreModel {
         void setup_registers();
 
         // Issue Functions
-        W8 issue(bool first_issue);
+        W8   issue(bool first_issue);
         bool can_issue();
         bool all_src_ready();
-        W64 read_reg(W16 reg, W8 uop_idx);
-        W8 execute_uop(W8 idx);
-        W8 execute_ast(TransOp& uop);
-        W8 execute_fence(TransOp& uop);
+        W64  read_reg(W16 reg, W8 uop_idx);
+        W8   execute_uop(W8 idx);
+        W8   execute_ast(TransOp& uop);
+        W8   execute_fence(TransOp& uop);
         bool check_execute_exception(int idx);
-        W8 execute_load(TransOp& uop);
-        W8 execute_store(TransOp& uop, W8 idx);
-        W64 get_load_data(W64 addr, TransOp& uop);
-        W64 generate_address(TransOp& uop, bool is_st);
-        W64 get_virt_address(TransOp& uop, bool is_st);
-        W64 get_phys_address(TransOp& uop, bool is_st, W64 virtaddr);
+        W8   execute_load(TransOp& uop);
+        W8   execute_store(TransOp& uop, W8 idx);
+        W64  get_load_data(W64 addr, TransOp& uop);
+        W64  generate_address(TransOp& uop, bool is_st);
+        W64  get_virt_address(TransOp& uop, bool is_st);
+        W64  get_phys_address(TransOp& uop, bool is_st, W64 virtaddr);
         void dtlb_walk_completed();
 
         // Forward
         void forward();
         
         // Writeback/Commit
-        int writeback();
+        int  writeback();
+        void update_reg_mem();
+        void writeback_eom();
+        void update_checker();
 
         // Variables
         AtomThread *thread;
@@ -490,8 +493,7 @@ namespace AtomCoreModel {
         W8 is_branch:1, is_ldst:1, is_fp:1, is_sse:1, is_nonpipe:1,
            is_barrier:1, is_ast: 1, pad:1;
 
-        W64 rip;
-
+        W64  rip;
         W64  page_fault_addr;
         bool had_exception;
         W32  error_code;
@@ -690,6 +692,7 @@ namespace AtomCoreModel {
         W16     forwarded_flags;
         W16     internal_flags;
         int     pause_counter;
+        bool    init_dtlb_walk;
         bool    mmio_pending;
         bool    inst_in_pipe;
 
