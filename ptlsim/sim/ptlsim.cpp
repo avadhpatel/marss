@@ -722,7 +722,7 @@ void setup_checker(W8 contextid) {
     /* First clear the old check_context */
     assert(checker_context);
 
-    //checker_context->setup_ptlsim_switch();
+    checker_context->setup_ptlsim_switch();
 
     if(checker_context->kernel_mode || checker_context->eip == 0) {
       in_simulation = 0;
@@ -769,6 +769,8 @@ void execute_checker() {
     in_simulation = 0;
 
     checker_context->interrupt_request = 0;
+    checker_context->handle_interrupt = 0;
+    checker_context->exception_index = 0;
     W64 old_eip = checker_context->eip;
     int old_exception_index = checker_context->exception_index;
     int ret;
@@ -820,7 +822,7 @@ void compare_checker(W8 context_id, W64 flagmask) {
     bool fail = false;
     fail = (checker_context->eip != ptl_contexts[context_id]->eip);
 
-    W64 flag1 = checker_context->eflags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
+    W64 flag1 = checker_context->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
     W64 flag2 = ptl_contexts[context_id]->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
     //fail |= (flag1 != flag2);
 

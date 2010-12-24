@@ -184,7 +184,8 @@ void AtomOp::commit_flags(int idx)
     bool st = isstore(uop.opcode);
     bool ast = (uop.opcode == OP_ast);
 
-    if(ld | st || uop.nouserflags && uop.opcode != OP_ast) {
+    if((ld | st | uop.nouserflags) &&
+            (uop.opcode != OP_ast && !uop.setflags)) {
         return;
     }
 
@@ -428,6 +429,7 @@ void AtomOp::setup_registers()
 W8 AtomOp::issue(bool first_issue)
 {
     W8 return_value = false;
+    W16 saved_flags;
 
     /* Check if instruction is not first_issue and its not pipelined then
      * return
@@ -451,6 +453,7 @@ W8 AtomOp::issue(bool first_issue)
         thread->internal_flags = thread->forwarded_flags;
     }
 
+    saved_flags = thread->forwarded_flags;
 
     foreach(i, num_uops_used) {
         ATOMOPLOG2("Rflag for execution: ", hexstring(thread->internal_flags,16));
@@ -458,6 +461,7 @@ W8 AtomOp::issue(bool first_issue)
 
         if(result != ISSUE_OK && result != ISSUE_OK_BLOCK &&
                 result != ISSUE_OK_SKIP) {
+            thread->forwarded_flags = saved_flags;
             return result;
         }
 
@@ -676,7 +680,8 @@ W8 AtomOp::execute_uop(W8 idx)
             flagmask |= IF_MASK;
         }
 
-        rflags[idx] = (raflags & ~flagmask) | (state.reg.rdflags & flagmask);
+        rflags[idx] = (thread->forwarded_flags & ~flagmask) |
+            (state.reg.rdflags & flagmask);
 
         /* First we update internal flags */
         thread->internal_flags = rflags[idx];
@@ -1271,10 +1276,10 @@ int AtomOp::writeback()
 
     if(eom) {
         writeback_eom();
-    }
 
-    /* If checker is enabled, then this will be executed */
-    update_checker();
+        /* If checker is enabled, then this will be executed */
+        update_checker();
+    }
 
     if(is_barrier) {
         return COMMIT_BARRIER;
