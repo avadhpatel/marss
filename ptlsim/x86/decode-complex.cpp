@@ -944,6 +944,17 @@ W64 l_assist_pause(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	return 0;
 }
 
+W64 l_assist_popcnt(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
+        W16 rbflags, W16 rcflags, W16& flags) {
+    W64 sizeshift = rb;
+    setup_qemu_switch_except_ctx(ctx);
+    ctx.setup_qemu_switch();
+    helper_popcnt(ra,sizeshift);
+    setup_ptlsim_switch_all_ctx(ctx);
+
+    return 0;
+}
+
 bool assist_mmx_emms(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_emms);
@@ -2623,6 +2634,27 @@ bool TraceDecoder::decode_complex() {
 
       break;
     }
+  }
+
+  case 0x1b8: { //popcnt
+    DECODE(gform, rd, v_mode);
+    DECODE(eform, ra, v_mode);
+    EndOfDecode();
+    int sizeshift = (ra.type == OPTYPE_MEM) ? ra.mem.size : reginfo[ra.reg.reg].sizeshift;
+    int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
+    int rareg;
+
+    if (ra.type == OPTYPE_MEM) {
+      rareg = REG_temp0;
+      operand_load(REG_temp0, ra);
+    } else {
+      rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
+    }
+
+    TransOp ast(OP_ast, rdreg, rareg, REG_zero, REG_zero, sizeshift);
+    ast.riptaken = L_ASSIST_POPCNT;
+    this << ast;
+    break ;
   }
 
   case 0x1ba: { // bt|btc|btr|bts mem,imm

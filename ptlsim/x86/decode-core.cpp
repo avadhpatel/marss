@@ -202,6 +202,7 @@ const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT] = {
     l_assist_ioport_in,
     l_assist_ioport_out,
     l_assist_pause,
+    l_assist_popcnt,
 };
 
 int light_assist_index(light_assist_func_t assist) {
@@ -444,7 +445,7 @@ static const byte twobyte_has_modrm[256] = {
     /* 80 */ _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_, /* 8f */
     /* 90 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 9f */
     /* a0 */ _,_,_,1,1,1,1,1,_,_,_,1,1,1,1,1, /* af */
-    /* b0 */ 1,1,1,1,1,1,1,1,_,_,1,1,1,1,1,1, /* bf */
+    /* b0 */ 1,1,1,1,1,1,1,1,1,_,1,1,1,1,1,1, /* bf */
     /* c0 */ 1,1,1,1,1,1,1,1,_,_,_,_,_,_,_,_, /* cf */
     /* d0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* df */
     /* e0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ef */
