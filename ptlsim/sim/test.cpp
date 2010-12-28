@@ -1,6 +1,8 @@
 
 #include <test.h>
 
+#ifdef ENABLE_TESTS
+
 #include <gtest/gtest.h>
 
 void run_tests()
@@ -17,3 +19,12 @@ void run_tests()
 
     exit(0);
 }
+
+#else
+
+void run_tests()
+{
+    return;
+}
+
+#endif

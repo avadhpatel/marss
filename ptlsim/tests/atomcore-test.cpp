@@ -22,7 +22,7 @@ namespace {
             {
                 base_machine = (BaseCoreMachine*)PTLsimMachine::getmachine(
                         "base");
-                
+
                 // If machine is not configured to use AtomCore, change
                 // configuration
                 if(strcmp(config.core_config, "atom")) {
@@ -340,7 +340,7 @@ namespace {
         AtomCore& core = *(AtomCore*)base_machine->cores[0];
         AtomThread& thread = *core.threads[0];
 
-        // Check the config logging 
+        // Check the config logging
         config.start_log_at_rip = 0x401200;
         thread.fetchrip.rip = config.start_log_at_rip;
         logenable = 0;
@@ -468,8 +468,6 @@ namespace {
         thread->current_bb = bb;
 
         synth_uops_for_bb(*bb);
-
-        cout << *bb;
     }
 
     TEST_F(AtomCoreTest, AtomOpFetch)
@@ -492,7 +490,7 @@ namespace {
             // Get the buffer entry and AtomOp
             BufferEntry& fetch_entry = core.fetchq(fetch_counter++);
             ASSERT_TRUE(fetch_entry.op);
-            
+
             AtomOp& op = *fetch_entry.op;
             ASSERT_EQ(op.uuid, uuid_counter - 1);
 
@@ -871,7 +869,7 @@ namespace {
         fumask = FU_ALU0 | FU_ALU1;
         for(int i = OP_andcc; i <= OP_chk_and; i++) {
             ASSERT_EQ(fuinfo[i].fu, fumask);
-            
+
             // Make sure that atleast one of the port is set
             ASSERT_NE(fuinfo[i].port, 0);
         }

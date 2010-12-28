@@ -18,14 +18,7 @@ except:
 # Setup the environment
 # env = Environment()
 
-# Include all the subdirectories into the CCFLAGS
 env['CPPPATH'] = []
-for dir in dirs:
-    env['CPPPATH'].append(os.getcwd() + "/" + dir)
-
-# Add gtest directory in CPPPATH
-env['CPPPATH'].append(os.getcwd() + "/lib/gtest/include")
-
 env['CPPPATH'].append(qemu_dir)
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "target-i386"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "fpu"))
@@ -38,12 +31,25 @@ debug = ARGUMENTS.get('debug', 0)
 if int(debug):
     env.Append(CCFLAGS = '-g')
     env.Append(CCFLAGS = '-O')
+
+    # Enable tests
+    env.Append(CCFLAGS = '-DENABLE_TESTS')
+    dirs.append('tests')
+    # Add gtest directory in CPPPATH
+    env['CPPPATH'].append(os.getcwd() + "/lib/gtest/include")
+    env['tests'] = True
+
 else:
     env.Append(CCFLAGS = '-g3')
     env.Append(CCFLAGS = '-O3 -march=native -mtune=native')
-    # env.Append(CCFLAGS = '-DDISABLE_ASSERT')
+    env.Append(CCFLAGS = '-DDISABLE_ASSERT')
     env.Append(CCFLAGS = '-DDISABLE_LOGGING')
     env.Append(CCFLAGS = optimization_defs)
+    env['tests'] = False
+
+# Include all the subdirectories into the CCFLAGS
+for dir in dirs:
+    env['CPPPATH'].append(os.getcwd() + "/" + dir)
 
 num_sim_cores = ARGUMENTS.get('c', 1)
 env.Append(CCFLAGS = '-DNUM_SIM_CORES=%d' % int(num_sim_cores))

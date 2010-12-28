@@ -75,7 +75,7 @@ namespace {
         ASSERT_EQ(base_machine->cores.count(), NUM_SIM_CORES);
 
         foreach(i, NUM_SIM_CORES) {
-            DefaultCoreModel::DefaultCore* core = 
+            DefaultCoreModel::DefaultCore* core =
                 (DefaultCoreModel::DefaultCore*)base_machine->cores[i];
 
             ASSERT_EQ(core->threadcount, 1);
