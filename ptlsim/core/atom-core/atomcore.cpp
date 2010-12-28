@@ -1486,6 +1486,9 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
 void AtomThread::reset()
 {
     bb_transop_index = 0;
+    if(current_bb) {
+        current_bb->release();
+    }
     current_bb = NULL;
 
     fetchrip = ctx.eip;
@@ -1565,7 +1568,7 @@ bool AtomThread::fetch()
     while(fetchcount < MAX_FETCH_WIDTH) {
 
         // First check if fetchq is empty or not
-        if(!core.fetchq.remaining()) {
+        if(!core.fetchq.remaining() || op_free_list.count == 0) {
             return true;
         }
 
