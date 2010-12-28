@@ -1477,6 +1477,8 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
     fetch_uuid = 0;
 
     handle_interrupt_at_next_eom = 0;
+    current_bb = NULL;
+
     reset();
 }
 
