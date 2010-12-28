@@ -605,6 +605,8 @@ void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
     switch(oldState) {
         case MESI_INVALID:
             /* treat it as a miss */
+            N_STAT_UPDATE(new_stats.miss_state.cpu, [oldState]++,
+                    kernel_req);
             cache_miss_cb(queueEntry);
             break;
         case MESI_EXCLUSIVE:
@@ -620,6 +622,8 @@ void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
                      * treat it as miss so lower cache also update
                      * its cache line state
                      */
+                    N_STAT_UPDATE(new_stats.miss_state.cpu, [oldState]++,
+                            kernel_req);
                     cache_miss_cb(queueEntry);
                 }
             } else if(type == MEMORY_OP_READ) {
@@ -635,6 +639,8 @@ void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
                  * treat it as miss so other cache will invalidate
                  * their cached line
                  */
+                N_STAT_UPDATE(new_stats.miss_state.cpu, [oldState]++,
+                        kernel_req);
                 cache_miss_cb(queueEntry);
             } else if(type == MEMORY_OP_READ) {
                 queueEntry->sendTo = queueEntry->sender;
@@ -1030,6 +1036,7 @@ bool CacheController::cache_access_cb(void *arg)
         return true;
 
     queueEntry->eventFlags[CACHE_ACCESS_EVENT]--;
+    bool kernel_req = queueEntry->request->is_kernel();
 
     if(cacheLines_->get_port(queueEntry->request)) {
         bool hit;
@@ -1052,13 +1059,15 @@ bool CacheController::cache_access_cb(void *arg)
         } else { // Cache Miss
             signal = &cacheMiss_;
             delay = cacheAccessLatency_;
+
+            N_STAT_UPDATE(new_stats.miss_state.cpu, [4]++,
+                    kernel_req);
         }
         memoryHierarchy_->add_event(signal, delay,
                 (void*)queueEntry);
         return true;
     } else {
         OP_TYPE type = queueEntry->request->get_type();
-        bool kernel_req = queueEntry->request->is_kernel();
         if(type == MEMORY_OP_READ) {
             STAT_UPDATE(cpurequest.stall.read.cache_port++, kernel_req);
             N_STAT_UPDATE(new_stats.cpurequest.stall.read.cache_port, ++,

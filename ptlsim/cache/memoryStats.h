@@ -30,6 +30,7 @@
 
 #include <ptlsim.h>
 #include <statsBuilder.h>
+#include <cacheConstants.h>
 
 //#include <dcache.h>
 
@@ -334,6 +335,14 @@ struct BaseCacheStats : public Statable
 
 struct MESIStats : public BaseCacheStats {
 
+    struct miss_state : public Statable {
+        StatArray<W64, 5> cpu;
+        miss_state(const char *name, Statable *parent)
+            : Statable(name, parent)
+              , cpu("cpu", this)
+        {}
+    } miss_state;
+
     struct hit_state : public Statable{
         StatArray<W64,4> snoop;
         StatArray<W64,4> cpu;
@@ -349,7 +358,66 @@ struct MESIStats : public BaseCacheStats {
     MESIStats(const char *name, Statable *parent=NULL)
         :BaseCacheStats(name, parent)
          ,hit_state("hit_state",this)
+         ,miss_state("miss_state",this)
          ,state_transition("state_transition",this)
+    {}
+};
+
+struct NewBusStats : public Statable {
+
+    struct broadcasts : public Statable {
+        StatObj<W64> read;
+        StatObj<W64> write;
+        StatObj<W64> update;
+
+        broadcasts(Statable *parent)
+            : Statable("broadcast", parent)
+            , read("read", this)
+            , write("write", this)
+            , update("update", this)
+        {}
+    } broadcasts;
+
+    struct broadcast_cycles : public Statable {
+        StatObj<W64> read;
+        StatObj<W64> write;
+        StatObj<W64> update;
+
+        broadcast_cycles(Statable *parent)
+            : Statable("broadcast_cycles", parent)
+            , read("read", this)
+            , write("write", this)
+            , update("update", this)
+        {}
+    } broadcast_cycles;
+
+    StatObj<W64> addr_bus_cycles;
+    StatObj<W64> data_bus_cycles;
+    StatObj<W64> bus_not_ready;
+
+    NewBusStats(const char* name, Statable *parent)
+        : Statable(name, parent)
+          , broadcasts(this)
+          , broadcast_cycles(this)
+          , addr_bus_cycles("addr_bus_cycles", this)
+          , data_bus_cycles("data_bus_cycles", this)
+          , bus_not_ready("bus_not_ready", this)
+    {}
+};
+
+struct RAMStats : public Statable {
+
+    StatArray<W64, MEM_BANKS> bank_access;
+    StatArray<W64, MEM_BANKS> bank_read;
+    StatArray<W64, MEM_BANKS> bank_write;
+    StatArray<W64, MEM_BANKS> bank_update;
+
+    RAMStats(const char* name, Statable *parent)
+        : Statable(name, parent)
+          , bank_access("bank_access", this)
+          , bank_read("bank_read", this)
+          , bank_write("bank_write", this)
+          , bank_update("bank_update", this)
     {}
 };
 

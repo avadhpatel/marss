@@ -31,6 +31,7 @@
 #include <controller.h>
 #include <interconnect.h>
 #include <superstl.h>
+#include <memoryStats.h>
 
 namespace Memory {
 
@@ -73,6 +74,8 @@ class MemoryController : public Controller
 
 		int bankBits_;
 		int get_bank_id(W64 addr);
+
+        RAMStats new_stats;
 
 	public:
 		MemoryController(W8 coreid, char *name,

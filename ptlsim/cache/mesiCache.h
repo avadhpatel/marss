@@ -38,9 +38,12 @@
 #define UPDATE_MESI_TRANS_STATS(old_state, new_state, mode) \
     if(mode) { /* kernel mode */ \
         kernelStats_->mesi_stats.state_transition[(old_state << 2) | new_state]++; \
+        new_stats.state_transition(n_kernel_stats)[(old_state << 2) | new_state]++; \
     } else { \
         userStats_->mesi_stats.state_transition[(old_state << 2) | new_state]++; \
+        new_stats.state_transition(n_user_stats)[(old_state << 2) | new_state]++; \
     }
+
 namespace Memory {
 
     namespace MESICache {

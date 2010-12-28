@@ -41,6 +41,7 @@ using namespace Memory;
 MemoryController::MemoryController(W8 coreid, char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Controller(coreid, name, memoryHierarchy)
+    , new_stats(name, &memoryHierarchy->get_machine())
 {
 	GET_STRINGBUF_PTR(access_name, name, "_access_completed");
 	accessCompleted_.set_name(access_name->buf);
@@ -175,9 +176,24 @@ bool MemoryController::access_completed_cb(void *arg)
 {
     MemoryQueueEntry *queueEntry = (MemoryQueueEntry*)arg;
 
+    bool kernel = queueEntry->request->is_kernel();
+
     int bank_no = get_bank_id(queueEntry->request->
             get_physical_address());
     banksUsed_[bank_no] = 0;
+
+    N_STAT_UPDATE(new_stats.bank_access, [bank_no]++, kernel);
+    switch(queueEntry->request->get_type()) {
+        case MEMORY_OP_READ:
+            N_STAT_UPDATE(new_stats.bank_read, [bank_no]++, kernel);
+            break;
+        case MEMORY_OP_WRITE:
+            N_STAT_UPDATE(new_stats.bank_write, [bank_no]++, kernel);
+            break;
+        case MEMORY_OP_UPDATE:
+            N_STAT_UPDATE(new_stats.bank_update, [bank_no]++, kernel);
+            break;
+    }
 
     /*
      * Now check if we still have pending requests
