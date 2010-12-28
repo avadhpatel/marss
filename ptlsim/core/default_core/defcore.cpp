@@ -90,6 +90,7 @@ ThreadContext::ThreadContext(DefaultCore& core_, W8 threadid_, Context& ctx_)
     stats_name << "thread" << threadid;
     thread_stats.update_name(stats_name.buf);
 
+    thread_stats.set_default_stats(n_user_stats);
     reset();
 }
 
@@ -443,7 +444,7 @@ bool DefaultCore::runcycle() {
     // Each core's thread-shared stats counter will be added to
     // the thread-0's counters for simplicity
     stats_ = threads[0]->stats_;
-    core_stats.set_default_stats(threads[0]->thread_stats.get_default_stats());
+    core_stats.set_default_stats(threads[0]->thread_stats.get_default_stats(), false);
 
     //
     // Compute reserved issue queue entries to avoid starvation:
@@ -835,6 +836,7 @@ bool DefaultCore::runcycle() {
         }
     }
 
+    core_stats.cycles++;
 
     return exiting;
 }
@@ -1356,8 +1358,10 @@ bool ThreadContext::handle_interrupt() {
     // update the stats
     if(ctx.exit_request) {
         per_context_ooocore_stats_update(threadid, cpu_exit_requests++);
+        thread_stats.cpu_exit_requests++;
     } else {
         per_context_ooocore_stats_update(threadid, interrupt_requests++);
+        thread_stats.interrupt_requests++;
     }
     return true;
 }
@@ -2013,6 +2017,37 @@ void DefaultCore::check_ctx_changes()
             threads[i]->flush_pipeline();
         }
     }
+}
+
+void DefaultCore::update_stats(PTLsimStats* stats)
+{
+    global_stats += user_stats + kernel_stats;
+
+    *n_global_stats += *n_user_stats;
+    *n_global_stats += *n_kernel_stats;
+
+    cout << "Updating YAML Stats\n";
+    Stats* n_stats;
+    foreach(i, 3) {
+        n_stats = (i == 0) ? n_user_stats : ((i ==1) ? n_kernel_stats : n_global_stats);
+
+        foreach(i, threadcount) {
+            DefaultCoreThreadStats& st = threads[i]->thread_stats;
+
+            W64 cycles = core_stats.cycles(n_stats);
+            st.issue.uipc(n_stats) = st.issue.uops(n_stats) /
+                (double)(cycles);
+            st.commit.uipc(n_stats) = (double)st.commit.uops(n_stats) /
+                (double)(cycles);
+            st.commit.ipc(n_stats) = (double)st.commit.insns(n_stats) /
+                (double)(cycles);
+        }
+    }
+
+    // this ipc is in fact for threads average, so if using smt, you might need to get per core ipc first.
+    global_stats.ooocore_context_total.issue.uipc = (double)global_stats.ooocore_context_total.issue.uops / (double)global_stats.ooocore_total.cycles;
+    global_stats.ooocore_context_total.commit.uipc = (double)global_stats.ooocore_context_total.commit.uops / (double)global_stats.ooocore_total.cycles;
+    global_stats.ooocore_context_total.commit.ipc = (double)global_stats.ooocore_context_total.commit.insns / (double)global_stats.ooocore_total.cycles;
 }
 
 namespace DefaultCoreModel {

@@ -210,7 +210,9 @@ void BaseCoreMachine::flush_all_pipelines()
 
 void BaseCoreMachine::update_stats(PTLsimStats* stats)
 {
-    // TODO
+    foreach(i, cores.count()) {
+        cores[i]->update_stats(stats);
+    }
 }
 
 Context& BaseCoreMachine::get_next_context()

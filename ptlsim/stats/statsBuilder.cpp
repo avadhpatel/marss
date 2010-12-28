@@ -59,14 +59,20 @@ Statable::Statable(stringbuf &str, Statable *parent)
     }
 }
 
-void Statable::set_default_stats(Stats *stats)
+void Statable::set_default_stats(Stats *stats, bool recursive, bool force)
 {
+    if(default_stats == stats && !force)
+        return;
+
     default_stats = stats;
 
     // First set stats to leafs
     foreach(i, leafs.count()) {
         leafs[i]->set_default_stats(stats);
     }
+
+    if(!recursive)
+        return;
 
     // Now set stats to all child nodes
     foreach(i, childNodes.count()) {
@@ -161,7 +167,7 @@ ostream& StatsBuilder::dump(Stats *stats, ostream &os) const
 YAML::Emitter& StatsBuilder::dump(Stats *stats, YAML::Emitter &out) const
 {
     // First set the stats as default stats in each node
-    rootNode->set_default_stats(stats);
+    rootNode->set_default_stats(stats, true, true);
 
     // Now print the stats into ostream
     rootNode->dump(out, stats);

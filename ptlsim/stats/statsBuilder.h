@@ -122,7 +122,8 @@ class Statable {
          *
          * @param stats
          */
-        void set_default_stats(Stats *stats);
+        void set_default_stats(Stats *stats, bool recursive=true,
+                bool force=false);
 
         /**
          * @brief Dump string representation of  Statable and it childs
@@ -596,7 +597,6 @@ class StatObj : public StatObjBase {
          */
         YAML::Emitter& dump(YAML::Emitter &out, Stats *stats) const
         {
-            assert(default_var);
             T var = (*this)(stats);
 
             out << YAML::Key << (char *)name;
@@ -664,6 +664,7 @@ class StatArray : public StatObjBase {
         {
             StatObjBase::set_default_stats(stats);
             set_default_var_ptr();
+            assert(default_var);
         }
 
         /**
@@ -678,7 +679,8 @@ class StatArray : public StatObjBase {
             assert(index < size);
             assert(default_var);
 
-            return *(T*)(default_var + (index * sizeof(T)));
+            BaseArr& arr = *(BaseArr*)(default_var);
+            return arr[index];
         }
 
         /**

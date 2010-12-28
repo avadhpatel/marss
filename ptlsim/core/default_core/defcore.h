@@ -1608,9 +1608,7 @@ namespace DefaultCoreModel {
         // Stats
         DefaultCoreStats core_stats;
 
-        void update_stats(PTLsimStats* stats) {
-            // TODO
-        }
+        void update_stats(PTLsimStats* stats);
 
         void check_ctx_changes();
 

@@ -754,7 +754,7 @@ bool ThreadContext::fetch() {
         }
 
         per_context_ooocore_stats_update(threadid, fetch.opclass[opclassof(transop.opcode)]++);
-        thread_stats.fetch.opclass[opclassof(transop.opcode)];
+        thread_stats.fetch.opclass[opclassof(transop.opcode)]++;
         if unlikely (config.event_log_enabled) {
             event = eventlog.add(EVENT_FETCH_OK, transop);
             event->fetch.predrip = predrip;
