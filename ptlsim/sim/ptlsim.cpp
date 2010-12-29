@@ -68,6 +68,7 @@ const char *snapshot_names[] = {"user", "kernel", "global"};
 Stats *n_user_stats;
 Stats *n_kernel_stats;
 Stats *n_global_stats;
+SimStats sim_stats;
 
 #endif
 
@@ -183,7 +184,7 @@ void PTLsimConfig::reset() {
   enable_mongo = 0;
   mongo_server = "127.0.0.1";
   mongo_port = 27017;
-  bench_name = "unknown";
+  bench_name = "";
   db_tags = "";
 
   // Test Framework
@@ -1011,25 +1012,65 @@ void write_mongo_stats() {
     mongo_destroy(conn);
 }
 
+stringbuf get_date()
+{
+    time_t rawtime;
+    struct tm *timeinfo;
+    char buf[80];
+    stringbuf date;
+
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(buf, 80, "%x", timeinfo);
+    date << buf;
+
+    return date;
+}
+
+void setup_sim_stats()
+{
+    /* Simlation tags contains benchmark name, host name, simulation-date,
+     * user specified tags */
+    stringbuf base_tags, kernel_tags, user_tags, total_tags;
+    utsname hostinfo;
+    stringbuf date;
+
+    sys_uname(&hostinfo);
+    date = get_date();
+
+    if(config.bench_name.size() > 0)
+        base_tags << config.bench_name << ",";
+    base_tags << hostinfo.nodename << "." << hostinfo.domainname << ",";
+    base_tags << date << ",";
+
+    if(config.db_tags.size() > 0)
+        base_tags << config.db_tags;
+
+    kernel_tags << base_tags << "kernel";
+    user_tags << base_tags << "user";
+    total_tags << base_tags << "total";
+    ptl_logfile << "Total Tags: " << total_tags << endl;
+
+    sim_stats.tags.set(n_kernel_stats, kernel_tags);
+    sim_stats.tags.set(n_user_stats, user_tags);
+    sim_stats.tags.set(n_global_stats, total_tags);
+}
+
 void dump_yaml_stats()
 {
-    yaml_stats_file << "# kernel stats\n";
-    YAML::Emitter k_out, u_out;
+    setup_sim_stats();
+
+    YAML::Emitter k_out, u_out, g_out;
+
     (StatsBuilder::get()).dump(n_kernel_stats, k_out);
     yaml_stats_file << k_out.c_str() << "\n";
-    yaml_stats_file << "# user stats\n";
+
     (StatsBuilder::get()).dump(n_user_stats, u_out);
     yaml_stats_file << u_out.c_str() << "\n";
 
-    Stats* tot_stats = (StatsBuilder::get()).get_new_stats();
+    (StatsBuilder::get()).dump(n_global_stats, g_out);
+    yaml_stats_file << g_out.c_str() << "\n";
 
-    *tot_stats += *n_user_stats;
-    *tot_stats += *n_kernel_stats;
-
-    yaml_stats_file << "total stats\n";
-    YAML::Emitter t_out;
-    (StatsBuilder::get()).dump(tot_stats, t_out);
-    yaml_stats_file << t_out.c_str() << "\n";
     yaml_stats_file.flush();
 }
 

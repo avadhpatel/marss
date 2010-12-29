@@ -210,6 +210,12 @@ void BaseCoreMachine::flush_all_pipelines()
 
 void BaseCoreMachine::update_stats(PTLsimStats* stats)
 {
+    // First add user and kernel stats to global stats
+    global_stats += user_stats + kernel_stats;
+
+    *n_global_stats += *n_user_stats;
+    *n_global_stats += *n_kernel_stats;
+
     foreach(i, cores.count()) {
         cores[i]->update_stats(stats);
     }

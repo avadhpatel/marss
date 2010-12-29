@@ -2021,12 +2021,6 @@ void DefaultCore::check_ctx_changes()
 
 void DefaultCore::update_stats(PTLsimStats* stats)
 {
-    global_stats += user_stats + kernel_stats;
-
-    *n_global_stats += *n_user_stats;
-    *n_global_stats += *n_kernel_stats;
-
-    cout << "Updating YAML Stats\n";
     Stats* n_stats;
     foreach(i, 3) {
         n_stats = (i == 0) ? n_user_stats : ((i ==1) ? n_kernel_stats : n_global_stats);

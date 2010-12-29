@@ -640,7 +640,8 @@ class StatArray : public StatObjBase {
         /**
          * @brief Default constructor
          *
-         * @param keyName Name of the stat array
+         * @param name Name of the stat array
+         * @param parent Parent Statable object of this
          */
         StatArray(const char *name, Statable *parent)
             : StatObjBase(name, parent)
@@ -750,6 +751,171 @@ class StatArray : public StatObjBase {
             foreach(i, size) {
                 dest_arr[i] += src_arr[i];
             }
+        }
+};
+
+/**
+ * @brief Create a Stat string object
+ *
+ * This class provides an interface to create Strings in a Stats database. This
+ * string object is mainly provided to add tags and other informations to the
+ * Stats database. StatString doesn't provide 'add_stats' support so if you
+ * want to add two StatStrings object then do it manually.
+ *
+ * Maximum length of this string is 256 bytes.
+ */
+class StatString : public StatObjBase {
+
+    private:
+        W64 offset;
+        char* default_var;
+
+        inline void set_default_var_ptr()
+        {
+            if(default_stats) {
+                default_var = (char*)(default_stats->base() + offset);
+            } else {
+                default_var = NULL;
+            }
+        }
+
+    public:
+
+        static const int MAX_STAT_STR_SIZE = 256;
+
+        /**
+         * @brief Default constructor
+         *
+         * @param name Name of the stats object
+         * @param parent Parent Statable object of this
+         */
+        StatString(const char *name, Statable *parent)
+            : StatObjBase(name, parent)
+        {
+            StatsBuilder& builder = StatsBuilder::get();
+
+            offset = builder.get_offset(sizeof(char) * MAX_STAT_STR_SIZE);
+
+            set_default_var_ptr();
+        }
+
+        /**
+         * @brief Set the default Stats*
+         *
+         * @param stats A pointer to Stats structure
+         */
+        void set_default_stats(Stats *stats)
+        {
+            StatObjBase::set_default_stats(stats);
+            set_default_var_ptr();
+            assert(default_var);
+        }
+
+        /**
+         * @brief Copy string from given char *
+         *
+         * @param str A char* string to copy from
+         */
+        inline char* operator= (const char* str)
+        {
+            if(strlen(str) >= MAX_STAT_STR_SIZE) {
+                assert(0);
+            }
+
+            assert(default_var);
+
+            strcpy(default_var, str);
+
+            return default_var;
+        }
+
+        /**
+         * @brief Copy string from given stringbuf
+         *
+         * @param str A stringbuf object to copy from
+         */
+        inline char* operator= (const stringbuf& str)
+        {
+            if(str.size() >= MAX_STAT_STR_SIZE) {
+                assert(0);
+            }
+
+            return (*this) = str.buf;
+        }
+
+        /**
+         * @brief Copy string from given char * to specified Stats
+         *
+         * @param stats A Stats pointer to specify database
+         * @param str A char* string to copy from
+         */
+        inline void set(Stats *stats, const char* str)
+        {
+            if(strlen(str) >= MAX_STAT_STR_SIZE) {
+                assert(0);
+            }
+
+            char* var = (*this)(stats);
+            assert(var);
+
+            strcpy(var, str);
+        }
+
+        /**
+         * @brief Copy string from given stringbuf to specified Stats
+         *
+         * @param stats A Stats pointer to specify database
+         * @param str A stringbuf object to copy from
+         */
+        inline void set(Stats *stats, const stringbuf& str)
+        {
+            this->set(stats, str.buf);
+        }
+
+        /**
+         * @brief Get a char* of given Stats database
+         *
+         * @param stats A Stats database pointer
+         */
+        inline char* operator()(Stats *stats) const
+        {
+            return (char*)(stats->base() + offset);
+        }
+
+        /**
+         * @brief Dump string of given database to given ostream
+         *
+         * @param os stream to dump
+         * @param stats Stats database to read string from
+         */
+        ostream& dump(ostream& os, Stats *stats) const
+        {
+            char* var = (*this)(stats);
+
+            os << name << ":" << var << "\n";
+
+            return os;
+        }
+
+        /**
+         * @brief Dump string of given database in YAML format
+         *
+         * @param out dump stream in this YAML Emitter
+         * @param stats Stats database to read string from
+         */
+        YAML::Emitter& dump(YAML::Emitter &out, Stats *stats) const
+        {
+            char* var = (*this)(stats);
+
+            out << YAML::Key << (char *)name;
+            out << YAML::Value << var;
+
+            return out;
+        }
+
+        void add_stats(Stats& dest_stats, Stats& src_stats)
+        {
+            /* NOTE: We don't do auto addition os stats string */
         }
 };
 

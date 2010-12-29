@@ -86,6 +86,15 @@ inline Context& contextof(W8 i) {
 	return *ptl_contexts[i];
 }
 
+/* Simulation related stats like tags, benchmark name etc.*/
+struct SimStats : public Statable {
+    StatString tags;
+    SimStats() :
+        Statable("sim_stats")
+        , tags("tags", this)
+    { }
+};
+
 /* Checker */
 extern Context* checker_context;
 
