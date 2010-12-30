@@ -1896,6 +1896,8 @@ OutOfOrderMachine::OutOfOrderMachine(const char* name) {
   cerr << "initing the ooomachine", endl;
   machine_name = name;
   addmachine(machine_name, this);
+
+  disable_dump();
 }
 
 OutOfOrderMachine::~OutOfOrderMachine() {

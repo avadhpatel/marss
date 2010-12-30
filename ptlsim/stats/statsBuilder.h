@@ -6,6 +6,7 @@
 #include <superstl.h>
 
 #include <yaml/yaml.h>
+#include <bson/bson.h>
 
 #define STATS_SIZE 1024*1024
 
@@ -29,6 +30,7 @@ class Statable {
     private:
         dynarray<Statable*> childNodes;
         dynarray<StatObjBase*> leafs;
+        bool dump_disabled;
         Statable *parent;
         stringbuf name;
 
@@ -126,6 +128,16 @@ class Statable {
                 bool force=false);
 
         /**
+         * @brief Disable dumping this Stats node and its child
+         */
+        void disable_dump() { dump_disabled = true;  }
+
+        /**
+         * @brief Enable dumping this Stats node and its child
+         */
+        void enable_dump()  { dump_disabled = false; }
+
+        /**
          * @brief Dump string representation of  Statable and it childs
          *
          * @param os
@@ -144,6 +156,16 @@ class Statable {
          * @return
          */
         YAML::Emitter& dump(YAML::Emitter &out, Stats *stats);
+
+        /**
+         * @brief Dump BSON representation to Stats
+         *
+         * @param bb BSON buffer
+         * @param stats Stats database to read data from
+         *
+         * @return updated BSON buffer
+         */
+        bson_buffer* dump(bson_buffer *bb, Stats *stats);
 
         void add_stats(Stats& dest_stats, Stats& src_stats);
 };
@@ -245,6 +267,16 @@ class StatsBuilder {
          */
         YAML::Emitter& dump(Stats *stats, YAML::Emitter &out) const;
 
+        /**
+         * @brief Dump Stats tree in BSON format
+         *
+         * @param stats Stats database
+         * @param bb BSON buffer to dump into
+         *
+         * @return updated BSON buffer
+         */
+        bson_buffer* dump(Stats *stats, bson_buffer *bb) const;
+
         void add_stats(Stats& dest_stats, Stats& src_stats)
         {
             rootNode->add_stats(dest_stats, src_stats);
@@ -291,10 +323,12 @@ class StatObjBase {
         Stats *default_stats;
         Statable *parent;
         stringbuf name;
+        bool dump_disabled;
 
     public:
         StatObjBase(const char *name, Statable *parent)
             : parent(parent)
+              , dump_disabled(false)
         {
             this->name = name;
             default_stats = parent->get_default_stats();
@@ -306,16 +340,22 @@ class StatObjBase {
         virtual ostream& dump(ostream& os, Stats *stats) const = 0;
         virtual YAML::Emitter& dump(YAML::Emitter& out,
                 Stats *stats) const = 0;
+        virtual bson_buffer* dump(bson_buffer* out,
+                Stats *stats) const = 0;
 
         virtual void add_stats(Stats& dest_stats, Stats& src_stats) = 0;
+
+        void disable_dump() { dump_disabled = true; }
+        void enable_dump() { dump_disabled = false; }
+        bool is_dump_disabled() const { return dump_disabled; }
 };
 
 /**
  * @brief Create a Stat object of type T
  *
  * This class povides an easy interface to create basic statistics counters for
- * the simulator. It also provides easy way to generate YAML representation of
- * the the object for final Stats dump.
+ * the simulator. It also provides easy way to generate YAML and BSON
+ * prepresentation of the the object for final Stats dump.
  */
 template<typename T>
 class StatObj : public StatObjBase {
@@ -580,6 +620,8 @@ class StatObj : public StatObjBase {
          */
         ostream& dump(ostream& os, Stats *stats) const
         {
+            if(is_dump_disabled()) return os;
+
             T var = (*this)(stats);
 
             os << name << ":" << var << "\n";
@@ -597,12 +639,32 @@ class StatObj : public StatObjBase {
          */
         YAML::Emitter& dump(YAML::Emitter &out, Stats *stats) const
         {
+            if(is_dump_disabled()) return out;
+
             T var = (*this)(stats);
 
             out << YAML::Key << (char *)name;
             out << YAML::Value << var;
 
             return out;
+        }
+
+        /**
+         * @brief Dump StatObj to BSON format
+         *
+         * @param bb BSON buffer to dump into
+         * @param stats Stats database to read string from
+         *
+         * @return updated BSON buffer
+         */
+        bson_buffer* dump(bson_buffer *bb, Stats *stats) const
+        {
+            if(is_dump_disabled()) return bb;
+
+            T var = (*this)(stats);
+
+            // FIXME : Currently we dump all values as 'long'
+            return bson_append_long(bb, (char *)name, var);
         }
 
         void add_stats(Stats& dest_stats, Stats& src_stats)
@@ -707,6 +769,8 @@ class StatArray : public StatObjBase {
          */
         ostream& dump(ostream &os, Stats *stats) const
         {
+            if(is_dump_disabled()) return os;
+
             os << name << ": ";
             BaseArr& arr = (*this)(stats);
             foreach(i, size) {
@@ -727,6 +791,8 @@ class StatArray : public StatObjBase {
          */
         YAML::Emitter& dump(YAML::Emitter &out, Stats *stats) const
         {
+            if(is_dump_disabled()) return out;
+
             out << YAML::Key << (char *)name;
             out << YAML::Value;
 
@@ -742,6 +808,32 @@ class StatArray : public StatObjBase {
             out << YAML::Block;
 
             return out;
+        }
+
+        /**
+         * @brief Dump StatArray to BSON format
+         *
+         * @param bb BSON buffer to dump into
+         * @param stats Stats database to read string from
+         *
+         * @return updated BSON buffer
+         */
+        bson_buffer* dump(bson_buffer *bb, Stats *stats) const
+        {
+            if(is_dump_disabled()) return bb;
+
+            char numstr[16];
+            bson_buffer *arr;
+
+            arr = bson_append_start_array(bb, (char *)name);
+
+            BaseArr& val = (*this)(stats);
+            foreach(i, size) {
+                bson_numstr(numstr, i);
+                bson_append_long(arr, numstr, val[i]);
+            }
+
+            return bson_append_finish_object(arr);
         }
 
         void add_stats(Stats& dest_stats, Stats& src_stats)
@@ -769,6 +861,7 @@ class StatString : public StatObjBase {
     private:
         W64 offset;
         char* default_var;
+        char split[8];
 
         inline void set_default_var_ptr()
         {
@@ -792,11 +885,26 @@ class StatString : public StatObjBase {
         StatString(const char *name, Statable *parent)
             : StatObjBase(name, parent)
         {
+            split[0] = '\0';
+
             StatsBuilder& builder = StatsBuilder::get();
 
             offset = builder.get_offset(sizeof(char) * MAX_STAT_STR_SIZE);
 
             set_default_var_ptr();
+        }
+
+        /**
+         * @brief Set string split string
+         *
+         * @param split_val string value to be used as splitter
+         *
+         * When you specify splitter string, the string will be automatically
+         * split into an array and that array will be dumped.
+         */
+        void set_split(const char *split_val)
+        {
+            strcpy(split, split_val);
         }
 
         /**
@@ -890,9 +998,23 @@ class StatString : public StatObjBase {
          */
         ostream& dump(ostream& os, Stats *stats) const
         {
+            if(is_dump_disabled()) return os;
+
             char* var = (*this)(stats);
 
-            os << name << ":" << var << "\n";
+            if(split[0] != '\0') {
+                dynarray<stringbuf*> tags;
+                stringbuf st_tags; st_tags << var;
+                st_tags.split(tags, split);
+
+                os << name << "[";
+                foreach(i, tags.size()) {
+                    os << i << ":" << tags[i]->buf << ", ";
+                }
+                os << "\n";
+            } else {
+                os << name << ":" << var << "\n";
+            }
 
             return os;
         }
@@ -905,12 +1027,66 @@ class StatString : public StatObjBase {
          */
         YAML::Emitter& dump(YAML::Emitter &out, Stats *stats) const
         {
+            if(is_dump_disabled()) return out;
+
             char* var = (*this)(stats);
 
-            out << YAML::Key << (char *)name;
-            out << YAML::Value << var;
+            if(split[0] != '\0') {
+                dynarray<stringbuf*> tags;
+                stringbuf st_tags; st_tags << var;
+                st_tags.split(tags, split);
+
+                out << YAML::Key << (char *)name;
+                out << YAML::Value;
+
+                out << YAML::Flow;
+                out << YAML::BeginSeq;
+
+                foreach(i, tags.size()) {
+                    out << tags[i]->buf;
+                }
+
+                out << YAML::EndSeq;
+                out << YAML::Block;
+            } else {
+                out << YAML::Key << (char *)name;
+                out << YAML::Value << var;
+            }
 
             return out;
+        }
+
+        /**
+         * @brief Dump StatString to BSON format
+         *
+         * @param bb BSON buffer to dump into
+         * @param stats Stats database to read string from
+         *
+         * @return updated BSON buffer
+         */
+        bson_buffer* dump(bson_buffer *bb, Stats *stats) const
+        {
+            if(is_dump_disabled()) return bb;
+
+            char* var = (*this)(stats);
+
+            if(split[0] != '\0') {
+                dynarray<stringbuf*> tags;
+                stringbuf st_tags; st_tags << var;
+                st_tags.split(tags, split);
+
+                char numstr[16];
+                bson_buffer *arr = bson_append_start_array(bb, (char *)name);
+
+                foreach(i, tags.size()) {
+                    bson_numstr(numstr, i);
+                    bson_append_string(arr, numstr, tags[i]->buf);
+                }
+
+                return bson_append_finish_object(arr);
+            }
+
+            return bson_append_string(bb, (char *)name, var);
         }
 
         void add_stats(Stats& dest_stats, Stats& src_stats)

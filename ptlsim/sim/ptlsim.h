@@ -92,7 +92,9 @@ struct SimStats : public Statable {
     SimStats() :
         Statable("sim_stats")
         , tags("tags", this)
-    { }
+    {
+        tags.set_split(",");
+    }
 };
 
 /* Checker */
@@ -321,7 +323,7 @@ struct PTLsimConfig {
   stringbuf mongo_server;
   W64 mongo_port;
   stringbuf bench_name;
-  stringbuf db_tags;
+  stringbuf tags;
 
   // Test Framework
   bool run_tests;

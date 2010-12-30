@@ -1522,6 +1522,7 @@ struct SequentialMachine: public PTLsimMachine {
     // Add to the list of available core types
     addmachine(name, this);
     init_done = 0;
+    disable_dump();
   }
 
   //

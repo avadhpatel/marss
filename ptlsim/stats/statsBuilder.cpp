@@ -82,6 +82,8 @@ void Statable::set_default_stats(Stats *stats, bool recursive, bool force)
 
 ostream& Statable::dump(ostream &os, Stats *stats)
 {
+    if(dump_disabled) return os;
+
     os << name << "\t# Node\n";
 
     // First print all the leafs
@@ -99,6 +101,8 @@ ostream& Statable::dump(ostream &os, Stats *stats)
 
 YAML::Emitter& Statable::dump(YAML::Emitter &out, Stats *stats)
 {
+    if(dump_disabled) return out;
+
     if(name.size()) {
         out << YAML::Key << (char *)name;
         out << YAML::Value;
@@ -120,6 +124,33 @@ YAML::Emitter& Statable::dump(YAML::Emitter &out, Stats *stats)
     out << YAML::EndMap;
 
     return out;
+}
+
+bson_buffer* Statable::dump(bson_buffer *bb, Stats *stats)
+{
+    if(dump_disabled) return bb;
+
+    bson_buffer *obj = bb;
+
+    if(name.size()) {
+        obj = bson_append_start_object(bb, (char *)name);
+    }
+
+    // First print all the leafs
+    foreach(i, leafs.count()) {
+        leafs[i]->dump(obj, stats);
+    }
+
+    // Now print all the child nodes
+    foreach(i, childNodes.count()) {
+        childNodes[i]->dump(obj, stats);
+    }
+
+    if(name.size()) {
+        bb = bson_append_finish_object(obj);
+    }
+
+    return bb;
 }
 
 void Statable::add_stats(Stats& dest_stats, Stats& src_stats)
@@ -173,6 +204,11 @@ YAML::Emitter& StatsBuilder::dump(Stats *stats, YAML::Emitter &out) const
     rootNode->dump(out, stats);
 
     return out;
+}
+
+bson_buffer* StatsBuilder::dump(Stats *stats, bson_buffer *bb) const
+{
+    return rootNode->dump(bb, stats);
 }
 
 void StatObjBase::set_default_stats(Stats *stats)

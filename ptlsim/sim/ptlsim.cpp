@@ -185,7 +185,7 @@ void PTLsimConfig::reset() {
   mongo_server = "127.0.0.1";
   mongo_port = 27017;
   bench_name = "";
-  db_tags = "";
+  tags = "";
 
   // Test Framework
   run_tests = 0;
@@ -328,7 +328,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(mongo_server,         "mongo-server",         "Server Address running MongoDB");
   add(mongo_port,           "mongo-port",           "MongoDB server's port address");
   add(bench_name,           "bench-name",           "Benchmark Name added to database");
-  add(db_tags,              "db-tags",              "tags added to database");
+  add(tags,              "tags",              "tags added to database");
 
   // Test Framework
   section("Unit Test Framework");
@@ -689,6 +689,8 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
     }
 
     qemu_free(config_str);
+
+    ptl_machine.disable_dump();
 }
 
 static int ctx_counter = 0;
@@ -950,13 +952,11 @@ void add_bson_PTLsimStats(PTLsimStats *stats, bson_buffer *bb, const char *snaps
 
 /* Write all the stats to MongoDB */
 void write_mongo_stats() {
-    bson bout;
-    bson_buffer bb;
+    bson *bout;
+    bson_buffer *bb;
     char numstr[4];
-    dynarray<stringbuf*> tags;
     mongo_connection conn[1];
     mongo_connection_options opts;
-    const char *col = "benchmarks";
     const char *ns = "marss.benchmarks";
 
     /* First setup the connection to MongoDB */
@@ -967,45 +967,36 @@ void write_mongo_stats() {
     if(mongo_connect(conn, &opts)){
         cerr << "Failed to connect to MongoDB server at ", opts.host,
              ":", opts.port, " , **Skipping Mongo Datawrite**", endl;
+        ptl_logfile << "Failed to connect to MongoDB server at ", opts.host,
+             ":", opts.port, " , **Skipping Mongo Datawrite**", endl;
         config.enable_mongo = 0;
         return;
     }
 
-    /* Parse the tags */
-    config.db_tags.split(tags, ",");
-
-    /*
-     * Now write user, kernel and global stats into database
-     * One stats document structure:
-     *  { '_id' : (unique id for this benchmark run),
-     *    'benchmark' : (name of the benchmark, like gcc),
-     *    'stats_type' : (user|kernel|global),
-     *    'tags' : [ array of tags specified in config.db_tags ],
-     *    'stats' : { PTLsimStats Object }
-     *  }
-     */
+    /* Now write user, kernel and global stats into database */
     foreach(i, 3) {
-        PTLsimStats *stats_;
-        bson_buffer_init(&bb);
-        bson_append_new_oid(&bb, "_id");
-        switch(i) {
-            case 0: stats_ = &user_stats; break;
-            case 1: stats_ = &kernel_stats; break;
-            case 2: stats_ = &global_stats; break;
-        }
-        bson_append_string(&bb, "benchmark", config.bench_name);
-        bson_append_string(&bb, "stats_type", snapshot_names[i]);
-        bson_append_start_array(&bb, "tags");
-        foreach(j, tags.size()) {
-            bson_numstr(numstr, j);
-            bson_append_string(&bb, numstr, tags[j]->buf);
-        }
-        bson_append_finish_object(&bb);
-        add_bson_PTLsimStats(stats_, &bb, "stats");
-        bson_from_buffer(&bout, &bb);
+        Stats *stats_;
 
-        mongo_insert( conn , ns , &bout );
-        bson_destroy(&bout);
+        bb = (bson_buffer*)qemu_mallocz(sizeof(bson_buffer));
+        bout = (bson*)qemu_mallocz(sizeof(bson));
+
+        bson_buffer_init(bb);
+        bson_append_new_oid(bb, "_id");
+
+        switch(i) {
+            case 0: stats_ = n_user_stats; break;
+            case 1: stats_ = n_kernel_stats; break;
+            case 2: stats_ = n_global_stats; break;
+        }
+
+        bb = (StatsBuilder::get()).dump(stats_, bb);
+        bson_from_buffer(bout, bb);
+
+        mongo_insert(conn, ns, bout);
+        bson_destroy(bout);
+
+        qemu_free(bb);
+        qemu_free(bout);
     }
 
     /* Close the connection with MongoDB */
@@ -1043,8 +1034,8 @@ void setup_sim_stats()
     base_tags << hostinfo.nodename << "." << hostinfo.domainname << ",";
     base_tags << date << ",";
 
-    if(config.db_tags.size() > 0)
-        base_tags << config.db_tags;
+    if(config.tags.size() > 0)
+        base_tags << config.tags << ",";
 
     kernel_tags << base_tags << "kernel";
     user_tags << base_tags << "user";
@@ -1058,8 +1049,6 @@ void setup_sim_stats()
 
 void dump_yaml_stats()
 {
-    setup_sim_stats();
-
     YAML::Emitter k_out, u_out, g_out;
 
     (StatsBuilder::get()).dump(n_kernel_stats, k_out);
@@ -1251,6 +1240,8 @@ extern "C" uint8_t ptl_simulate() {
 	statswriter.write(&global_stats, global_name);
 
 	statswriter.close();
+
+    setup_sim_stats();
 
     if(config.yaml_stats_filename.set()) {
         dump_yaml_stats();
