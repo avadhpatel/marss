@@ -255,7 +255,7 @@ void ptlsim_init() {
     register_assert_cb(&dump_bbcache_to_logfile);
 }
 
-void ptl_config_from_file(char *filename) {
+void ptl_config_from_file(const char *filename) {
     int const MAX_CMD_SIZE = 1024;
     char * line = NULL;
     size_t len = 0;
@@ -777,6 +777,8 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
         return virtaddr;
     }
 
+    Waddr paddr;
+
     bool page_not_present;
     bool page_read_only;
     bool page_kernel_only;
@@ -794,7 +796,7 @@ redo:
     } else {
         tlb_addr = tlb_table[mmu_index][index].addr_write;
     }
-
+	Waddr host_virtaddr;
     if(logable(10)) {
         ptl_logfile << "mmu_index:", mmu_index, " index:", index,
                     " virtaddr:", hexstring(virtaddr, 64),
@@ -817,7 +819,18 @@ redo:
 
         /* we find valid TLB entry, return the physical address for it */
         mmio = 0;
-        return (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
+
+        host_virtaddr = (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
+        if (unlikely(get_phys_memory_address(host_virtaddr, paddr) < 0))
+        {
+            // Since the entry is in the TLB, it should also have a mapping, so this case should never arise
+            printf("ERROR: Cannot find mapping for host virtual addr %lx\n", (unsigned long)virtaddr);
+            assert(0);
+        }
+        if (paddr > qemu_ram_size) {
+            printf("ERROR: guest physical address 0x%llx is out of bounds\n", paddr);
+        }
+        return paddr;
     }
 
     mmio = 0;
@@ -887,6 +900,12 @@ bool Context::has_page_fault(Waddr virtaddr, int store) {
 
 int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr& faultaddr) {
 
+
+    // this function copies from source_paddr which is invalid since now it is a guest physical
+    // address. I don't think this function is ever called, but to make sure. If it does get
+    // called, the guest physical address will have to be converted into a host virtual address
+    // before being able to use this function again
+    assert(0);
     int n = 0 ;
 
     int exception;
@@ -1267,4 +1286,9 @@ bool Context::try_handle_fault(Waddr virtaddr, bool store) {
         ptl_logfile << "Tlb fill for addr: ", (void*)virtaddr, endl, flush;
 
     return true;
+}
+
+extern "C" void ptl_add_phys_memory_mapping(int8_t cpu_index, uint64_t host_vaddr, uint64_t guest_paddr)
+{
+  contextof(cpu_index).hvirt_gphys_map[(Waddr)host_vaddr] = (Waddr)guest_paddr;
 }

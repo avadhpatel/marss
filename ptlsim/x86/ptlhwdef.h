@@ -18,6 +18,10 @@ extern "C" {
 #include <exec.h>
 }
 
+// for virtual -> physical address mapping
+#include <map>
+using std::map;
+
 #define PTLSIM_VIRT_BASE 0x0000000000000000ULL // PML4 entry 0
 
 #define PTLSIM_FIRST_READ_ONLY_PAGE    0x10000ULL // 64KB: entry point rip
@@ -830,6 +834,8 @@ struct Context: public CPUX86State {
   W64 reg_fpstack;
   W64 page_fault_addr;
   W64 exec_fault_addr;
+  map<Waddr, Waddr> hvirt_gphys_map;
+
 
   void change_runstate(int new_state) { running = new_state; }
 
@@ -909,6 +915,19 @@ struct Context: public CPUX86State {
 	  int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
 
 	  return &tlb_table[mmu_idx][index];
+  }
+
+  int get_phys_memory_address(Waddr host_vaddr, Waddr &guest_paddr)
+  {
+    map<Waddr, Waddr>::iterator it;
+    if ((it = hvirt_gphys_map.find(host_vaddr & TARGET_PAGE_MASK)) == hvirt_gphys_map.end())
+    {
+      guest_paddr=0;
+      return -1;
+    }
+
+    guest_paddr = it->second + (host_vaddr & ~TARGET_PAGE_MASK);
+    return 0;
   }
 
   int copy_from_user(void* target, Waddr source, int bytes) ;

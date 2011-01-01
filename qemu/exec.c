@@ -349,6 +349,14 @@ static inline PageDesc *page_find(target_ulong index)
     return p + (index & (L2_SIZE - 1));
 }
 
+/*
+	---------------------------------------------
+	|    OFFSET    |   L1 BITS    |   L2 BITS   |
+	---------------------------------------------
+	| <--L1SIZE--> | <--L1SIZE--> | <--L2SIZE-->|
+
+ */
+
 static PhysPageDesc *phys_page_find_alloc(target_phys_addr_t index, int alloc)
 {
     void **lp, **p;
@@ -360,6 +368,8 @@ static PhysPageDesc *phys_page_find_alloc(target_phys_addr_t index, int alloc)
 #if TARGET_PHYS_ADDR_SPACE_BITS > (32 + L1_BITS)
 #error unsupported TARGET_PHYS_ADDR_SPACE_BITS
 #endif
+/* for large address spaces, first use the L1_SIZE bits above the L1 bits to offset into the L1 map */
+
     lp = p + ((index >> (L1_BITS + L2_BITS)) & (L1_SIZE - 1));
     p = *lp;
     if (!p) {
@@ -371,6 +381,7 @@ static PhysPageDesc *phys_page_find_alloc(target_phys_addr_t index, int alloc)
         *lp = p;
     }
 #endif
+	 /* use the L1 bits to index the map */
     lp = p + ((index >> L2_BITS) & (L1_SIZE - 1));
     pd = *lp;
     if (!pd) {
@@ -385,6 +396,7 @@ static PhysPageDesc *phys_page_find_alloc(target_phys_addr_t index, int alloc)
           pd[i].region_offset = (index + i) << TARGET_PAGE_BITS;
         }
     }
+	 /* pd is the base of an array of PhysPageDescs, so add the L2 offset to that to get the actual PhysPageDesc of interest */
     return ((PhysPageDesc *)pd) + (index & (L2_SIZE - 1));
 }
 
@@ -1994,7 +2006,6 @@ int tlb_set_page_exec(CPUState *env, target_ulong vaddr,
         /* IO memory case (romd handled later) */
         address |= TLB_MMIO;
     }
-    addend = (unsigned long)qemu_get_ram_ptr(pd & TARGET_PAGE_MASK);
     if ((pd & ~TARGET_PAGE_MASK) <= IO_MEM_ROM) {
         /* Normal RAM.  */
         iotlb = pd & TARGET_PAGE_MASK;
@@ -2029,10 +2040,19 @@ int tlb_set_page_exec(CPUState *env, target_ulong vaddr,
         }
     }
 
+	 /* get_ram_ptr returns block->host + (ARG - block->offset), i.e. the host pointer to the into the ramblock where this address is */
+    addend = (unsigned long)qemu_get_ram_ptr(pd & TARGET_PAGE_MASK);
+#ifdef MARSS_QEMU
+	ptl_add_phys_memory_mapping(env->cpu_index, addend & TARGET_PAGE_MASK, paddr & TARGET_PAGE_MASK);
+#endif
+
     index = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     env->iotlb[mmu_idx][index] = iotlb - vaddr;
     te = &env->tlb_table[mmu_idx][index];
+
+	 /* in other words: te->addend + guest_vaddr = host virtual address */
     te->addend = addend - vaddr;
+
     if (prot & PAGE_READ) {
         te->addr_read = address;
     } else {
@@ -2058,7 +2078,7 @@ int tlb_set_page_exec(CPUState *env, target_ulong vaddr,
     } else {
         te->addr_write = -1;
     }
-    return ret;
+    return ret; /* always returns 0 */
 }
 
 #else
