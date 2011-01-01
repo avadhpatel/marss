@@ -2,6 +2,8 @@
 #ifndef DEFCORE_STATS_H
 #define DEFCORE_STATS_H
 
+#include <ptlhwdef.h>
+#include <branchpred.h>
 #include <statsBuilder.h>
 #include <defcore-const.h>
 
@@ -49,7 +51,7 @@ namespace DefaultCoreModel {
             fetch(Statable *parent)
                 : Statable("fetch", parent)
                   , stop(this)
-                  , opclass("opclass", this)
+                  , opclass("opclass", this, opclass_names)
                   , width("width", this)
                   , blocks("blocks", this)
                   , uops("uops", this)
@@ -147,7 +149,7 @@ namespace DefaultCoreModel {
             dispatch(Statable *parent)
                 : Statable("dispatch", parent)
                   , redispatch(this)
-                  , cluster("cluster", this)
+                  , cluster("cluster", this, cluster_names)
             {}
         } dispatch;
 
@@ -184,7 +186,7 @@ namespace DefaultCoreModel {
                   , result(this)
                   , uops("uops", this)
                   , uipc("uipc", this)
-                  , opclass("opclass", this)
+                  , opclass("opclass", this, opclass_names)
             {}
         } issue;
 
@@ -194,7 +196,7 @@ namespace DefaultCoreModel {
 
             writeback(Statable *parent)
                 : Statable("writeback", parent)
-                  , writebacks("writebacks", this)
+                  , writebacks("writebacks", this, phys_reg_file_names)
             {}
         } writeback;
 
@@ -287,7 +289,7 @@ namespace DefaultCoreModel {
                   , insns("insns", this)
                   , uipc("uipc", this)
                   , ipc("ipc", this)
-                  , opclass("opclass", this)
+                  , opclass("opclass", this, opclass_names)
                   , result(this)
                   , fail(this)
                   , setflags(this)
@@ -327,10 +329,10 @@ namespace DefaultCoreModel {
                 : Statable("branchpred", parent)
                   , predictions("predictions", this)
                   , updates("updates", this)
-                  , cond("cond", this)
-                  , indir("indir", this)
-                  , ret("ret", this)
-                  , summary("summary", this)
+                  , cond("cond", this, branchpred_outcome_names)
+                  , indir("indir", this, branchpred_outcome_names)
+                  , ret("ret", this, branchpred_outcome_names)
+                  , summary("summary", this, branchpred_outcome_names)
                   , ras(this)
             {}
         } branchpred;
@@ -444,8 +446,8 @@ namespace DefaultCoreModel {
                 , forward(this)
                 , dependency(this)
                 , type(this)
-                , size("size", this)
-                , datatype("datatype", this)
+                , size("size", this, sizeshift_names)
+                , datatype("datatype", this, datatype_names)
                 {}
             };
 

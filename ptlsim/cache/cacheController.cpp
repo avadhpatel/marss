@@ -559,8 +559,6 @@ bool CacheController::cache_hit_cb(void *arg)
                 kernel_req);
 	}
 
-    new_stats.testArr(n_kernel_stats)[2]++;
-
 	if(queueEntry->prefetch) {
 		clear_entry_cb(queueEntry);
 	} else if(queueEntry->sender == upperInterconnect_ ||

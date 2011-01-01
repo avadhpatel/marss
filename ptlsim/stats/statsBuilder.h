@@ -685,6 +685,7 @@ class StatArray : public StatObjBase {
     private:
         W64 offset;
         T* default_var;
+        const char** labels;
 
         inline void set_default_var_ptr()
         {
@@ -705,8 +706,9 @@ class StatArray : public StatObjBase {
          * @param name Name of the stat array
          * @param parent Parent Statable object of this
          */
-        StatArray(const char *name, Statable *parent)
+        StatArray(const char *name, Statable *parent, const char** labels_=NULL)
             : StatObjBase(name, parent)
+              , labels(labels_)
         {
             StatsBuilder &builder = StatsBuilder::get();
 
@@ -796,16 +798,28 @@ class StatArray : public StatObjBase {
             out << YAML::Key << (char *)name;
             out << YAML::Value;
 
-            out << YAML::Flow;
-            out << YAML::BeginSeq;
+            if(labels) {
+                out << YAML::BeginMap;
 
-            BaseArr& arr = (*this)(stats);
-            foreach(i, size) {
-                out << arr[i];
+                BaseArr& arr = (*this)(stats);
+                foreach(i, size) {
+                    out << YAML::Key << labels[i];
+                    out << YAML::Value << arr[i];
+                }
+
+                out << YAML::EndMap;
+            } else {
+                out << YAML::Flow;
+                out << YAML::BeginSeq;
+
+                BaseArr& arr = (*this)(stats);
+                foreach(i, size) {
+                    out << arr[i];
+                }
+
+                out << YAML::EndSeq;
+                out << YAML::Block;
             }
-
-            out << YAML::EndSeq;
-            out << YAML::Block;
 
             return out;
         }
@@ -825,12 +839,20 @@ class StatArray : public StatObjBase {
             char numstr[16];
             bson_buffer *arr;
 
-            arr = bson_append_start_array(bb, (char *)name);
-
             BaseArr& val = (*this)(stats);
-            foreach(i, size) {
-                bson_numstr(numstr, i);
-                bson_append_long(arr, numstr, val[i]);
+            if(labels) {
+                arr = bson_append_start_object(bb, (char *)name);
+
+                foreach(i, size) {
+                    bson_append_long(arr, labels[i], val[i]);
+                }
+            } else {
+                arr = bson_append_start_array(bb, (char *)name);
+
+                foreach(i, size) {
+                    bson_numstr(numstr, i);
+                    bson_append_long(arr, numstr, val[i]);
+                }
             }
 
             return bson_append_finish_object(arr);

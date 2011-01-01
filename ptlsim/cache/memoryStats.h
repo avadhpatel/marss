@@ -322,15 +322,16 @@ struct BaseCacheStats : public Statable
     StatObj<W64> annul;
     StatObj<W64> queueFull;
 
-    StatArray<W64, 5> testArr;
-
     BaseCacheStats(const char *name, Statable *parent=NULL)
         : Statable(name, parent)
           , cpurequest(this)
           , annul("annul", this)
           , queueFull("queueFull", this)
-          , testArr("TestArray", this)
     {}
+};
+
+static const char* mesi_state_names[4] = {
+    "Modified", "Exclusive", "Shared", "Invalid"
 };
 
 struct MESIStats : public BaseCacheStats {
@@ -348,9 +349,10 @@ struct MESIStats : public BaseCacheStats {
         StatArray<W64,4> cpu;
         hit_state (const char *name,Statable *parent)
             :Statable(name, parent)
-             ,snoop("snoop",this)
-             ,cpu("cpu",this)
-        {}
+             ,snoop("snoop",this, mesi_state_names)
+             ,cpu("cpu",this, mesi_state_names)
+        {
+        }
     } hit_state;
 
     StatArray<W64,16> state_transition;

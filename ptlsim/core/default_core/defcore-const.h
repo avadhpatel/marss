@@ -38,10 +38,6 @@ namespace DefaultCoreModel {
 
     enum { PHYSREG_NONE, PHYSREG_FREE, PHYSREG_WAITING, PHYSREG_BYPASS,
         PHYSREG_WRITTEN, PHYSREG_ARCH, PHYSREG_PENDINGFREE, MAX_PHYSREG_STATE };
-    static const char* physreg_state_names[MAX_PHYSREG_STATE] = {"none", "free",
-        "waiting", "bypass", "written", "arch", "pendingfree"};
-    static const char* short_physreg_state_names[MAX_PHYSREG_STATE] = {"-",
-        "free", "wait", "byps", "wrtn", "arch", "pend"};
 
     //
     // IMPORTANT! If you change this to be greater than 256, you MUST
@@ -141,6 +137,20 @@ namespace DefaultCoreModel {
     static const int UNALIGNED_PREDICTOR_SIZE = 4096;
 
     static const int THREAD_PAUSE_CYCLES = 20;
+
+    // String names used in stats labels
+    static const char* physreg_state_names[MAX_PHYSREG_STATE] = {"none", "free",
+        "waiting", "bypass", "written", "arch", "pendingfree"};
+    static const char* short_physreg_state_names[MAX_PHYSREG_STATE] = {"-",
+        "free", "wait", "byps", "wrtn", "arch", "pend"};
+
+#ifdef MULTI_IQ
+    static const char* cluster_names[MAX_CLUSTERS] = {"int0", "int1", "ld", "fp"};
+#else
+    static const char* cluster_names[MAX_CLUSTERS] = {"all"};
+#endif
+
+    static const char* phys_reg_file_names[PHYS_REG_FILE_COUNT] = {"int", "fp", "st", "br"};
 
 };
 

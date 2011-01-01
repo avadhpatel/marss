@@ -1789,16 +1789,8 @@ static inline void smc_cleardirty(Waddr page_addr) {
 	tlb_protect_code(page_addr);
 }
 
-
-//
-// This part is used when parsing stats.h to build the
-// data store template; these must be in sync with the
-// corresponding definitions elsewhere.
-//
-#ifdef DSTBUILD
 static const char* sizeshift_names[4] = {
   "1 (byte)", "2 (word)", "4 (dword)", "8 (qword)"
 };
-#endif
 #endif // __ASM_ONLY__
 #endif // _PTLHWDEF_H

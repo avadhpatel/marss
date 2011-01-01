@@ -1688,18 +1688,6 @@ namespace DefaultCoreModel {
 
 #endif // INSIDE_DEFCORE
 
-    //
-    // This part is used when parsing stats.h to build the
-    // data store template; these must be in sync with the
-    // corresponding definitions elsewhere.
-    //
-#ifdef MULTI_IQ
-    static const char* cluster_names[MAX_CLUSTERS] = {"int0", "int1", "ld", "fp"};
-#else
-    static const char* cluster_names[MAX_CLUSTERS] = {"all"};
-#endif
-
-    static const char* phys_reg_file_names[PHYS_REG_FILE_COUNT] = {"int", "fp", "st", "br"};
 };
 
 
