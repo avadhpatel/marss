@@ -70,7 +70,6 @@ void PTLsimConfig::reset() {
   domain = (W64)(-1);
   run = 0;
   stop = 0;
-  native = 0;
   kill = 0;
   flush_command_queue = 0;
   simswitch = 0;
@@ -141,14 +140,10 @@ void PTLsimConfig::reset() {
   realtime = 0;
   mask_interrupts = 0;
   console_mfn = 0;
-  pause = 0;
   perfctr_name.reset();
   force_native = 0;
   kill_after_finish = 0;
   exit_after_finish = 0;
-
-  continuous_validation = 0;
-  validation_start_cycle = 0;
 
   perfect_cache = 0;
 
@@ -162,9 +157,6 @@ void PTLsimConfig::reset() {
   /// memory hierarchy implementation
   ///
 
-  number_of_cores = 1;
-  cores_per_L2 = 1;
-  max_L1_req = 16;
   cache_config_type = "private_L2";
 
   checker_enabled = 0;
@@ -188,7 +180,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   section("Action (specify only one)");
   add(run,                          "run",                  "Run under simulation");
   add(stop,                         "stop",                 "Stop current simulation run and wait for command");
-  add(native,                       "native",               "Switch to native mode");
   add(kill,                         "kill",                 "Kill PTLsim inside domain (and ptlmon), then shutdown domain");
   add(flush_command_queue,          "flush",                "Flush all queued commands, stop the current simulation run and wait");
   add(simswitch,                    "switch",               "Switch back to PTLsim while in native mode");
@@ -252,15 +243,14 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(realtime,                     "realtime",             "Operate in real time: no time dilation (not accurate for I/O intensive workloads!)");
   add(mask_interrupts,              "maskints",             "Mask all interrupts (required for guaranteed deterministic behavior)");
   add(console_mfn,                  "console-mfn",          "Track the specified Xen console MFN");
-  add(pause,                        "pause",                "Pause domain after using -native");
   add(perfctr_name,                 "perfctr",              "Performance counter generic name for hardware profiling during native mode");
   add(force_native,                 "force-native",         "Force native mode: ignore attempts to switch to simulation");
   add(kill_after_finish,            "kill-after-finish",     "kill both simulator and domainU after finish simulation");
   add(exit_after_finish,            "exit-after-finish",     "exit simulator keep domainU after finish simulation");
 
   section("Validation");
-  add(continuous_validation,        "validate",             "Continuous validation: validate against known-good sequential model");
-  add(validation_start_cycle,       "validate-start-cycle", "Start continuous validation after N cycles");
+  add(checker_enabled, 		"enable-checker", 		"Enable emulation based checker");
+  add(checker_start_rip,          "checker-startrip",     "Start checker at specified RIP");
 
   section("Out of Order Core (ooocore)");
   add(perfect_cache,                "perfect-cache",        "Perfect cache performance: all loads and stores hit in L1");
@@ -292,13 +282,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
 
   section("Memory Hierarchy Configuration");
   //  add(memory_log,               "memory-log",               "log memory debugging info");
-  add(number_of_cores,               "number-of-cores",               "number of cores");
-  add(cores_per_L2,               "cores-per-L2",               "number of cores sharing a L2 cache");
-  add(max_L1_req,               "max-L1-req",               "max number of L1 requests");
   add(cache_config_type,               "cache-config-type",               "possible config are shared_L2, private_L2");
-
-  add(checker_enabled, 		"enable-checker", 		"Enable emulation based checker");
-  add(checker_start_rip,          "checker-startrip",     "Start checker at specified RIP");
 
   // MongoDB
   section("bus configuration");
@@ -519,7 +503,7 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   if (first_time) {
     if (!config.quiet) {
       print_sysinfo(cerr);
-      if (!(config.run | config.native | config.kill))
+      if (!(config.run | config.kill))
         cerr << "Simulator is now waiting for a 'run' command.", endl, flush;
     }
     print_banner(ptl_logfile, *stats, argc, argv);
@@ -530,10 +514,10 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
     first_time = false;
   }
 
-  int total = config.run + config.stop + config.native + config.kill;
+  int total = config.run + config.stop + config.kill;
   if (total > 1) {
-    ptl_logfile << "Warning: only one action (from -run, -stop, -native, -kill) can be specified at once", endl, flush;
-    cerr << "Warning: only one action (from -run, -stop, -native, -kill) can be specified at once", endl, flush;
+    ptl_logfile << "Warning: only one action (from -run, -stop, -kill) can be specified at once", endl, flush;
+    cerr << "Warning: only one action (from -run, -stop, -kill) can be specified at once", endl, flush;
   }
 
   if(config.checker_enabled) {
