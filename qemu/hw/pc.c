@@ -47,6 +47,9 @@
 
 #ifdef MARSS_QEMU
 #include <ptl-qemu.h>
+
+// For sanity checking of addresses
+uint64_t qemu_ram_size;
 #endif
 /* output Bochs bios info messages */
 //#define DEBUG_BIOS
@@ -973,7 +976,6 @@ static CPUState *pc_new_cpu(const char *cpu_model)
     }
     return env;
 }
-
 /* PC hardware initialisation */
 static void pc_init1(ram_addr_t ram_size,
                      const char *boot_device,
@@ -983,6 +985,9 @@ static void pc_init1(ram_addr_t ram_size,
                      const char *cpu_model,
                      int pci_enabled)
 {
+#ifdef MARSS_QEMU
+    qemu_ram_size = (uint64_t)ram_size;
+#endif
     char *filename;
     int ret, linux_boot, i;
     ram_addr_t ram_addr, bios_offset, option_rom_offset;
