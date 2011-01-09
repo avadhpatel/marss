@@ -65,6 +65,8 @@ const char *snapshot_names[] = {"user", "kernel", "global"};
 
 #endif
 
+void kill_simulation() __attribute__((noreturn));
+
 void PTLsimConfig::reset() {
   help=0;
   domain = (W64)(-1);
@@ -420,6 +422,20 @@ void print_sysinfo(ostream& os) {
 	// TODO: In QEMU based system
 }
 
+void kill_simulation()
+{
+    assert(config.kill || config.kill_after_run);
+
+    ptl_logfile << "Received simulation kill signal, stopped the simulation and killing the VM\n";
+    ptl_logfile.flush();
+    ptl_logfile.close();
+#ifdef TRACE_RIP
+    ptl_rip_trace.flush();
+    ptl_rip_trace.close();
+#endif
+    exit(0);
+}
+
 bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
   static bool first_time = true;
 
@@ -606,6 +622,11 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
         configparser.printusage(cerr, config);
         config.help=0;
     }
+
+    if(config.kill) {
+        kill_simulation();
+    }
+
     // reset machine's initalized variable only if it is the first run
 
 
@@ -1118,14 +1139,7 @@ extern "C" uint8_t ptl_simulate() {
         write_mongo_stats();
 
 	if(config.kill || config.kill_after_run) {
-		ptl_logfile << "Received simulation kill signal, stopped the simulation and killing the VM\n";
-		ptl_logfile.flush();
-		ptl_logfile.close();
-#ifdef TRACE_RIP
-		ptl_rip_trace.flush();
-		ptl_rip_trace.close();
-#endif
-		exit(0);
+        kill_simulation();
 	}
 
 	return 0;
