@@ -6,6 +6,7 @@ Statable::Statable(const char *name)
     this->name = name;
     parent = NULL;
     default_stats = NULL;
+    dump_disabled = false;
 
     StatsBuilder &builder = StatsBuilder::get();
     builder.add_to_root(this);
@@ -16,6 +17,7 @@ Statable::Statable(const char *name, bool is_root)
     this->name = name;
     parent = NULL;
     default_stats = NULL;
+    dump_disabled = false;
 
     StatsBuilder &builder = StatsBuilder::get();
 
@@ -28,6 +30,7 @@ Statable::Statable(stringbuf &str, bool is_root)
 {
     parent = NULL;
     default_stats = NULL;
+    dump_disabled = false;
 
     StatsBuilder &builder = StatsBuilder::get();
 
@@ -39,6 +42,7 @@ Statable::Statable(const char *name, Statable *parent)
     : parent(parent)
 {
     this->name = name;
+    dump_disabled = false;
 
     if(parent) {
         parent->add_child_node(this);
@@ -51,6 +55,7 @@ Statable::Statable(const char *name, Statable *parent)
 Statable::Statable(stringbuf &str, Statable *parent)
     : parent(parent), name(str)
 {
+    dump_disabled = false;
     if(parent) {
         parent->add_child_node(this);
         default_stats = parent->default_stats;

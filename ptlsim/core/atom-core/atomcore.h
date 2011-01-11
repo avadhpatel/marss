@@ -6,6 +6,8 @@
 #include <branchpred.h>
 #include <statelist.h>
 
+#include <statsBuilder.h>
+
 /* Logging Macros */
 // Base Logging Level
 #define ATOM_BASE_LL 5
@@ -63,19 +65,19 @@ namespace AtomCoreModel {
 
     const W8 ICACHE_FETCH_GRANULARITY = 16;
 
-    const W8 MAX_ISSUE_PER_CYCLE = 1;
+    const W8 MAX_ISSUE_PER_CYCLE = 2;
 
-    const W8 MIN_PIPELINE_CYCLES = 7;
+    const W8 MIN_PIPELINE_CYCLES = 2;
 
     const W8 STORE_BUF_SIZE = 16;
 
-    const W8 MAX_BRANCH_IN_FLIGHT = 1;
+    const W8 MAX_BRANCH_IN_FLIGHT = 3;
 
-    const int FORWARD_BUF_SIZE = 8;
+    const int FORWARD_BUF_SIZE = 32;
     
     const W8 MAX_FORWARDING_LATENCY = 1;
 
-    const W8 COMMIT_BUF_SIZE = 16;
+    const W8 COMMIT_BUF_SIZE = 32;
 
     const W8 THREAD_PAUSE_CYCLES = 20;
 
@@ -114,6 +116,18 @@ namespace AtomCoreModel {
 
     static const char* issue_res_names[NUM_ISSUE_RETULTS] = {
         "ok", "block", "fail", "cache-miss", "skip",
+    };
+
+    enum {
+        ISSUE_FAIL_NON_PIPE = 0,  // Non-pipline istruction
+        ISSUE_FAIL_NO_PORT,       // Port not available
+        ISSUE_FAIL_NO_FU,         // FU not available
+        ISSUE_FAIL_SRC_NOT_READY, // SRC not ready
+        NUM_ISSUE_FAIL
+    };
+
+    static const char* issue_fail_names[NUM_ISSUE_FAIL] = {
+        "non-pipe", "port", "fu", "src-not-ready",
     };
 
     enum {
@@ -616,7 +630,7 @@ namespace AtomCoreModel {
      * In multi-threaded Atom core, Only one thread can run. Thread switching
      * is done when thread halts in a L2-cache miss.
      */
-    struct AtomThread {
+    struct AtomThread : public Statable {
         AtomThread(AtomCore& core, W8 threadid, Context& ctx);
 
         void reset();
@@ -685,6 +699,7 @@ namespace AtomCoreModel {
         W64   itlb_exception_addr;
         bool  stall_frontend;
         W8    itlb_walk_level;
+        W8    fetchcount;
 
         W8      dtlb_walk_level;
         W64     dtlb_miss_addr;
@@ -760,6 +775,127 @@ namespace AtomCoreModel {
          */
         Signal dcache_signal;
         Signal icache_signal;
+
+        /* Stats Collection */
+        struct st_fetch : public Statable
+        {
+            struct stop : public Statable
+            {
+                StatObj<W64> stalled;
+                StatObj<W64> icache_miss;
+                StatObj<W64> fetch_q_full;
+                StatObj<W64> dispatch_q_full;
+                StatObj<W64> assist;
+                StatObj<W64> branch_taken;
+                StatObj<W64> max_branch;
+
+                stop(Statable *parent)
+                    : Statable("stop", parent)
+                      , stalled("stalled", this)
+                      , icache_miss("icache_miss", this)
+                      , fetch_q_full("fetch_q_full", this)
+                      , dispatch_q_full("dispatch_q_full", this)
+                      , assist("assist", this)
+                      , branch_taken("branch_taken", this)
+                      , max_branch("max_branch_in_flight", this)
+                {}
+            } stop;
+
+            StatObj<W64> insns;
+            StatObj<W64> atomops;
+            StatObj<W64> uops;
+            StatObj<W64> bbs;
+
+            StatArray<W64, OPCLASS_COUNT> opclass;
+            StatArray<W64, MAX_FETCH_WIDTH+1> width;
+
+            st_fetch(Statable *parent)
+                : Statable("fetch", parent)
+                  , stop(this)
+                  , insns("insns", this)
+                  , atomops("atomops", this)
+                  , uops("uops", this)
+                  , bbs("bbs", this)
+                  , opclass("opclass", this, opclass_names)
+                  , width("width", this)
+           {}
+        } st_fetch;
+
+        struct st_issue : public Statable
+        {
+            StatArray<W64, NUM_ISSUE_RETULTS>     result;
+            StatArray<W64, MAX_ISSUE_PER_CYCLE+1> width;
+            StatArray<W64, NUM_ISSUE_FAIL>        fail;
+
+            StatObj<W64> disabled;
+            StatObj<W64> not_ready;
+            StatObj<W64> non_pipelined;
+            StatObj<W64> insns;
+            StatObj<W64> atomops;
+            StatObj<W64> uops;
+
+            st_issue(Statable *parent)
+                : Statable("issue", parent)
+                  , result("result", this, issue_res_names)
+                  , width("width", this)
+                  , fail("fail", this, issue_fail_names)
+                  , disabled("disabled", this)
+                  , not_ready("not_ready", this)
+                  , non_pipelined("non_pipelined", this)
+                  , insns("insns", this)
+                  , atomops("atomops", this)
+                  , uops("uops", this)
+            {}
+        } st_issue;
+
+        struct st_commit : public Statable
+        {
+            StatObj<W64> insns;
+            StatObj<W64> atomops;
+            StatObj<W64> uops;
+
+            StatObj<float> ipc;
+            StatObj<float> atomop_pc;
+            StatObj<float> uipc;
+
+            st_commit(Statable *parent)
+                : Statable("commit", parent)
+                  , insns("insns", this)
+                  , atomops("atomops", this)
+                  , uops("uops", this)
+                  , ipc("ipc", this)
+                  , atomop_pc("atomop_pc", this)
+                  , uipc("uipc", this)
+            {}
+        } st_commit;
+
+        struct st_branch_predictions : public Statable
+        {
+            StatObj<W64> predictions;
+            StatObj<W64> fail;
+
+            st_branch_predictions(Statable *parent)
+                : Statable("branch_predictions", parent)
+                  , predictions("predictions", this)
+                  , fail("fail", this)
+            {}
+        } st_branch_predictions;
+
+        struct cache_access : public Statable
+        {
+            StatObj<W64> accesses;
+            StatObj<W64> misses;
+
+            cache_access(const char* name, Statable *parent)
+                : Statable(name, parent)
+                  , accesses("accesses", this)
+                  , misses("misses", this)
+            {}
+        };
+
+        cache_access st_dcache, st_icache;
+
+        StatObj<W64> st_cycles;
     };
 
     /**
@@ -769,7 +905,7 @@ namespace AtomCoreModel {
      * multi-threading. In some cases it tries to mimic Intel Atom
      * architecture.
      */
-    struct AtomCore : public BaseCore {
+    struct AtomCore : public BaseCore , Statable {
 
         AtomCore(BaseCoreMachine& machine, int num_threads);
         
