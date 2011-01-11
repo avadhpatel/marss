@@ -244,6 +244,7 @@ bool AtomOp::fetch()
 
         num_uops_used++;
         thread->bb_transop_index++;
+        thread->st_fetch.uops++;
 
         /* Update AtomOp from fuinfo */
         fu_mask &= fuinfo[op.opcode].fu;
@@ -254,6 +255,7 @@ bool AtomOp::fetch()
 
         if unlikely (isclass(op.opcode, OPCLASS_BARRIER)) {
             thread->stall_frontend = true;
+            thread->st_fetch.stop.assist++;
             is_barrier = true;
             ret_value = false;
         }
@@ -292,6 +294,8 @@ bool AtomOp::fetch()
             predrip = thread->branchpred.predict(predinfo, predinfo.bptype,
                     predinfo.ripafter, op.riptaken);
 
+            thread->st_branch_predictions.predictions++;
+
             /*
              * FIXME : Branchpredictor should never give the predicted address in
              * different address space then fetchrip.  If its different, discard the
@@ -312,6 +316,7 @@ bool AtomOp::fetch()
             if(thread->branches_in_flight > MAX_BRANCH_IN_FLIGHT) {
                 ATOMOPLOG1("Frontend stalled because of branch");
                 thread->stall_frontend = true;
+                thread->st_fetch.stop.max_branch++;
                 ret_value = false;
             }
         }
@@ -337,6 +342,8 @@ bool AtomOp::fetch()
             op.ripseq = predrip;
         }
 
+        thread->st_fetch.opclass[opclassof(op.opcode)]++;
+
         if likely (op.eom) {
             fetchrip.rip += op.bytes;
             fetchrip.update(thread->ctx);
@@ -356,9 +363,12 @@ bool AtomOp::fetch()
                 fetchrip.update(thread->ctx);
 
                 if (taken) {
+                    thread->st_fetch.stop.branch_taken++;
                     ret_value = false;
                 }
             }
+
+            thread->st_fetch.insns++;
 
             break;
         }
@@ -384,6 +394,9 @@ bool AtomOp::fetch()
     if(is_nonpipe) {
         ret_value = false;
     }
+
+    thread->st_fetch.atomops++;
+    thread->fetchcount++;
 
     return ret_value;
 }
@@ -435,6 +448,7 @@ W8 AtomOp::issue(bool first_issue)
      * return
      */
     if(!first_issue & is_nonpipe) {
+        thread->st_issue.fail[ISSUE_FAIL_NON_PIPE]++;
         return ISSUE_FAIL;
     }
 
@@ -445,6 +459,7 @@ W8 AtomOp::issue(bool first_issue)
 
     /* Check if all source registers are available or not */
     if(!all_src_ready()) {
+        thread->st_issue.fail[ISSUE_FAIL_SRC_NOT_READY]++;
         return ISSUE_FAIL;
     }
 
@@ -522,6 +537,12 @@ bool AtomOp::can_issue()
                 }
             }
         }
+    }
+
+    if(!fu_available) {
+        thread->st_issue.fail[ISSUE_FAIL_NO_FU]++;
+    } else if(!port_available) {
+        thread->st_issue.fail[ISSUE_FAIL_NO_PORT]++;
     }
 
     return (fu_available && port_available);
@@ -720,6 +741,8 @@ W8 AtomOp::execute_uop(W8 idx)
 
         if (mispredicted) {
             W64 realrip = state.reg.rddata;
+
+            thread->st_branch_predictions.fail++;
 
             // Correct branch direction and update cond code field of the uop
             if likely (isclass(uop.opcode, OPCLASS_COND_BRANCH)) {
@@ -1448,10 +1471,23 @@ void AtomOp::update_checker()
  * @param ctx CPU Context of this thread
  */
 AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
-    : core(core)
+    : Statable("thread", &core)
+      , core(core)
       , ctx(ctx)
       , threadid(threadid)
+      /* Initialize Statistics structures*/
+      , st_fetch(this)
+      , st_issue(this)
+      , st_commit(this)
+      , st_branch_predictions(this)
+      , st_dcache("dcache", this)
+      , st_icache("icache", this)
+      , st_cycles("cycles", this)
 {
+    stringbuf th_name;
+    th_name << "thread_" << threadid;
+    update_name(th_name.buf);
+
     // Setup the signals
     stringbuf sig_name;
     sig_name << "Core" << core.coreid << "-Th" << threadid << "-dcache-wakeup";
@@ -1559,18 +1595,26 @@ void AtomThread::reset()
  */
 bool AtomThread::fetch()
 {
-    int fetchcount = 0;
+    /* Fetch count will be updated in 'AtomOp::fetch' when an AtomOp is
+     * successfully fetched.*/
+    fetchcount = 0;
 
-    if(waiting_for_icache_miss ||
-            stall_frontend) {
+    if(waiting_for_icache_miss) {
+        st_fetch.stop.icache_miss++;
         return true;
     }
 
     // Fetch an instruction
     while(fetchcount < MAX_FETCH_WIDTH) {
 
+        if(stall_frontend) {
+            st_fetch.stop.stalled++;
+            break;
+        }
+
         // First check if fetchq is empty or not
         if(!core.fetchq.remaining() || op_free_list.count == 0) {
+            st_fetch.stop.fetch_q_full++;
             return true;
         }
 
@@ -1602,9 +1646,9 @@ bool AtomThread::fetch()
         if unlikely (!fetch_into_atomop()) {
             break;
         }
-
-        fetchcount++;
     }
+
+    st_fetch.width[fetchcount]++;
 
     return true;
 }
@@ -1660,10 +1704,13 @@ bool AtomThread::fetch_from_icache()
 
         hit = core.memoryHierarchy->access_cache(request);
 
+        st_icache.accesses++;
+
         hit |= config.perfect_cache;
         if unlikely (!hit) {
             waiting_for_icache_miss = 1;
             icache_miss_addr = req_icache_block;
+            st_icache.misses++;
             return false;
         }
 
@@ -1721,6 +1768,8 @@ bool AtomThread::fetch_check_current_bb()
         }
 
         bb_transop_index = 0;
+
+        st_fetch.bbs++;
     }
 
     return (current_bb != NULL);
@@ -1885,6 +1934,7 @@ void AtomThread::frontend()
             if(dispatch(op)) {
                 core.fetchq.commit(op_buf);
             } else {
+                st_fetch.stop.dispatch_q_full++;
                 break;
             }
         } else {
@@ -1927,6 +1977,8 @@ bool AtomThread::dispatch(AtomOp *op)
 bool AtomThread::issue()
 {
     W8 issue_result;
+    W8 num_issues = 0;
+    W8 ret_value = false;
 
     /*
      * First check if issue is not disabled for this thread
@@ -1934,6 +1986,7 @@ bool AtomThread::issue()
      * thread when this flag is set.
      */
     if(issue_disabled) {
+        st_issue.disabled++;
         return true;
     }
 
@@ -1946,10 +1999,11 @@ bool AtomThread::issue()
      * indicate thread switching.
      */
     if(!ready) {
+        st_issue.not_ready++;
         return true;
     }
 
-    foreach(i, MAX_ISSUE_PER_CYCLE) {
+    for(num_issues; num_issues < MAX_ISSUE_PER_CYCLE; num_issues++) {
 
         /* Check if dispatch queue has anything to dispatch. */
         if(dispatchq.empty()) {
@@ -1964,16 +2018,24 @@ bool AtomThread::issue()
 
         assert(buf_entry.op);
 
-        issue_result = buf_entry.op->issue(i == 0);
+        issue_result = buf_entry.op->issue(num_issues == 0);
+
+        st_issue.result[issue_result]++;
 
         if(issue_result == ISSUE_FAIL) {
             break;
         } else if(issue_result == ISSUE_CACHE_MISS) {
             ready = false;
-            return false;
+            break;
         } else {
             add_to_commitbuf(buf_entry.op);
             dispatchq.pophead();
+
+            st_issue.atomops++;
+            st_issue.uops += buf_entry.op->num_uops_used;
+            if(buf_entry.op->eom) {
+                st_issue.insns++;
+            }
 
             // inst_in_pipe = true;
 
@@ -2003,6 +2065,8 @@ bool AtomThread::issue()
         // add_to_commitbuf(buf_entry.op);
         // dispatchq.pophead();
     }
+
+    st_issue.width[num_issues]++;
 
     return false;
 }
@@ -2064,7 +2128,14 @@ bool AtomThread::access_dcache(Waddr addr, W64 rip, W8 type, W64 uuid)
             sim_cycle, false, rip, uuid, (Memory::OP_TYPE)type);
     request->set_coreSignal(&dcache_signal);
 
-    return core.memoryHierarchy->access_cache(request);
+    st_dcache.accesses++;
+    bool hit = core.memoryHierarchy->access_cache(request);
+
+    if(!hit) {
+        st_dcache.misses++;
+    }
+
+    return hit;
 }
 
 /**
@@ -2339,12 +2410,12 @@ bool AtomThread::commit_queue()
 
         commitbuf.commit(&buf);
 
-        if(commit_result == COMMIT_BARRIER) {
-            break;
-        }
+        st_commit.atomops++;
+        st_commit.uops += buf.op->num_uops_used;
 
-        if(buf.op->eom) {
+        if(buf.op->eom || commit_result == COMMIT_BARRIER) {
             total_user_insns_committed++;
+            st_commit.insns++;
             break;
         }
     }
@@ -2460,7 +2531,7 @@ bool AtomThread::handle_barrier()
     assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
     
     if(assistid == ASSIST_WRITE_CR3) {
-        core.flush_pipeline();
+        flush_pipeline();
     }
 
     ATOMTHLOG1("Executing Assist Function ", assist_name(assist));
@@ -2468,7 +2539,7 @@ bool AtomThread::handle_barrier()
     bool flush_required = assist(ctx);
 
     if(flush_required) {
-        core.flush_pipeline();
+        flush_pipeline();
         if(config.checker_enabled) {
             clear_checker();
         }
@@ -2576,10 +2647,15 @@ W64 AtomThread::read_reg(W16 reg)
  * @param num_threads Number of Hardware-threads per core
  */
 AtomCore::AtomCore(BaseCoreMachine& machine, int num_threads)
-    : BaseCore(machine)
+    : BaseCore(machine), Statable("atom", &machine)
       , threadcount(num_threads)
 {
+    stringbuf corename;
+
     coreid = machine.get_next_coreid();
+    corename << "atom_" << coreid;
+
+    update_name(corename.buf);
 
     threads = (AtomThread**)qemu_mallocz(threadcount*sizeof(AtomThread*));
 
@@ -2717,6 +2793,14 @@ bool AtomCore::runcycle()
 
     running_thread->handle_interrupt_at_next_eom =
         running_thread->ctx.check_events();
+
+    if(running_thread->ctx.kernel_mode) {
+        running_thread->set_default_stats(n_kernel_stats);
+    } else {
+        running_thread->set_default_stats(n_user_stats);
+    }
+
+    running_thread->st_cycles++;
 
     exit_requested = writeback();
 
@@ -2860,7 +2944,21 @@ void AtomCore::dump_state(ostream& os)
 
 void AtomCore::update_stats(PTLsimStats* stats)
 {
-    // TODO
+    Stats* st_t;
+    foreach(i, 3) {
+        st_t = (i == 0) ? n_user_stats : ((i == 1) ? n_kernel_stats : n_global_stats);
+
+        foreach(i, threadcount) {
+            W64 cycles = threads[i]->st_cycles(st_t);
+
+            threads[i]->st_commit.ipc(st_t) = threads[i]->st_commit.insns(st_t) /
+                (double)(cycles);
+            threads[i]->st_commit.atomop_pc(st_t) = threads[i]->st_commit.atomops(st_t) /
+                (double)(cycles);
+            threads[i]->st_commit.uipc(st_t) = threads[i]->st_commit.uops(st_t) /
+                (double)(cycles);
+        }
+    }
 }
 
 /**
@@ -2880,9 +2978,6 @@ void AtomCore::flush_pipeline()
     fu_available = (W32)-1;
     fu_used = 0;
     port_available = (W8)-1;
-
-    dtlb.flush_all();
-    itlb.flush_all();
 
     running_thread = threads[0];
 }
@@ -2905,10 +3000,6 @@ void AtomCore::flush_shared_structs(W8 threadid)
         fu_used = 0;
         port_available = (W8)-1;
     }
-
-    // In TLB delete entries from given thread
-    dtlb.flush_thread((W64)threadid);
-    itlb.flush_thread((W64)threadid);
 }
 
 /**
