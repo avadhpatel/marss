@@ -32,6 +32,11 @@ namespace {
                 }
 
                 base_machine->init(config);
+
+                foreach(i, base_machine->cores.count()) {
+                    AtomCore* core = (AtomCore*)base_machine->cores[i];
+                    core->set_default_stats(n_user_stats);
+                }
             }
 
             void TearDown()
@@ -872,6 +877,27 @@ namespace {
 
             // Make sure that atleast one of the port is set
             ASSERT_NE(fuinfo[i].port, 0);
+        }
+    }
+
+    TEST(AtomCoreModelTest, CheckFUMap)
+    {
+        for(int i=0; i < (1 << FU_COUNT); i++) {
+            W32 fu_used = first_set_fu_map[i];
+
+            switch(fu_used) {
+                case 0x0:
+                case 0x1:
+                case 0x2:
+                case 0x4:
+                case 0x8:
+                case 0x10:
+                case 0x20:
+                case 0x30:
+                    continue;
+                default:
+                    ASSERT_TRUE(0) << "Masking failed for " << i;
+            }
         }
     }
 

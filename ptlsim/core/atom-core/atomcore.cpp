@@ -86,12 +86,20 @@ static inline W64 extract_bytes(byte* target, int SIZESHIFT, bool SIGNEXT) {
     return data;
 }
 
-static W8 first_set_fu_map[1<<FU_COUNT] = {
+W8 AtomCoreModel::first_set_fu_map[1<<FU_COUNT] = {
    //0     1     2     3     4     5     6     7     8     9     a     b     c     d     e     f
     0x00, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
     0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
     0x20, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
-    0x30, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
+    0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
+};
+
+W8 AtomCoreModel::fu_map_to_fu[1 << FU_COUNT] = {
+  //0   1   2   3   4   5   6   7   8   9   a   b   c   d   e   f
+    0,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
+    4,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
+    5,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
+    4,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
 };
 
 
@@ -511,7 +519,9 @@ W8 AtomOp::issue(bool first_issue)
 
     /* Set flag in core's fu_used so same FU can't be used in same cycle */
     W32 fu_available = (thread->core.fu_available) & ~(thread->core.fu_used);
-    thread->core.fu_used |= first_set_fu_map[(fu_mask & fu_available) & 0x3f];
+    W32 fu_selected = first_set_fu_map[(fu_mask & fu_available) & 0x3f];
+    thread->core.fu_used |= fu_selected;
+    thread->st_issue.fu_usage[fu_map_to_fu[fu_selected]]++;
 
     change_state(thread->op_executing_list);
     cycles_left = execution_cycles;

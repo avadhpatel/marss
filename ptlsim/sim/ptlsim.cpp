@@ -120,7 +120,7 @@ void PTLsimConfig::reset() {
   trace_memory_updates = 0;
   trace_memory_updates_logfile = "ptlsim.mem.log";
   stats_filename.reset();
-  yaml_stats_filename="yaml_stats.txt";
+  yaml_stats_filename="";
   snapshot_cycles = infinity;
   snapshot_now.reset();
 
@@ -457,6 +457,26 @@ void print_sysinfo(ostream& os) {
 	// TODO: In QEMU based system
 }
 
+void dump_yaml_stats()
+{
+    if(!config.yaml_stats_filename) {
+        return;
+    }
+
+    YAML::Emitter k_out, u_out, g_out;
+
+    (StatsBuilder::get()).dump(n_kernel_stats, k_out);
+    yaml_stats_file << k_out.c_str() << "\n";
+
+    (StatsBuilder::get()).dump(n_user_stats, u_out);
+    yaml_stats_file << u_out.c_str() << "\n";
+
+    (StatsBuilder::get()).dump(n_global_stats, g_out);
+    yaml_stats_file << g_out.c_str() << "\n";
+
+    yaml_stats_file.flush();
+}
+
 static void flush_stats()
 {
     if(config.screenshot_file.buf != "") {
@@ -479,6 +499,8 @@ static void flush_stats()
 	statswriter.write(&global_stats, global_name);
 
 	statswriter.close();
+
+    dump_yaml_stats();
 
     if(config.enable_mongo)
         write_mongo_stats();
@@ -1075,22 +1097,6 @@ void setup_sim_stats()
     sim_stats.tags.set(n_kernel_stats, kernel_tags);
     sim_stats.tags.set(n_user_stats, user_tags);
     sim_stats.tags.set(n_global_stats, total_tags);
-}
-
-void dump_yaml_stats()
-{
-    YAML::Emitter k_out, u_out, g_out;
-
-    (StatsBuilder::get()).dump(n_kernel_stats, k_out);
-    yaml_stats_file << k_out.c_str() << "\n";
-
-    (StatsBuilder::get()).dump(n_user_stats, u_out);
-    yaml_stats_file << u_out.c_str() << "\n";
-
-    (StatsBuilder::get()).dump(n_global_stats, g_out);
-    yaml_stats_file << g_out.c_str() << "\n";
-
-    yaml_stats_file.flush();
 }
 
 extern "C" uint8_t ptl_simulate() {

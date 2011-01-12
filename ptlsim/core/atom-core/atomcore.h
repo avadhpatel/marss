@@ -142,6 +142,9 @@ namespace AtomCoreModel {
         "ok", "barrier", "interrupt", "smc",
     };
 
+    extern W8 first_set_fu_map[1 << FU_COUNT];
+    extern W8 fu_map_to_fu[1 << FU_COUNT];
+
     //
     // Opcodes and properties
     //
@@ -826,6 +829,7 @@ namespace AtomCoreModel {
             StatArray<W64, NUM_ISSUE_RETULTS>     result;
             StatArray<W64, MAX_ISSUE_PER_CYCLE+1> width;
             StatArray<W64, NUM_ISSUE_FAIL>        fail;
+            StatArray<W64, FU_COUNT>              fu_usage;
 
             StatObj<W64> disabled;
             StatObj<W64> not_ready;
@@ -839,6 +843,7 @@ namespace AtomCoreModel {
                   , result("result", this, issue_res_names)
                   , width("width", this)
                   , fail("fail", this, issue_fail_names)
+                  , fu_usage("fu_usage", this, fu_names)
                   , disabled("disabled", this)
                   , not_ready("not_ready", this)
                   , non_pipelined("non_pipelined", this)
