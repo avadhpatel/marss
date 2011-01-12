@@ -86,6 +86,14 @@ static inline W64 extract_bytes(byte* target, int SIZESHIFT, bool SIGNEXT) {
     return data;
 }
 
+static W8 first_set_fu_map[1<<FU_COUNT] = {
+   //0     1     2     3     4     5     6     7     8     9     a     b     c     d     e     f
+    0x00, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
+    0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
+    0x20, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
+    0x30, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
+};
+
 
 //---------------------------------------------//
 //   AtomOp
@@ -497,11 +505,13 @@ W8 AtomOp::issue(bool first_issue)
     /* If not pipelined then set flag in core's fu_available */
     if(is_nonpipe) {
         thread->core.fu_available &= ~fu_mask;
+        thread->st_issue.non_pipelined++;
         return_value = ISSUE_OK_BLOCK;
     }
 
     /* Set flag in core's fu_used so same FU can't be used in same cycle */
-    thread->core.fu_used |= fu_mask;
+    W32 fu_available = (thread->core.fu_available) & ~(thread->core.fu_used);
+    thread->core.fu_used |= first_set_fu_map[(fu_mask & fu_available) & 0x3f];
 
     change_state(thread->op_executing_list);
     cycles_left = execution_cycles;
