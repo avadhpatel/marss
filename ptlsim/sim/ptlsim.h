@@ -140,8 +140,8 @@ struct TransOpBuffer {
 
 void split_unaligned(const TransOp& transop, TransOpBuffer& buf);
 
-void capture_stats_snapshot(const char* name = null);
-bool handle_config_change(PTLsimConfig& config, int argc = 0, char** argv = null);
+void capture_stats_snapshot(const char* name = NULL);
+bool handle_config_change(PTLsimConfig& config, int argc = 0, char** argv = NULL);
 void collect_common_sysinfo(PTLsimStats& stats);
 void collect_sysinfo(PTLsimStats& stats, int argc, char** argv);
 void print_sysinfo(ostream& os);
