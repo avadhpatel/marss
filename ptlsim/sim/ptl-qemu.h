@@ -32,6 +32,7 @@
 extern "C" {
 #endif
 
+
 /*
  * This file is included from QEMU to call PTLsim related
  * functions.  So we have to make sure that we don't add
@@ -125,7 +126,7 @@ void ptl_reconfigure(char* config_str);
  * working      : Read the file given in filename and parse the simulation
  *                configuration options
  */
-void ptl_config_from_file(char *filename);
+void ptl_config_from_file(const char *filename);
 
 /*
  * ptl_simulate
@@ -181,6 +182,8 @@ void ptl_check_ptlcall_queue(void);
 
 extern uint8_t ptl_stable_state;
 
+void ptl_add_phys_memory_mapping(int8_t cpu_index, uint64_t host_vaddr, uint64_t guest_paddr);
+
 /*
  * qemu_take_screenshot
  * filename     : Name of the file to store screenshot of VGA screen
@@ -194,6 +197,8 @@ void qemu_take_screenshot(char* filename);
  * RIP location from where to switch to simulation
  */
 extern uint64_t ptl_start_sim_rip;
+
+extern uint64_t qemu_ram_size;
 
 #ifdef __cplusplus
 }

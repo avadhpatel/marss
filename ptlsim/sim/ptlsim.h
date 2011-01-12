@@ -141,7 +141,6 @@ struct TransOpBuffer {
 void split_unaligned(const TransOp& transop, TransOpBuffer& buf);
 
 void capture_stats_snapshot(const char* name = NULL);
-void flush_stats();
 bool handle_config_change(PTLsimConfig& config, int argc = 0, char** argv = NULL);
 void collect_common_sysinfo(PTLsimStats& stats);
 void collect_sysinfo(PTLsimStats& stats, int argc, char** argv);
@@ -198,7 +197,6 @@ struct PTLsimConfig {
   W64 domain;
   bool run;
   bool stop;
-  bool native;
   bool kill;
   bool flush_command_queue;
   bool simswitch;
@@ -285,14 +283,10 @@ struct PTLsimConfig {
   bool realtime;
   bool mask_interrupts;
   W64 console_mfn;
-  bool pause;
   stringbuf perfctr_name;
   bool force_native;
   bool kill_after_finish;
   bool exit_after_finish;
-
-  bool continuous_validation;
-  W64 validation_start_cycle;
 
   // Out of order core features
   bool perfect_cache;
@@ -310,9 +304,6 @@ struct PTLsimConfig {
   /// for memory hierarchy implementaion
   ///
   //  bool memory_log;
-  W64 number_of_cores;
-  W64 cores_per_L2;
-  W64 max_L1_req;
   stringbuf cache_config_type;
 
   bool checker_enabled;
