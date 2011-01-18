@@ -74,6 +74,7 @@ SimStats sim_stats;
 
 static void kill_simulation() __attribute__((noreturn));
 static void write_mongo_stats();
+static void setup_sim_stats();
 
 void PTLsimConfig::reset() {
   help=0;
@@ -482,6 +483,13 @@ static void flush_stats()
     if(config.screenshot_file.buf != "") {
         qemu_take_screenshot((char*)config.screenshot_file);
     }
+
+    PTLsimMachine* machine = PTLsimMachine::getmachine(config.core_name.buf);
+    assert(machine);
+    machine->update_stats(stats);
+
+    // Call this function to setup tags and other info
+    setup_sim_stats();
 
 	const char *user_name = "user";
     strncpy(user_stats.snapshot_name, snapshot_names[0], sizeof(user_name));
@@ -1070,7 +1078,7 @@ stringbuf get_date()
     return date;
 }
 
-void setup_sim_stats()
+static void setup_sim_stats()
 {
     /* Simlation tags contains benchmark name, host name, simulation-date,
      * user specified tags */
