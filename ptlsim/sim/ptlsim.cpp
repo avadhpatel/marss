@@ -65,6 +65,9 @@ const char *snapshot_names[] = {"user", "kernel", "global"};
 
 #endif
 
+static void kill_simulation() __attribute__((noreturn));
+static void write_mongo_stats();
+
 void PTLsimConfig::reset() {
   help=0;
   domain = (W64)(-1);
@@ -412,12 +415,49 @@ void capture_stats_snapshot(const char* name) {
   statswriter.write(stats, name);
 }
 
-void flush_stats() {
-  statswriter.flush();
-}
-
 void print_sysinfo(ostream& os) {
 	// TODO: In QEMU based system
+}
+
+static void flush_stats()
+{
+    if(config.screenshot_file.buf != "") {
+        qemu_take_screenshot((char*)config.screenshot_file);
+    }
+
+	const char *user_name = "user";
+    strncpy(user_stats.snapshot_name, snapshot_names[0], sizeof(user_name));
+	user_stats.snapshot_uuid = statswriter.next_uuid();
+	statswriter.write(&user_stats, user_name);
+
+	const char *kernel_name = "kernel";
+    strncpy(kernel_stats.snapshot_name, snapshot_names[1], sizeof(kernel_name));
+	kernel_stats.snapshot_uuid = statswriter.next_uuid();
+	statswriter.write(&kernel_stats, kernel_name);
+
+	const char *global_name = "final";
+    strncpy(global_stats.snapshot_name, snapshot_names[2], sizeof(global_name));
+	global_stats.snapshot_uuid = statswriter.next_uuid();
+	statswriter.write(&global_stats, global_name);
+
+	statswriter.close();
+
+    if(config.enable_mongo)
+        write_mongo_stats();
+}
+
+static void kill_simulation()
+{
+    assert(config.kill || config.kill_after_run);
+
+    ptl_logfile << "Received simulation kill signal, stopped the simulation and killing the VM\n";
+    ptl_logfile.flush();
+    ptl_logfile.close();
+#ifdef TRACE_RIP
+    ptl_rip_trace.flush();
+    ptl_rip_trace.close();
+#endif
+    exit(0);
 }
 
 bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
@@ -606,6 +646,12 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
         configparser.printusage(cerr, config);
         config.help=0;
     }
+
+    if(config.kill) {
+        flush_stats();
+        kill_simulation();
+    }
+
     // reset machine's initalized variable only if it is the first run
 
 
@@ -878,7 +924,7 @@ void setup_ptlsim_switch_all_ctx(Context& last_ctx) {
 void add_bson_PTLsimStats(PTLsimStats *stats, bson_buffer *bb, const char *snapshot_name);
 
 /* Write all the stats to MongoDB */
-void write_mongo_stats() {
+static void write_mongo_stats() {
     bson bout;
     bson_buffer bb;
     char numstr[4];
@@ -1093,39 +1139,10 @@ extern "C" uint8_t ptl_simulate() {
 	cerr << endl;
 	print_stats_in_log();
 
-    if(config.screenshot_file.buf != "") {
-        qemu_take_screenshot((char*)config.screenshot_file);
-    }
-
-	const char *user_name = "user";
-    strncpy(user_stats.snapshot_name, snapshot_names[0], sizeof(user_name));
-	user_stats.snapshot_uuid = statswriter.next_uuid();
-	statswriter.write(&user_stats, user_name);
-
-	const char *kernel_name = "kernel";
-    strncpy(kernel_stats.snapshot_name, snapshot_names[1], sizeof(kernel_name));
-	kernel_stats.snapshot_uuid = statswriter.next_uuid();
-	statswriter.write(&kernel_stats, kernel_name);
-
-	const char *global_name = "final";
-    strncpy(global_stats.snapshot_name, snapshot_names[2], sizeof(global_name));
-	global_stats.snapshot_uuid = statswriter.next_uuid();
-	statswriter.write(&global_stats, global_name);
-
-	statswriter.close();
-
-    if(config.enable_mongo)
-        write_mongo_stats();
+    flush_stats();
 
 	if(config.kill || config.kill_after_run) {
-		ptl_logfile << "Received simulation kill signal, stopped the simulation and killing the VM\n";
-		ptl_logfile.flush();
-		ptl_logfile.close();
-#ifdef TRACE_RIP
-		ptl_rip_trace.flush();
-		ptl_rip_trace.close();
-#endif
-		exit(0);
+        kill_simulation();
 	}
 
 	return 0;
