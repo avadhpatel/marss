@@ -425,6 +425,10 @@ static void flush_stats()
         qemu_take_screenshot((char*)config.screenshot_file);
     }
 
+    PTLsimMachine* machine = PTLsimMachine::getmachine(config.core_name.buf);
+    assert(machine);
+    machine->update_stats(stats);
+
 	const char *user_name = "user";
     strncpy(user_stats.snapshot_name, snapshot_names[0], sizeof(user_name));
 	user_stats.snapshot_uuid = statswriter.next_uuid();
