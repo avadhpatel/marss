@@ -697,9 +697,15 @@ bool CacheController::cache_access_cb(void *arg)
                  * remove the entry from the queue if its not
                  * going to be used, else do nothing
                  */
-				signal = &cacheInsertComplete_;
-				delay = cacheAccessLatency_;
-				queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
+                signal = &cacheInsertComplete_;
+                delay = cacheAccessLatency_;
+                queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
+
+                if(wt_disabled_) {
+                    if(!send_update_message(queueEntry)) {
+                        goto retry_cache_access;
+                    }
+                }
 			}
 		} else { // Cache Miss
 			if(type == MEMORY_OP_READ ||
