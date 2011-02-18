@@ -59,6 +59,29 @@ bool TraceDecoder::decode_fast() {
 		push_op = true;
 		break;
 	}
+    case 7: {
+        // 0x07 pop es
+        // 0x17 pop ss
+        // 0x1f pop ds
+        EndOfDecode();
+
+        int sizeshift = 2;
+        int size = (1 << sizeshift);
+        int seg_reg = (op >> 3);
+        int r = REG_temp0;
+
+        this << TransOp(OP_ld, r, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
+
+        TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, r, size,
+                offsetof_t(Context, segs[seg_reg].selector));
+        stp.internal = 1;
+        this << stp;
+
+        this << TransOp(OP_add, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
+
+        push_op = true;
+        break;
+    }
     default: invalid |= true; break;
     }
 
@@ -903,6 +926,27 @@ bool TraceDecoder::decode_fast() {
     this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, r, sizeshift, -size);
     this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
 	break;
+  }
+
+  case 0x1a1: {
+      // pop fs
+      EndOfDecode();
+
+      int sizeshift = 2;
+      int size = (1 << sizeshift);
+      int seg_reg = (op >> 3) & 7;
+      int r = REG_temp0;
+
+      this << TransOp(OP_ld, r, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
+
+      TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, r, size,
+              offsetof_t(Context, segs[seg_reg].selector));
+      stp.internal = 1;
+      this << stp;
+
+      this << TransOp(OP_add, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
+
+      break;
   }
 
   case 0x1bc:
