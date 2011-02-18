@@ -1468,13 +1468,11 @@ DataStoreNode* StatsFileReader::getdelta(W64 uuid, W64 uuidsub) {
 
   is.seekg(offset);
   is.read((char*)(buf), header.record_size);
-  int size = strlen((char*)(buf));
-  if unlikely (size != header.record_size) return null;
+  if unlikely (is.gcount() != header.record_size) return null;
 
   is.seekg(offsetsub);
   is.read((char*)(bufsub), header.record_size);
-  size = strlen((char*)(buf));
-  if unlikely (size != header.record_size) return null;
+  if unlikely (is.gcount() != header.record_size) return null;
 
   const W64* p = (const W64*)buf;
   W64* porig = (W64*)p;

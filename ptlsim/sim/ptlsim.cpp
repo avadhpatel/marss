@@ -477,10 +477,12 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 		ptl_rip_trace.open("ptl_rip_trace");
 #endif
 
-    statswriter.open(config.stats_filename, &_binary_ptlsim_build_ptlsim_dst_start,
-                     &_binary_ptlsim_build_ptlsim_dst_end - &_binary_ptlsim_build_ptlsim_dst_start,
-                     sizeof(PTLsimStats));
-    current_stats_filename = config.stats_filename;
+    if(config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
+        statswriter.open(config.stats_filename, &_binary_ptlsim_build_ptlsim_dst_start,
+                &_binary_ptlsim_build_ptlsim_dst_end - &_binary_ptlsim_build_ptlsim_dst_start,
+                sizeof(PTLsimStats));
+        current_stats_filename = config.stats_filename;
+    }
 
   if (config.trace_memory_updates_logfile.set() && (config.trace_memory_updates_logfile != current_trace_memory_updates_logfile)) {
     backup_and_reopen_memory_logfile();
