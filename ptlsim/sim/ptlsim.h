@@ -291,6 +291,9 @@ struct PTLsimConfig {
   stringbuf bench_name;
   stringbuf db_tags;
 
+  //Utilities/Tools
+  stringbuf execute_after_kill;
+
   void reset();
 };
 

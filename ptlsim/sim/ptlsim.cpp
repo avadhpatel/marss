@@ -171,6 +171,9 @@ void PTLsimConfig::reset() {
   mongo_port = 27017;
   bench_name = "unknown";
   db_tags = "";
+
+  // Utilities/Tools
+  execute_after_kill = "";
 }
 
 template <>
@@ -294,6 +297,10 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(mongo_port,           "mongo-port",           "MongoDB server's port address");
   add(bench_name,           "bench-name",           "Benchmark Name added to database");
   add(db_tags,              "db-tags",              "tags added to database");
+
+  // Utilities/Tools
+  section("options for tools/utilities");
+  add(execute_after_kill,	"execute-after-kill" ,	"Execute a shell command (on the host shell) after simulation receives kill signal");
 };
 
 #ifndef CONFIG_ONLY
@@ -461,6 +468,11 @@ static void kill_simulation()
     ptl_rip_trace.flush();
     ptl_rip_trace.close();
 #endif
+
+    if (config.execute_after_kill.length > 0) {
+        system(config.execute_after_kill.buf);
+    }
+
     exit(0);
 }
 
@@ -1187,7 +1199,10 @@ extern "C" void update_progress() {
     //while (sb.size() < 160) sb << ' ';
 
     ptl_logfile << sb, endl;
-    cerr << "\r  ", sb;
+    if (!config.quiet) {
+        cerr << "\r  ", sb;
+    }
+
     last_printed_status_at_ticks = ticks;
     last_printed_status_at_cycle = sim_cycle;
     last_printed_status_at_user_insn = total_user_insns_committed;
