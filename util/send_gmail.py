@@ -17,7 +17,7 @@ import random
 import os
 import socket
 
-if not os.path.exists("xoauth.txt"):
+if not os.path.exists("xoauth.txt") and not os.path.exists("util/xoauth.txt"):
     print """
         Please generate a xoauth.txt. To do so, first run: 
             ./xoauth.py --generate_oauth_token --user=YOUR_USERNAME@gmail.com
@@ -30,11 +30,17 @@ if not os.path.exists("xoauth.txt"):
             oauth_token
             oauth_secret
 
-        Then re-run the sender script
+        Then re-run the sender script.
+        Save this xoauth.txt file either in top Marss directory or in $MARSS/util.
     """
     exit();
 
-xoauth_cred = open("xoauth.txt")
+if os.path.exists("xoauth.txt"):
+    xoauth_txt = "xoauth.txt"
+elif os.path.exists("util/xoauth.txt"):
+    xoauth_txt = "util/xoauth.txt"
+
+xoauth_cred = open(xoauth_txt)
 xoauth_fields = file.readlines(xoauth_cred); 
 
 hostname = socket.gethostname()
@@ -63,7 +69,7 @@ xoauth_string = GenerateXOauthString( consumer, access_token, user, proto, xoaut
 msg="From: %s\r\nTo: %s\r\nSubject: %s\r\n%s\r\n\r\n" % (user,destination_email,subject_string,msg_body)
 
 # TODO: change this to disable the debug once it works reasonably well
-print
+# print
 smtp_conn = smtplib.SMTP(smtp_hostname, 587)
 smtp_conn.set_debuglevel(True)
 smtp_conn.ehlo('test')
