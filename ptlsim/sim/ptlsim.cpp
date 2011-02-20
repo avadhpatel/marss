@@ -461,17 +461,24 @@ static void kill_simulation()
 {
     assert(config.kill || config.kill_after_run);
 
+    flush_stats();
+
     ptl_logfile << "Received simulation kill signal, stopped the simulation and killing the VM\n";
-    ptl_logfile.flush();
-    ptl_logfile.close();
 #ifdef TRACE_RIP
     ptl_rip_trace.flush();
     ptl_rip_trace.close();
 #endif
 
-    if (config.execute_after_kill.length > 0) {
-        system(config.execute_after_kill.buf);
+    if (config.execute_after_kill.size() > 0) {
+        ptl_logfile << "Executing: " << config.execute_after_kill << endl;
+        int ret = system(config.execute_after_kill.buf);
+        if(ret != 0) {
+            ptl_logfile << "execute-after-kill command return " << ret << endl;
+        }
     }
+
+    ptl_logfile.flush();
+    ptl_logfile.close();
 
     exit(0);
 }
@@ -666,7 +673,6 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
     }
 
     if(config.kill) {
-        flush_stats();
         kill_simulation();
     }
 
@@ -1131,7 +1137,6 @@ extern "C" uint8_t ptl_simulate() {
 
     stats = &global_stats;
 	W64 tsc_at_end = rdtsc();
-	machine->update_stats(stats);
 	curr_ptl_machine = null;
 
 	W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
@@ -1156,8 +1161,6 @@ extern "C" uint8_t ptl_simulate() {
 	last_printed_status_at_ticks = 0;
 	cerr << endl;
 	print_stats_in_log();
-
-    flush_stats();
 
 	if(config.kill || config.kill_after_run) {
         kill_simulation();
@@ -1225,71 +1228,6 @@ void dump_all_info() {
 		curr_ptl_machine->dump_state(ptl_logfile);
 		ptl_logfile.flush();
 	}
-}
-
-
-bool simulate(const char* machinename) {
-  PTLsimMachine* machine = PTLsimMachine::getmachine(machinename);
-
-  if (!machine) {
-    ptl_logfile << "Cannot find core named '", machinename, "'", endl;
-    cerr << "Cannot find core named '", machinename, "'", endl;
-    return 0;
-  }
-
-  if (!machine->initialized) {
-    ptl_logfile << "Initializing core '", machinename, "'", endl;
-    if (!machine->init(config)) {
-      ptl_logfile << "Cannot initialize core model; check its configuration!", endl;
-      return 0;
-    }
-    machine->initialized = 1;
-  }
-
-  ptl_logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
-  cerr <<  "Switching to simulation core '", machinename, "'...", endl, flush;
-  ptl_logfile << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
-  cerr << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
-
-  /* Update stats every half second: */
-  ticks_per_update = seconds_to_ticks(0.2);
-  //ticks_per_update = seconds_to_ticks(0.1);
-  last_printed_status_at_ticks = 0;
-  last_printed_status_at_user_insn = 0;
-  last_printed_status_at_cycle = 0;
-
-  W64 tsc_at_start = rdtsc();
-  curr_ptl_machine = machine;
-  machine->run(config);
-  W64 tsc_at_end = rdtsc();
-  machine->update_stats(stats);
-  curr_ptl_machine = null;
-
-  W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
-  stats->elapse_seconds = seconds;
-  stringbuf sb;
-  sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_user_insns_committed, " instructions and ",
-    seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_user_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_user_insns_committed) / double(sim_cycle), ")", endl;
-
-  ptl_logfile << sb, flush;
-  cerr << sb, flush;
-
-  if (config.dumpcode_filename.set()) {
-//    byte insnbuf[256];
-//    PageFaultErrorCode pfec;
-//    Waddr faultaddr;
-//    Waddr rip = contextof(0).eip;
-//    int n = contextof(0).copy_from_user(insnbuf, rip, sizeof(insnbuf), pfec, faultaddr);
-//    ptl_logfile << "Saving ", n, " bytes from rip ", (void*)rip, " to ", config.dumpcode_filename, endl, flush;
-//    ostream(config.dumpcode_filename).write(insnbuf, n);
-  }
-
-  last_printed_status_at_ticks = 0;
-  update_progress();
-  cerr << endl;
-  print_stats_in_log();
-
-  return 0;
 }
 
 extern void shutdown_uops();
