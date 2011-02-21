@@ -701,7 +701,7 @@ bool CacheController::cache_access_cb(void *arg)
                 delay = cacheAccessLatency_;
                 queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
 
-                if(wt_disabled_) {
+                if(!wt_disabled_) {
                     if(!send_update_message(queueEntry)) {
                         goto retry_cache_access;
                     }
@@ -721,6 +721,13 @@ bool CacheController::cache_access_cb(void *arg)
 				signal = &clearEntry_;
 				delay = cacheAccessLatency_;
 				queueEntry->eventFlags[CACHE_CLEAR_ENTRY_EVENT]++;
+
+                // Send to lower cache/memory if write-back mode
+                if(wt_disabled_) {
+                    if(!send_update_message(queueEntry)) {
+                        goto retry_cache_access;
+                    }
+                }
 			}
 		}
 		memoryHierarchy_->add_event(signal, delay,
