@@ -41,27 +41,15 @@ BusInterconnect::BusInterconnect(char *name,
 	Interconnect(name,memoryHierarchy),
 	busBusy_(false)
 {
-	GET_STRINGBUF_PTR(broadcast_name, name, "_broadcast");
-	broadcast_.set_name(broadcast_name->buf);
-	broadcast_.connect(signal_mem_ptr(*this,
-				&BusInterconnect::broadcast_cb));
+    SET_SIGNAL_CB(name, "_Broadcast", broadcast_, &BusInterconnect::broadcast_cb);
 
-	GET_STRINGBUF_PTR(broadcastComplete_name, name,
-			"_broadcastComplete");
-	broadcastCompleted_.set_name(broadcastComplete_name->buf);
-	broadcastCompleted_.connect(signal_mem_ptr(*this,
-				&BusInterconnect::broadcast_completed_cb));
+    SET_SIGNAL_CB(name, "_Broadcast_Complete", broadcastCompleted_,
+            &BusInterconnect::broadcast_completed_cb);
 
-	GET_STRINGBUF_PTR(dataBroadcast_name, name, "_dataBroadcast");
-	dataBroadcast_.set_name(dataBroadcast_name->buf);
-	dataBroadcast_.connect(signal_mem_ptr(*this,
-				&BusInterconnect::data_broadcast_cb));
+    SET_SIGNAL_CB(name, "_Data_Broadcast", dataBroadcast_, &BusInterconnect::data_broadcast_cb);
 
-	GET_STRINGBUF_PTR(dataBroadcastComplete_name, name,
-			"_dataBroadcastComplete");
-	dataBroadcastCompleted_.set_name(dataBroadcastComplete_name->buf);
-	dataBroadcastCompleted_.connect(signal_mem_ptr(*this,
-				&BusInterconnect::data_broadcast_completed_cb));
+    SET_SIGNAL_CB(name, "_Data_Broadcast_Complete", dataBroadcastCompleted_,
+            &BusInterconnect::data_broadcast_completed_cb);
 
 	lastAccessQueue = 0;
 }

@@ -70,9 +70,17 @@
 #endif
 
 #define GET_STRINGBUF_PTR(var_name, ...)  \
-	stringbuf *var_name = new stringbuf(); \
-	*var_name << __VA_ARGS__; \
+    stringbuf *var_name = new stringbuf(); \
+    *var_name << __VA_ARGS__; \
 
+#define SET_SIGNAL_CB(name, name_postfix, signal, cb) \
+{ \
+    stringbuf *sg_n = new stringbuf(); \
+    *sg_n << name, name_postfix; \
+    signal.set_name(sg_n->buf); \
+    signal.connect(signal_mem_ptr(*this, cb)); \
+    delete sg_n; \
+}
 
 namespace OutOfOrderModel {
   class OutOfOrderMachine;

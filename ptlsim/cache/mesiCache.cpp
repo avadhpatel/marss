@@ -172,54 +172,24 @@ CacheController::CacheController(W8 coreid, char *name,
 
     cacheLines_->init();
 
-    stringbuf *signal_name;
 
-    signal_name = new stringbuf();
-    *signal_name << name, "_Cache_Hit";
-    cacheHit_.set_name(signal_name->buf);
-    cacheHit_.connect(signal_mem_ptr(*this,
-                &CacheController::cache_hit_cb));
+    SET_SIGNAL_CB(name, "_Cache_Hit", cacheHit_, &CacheController::cache_hit_cb);
 
-    signal_name = new stringbuf();
-    *signal_name << name, "_Cache_Miss";
-    cacheMiss_.set_name(signal_name->buf);
-    cacheMiss_.connect(signal_mem_ptr(*this,
-                &CacheController::cache_miss_cb));
+    SET_SIGNAL_CB(name, "_Cache_Miss", cacheMiss_, &CacheController::cache_miss_cb);
 
-    GET_STRINGBUF_PTR(cacheInsert_name, name, "_Cache_Insert");
-    cacheInsert_.set_name(cacheInsert_name->buf);
-    cacheInsert_.connect(signal_mem_ptr(*this,
-                &CacheController::cache_insert_cb));
+    SET_SIGNAL_CB(name, "_Cache_Insert", cacheInsert_, &CacheController::cache_insert_cb);
 
-    signal_name = new stringbuf();
-    *signal_name << name, "_Cache_Update";
-    cacheUpdate_.set_name(signal_name->buf);
-    cacheUpdate_.connect(signal_mem_ptr(*this,
-                &CacheController::cache_update_cb));
+    SET_SIGNAL_CB(name, "_Cache_Update", cacheUpdate_, &CacheController::cache_update_cb);
 
-    signal_name = new stringbuf();
-    *signal_name << name, "_Wait_Interconnect";
-    waitInterconnect_.set_name(signal_name->buf);
-    waitInterconnect_.connect(signal_mem_ptr(*this,
-                &CacheController::wait_interconnect_cb));
+    SET_SIGNAL_CB(name, "_Wait_Interconnect", waitInterconnect_,
+            &CacheController::wait_interconnect_cb);
 
-    signal_name = new stringbuf();
-    *signal_name << name, "_cache_access";
-    cacheAccess_.set_name(signal_name->buf);
-    cacheAccess_.connect(signal_mem_ptr(*this,
-                &CacheController::cache_access_cb));
+    SET_SIGNAL_CB(name, "_Cache_Access", cacheAccess_, &CacheController::cache_access_cb);
 
-    signal_name = new stringbuf();
-    *signal_name << name, "_clear_entry";
-    clearEntry_.set_name(signal_name->buf);
-    clearEntry_.connect(signal_mem_ptr(*this,
-                &CacheController::clear_entry_cb));
+    SET_SIGNAL_CB(name, "_Clear_Entry", clearEntry_, &CacheController::clear_entry_cb);
 
-    signal_name = new stringbuf();
-    *signal_name << name, "_cache_insert_complete";
-    cacheInsertComplete_.set_name(signal_name->buf);
-    cacheInsertComplete_.connect(signal_mem_ptr(*this,
-                &CacheController::cache_insert_complete_cb));
+    SET_SIGNAL_CB(name, "_Cache_Insert_Complete", cacheInsertComplete_,
+            &CacheController::cache_insert_complete_cb);
 
     upperInterconnect_ = null;
     upperInterconnect2_ = null;

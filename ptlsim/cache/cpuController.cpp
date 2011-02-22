@@ -49,12 +49,9 @@ CPUController::CPUController(W8 coreid, char *name,
 	dcacheLineBits_ = log2(L1D_LINE_SIZE);
     SETUP_STATS(CPUController);
 
-	stringbuf *signal_name;
-	signal_name = new stringbuf();
-	*signal_name << name, "_Cache_Access";
-	cacheAccess_.set_name(signal_name->buf);
-	cacheAccess_.connect(signal_mem_ptr(*this,
-				&CPUController::cache_access_cb));
+    SET_SIGNAL_CB(name, "_Cache_Access", cacheAccess_, &CPUController::cache_access_cb);
+
+    SET_SIGNAL_CB(name, "_Queue_Access", queueAccess_, &CPUController::queue_access_cb);
 }
 
 bool CPUController::handle_request_cb(void *arg)
