@@ -3103,6 +3103,7 @@ bool TraceDecoder::decode_complex() {
     // rdtsc: put result into %edx:%eax
     EndOfDecode();
 	microcode_assist(ASSIST_RDTSC, ripstart, rip);
+    end_of_block = 1;
     break;
   }
 
