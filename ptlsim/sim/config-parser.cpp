@@ -164,55 +164,55 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
 }
 
 int ConfigurationParserBase::parse(void* baseptr, char* argstr) {
-  dynarray<char*> argv;
-  argv.tokenize(argstr, " ");
-  foreach (i, argv.length) {
-    // Skip comments
-    if (argv[i][0] == '#') {
-      argv.resize(i);
-      break;
-    }
-    // add support for quoted strings such as -execute-after-kill "python blah.py"
-    if (argv[i][0] == '"') {
-        bool found_end_of_string = false;
-        stringbuf quoted_string;
+	dynarray<char*> argv;
+	argv.tokenize(argstr, " ");
+	foreach (i, argv.length) {
+		// Skip comments
+		if (argv[i][0] == '#') {
+			argv.resize(i);
+			break;
+		}
+		// add support for quoted strings such as -execute-after-kill "python blah.py"
+		if (argv[i][0] == '"') {
+			bool found_end_quoted_string = false;
+			stringbuf quoted_string;
+			int argv_idx;
 
-        for (int j=i; j<argv.length; j++) {
-            quoted_string << argv[j] << " ";
+			for (argv_idx = i; argv_idx < argv.length; argv_idx++) {
+				quoted_string << argv[argv_idx] << " ";
 
 
-            if (argv[j][strlen(argv[j])-1] == '"') {
-                // copy the stringbuf removing the quotes and space at the end
-                // FIXME: this probably leaks a very tiny amount of memory
-                // since I'm not freeing argv[i]
-                argv[i] = strndup(quoted_string.buf+1, quoted_string.size()-3);
+				if (argv[argv_idx][strlen(argv[argv_idx])-1] == '"') {
 
-                // FIXME: this shuffles a lot of memory around since it should delete
-                // in reverse, but this code only runs once so i'm not too worried
-                // about it since the quoted strings should be pretty short
-                if (j > i) {
-                    argv.remove(argv[j]);
-                }
+					// copy the stringbuf removing the quotes and space at the end
+					// FIXME: this probably leaks a very tiny amount of memory
+					// since I'm not freeing argv[i]
+					argv[i] = strndup(quoted_string.buf+1, quoted_string.size()-3);
 
-                if (!argv[i]) {
-                    exit(-ENOMEM);
-                }
-                found_end_of_string = true;
-                break;
-            }
+					found_end_quoted_string = true;
 
-            if (j > i) {
-                argv.remove(argv[j]);
-            }
-        }
-        if (!found_end_of_string)
-        {
-            cerr << "ERROR, could not find end of quoted string starting with " << argv[i] <<"\n", flush;
-            exit(-1);
-        }
-    }
-  }
-  return parse(baseptr, argv.length, argv);
+					if (!argv[i]) {
+						exit(-ENOMEM);
+					}
+					break;
+				}
+
+			}
+			if (!found_end_quoted_string)
+			{
+				cerr << "ERROR, could not find end of quoted string starting with " << argv[i] <<"\n", flush;
+				exit(-1);
+			}
+
+			// scan backwards and remove all nodes that are inside the quoted string (since they are already
+			// 	merged into argv[i] )
+			for ( ; argv_idx > i; argv_idx--)
+			{
+				argv.remove(argv[argv_idx]);
+			}
+		}
+	}
+	return parse(baseptr, argv.length, argv);
 }
 
 ostream& ConfigurationParserBase::print(const void* baseptr, ostream& os) const {
