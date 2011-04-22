@@ -14,14 +14,7 @@
 #include "hw.h"
 #include "msix.h"
 #include "pci.h"
-
-/* Declaration from linux/pci_regs.h */
-#define  PCI_CAP_ID_MSIX 0x11 /* MSI-X */
-#define  PCI_MSIX_FLAGS 2     /* Table at lower 11 bits */
-#define  PCI_MSIX_FLAGS_QSIZE	0x7FF
-#define  PCI_MSIX_FLAGS_ENABLE	(1 << 15)
-#define  PCI_MSIX_FLAGS_MASKALL	(1 << 14)
-#define  PCI_MSIX_FLAGS_BIRMASK	(7 << 0)
+#include "range.h"
 
 /* MSI-X capability structure */
 #define MSIX_TABLE_OFFSET 4
@@ -49,15 +42,6 @@
 #define MSIX_PAGE_PENDING (MSIX_PAGE_SIZE / 2)
 #define MSIX_MAX_ENTRIES 32
 
-
-#ifdef MSIX_DEBUG
-#define DEBUG(fmt, ...)                                       \
-    do {                                                      \
-      fprintf(stderr, "%s: " fmt, __func__ , __VA_ARGS__);    \
-    } while (0)
-#else
-#define DEBUG(fmt, ...) do { } while(0)
-#endif
 
 /* Flag for interrupt controller to declare MSI-X support */
 int msix_supported;
@@ -90,7 +74,8 @@ static int msix_add_config(struct PCIDevice *pdev, unsigned short nentries,
     }
 
     pdev->msix_bar_size = new_size;
-    config_offset = pci_add_capability(pdev, PCI_CAP_ID_MSIX, MSIX_CAP_LENGTH);
+    config_offset = pci_add_capability(pdev, PCI_CAP_ID_MSIX,
+                                       0, MSIX_CAP_LENGTH);
     if (config_offset < 0)
         return config_offset;
     config = pdev->config + config_offset;
@@ -175,7 +160,7 @@ void msix_write_config(PCIDevice *dev, uint32_t addr,
     unsigned enable_pos = dev->msix_cap + MSIX_CONTROL_OFFSET;
     int vector;
 
-    if (addr + len <= enable_pos || addr > enable_pos) {
+    if (!range_covers_byte(addr, len, enable_pos)) {
         return;
     }
 
@@ -183,7 +168,7 @@ void msix_write_config(PCIDevice *dev, uint32_t addr,
         return;
     }
 
-    qemu_set_irq(dev->irq[0], 0);
+    pci_device_deassert_intx(dev);
 
     if (msix_function_masked(dev)) {
         return;
@@ -266,7 +251,8 @@ int msix_init(struct PCIDevice *dev, unsigned short nentries,
     msix_mask_all(dev, nentries);
 
     dev->msix_mmio_index = cpu_register_io_memory(msix_mmio_read,
-                                                  msix_mmio_write, dev);
+                                                  msix_mmio_write, dev,
+                                                  DEVICE_NATIVE_ENDIAN);
     if (dev->msix_mmio_index == -1) {
         ret = -EBUSY;
         goto err_index;

@@ -87,14 +87,12 @@ static int piix4_initfn(PCIDevice *d)
     uint8_t *pci_conf;
 
     isa_bus_new(&d->qdev);
-    register_savevm("PIIX4", 0, 2, piix_save, piix_load, d);
+    register_savevm(&d->qdev, "PIIX4", 0, 2, piix_save, piix_load, d);
 
     pci_conf = d->config;
     pci_config_set_vendor_id(pci_conf, PCI_VENDOR_ID_INTEL);
     pci_config_set_device_id(pci_conf, PCI_DEVICE_ID_INTEL_82371AB_0); // 82371AB/EB/MB PIIX4 PCI-to-ISA bridge
     pci_config_set_class(pci_conf, PCI_CLASS_BRIDGE_ISA);
-    pci_conf[PCI_HEADER_TYPE] =
-        PCI_HEADER_TYPE_NORMAL | PCI_HEADER_TYPE_MULTI_FUNCTION; // header_type = PCI_multifunction, generic
 
     piix4_dev = d;
     qemu_register_reset(piix4_reset, d);
@@ -105,7 +103,7 @@ int piix4_init(PCIBus *bus, int devfn)
 {
     PCIDevice *d;
 
-    d = pci_create_simple(bus, devfn, "PIIX4");
+    d = pci_create_simple_multifunction(bus, devfn, true, "PIIX4");
     return d->devfn;
 }
 
@@ -115,6 +113,7 @@ static PCIDeviceInfo piix4_info[] = {
         .qdev.desc    = "ISA bridge",
         .qdev.size    = sizeof(PCIDevice),
         .qdev.no_user = 1,
+        .no_hotplug   = 1,
         .init         = piix4_initfn,
     },{
         /* end of list */

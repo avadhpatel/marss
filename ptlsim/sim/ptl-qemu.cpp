@@ -242,7 +242,7 @@ void ptlsim_init() {
 
     /* Register PTLsim PTLCALL mmio page */
     W64 ptlcall_mmio_pd = cpu_register_io_memory(ptlcall_mmio_read_ops,
-            ptlcall_mmio_write_ops, NULL);
+            ptlcall_mmio_write_ops, NULL, DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR, 4096,
             ptlcall_mmio_pd);
 

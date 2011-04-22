@@ -149,9 +149,19 @@ static int glue(load_symbols, SZ)(struct elfhdr *ehdr, int fd, int must_swab,
         }
         i++;
     }
-    syms = qemu_realloc(syms, nsyms * sizeof(*syms));
+    if (nsyms) {
+        syms = qemu_realloc(syms, nsyms * sizeof(*syms));
 
-    qsort(syms, nsyms, sizeof(*syms), glue(symcmp, SZ));
+        qsort(syms, nsyms, sizeof(*syms), glue(symcmp, SZ));
+        for (i = 0; i < nsyms - 1; i++) {
+            if (syms[i].st_size == 0) {
+                syms[i].st_size = syms[i + 1].st_value - syms[i].st_value;
+            }
+        }
+    } else {
+        qemu_free(syms);
+        syms = NULL;
+    }
 
     /* String table */
     if (symtab->sh_link >= ehdr->e_shnum)
@@ -179,7 +189,9 @@ static int glue(load_symbols, SZ)(struct elfhdr *ehdr, int fd, int must_swab,
     return -1;
 }
 
-static int glue(load_elf, SZ)(const char *name, int fd, int64_t address_offset,
+static int glue(load_elf, SZ)(const char *name, int fd,
+                              uint64_t (*translate_fn)(void *, uint64_t),
+                              void *translate_opaque,
                               int must_swab, uint64_t *pentry,
                               uint64_t *lowaddr, uint64_t *highaddr,
                               int elf_machine, int clear_lsb)
@@ -207,6 +219,11 @@ static int glue(load_elf, SZ)(const char *name, int fd, int64_t address_offset,
         case EM_X86_64:
             if (EM_X86_64 != ehdr.e_machine)
                 if (EM_386 != ehdr.e_machine)
+                    goto fail;
+            break;
+        case EM_MICROBLAZE:
+            if (EM_MICROBLAZE != ehdr.e_machine)
+                if (EM_MICROBLAZE_OLD != ehdr.e_machine)
                     goto fail;
             break;
         default:
@@ -248,7 +265,11 @@ static int glue(load_elf, SZ)(const char *name, int fd, int64_t address_offset,
             }
             /* address_offset is hack for kernel images that are
                linked at the wrong physical address.  */
-            addr = ph->p_paddr + address_offset;
+            if (translate_fn) {
+                addr = translate_fn(translate_opaque, ph->p_paddr);
+            } else {
+                addr = ph->p_paddr;
+            }
 
             snprintf(label, sizeof(label), "phdr #%d: %s", i, name);
             rom_add_blob_fixed(label, data, mem_size, addr);

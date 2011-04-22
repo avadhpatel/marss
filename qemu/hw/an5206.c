@@ -54,11 +54,11 @@ static void an5206_init(ram_addr_t ram_size,
 
     /* DRAM at address zero */
     cpu_register_physical_memory(0, ram_size,
-        qemu_ram_alloc(ram_size) | IO_MEM_RAM);
+        qemu_ram_alloc(NULL, "an5206.ram", ram_size) | IO_MEM_RAM);
 
     /* Internal SRAM.  */
     cpu_register_physical_memory(AN5206_RAMBAR_ADDR, 512,
-        qemu_ram_alloc(512) | IO_MEM_RAM);
+        qemu_ram_alloc(NULL, "an5206.sram", 512) | IO_MEM_RAM);
 
     mcf5206_init(AN5206_MBAR_ADDR, env);
 
@@ -68,8 +68,8 @@ static void an5206_init(ram_addr_t ram_size,
         exit(1);
     }
 
-    kernel_size = load_elf(kernel_filename, 0, &elf_entry, NULL, NULL,
-                           1, ELF_MACHINE, 0);
+    kernel_size = load_elf(kernel_filename, NULL, NULL, &elf_entry,
+                           NULL, NULL, 1, ELF_MACHINE, 0);
     entry = elf_entry;
     if (kernel_size < 0) {
         kernel_size = load_uimage(kernel_filename, &entry, NULL, NULL);

@@ -20,7 +20,7 @@
 #define __CPU_PPC_H__
 
 #include "config.h"
-#include <inttypes.h>
+#include "qemu-common.h"
 
 //#define PPC_EMULATE_32BITS_HYPV
 
@@ -28,6 +28,20 @@
 /* PowerPC 64 definitions */
 #define TARGET_LONG_BITS 64
 #define TARGET_PAGE_BITS 12
+
+/* Note that the official physical address space bits is 62-M where M
+   is implementation dependent.  I've not looked up M for the set of
+   cpus we emulate at the system level.  */
+#define TARGET_PHYS_ADDR_SPACE_BITS 62
+
+/* Note that the PPC environment architecture talks about 80 bit virtual
+   addresses, with segmentation.  Obviously that's not all visible to a
+   single process, which is all we're concerned with here.  */
+#ifdef TARGET_ABI32
+# define TARGET_VIRT_ADDR_SPACE_BITS 32
+#else
+# define TARGET_VIRT_ADDR_SPACE_BITS 64
+#endif
 
 #else /* defined (TARGET_PPC64) */
 /* PowerPC 32 definitions */
@@ -49,6 +63,9 @@
 /* "standard" PowerPC 32 definitions */
 #define TARGET_PAGE_BITS 12
 #endif /* defined(TARGET_PPCEMB) */
+
+#define TARGET_PHYS_ADDR_SPACE_BITS 32
+#define TARGET_VIRT_ADDR_SPACE_BITS 32
 
 #endif /* defined (TARGET_PPC64) */
 
@@ -315,6 +332,7 @@ union ppc_avr_t {
     uint64_t u64[2];
 };
 
+#if !defined(CONFIG_USER_ONLY)
 /* Software TLB cache */
 typedef struct ppc6xx_tlb_t ppc6xx_tlb_t;
 struct ppc6xx_tlb_t {
@@ -337,6 +355,7 @@ union ppc_tlb_t {
     ppc6xx_tlb_t tlb6;
     ppcemb_tlb_t tlbe;
 };
+#endif
 
 typedef struct ppc_slb_t ppc_slb_t;
 struct ppc_slb_t {
@@ -433,6 +452,9 @@ struct ppc_slb_t {
 #define msr_hv  (0)
 #endif
 #endif
+
+/* Exception state register bits definition                                  */
+#define ESR_ST    23    /* Exception was caused by a store type access.      */
 
 enum {
     POWERPC_FLAG_NONE     = 0x00000000,
@@ -678,10 +700,12 @@ struct CPUPPCState {
     int power_mode;
     int (*check_pow)(CPUPPCState *env);
 
-    /* temporary hack to handle OSI calls (only used if non NULL) */
-    int (*osi_call)(struct CPUPPCState *env);
+#if !defined(CONFIG_USER_ONLY)
+    void *load_info;    /* Holds boot loading state.  */
+#endif
 };
 
+#if !defined(CONFIG_USER_ONLY)
 /* Context used internally during MMU translations */
 typedef struct mmu_ctx_t mmu_ctx_t;
 struct mmu_ctx_t {
@@ -693,6 +717,7 @@ struct mmu_ctx_t {
     int key;                       /* Access key                */
     int nx;                        /* Non-execute area          */
 };
+#endif
 
 /*****************************************************************************/
 CPUPPCState *cpu_ppc_init (const char *cpu_model);
@@ -707,8 +732,10 @@ int cpu_ppc_signal_handler (int host_signum, void *pinfo,
 int cpu_ppc_handle_mmu_fault (CPUPPCState *env, target_ulong address, int rw,
                               int mmu_idx, int is_softmmu);
 #define cpu_handle_mmu_fault cpu_ppc_handle_mmu_fault
+#if !defined(CONFIG_USER_ONLY)
 int get_physical_address (CPUPPCState *env, mmu_ctx_t *ctx, target_ulong vaddr,
                           int rw, int access_type);
+#endif
 void do_interrupt (CPUPPCState *env);
 void ppc_hw_interrupt (CPUPPCState *env);
 
@@ -734,18 +761,18 @@ void ppc_store_sr (CPUPPCState *env, int srnum, target_ulong value);
 #endif /* !defined(CONFIG_USER_ONLY) */
 void ppc_store_msr (CPUPPCState *env, target_ulong value);
 
-void ppc_cpu_list (FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt, ...));
+void ppc_cpu_list (FILE *f, fprintf_function cpu_fprintf);
 
 const ppc_def_t *cpu_ppc_find_by_name (const char *name);
 int cpu_ppc_register_internal (CPUPPCState *env, const ppc_def_t *def);
 
 /* Time-base and decrementer management */
 #ifndef NO_CPU_IO_DEFS
-uint32_t cpu_ppc_load_tbl (CPUPPCState *env);
+uint64_t cpu_ppc_load_tbl (CPUPPCState *env);
 uint32_t cpu_ppc_load_tbu (CPUPPCState *env);
 void cpu_ppc_store_tbu (CPUPPCState *env, uint32_t value);
 void cpu_ppc_store_tbl (CPUPPCState *env, uint32_t value);
-uint32_t cpu_ppc_load_atbl (CPUPPCState *env);
+uint64_t cpu_ppc_load_atbl (CPUPPCState *env);
 uint32_t cpu_ppc_load_atbu (CPUPPCState *env);
 void cpu_ppc_store_atbl (CPUPPCState *env, uint32_t value);
 void cpu_ppc_store_atbu (CPUPPCState *env, uint32_t value);
@@ -795,8 +822,8 @@ static inline uint64_t ppc_dump_gpr(CPUPPCState *env, int gprn)
 }
 
 /* Device control registers */
-int ppc_dcr_read (ppc_dcr_t *dcr_env, int dcrn, target_ulong *valp);
-int ppc_dcr_write (ppc_dcr_t *dcr_env, int dcrn, target_ulong val);
+int ppc_dcr_read (ppc_dcr_t *dcr_env, int dcrn, uint32_t *valp);
+int ppc_dcr_write (ppc_dcr_t *dcr_env, int dcrn, uint32_t val);
 
 #define cpu_init cpu_ppc_init
 #define cpu_exec cpu_ppc_exec
@@ -826,7 +853,6 @@ static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
 #endif
 
 #include "cpu-all.h"
-#include "exec-all.h"
 
 /*****************************************************************************/
 /* CRF definitions */
@@ -834,10 +860,10 @@ static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
 #define CRF_GT        2
 #define CRF_EQ        1
 #define CRF_SO        0
-#define CRF_CH        (1 << 4)
-#define CRF_CL        (1 << 3)
-#define CRF_CH_OR_CL  (1 << 2)
-#define CRF_CH_AND_CL (1 << 1)
+#define CRF_CH        (1 << CRF_LT)
+#define CRF_CL        (1 << CRF_GT)
+#define CRF_CH_OR_CL  (1 << CRF_EQ)
+#define CRF_CH_AND_CL (1 << CRF_SO)
 
 /* XER definitions */
 #define XER_SO  31
@@ -1577,11 +1603,6 @@ enum {
 };
 
 /*****************************************************************************/
-
-static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
-{
-    env->nip = tb->pc;
-}
 
 static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
                                         target_ulong *cs_base, int *flags)

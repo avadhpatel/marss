@@ -528,13 +528,13 @@ PXA2xxMMCIState *pxa2xx_mmci_init(target_phys_addr_t base,
     s->dma = dma;
 
     iomemtype = cpu_register_io_memory(pxa2xx_mmci_readfn,
-                    pxa2xx_mmci_writefn, s);
+                    pxa2xx_mmci_writefn, s, DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x00100000, iomemtype);
 
     /* Instantiate the actual storage */
     s->card = sd_init(bd, 0);
 
-    register_savevm("pxa2xx_mmci", 0, 0,
+    register_savevm(NULL, "pxa2xx_mmci", 0, 0,
                     pxa2xx_mmci_save, pxa2xx_mmci_load, s);
 
     return s;

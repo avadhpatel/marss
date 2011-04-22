@@ -97,11 +97,6 @@ int cpu_ppc_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
     return 1;
 }
 
-target_phys_addr_t cpu_get_phys_page_debug (CPUState *env, target_ulong addr)
-{
-    return addr;
-}
-
 #else
 /* Common routines used by software and hardware TLBs emulation */
 static inline int pte_is_valid(target_ulong pte0)
@@ -203,7 +198,6 @@ static inline int _pte_check(mmu_ctx_t *ctx, int is_64b, target_ulong pte0,
     target_ulong ptem, mmask;
     int access, ret, pteh, ptev, pp;
 
-    access = 0;
     ret = -1;
     /* Check validity and table match */
 #if defined(TARGET_PPC64)
@@ -498,7 +492,7 @@ static inline int get_bat(CPUState *env, mmu_ctx_t *ctx, target_ulong virtual,
                           int rw, int type)
 {
     target_ulong *BATlt, *BATut, *BATu, *BATl;
-    target_ulong base, BEPIl, BEPIu, bl;
+    target_ulong BEPIl, BEPIu, bl;
     int i, valid, prot;
     int ret = -1;
 
@@ -514,7 +508,6 @@ static inline int get_bat(CPUState *env, mmu_ctx_t *ctx, target_ulong virtual,
         BATut = env->DBAT[0];
         break;
     }
-    base = virtual & 0xFFFC0000;
     for (i = 0; i < env->nb_BATs; i++) {
         BATu = &BATut[i];
         BATl = &BATlt[i];
@@ -736,14 +729,13 @@ static inline int slb_lookup(CPUPPCState *env, target_ulong eaddr,
                     PRIx32 "\n", __func__, n, slb->tmp64, slb->tmp);
         if (slb_is_valid(slb)) {
             /* SLB entry is valid */
+            mask = 0xFFFFFFFFF0000000ULL;
             if (slb->tmp & 0x8) {
-                /* 1 TB Segment */
-                mask = 0xFFFF000000000000ULL;
+                /* 16 MB PTEs */
                 if (target_page_bits)
-                    *target_page_bits = 24; // XXX 16M pages?
+                    *target_page_bits = 24;
             } else {
-                /* 256MB Segment */
-                mask = 0xFFFFFFFFF0000000ULL;
+                /* 4 KB PTEs */
                 if (target_page_bits)
                     *target_page_bits = TARGET_PAGE_BITS;
             }
@@ -1058,7 +1050,6 @@ static inline int ppcemb_tlb_check(CPUState *env, ppcemb_tlb_t *tlb,
 
     /* Check valid flag */
     if (!(tlb->prot & PAGE_VALID)) {
-        qemu_log("%s: TLB %d not valid\n", __func__, i);
         return -1;
     }
     mask = ~(tlb->size - 1);
@@ -1155,7 +1146,7 @@ static int mmu40x_get_physical_address (CPUState *env, mmu_ctx_t *ctx,
                              env->spr[SPR_40x_PID], 0, i) < 0)
             continue;
         zsel = (tlb->attr >> 4) & 0xF;
-        zpr = (env->spr[SPR_40x_ZPR] >> (28 - (2 * zsel))) & 0x3;
+        zpr = (env->spr[SPR_40x_ZPR] >> (30 - (2 * zsel))) & 0x3;
         LOG_SWTLB("%s: TLB %d zsel %d zpr %d rw %d attr %08x\n",
                     __func__, i, zsel, zpr, rw, tlb->attr);
         /* Check execute enable bit */
@@ -1171,6 +1162,8 @@ static int mmu40x_get_physical_address (CPUState *env, mmu_ctx_t *ctx,
             break;
         case 0x0:
             if (pr != 0) {
+                /* Raise Zone protection fault.  */
+                env->spr[SPR_40x_ESR] = 1 << 22;
                 ctx->prot = 0;
                 ret = -2;
                 break;
@@ -1179,10 +1172,10 @@ static int mmu40x_get_physical_address (CPUState *env, mmu_ctx_t *ctx,
         case 0x1:
         check_perms:
             /* Check from TLB entry */
-            /* XXX: there is a problem here or in the TLB fill code... */
             ctx->prot = tlb->prot;
-            ctx->prot |= PAGE_EXEC;
             ret = check_prot(ctx->prot, rw, access_type);
+            if (ret == -2)
+                env->spr[SPR_40x_ESR] = 0;
             break;
         }
         if (ret >= 0) {
@@ -1330,8 +1323,15 @@ int get_physical_address (CPUState *env, mmu_ctx_t *ctx, target_ulong eaddr,
 #endif
     if ((access_type == ACCESS_CODE && msr_ir == 0) ||
         (access_type != ACCESS_CODE && msr_dr == 0)) {
-        /* No address translation */
-        ret = check_physical(env, ctx, eaddr, rw);
+        if (env->mmu_model == POWERPC_MMU_BOOKE) {
+            /* The BookE MMU always performs address translation. The
+               IS and DS bits only affect the address space.  */
+            ret = mmubooke_get_physical_address(env, ctx, eaddr,
+                                                rw, access_type);
+        } else {
+            /* No address translation.  */
+            ret = check_physical(env, ctx, eaddr, rw);
+        }
     } else {
         ret = -1;
         switch (env->mmu_model) {
@@ -1412,9 +1412,10 @@ int cpu_ppc_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
     }
     ret = get_physical_address(env, &ctx, address, rw, access_type);
     if (ret == 0) {
-        ret = tlb_set_page_exec(env, address & TARGET_PAGE_MASK,
-                                ctx.raddr & TARGET_PAGE_MASK, ctx.prot,
-                                mmu_idx, is_softmmu);
+        tlb_set_page(env, address & TARGET_PAGE_MASK,
+                     ctx.raddr & TARGET_PAGE_MASK, ctx.prot,
+                     mmu_idx, TARGET_PAGE_SIZE);
+        ret = 0;
     } else if (ret < 0) {
         LOG_MMU_STATE(env);
         if (access_type == ACCESS_CODE) {
@@ -1448,8 +1449,9 @@ int cpu_ppc_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
                     env->error_code = 0x40000000;
                     break;
                 case POWERPC_MMU_BOOKE:
-                    /* XXX: TODO */
-                    cpu_abort(env, "BookE MMU model is not implemented\n");
+                    env->exception_index = POWERPC_EXCP_ITLB;
+                    env->error_code = 0;
+                    env->spr[SPR_BOOKE_DEAR] = address;
                     return -1;
                 case POWERPC_MMU_BOOKE_FSL:
                     /* XXX: TODO */
@@ -1475,6 +1477,9 @@ int cpu_ppc_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
                 break;
             case -3:
                 /* No execute protection violation */
+                if (env->mmu_model == POWERPC_MMU_BOOKE) {
+                    env->spr[SPR_BOOKE_ESR] = 0x00000000;
+                }
                 env->exception_index = POWERPC_EXCP_ISI;
                 env->error_code = 0x10000000;
                 break;
@@ -1560,8 +1565,10 @@ int cpu_ppc_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
                     cpu_abort(env, "MPC8xx MMU model is not implemented\n");
                     break;
                 case POWERPC_MMU_BOOKE:
-                    /* XXX: TODO */
-                    cpu_abort(env, "BookE MMU model is not implemented\n");
+                    env->exception_index = POWERPC_EXCP_DTLB;
+                    env->error_code = 0;
+                    env->spr[SPR_BOOKE_DEAR] = address;
+                    env->spr[SPR_BOOKE_ESR] = rw ? 1 << ESR_ST : 0;
                     return -1;
                 case POWERPC_MMU_BOOKE_FSL:
                     /* XXX: TODO */
@@ -1580,11 +1587,23 @@ int cpu_ppc_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
                 /* Access rights violation */
                 env->exception_index = POWERPC_EXCP_DSI;
                 env->error_code = 0;
-                env->spr[SPR_DAR] = address;
-                if (rw == 1)
-                    env->spr[SPR_DSISR] = 0x0A000000;
-                else
-                    env->spr[SPR_DSISR] = 0x08000000;
+                if (env->mmu_model == POWERPC_MMU_SOFT_4xx
+                    || env->mmu_model == POWERPC_MMU_SOFT_4xx_Z) {
+                    env->spr[SPR_40x_DEAR] = address;
+                    if (rw) {
+                        env->spr[SPR_40x_ESR] |= 0x00800000;
+                    }
+                } else if (env->mmu_model == POWERPC_MMU_BOOKE) {
+                    env->spr[SPR_BOOKE_DEAR] = address;
+                    env->spr[SPR_BOOKE_ESR] = rw ? 1 << ESR_ST : 0;
+                } else {
+                    env->spr[SPR_DAR] = address;
+                    if (rw == 1) {
+                        env->spr[SPR_DSISR] = 0x0A000000;
+                    } else {
+                        env->spr[SPR_DSISR] = 0x08000000;
+                    }
+                }
                 break;
             case -4:
                 /* Direct store exception */
@@ -1747,11 +1766,15 @@ void ppc_store_dbatl (CPUPPCState *env, int nr, target_ulong value)
 void ppc_store_ibatu_601 (CPUPPCState *env, int nr, target_ulong value)
 {
     target_ulong mask;
+#if defined(FLUSH_ALL_TLBS)
     int do_inval;
+#endif
 
     dump_store_bat(env, 'I', 0, nr, value);
     if (env->IBAT[0][nr] != value) {
+#if defined(FLUSH_ALL_TLBS)
         do_inval = 0;
+#endif
         mask = (env->IBAT[1][nr] << 17) & 0x0FFE0000UL;
         if (env->IBAT[1][nr] & 0x40) {
             /* Invalidate BAT only if it is valid */
@@ -1784,11 +1807,15 @@ void ppc_store_ibatu_601 (CPUPPCState *env, int nr, target_ulong value)
 void ppc_store_ibatl_601 (CPUPPCState *env, int nr, target_ulong value)
 {
     target_ulong mask;
+#if defined(FLUSH_ALL_TLBS)
     int do_inval;
+#endif
 
     dump_store_bat(env, 'I', 1, nr, value);
     if (env->IBAT[1][nr] != value) {
+#if defined(FLUSH_ALL_TLBS)
         do_inval = 0;
+#endif
         if (env->IBAT[1][nr] & 0x40) {
 #if !defined(FLUSH_ALL_TLBS)
             mask = (env->IBAT[1][nr] << 17) & 0x0FFE0000UL;
@@ -1835,8 +1862,7 @@ void ppc_tlb_invalidate_all (CPUPPCState *env)
         cpu_abort(env, "MPC8xx MMU model is not implemented\n");
         break;
     case POWERPC_MMU_BOOKE:
-        /* XXX: TODO */
-        cpu_abort(env, "BookE MMU model is not implemented\n");
+        tlb_flush(env, 1);
         break;
     case POWERPC_MMU_BOOKE_FSL:
         /* XXX: TODO */
@@ -2060,19 +2086,24 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
 
     qemu_log_mask(CPU_LOG_INT, "Raise exception at " TARGET_FMT_lx
                   " => %08x (%02x)\n", env->nip, excp, env->error_code);
-    msr = env->msr;
-    new_msr = msr;
+
+    /* new srr1 value excluding must-be-zero bits */
+    msr = env->msr & ~0x783f0000ULL;
+
+    /* new interrupt handler msr */
+    new_msr = env->msr & ((target_ulong)1 << MSR_ME);
+
+    /* target registers */
     srr0 = SPR_SRR0;
     srr1 = SPR_SRR1;
     asrr0 = -1;
     asrr1 = -1;
-    msr &= ~((target_ulong)0x783F0000);
+
     switch (excp) {
     case POWERPC_EXCP_NONE:
         /* Should never happen */
         return;
     case POWERPC_EXCP_CRITICAL:    /* Critical input                         */
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         switch (excp_model) {
         case POWERPC_EXCP_40x:
             srr0 = SPR_40x_SRR2;
@@ -2103,12 +2134,14 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
             env->halted = 1;
             env->interrupt_request |= CPU_INTERRUPT_EXITTB;
         }
-        new_msr &= ~((target_ulong)1 << MSR_RI);
-        new_msr &= ~((target_ulong)1 << MSR_ME);
         if (0) {
             /* XXX: find a suitable condition to enable the hypervisor mode */
             new_msr |= (target_ulong)MSR_HVB;
         }
+
+        /* machine check exceptions don't have ME set */
+        new_msr &= ~((target_ulong)1 << MSR_ME);
+
         /* XXX: should also have something loaded in DAR / DSISR */
         switch (excp_model) {
         case POWERPC_EXCP_40x:
@@ -2128,25 +2161,21 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
     case POWERPC_EXCP_DSI:       /* Data storage exception                   */
         LOG_EXCP("DSI exception: DSISR=" TARGET_FMT_lx" DAR=" TARGET_FMT_lx
                  "\n", env->spr[SPR_DSISR], env->spr[SPR_DAR]);
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         goto store_next;
     case POWERPC_EXCP_ISI:       /* Instruction storage exception            */
         LOG_EXCP("ISI exception: msr=" TARGET_FMT_lx ", nip=" TARGET_FMT_lx
                  "\n", msr, env->nip);
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         msr |= env->error_code;
         goto store_next;
     case POWERPC_EXCP_EXTERNAL:  /* External input                           */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes0 == 1)
             new_msr |= (target_ulong)MSR_HVB;
         goto store_next;
     case POWERPC_EXCP_ALIGN:     /* Alignment exception                      */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         /* XXX: this is false */
@@ -2162,7 +2191,6 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
                 env->error_code = 0;
                 return;
             }
-            new_msr &= ~((target_ulong)1 << MSR_RI);
             if (lpes1 == 0)
                 new_msr |= (target_ulong)MSR_HVB;
             msr |= 0x00100000;
@@ -2172,19 +2200,16 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
             break;
         case POWERPC_EXCP_INVAL:
             LOG_EXCP("Invalid instruction at " TARGET_FMT_lx "\n", env->nip);
-            new_msr &= ~((target_ulong)1 << MSR_RI);
             if (lpes1 == 0)
                 new_msr |= (target_ulong)MSR_HVB;
             msr |= 0x00080000;
             break;
         case POWERPC_EXCP_PRIV:
-            new_msr &= ~((target_ulong)1 << MSR_RI);
             if (lpes1 == 0)
                 new_msr |= (target_ulong)MSR_HVB;
             msr |= 0x00040000;
             break;
         case POWERPC_EXCP_TRAP:
-            new_msr &= ~((target_ulong)1 << MSR_RI);
             if (lpes1 == 0)
                 new_msr |= (target_ulong)MSR_HVB;
             msr |= 0x00020000;
@@ -2197,40 +2222,24 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
         }
         goto store_current;
     case POWERPC_EXCP_FPU:       /* Floating-point unavailable exception     */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         goto store_current;
     case POWERPC_EXCP_SYSCALL:   /* System call exception                    */
-        /* NOTE: this is a temporary hack to support graphics OSI
-           calls from the MOL driver */
-        /* XXX: To be removed */
-        if (env->gpr[3] == 0x113724fa && env->gpr[4] == 0x77810f9b &&
-            env->osi_call) {
-            if (env->osi_call(env) != 0) {
-                env->exception_index = POWERPC_EXCP_NONE;
-                env->error_code = 0;
-                return;
-            }
-        }
         dump_syscall(env);
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         lev = env->error_code;
         if (lev == 1 || (lpes0 == 0 && lpes1 == 0))
             new_msr |= (target_ulong)MSR_HVB;
         goto store_next;
     case POWERPC_EXCP_APU:       /* Auxiliary processor unavailable          */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         goto store_current;
     case POWERPC_EXCP_DECR:      /* Decrementer exception                    */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         goto store_next;
     case POWERPC_EXCP_FIT:       /* Fixed-interval timer interrupt           */
         /* FIT on 4xx */
         LOG_EXCP("FIT exception\n");
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         goto store_next;
     case POWERPC_EXCP_WDT:       /* Watchdog timer interrupt                 */
         LOG_EXCP("WDT exception\n");
@@ -2242,13 +2251,10 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
         default:
             break;
         }
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         goto store_next;
     case POWERPC_EXCP_DTLB:      /* Data TLB error                           */
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         goto store_next;
     case POWERPC_EXCP_ITLB:      /* Instruction TLB error                    */
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         goto store_next;
     case POWERPC_EXCP_DEBUG:     /* Debug interrupt                          */
         switch (excp_model) {
@@ -2265,7 +2271,6 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
         cpu_abort(env, "Debug exception is not implemented yet !\n");
         goto store_next;
     case POWERPC_EXCP_SPEU:      /* SPE/embedded floating-point unavailable  */
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         goto store_current;
     case POWERPC_EXCP_EFPDI:     /* Embedded floating-point data interrupt   */
         /* XXX: TODO */
@@ -2278,7 +2283,6 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
                   "is not implemented yet !\n");
         goto store_next;
     case POWERPC_EXCP_EPERFM:    /* Embedded performance monitor interrupt   */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         /* XXX: TODO */
         cpu_abort(env,
                   "Performance counter exception is not implemented yet !\n");
@@ -2302,19 +2306,23 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
                   "is not implemented yet !\n");
         goto store_next;
     case POWERPC_EXCP_RESET:     /* System reset exception                   */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
+        if (msr_pow) {
+            /* indicate that we resumed from power save mode */
+            msr |= 0x10000;
+        } else {
+            new_msr &= ~((target_ulong)1 << MSR_ME);
+        }
+
         if (0) {
             /* XXX: find a suitable condition to enable the hypervisor mode */
             new_msr |= (target_ulong)MSR_HVB;
         }
         goto store_next;
     case POWERPC_EXCP_DSEG:      /* Data segment exception                   */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         goto store_next;
     case POWERPC_EXCP_ISEG:      /* Instruction segment exception            */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         goto store_next;
@@ -2322,9 +2330,9 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
         srr0 = SPR_HSRR0;
         srr1 = SPR_HSRR1;
         new_msr |= (target_ulong)MSR_HVB;
+        new_msr |= env->msr & ((target_ulong)1 << MSR_RI);
         goto store_next;
     case POWERPC_EXCP_TRACE:     /* Trace exception                          */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         goto store_next;
@@ -2332,30 +2340,32 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
         srr0 = SPR_HSRR0;
         srr1 = SPR_HSRR1;
         new_msr |= (target_ulong)MSR_HVB;
+        new_msr |= env->msr & ((target_ulong)1 << MSR_RI);
         goto store_next;
     case POWERPC_EXCP_HISI:      /* Hypervisor instruction storage exception */
         srr0 = SPR_HSRR0;
         srr1 = SPR_HSRR1;
         new_msr |= (target_ulong)MSR_HVB;
+        new_msr |= env->msr & ((target_ulong)1 << MSR_RI);
         goto store_next;
     case POWERPC_EXCP_HDSEG:     /* Hypervisor data segment exception        */
         srr0 = SPR_HSRR0;
         srr1 = SPR_HSRR1;
         new_msr |= (target_ulong)MSR_HVB;
+        new_msr |= env->msr & ((target_ulong)1 << MSR_RI);
         goto store_next;
     case POWERPC_EXCP_HISEG:     /* Hypervisor instruction segment exception */
         srr0 = SPR_HSRR0;
         srr1 = SPR_HSRR1;
         new_msr |= (target_ulong)MSR_HVB;
+        new_msr |= env->msr & ((target_ulong)1 << MSR_RI);
         goto store_next;
     case POWERPC_EXCP_VPU:       /* Vector unavailable exception             */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         goto store_current;
     case POWERPC_EXCP_PIT:       /* Programmable interval timer interrupt    */
         LOG_EXCP("PIT exception\n");
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         goto store_next;
     case POWERPC_EXCP_IO:        /* IO error exception                       */
         /* XXX: TODO */
@@ -2371,7 +2381,6 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
                   "is not implemented yet !\n");
         goto store_next;
     case POWERPC_EXCP_IFTLB:     /* Instruction fetch TLB error              */
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         if (lpes1 == 0) /* XXX: check this */
             new_msr |= (target_ulong)MSR_HVB;
         switch (excp_model) {
@@ -2390,7 +2399,6 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
         }
         break;
     case POWERPC_EXCP_DLTLB:     /* Data load TLB miss                       */
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         if (lpes1 == 0) /* XXX: check this */
             new_msr |= (target_ulong)MSR_HVB;
         switch (excp_model) {
@@ -2409,7 +2417,6 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
         }
         break;
     case POWERPC_EXCP_DSTLB:     /* Data store TLB miss                      */
-        new_msr &= ~((target_ulong)1 << MSR_RI); /* XXX: check this */
         if (lpes1 == 0) /* XXX: check this */
             new_msr |= (target_ulong)MSR_HVB;
         switch (excp_model) {
@@ -2513,7 +2520,6 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
                   "is not implemented yet !\n");
         goto store_next;
     case POWERPC_EXCP_PERFM:     /* Embedded performance monitor interrupt   */
-        new_msr &= ~((target_ulong)1 << MSR_RI);
         if (lpes1 == 0)
             new_msr |= (target_ulong)MSR_HVB;
         /* XXX: TODO */
@@ -2567,24 +2573,11 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
     /* If we disactivated any translation, flush TLBs */
     if (new_msr & ((1 << MSR_IR) | (1 << MSR_DR)))
         tlb_flush(env, 1);
-    /* reload MSR with correct bits */
-    new_msr &= ~((target_ulong)1 << MSR_EE);
-    new_msr &= ~((target_ulong)1 << MSR_PR);
-    new_msr &= ~((target_ulong)1 << MSR_FP);
-    new_msr &= ~((target_ulong)1 << MSR_FE0);
-    new_msr &= ~((target_ulong)1 << MSR_SE);
-    new_msr &= ~((target_ulong)1 << MSR_BE);
-    new_msr &= ~((target_ulong)1 << MSR_FE1);
-    new_msr &= ~((target_ulong)1 << MSR_IR);
-    new_msr &= ~((target_ulong)1 << MSR_DR);
-#if 0 /* Fix this: not on all targets */
-    new_msr &= ~((target_ulong)1 << MSR_PMM);
-#endif
-    new_msr &= ~((target_ulong)1 << MSR_LE);
-    if (msr_ile)
+
+    if (msr_ile) {
         new_msr |= (target_ulong)1 << MSR_LE;
-    else
-        new_msr &= ~((target_ulong)1 << MSR_LE);
+    }
+
     /* Jump to handler */
     vector = env->excp_vectors[excp];
     if (vector == (target_ulong)-1ULL) {
@@ -2595,14 +2588,12 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
 #if defined(TARGET_PPC64)
     if (excp_model == POWERPC_EXCP_BOOKE) {
         if (!msr_icm) {
-            new_msr &= ~((target_ulong)1 << MSR_CM);
             vector = (uint32_t)vector;
         } else {
             new_msr |= (target_ulong)1 << MSR_CM;
         }
     } else {
         if (!msr_isf && !(env->mmu_model & POWERPC_MMU_64)) {
-            new_msr &= ~((target_ulong)1 << MSR_SF);
             vector = (uint32_t)vector;
         } else {
             new_msr |= (target_ulong)1 << MSR_SF;
@@ -2618,6 +2609,13 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
     /* Reset exception state */
     env->exception_index = POWERPC_EXCP_NONE;
     env->error_code = 0;
+
+    if (env->mmu_model == POWERPC_MMU_BOOKE) {
+        /* XXX: The BookE changes address space when switching modes,
+                we should probably implement that as different MMU indexes,
+                but for the moment we do it the slow way and flush all.  */
+        tlb_flush(env, 1);
+    }
 }
 
 void do_interrupt (CPUState *env)

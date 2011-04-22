@@ -215,13 +215,14 @@ static int syborg_timer_init(SysBusDevice *dev)
     }
     sysbus_init_irq(dev, &s->irq);
     iomemtype = cpu_register_io_memory(syborg_timer_readfn,
-                                       syborg_timer_writefn, s);
+                                       syborg_timer_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
 
     bh = qemu_bh_new(syborg_timer_tick, s);
     s->timer = ptimer_init(bh);
     ptimer_set_freq(s->timer, s->freq);
-    register_savevm("syborg_timer", -1, 1,
+    register_savevm(&dev->qdev, "syborg_timer", -1, 1,
                     syborg_timer_save, syborg_timer_load, s);
     return 0;
 }

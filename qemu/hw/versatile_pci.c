@@ -32,18 +32,12 @@ static void pci_vpb_config_writeb (void *opaque, target_phys_addr_t addr,
 static void pci_vpb_config_writew (void *opaque, target_phys_addr_t addr,
                                    uint32_t val)
 {
-#ifdef TARGET_WORDS_BIGENDIAN
-    val = bswap16(val);
-#endif
     pci_data_write(opaque, vpb_pci_config_addr (addr), val, 2);
 }
 
 static void pci_vpb_config_writel (void *opaque, target_phys_addr_t addr,
                                    uint32_t val)
 {
-#ifdef TARGET_WORDS_BIGENDIAN
-    val = bswap32(val);
-#endif
     pci_data_write(opaque, vpb_pci_config_addr (addr), val, 4);
 }
 
@@ -58,9 +52,6 @@ static uint32_t pci_vpb_config_readw (void *opaque, target_phys_addr_t addr)
 {
     uint32_t val;
     val = pci_data_read(opaque, vpb_pci_config_addr (addr), 2);
-#ifdef TARGET_WORDS_BIGENDIAN
-    val = bswap16(val);
-#endif
     return val;
 }
 
@@ -68,9 +59,6 @@ static uint32_t pci_vpb_config_readl (void *opaque, target_phys_addr_t addr)
 {
     uint32_t val;
     val = pci_data_read(opaque, vpb_pci_config_addr (addr), 4);
-#ifdef TARGET_WORDS_BIGENDIAN
-    val = bswap32(val);
-#endif
     return val;
 }
 
@@ -123,12 +111,13 @@ static int pci_vpb_init(SysBusDevice *dev)
     }
     bus = pci_register_bus(&dev->qdev, "pci",
                            pci_vpb_set_irq, pci_vpb_map_irq, s->irq,
-                           11 << 3, 4);
+                           PCI_DEVFN(11, 0), 4);
 
     /* ??? Register memory space.  */
 
     s->mem_config = cpu_register_io_memory(pci_vpb_config_read,
-                                           pci_vpb_config_write, bus);
+                                           pci_vpb_config_write, bus,
+                                           DEVICE_LITTLE_ENDIAN);
     sysbus_init_mmio_cb(dev, 0x04000000, pci_vpb_map);
 
     pci_create_simple(bus, -1, "versatile_pci_host");
@@ -147,14 +136,10 @@ static int versatile_pci_host_init(PCIDevice *d)
     pci_config_set_vendor_id(d->config, PCI_VENDOR_ID_XILINX);
     /* Both boards have the same device ID.  Oh well.  */
     pci_config_set_device_id(d->config, PCI_DEVICE_ID_XILINX_XC2VP30);
-    d->config[0x04] = 0x00;
-    d->config[0x05] = 0x00;
-    d->config[0x06] = 0x20;
-    d->config[0x07] = 0x02;
-    d->config[0x08] = 0x00; // revision
-    d->config[0x09] = 0x00; // programming i/f
+    pci_set_word(d->config + PCI_STATUS,
+		 PCI_STATUS_66MHZ | PCI_STATUS_DEVSEL_MEDIUM);
     pci_config_set_class(d->config, PCI_CLASS_PROCESSOR_CO);
-    d->config[0x0D] = 0x10; // latency_timer
+    pci_set_byte(d->config + PCI_LATENCY_TIMER, 0x10);
     return 0;
 }
 

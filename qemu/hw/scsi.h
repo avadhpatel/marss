@@ -3,6 +3,9 @@
 
 #include "qdev.h"
 #include "block.h"
+#include "block_int.h"
+
+#define MAX_SCSI_DEVS	255
 
 #define SCSI_CMD_BUF_SIZE     16
 
@@ -24,10 +27,6 @@ enum SCSIXferMode {
     SCSI_XFER_TO_DEV,    /*  WRITE, MODE_SELECT, ...         */
 };
 
-typedef struct SCSISense {
-    uint8_t key;
-} SCSISense;
-
 typedef struct SCSIRequest {
     SCSIBus           *bus;
     SCSIDevice        *dev;
@@ -42,6 +41,7 @@ typedef struct SCSIRequest {
         enum SCSIXferMode mode;
     } cmd;
     BlockDriverAIOCB  *aiocb;
+    bool enqueued;
     QTAILQ_ENTRY(SCSIRequest) next;
 } SCSIRequest;
 
@@ -49,12 +49,11 @@ struct SCSIDevice
 {
     DeviceState qdev;
     uint32_t id;
-    DriveInfo *dinfo;
+    BlockConf conf;
     SCSIDeviceInfo *info;
     QTAILQ_HEAD(, SCSIRequest) requests;
     int blocksize;
     int type;
-    struct SCSISense sense;
 };
 
 /* cdrom.c */
@@ -84,7 +83,7 @@ struct SCSIBus {
     int tcq, ndev;
     scsi_completionfn complete;
 
-    SCSIDevice *devs[8];
+    SCSIDevice *devs[MAX_SCSI_DEVS];
 };
 
 void scsi_bus_new(SCSIBus *bus, DeviceState *host, int tcq, int ndev,
@@ -96,11 +95,9 @@ static inline SCSIBus *scsi_bus_from_device(SCSIDevice *d)
     return DO_UPCAST(SCSIBus, qbus, d->qdev.parent_bus);
 }
 
-SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, DriveInfo *dinfo, int unit);
-void scsi_bus_legacy_handle_cmdline(SCSIBus *bus);
-
-void scsi_dev_clear_sense(SCSIDevice *dev);
-void scsi_dev_set_sense(SCSIDevice *dev, uint8_t key);
+SCSIDevice *scsi_bus_legacy_add_drive(SCSIBus *bus, BlockDriverState *bdrv,
+                                      int unit, bool removable);
+int scsi_bus_legacy_handle_cmdline(SCSIBus *bus);
 
 SCSIRequest *scsi_req_alloc(size_t size, SCSIDevice *d, uint32_t tag, uint32_t lun);
 SCSIRequest *scsi_req_find(SCSIDevice *d, uint32_t tag);

@@ -1,143 +1,141 @@
 /*
- * Virtio Console Device
+ * Virtio Console and Generic Serial Port Devices
  *
- * Copyright IBM, Corp. 2008
+ * Copyright Red Hat, Inc. 2009, 2010
  *
  * Authors:
- *  Christian Ehrhardt <ehrhardt@linux.vnet.ibm.com>
+ *  Amit Shah <amit.shah@redhat.com>
  *
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
- *
  */
 
-#include "hw.h"
 #include "qemu-char.h"
-#include "virtio.h"
-#include "virtio-console.h"
+#include "virtio-serial.h"
 
-
-typedef struct VirtIOConsole
-{
-    VirtIODevice vdev;
-    VirtQueue *ivq, *ovq;
+typedef struct VirtConsole {
+    VirtIOSerialPort port;
     CharDriverState *chr;
-} VirtIOConsole;
+} VirtConsole;
 
-static VirtIOConsole *to_virtio_console(VirtIODevice *vdev)
+
+/* Callback function that's called when the guest sends us data */
+static ssize_t flush_buf(VirtIOSerialPort *port, const uint8_t *buf, size_t len)
 {
-    return (VirtIOConsole *)vdev;
+    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
+
+    return qemu_chr_write(vcon->chr, buf, len);
 }
 
-static void virtio_console_handle_output(VirtIODevice *vdev, VirtQueue *vq)
+/* Readiness of the guest to accept data on a port */
+static int chr_can_read(void *opaque)
 {
-    VirtIOConsole *s = to_virtio_console(vdev);
-    VirtQueueElement elem;
+    VirtConsole *vcon = opaque;
 
-    while (virtqueue_pop(vq, &elem)) {
-        ssize_t len = 0;
-        int d;
+    return virtio_serial_guest_ready(&vcon->port);
+}
 
-        for (d = 0; d < elem.out_num; d++) {
-            len += qemu_chr_write(s->chr, (uint8_t *)elem.out_sg[d].iov_base,
-                                  elem.out_sg[d].iov_len);
-        }
-        virtqueue_push(vq, &elem, len);
-        virtio_notify(vdev, vq);
+/* Send data from a char device over to the guest */
+static void chr_read(void *opaque, const uint8_t *buf, int size)
+{
+    VirtConsole *vcon = opaque;
+
+    virtio_serial_write(&vcon->port, buf, size);
+}
+
+static void chr_event(void *opaque, int event)
+{
+    VirtConsole *vcon = opaque;
+
+    switch (event) {
+    case CHR_EVENT_OPENED:
+        virtio_serial_open(&vcon->port);
+        break;
+    case CHR_EVENT_CLOSED:
+        virtio_serial_close(&vcon->port);
+        break;
     }
 }
 
-static void virtio_console_handle_input(VirtIODevice *vdev, VirtQueue *vq)
+static int generic_port_init(VirtConsole *vcon, VirtIOSerialDevice *dev)
 {
-}
+    vcon->port.info = dev->info;
 
-static uint32_t virtio_console_get_features(VirtIODevice *vdev)
-{
-    return 0;
-}
-
-static int vcon_can_read(void *opaque)
-{
-    VirtIOConsole *s = (VirtIOConsole *) opaque;
-
-    if (!virtio_queue_ready(s->ivq) ||
-        !(s->vdev.status & VIRTIO_CONFIG_S_DRIVER_OK) ||
-        virtio_queue_empty(s->ivq))
-        return 0;
-
-    /* current implementations have a page sized buffer.
-     * We fall back to a one byte per read if there is not enough room.
-     * It would be cool to have a function that returns the available byte
-     * instead of checking for a limit */
-    if (virtqueue_avail_bytes(s->ivq, TARGET_PAGE_SIZE, 0))
-        return TARGET_PAGE_SIZE;
-    if (virtqueue_avail_bytes(s->ivq, 1, 0))
-        return 1;
-    return 0;
-}
-
-static void vcon_read(void *opaque, const uint8_t *buf, int size)
-{
-    VirtIOConsole *s = (VirtIOConsole *) opaque;
-    VirtQueueElement elem;
-    int offset = 0;
-
-    /* The current kernel implementation has only one outstanding input
-     * buffer of PAGE_SIZE. Nevertheless, this function is prepared to
-     * handle multiple buffers with multiple sg element for input */
-    while (offset < size) {
-        int i = 0;
-        if (!virtqueue_pop(s->ivq, &elem))
-                break;
-        while (offset < size && i < elem.in_num) {
-            int len = MIN(elem.in_sg[i].iov_len, size - offset);
-            memcpy(elem.in_sg[i].iov_base, buf + offset, len);
-            offset += len;
-            i++;
-        }
-        virtqueue_push(s->ivq, &elem, size);
+    if (vcon->chr) {
+        qemu_chr_add_handlers(vcon->chr, chr_can_read, chr_read, chr_event,
+                              vcon);
+        vcon->port.info->have_data = flush_buf;
     }
-    virtio_notify(&s->vdev, s->ivq);
-}
-
-static void vcon_event(void *opaque, int event)
-{
-    /* we will ignore any event for the time being */
-}
-
-static void virtio_console_save(QEMUFile *f, void *opaque)
-{
-    VirtIOConsole *s = opaque;
-
-    virtio_save(&s->vdev, f);
-}
-
-static int virtio_console_load(QEMUFile *f, void *opaque, int version_id)
-{
-    VirtIOConsole *s = opaque;
-
-    if (version_id != 1)
-        return -EINVAL;
-
-    virtio_load(&s->vdev, f);
     return 0;
 }
 
-VirtIODevice *virtio_console_init(DeviceState *dev)
+/* Virtio Console Ports */
+static int virtconsole_initfn(VirtIOSerialDevice *dev)
 {
-    VirtIOConsole *s;
-    s = (VirtIOConsole *)virtio_common_init("virtio-console",
-                                            VIRTIO_ID_CONSOLE,
-                                            0, sizeof(VirtIOConsole));
-    s->vdev.get_features = virtio_console_get_features;
+    VirtIOSerialPort *port = DO_UPCAST(VirtIOSerialPort, dev, &dev->qdev);
+    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
 
-    s->ivq = virtio_add_queue(&s->vdev, 128, virtio_console_handle_input);
-    s->ovq = virtio_add_queue(&s->vdev, 128, virtio_console_handle_output);
-
-    s->chr = qdev_init_chardev(dev);
-    qemu_chr_add_handlers(s->chr, vcon_can_read, vcon_read, vcon_event, s);
-
-    register_savevm("virtio-console", -1, 1, virtio_console_save, virtio_console_load, s);
-
-    return &s->vdev;
+    port->is_console = true;
+    return generic_port_init(vcon, dev);
 }
+
+static int virtconsole_exitfn(VirtIOSerialDevice *dev)
+{
+    VirtIOSerialPort *port = DO_UPCAST(VirtIOSerialPort, dev, &dev->qdev);
+    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
+
+    if (vcon->chr) {
+        port->info->have_data = NULL;
+        qemu_chr_close(vcon->chr);
+    }
+
+    return 0;
+}
+
+static VirtIOSerialPortInfo virtconsole_info = {
+    .qdev.name     = "virtconsole",
+    .qdev.size     = sizeof(VirtConsole),
+    .init          = virtconsole_initfn,
+    .exit          = virtconsole_exitfn,
+    .qdev.props = (Property[]) {
+        DEFINE_PROP_UINT8("is_console", VirtConsole, port.is_console, 1),
+        DEFINE_PROP_UINT32("nr", VirtConsole, port.id, VIRTIO_CONSOLE_BAD_ID),
+        DEFINE_PROP_CHR("chardev", VirtConsole, chr),
+        DEFINE_PROP_STRING("name", VirtConsole, port.name),
+        DEFINE_PROP_END_OF_LIST(),
+    },
+};
+
+static void virtconsole_register(void)
+{
+    virtio_serial_port_qdev_register(&virtconsole_info);
+}
+device_init(virtconsole_register)
+
+/* Generic Virtio Serial Ports */
+static int virtserialport_initfn(VirtIOSerialDevice *dev)
+{
+    VirtIOSerialPort *port = DO_UPCAST(VirtIOSerialPort, dev, &dev->qdev);
+    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
+
+    return generic_port_init(vcon, dev);
+}
+
+static VirtIOSerialPortInfo virtserialport_info = {
+    .qdev.name     = "virtserialport",
+    .qdev.size     = sizeof(VirtConsole),
+    .init          = virtserialport_initfn,
+    .exit          = virtconsole_exitfn,
+    .qdev.props = (Property[]) {
+        DEFINE_PROP_UINT32("nr", VirtConsole, port.id, VIRTIO_CONSOLE_BAD_ID),
+        DEFINE_PROP_CHR("chardev", VirtConsole, chr),
+        DEFINE_PROP_STRING("name", VirtConsole, port.name),
+        DEFINE_PROP_END_OF_LIST(),
+    },
+};
+
+static void virtserialport_register(void)
+{
+    virtio_serial_port_qdev_register(&virtserialport_info);
+}
+device_init(virtserialport_register)

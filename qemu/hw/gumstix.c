@@ -38,6 +38,7 @@
 #include "sysemu.h"
 #include "devices.h"
 #include "boards.h"
+#include "blockdev.h"
 
 static const int sector_len = 128 * 1024;
 
@@ -48,6 +49,7 @@ static void connex_init(ram_addr_t ram_size,
 {
     PXA2xxState *cpu;
     DriveInfo *dinfo;
+    int be;
 
     uint32_t connex_rom = 0x01000000;
     uint32_t connex_ram = 0x04000000;
@@ -61,18 +63,22 @@ static void connex_init(ram_addr_t ram_size,
         exit(1);
     }
 
-    if (!pflash_cfi01_register(0x00000000, qemu_ram_alloc(connex_rom),
-            dinfo->bdrv, sector_len, connex_rom / sector_len,
-            2, 0, 0, 0, 0)) {
+#ifdef TARGET_WORDS_BIGENDIAN
+    be = 1;
+#else
+    be = 0;
+#endif
+    if (!pflash_cfi01_register(0x00000000, qemu_ram_alloc(NULL, "connext.rom",
+                                                          connex_rom),
+                               dinfo->bdrv, sector_len, connex_rom / sector_len,
+                               2, 0, 0, 0, 0, be)) {
         fprintf(stderr, "qemu: Error registering flash memory.\n");
         exit(1);
     }
 
-    cpu->env->regs[15] = 0x00000000;
-
     /* Interrupt line of NIC is connected to GPIO line 36 */
     smc91c111_init(&nd_table[0], 0x04000300,
-                    pxa2xx_gpio_in_get(cpu->gpio)[36]);
+                    qdev_get_gpio_in(cpu->gpio, 36));
 }
 
 static void verdex_init(ram_addr_t ram_size,
@@ -82,6 +88,7 @@ static void verdex_init(ram_addr_t ram_size,
 {
     PXA2xxState *cpu;
     DriveInfo *dinfo;
+    int be;
 
     uint32_t verdex_rom = 0x02000000;
     uint32_t verdex_ram = 0x10000000;
@@ -95,18 +102,22 @@ static void verdex_init(ram_addr_t ram_size,
         exit(1);
     }
 
-    if (!pflash_cfi01_register(0x00000000, qemu_ram_alloc(verdex_rom),
-            dinfo->bdrv, sector_len, verdex_rom / sector_len,
-            2, 0, 0, 0, 0)) {
+#ifdef TARGET_WORDS_BIGENDIAN
+    be = 1;
+#else
+    be = 0;
+#endif
+    if (!pflash_cfi01_register(0x00000000, qemu_ram_alloc(NULL, "verdex.rom",
+                                                          verdex_rom),
+                               dinfo->bdrv, sector_len, verdex_rom / sector_len,
+                               2, 0, 0, 0, 0, be)) {
         fprintf(stderr, "qemu: Error registering flash memory.\n");
         exit(1);
     }
 
-    cpu->env->regs[15] = 0x00000000;
-
     /* Interrupt line of NIC is connected to GPIO line 99 */
     smc91c111_init(&nd_table[0], 0x04000300,
-                    pxa2xx_gpio_in_get(cpu->gpio)[99]);
+                    qdev_get_gpio_in(cpu->gpio, 99));
 }
 
 static QEMUMachine connex_machine = {

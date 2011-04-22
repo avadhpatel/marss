@@ -1,10 +1,20 @@
 \input texinfo @c -*- texinfo -*-
 @c %**start of header
 @setfilename qemu-doc.info
+
+@documentlanguage en
+@documentencoding UTF-8
+
 @settitle QEMU Emulator User Documentation
 @exampleindent 0
 @paragraphindent 0
 @c %**end of header
+
+@ifinfo
+@direntry
+* QEMU: (qemu-doc).    The QEMU Emulator User Documentation.
+@end direntry
+@end ifinfo
 
 @iftex
 @titlepage
@@ -27,6 +37,7 @@
 * QEMU System emulator for non PC targets::
 * QEMU User space emulator::
 * compilation:: Compilation from the sources
+* License::
 * Index::
 @end menu
 @end ifnottex
@@ -48,15 +59,18 @@ achieve good emulation speed.
 
 QEMU has two operating modes:
 
-@itemize @minus
+@itemize
+@cindex operating modes
 
 @item
+@cindex system emulation
 Full system emulation. In this mode, QEMU emulates a full system (for
 example a PC), including one or several processors and various
 peripherals. It can be used to launch different Operating Systems
 without rebooting the PC or to debug system code.
 
 @item
+@cindex user mode emulation
 User mode emulation. In this mode, QEMU can launch
 processes compiled for one CPU on another CPU. It can be used to
 launch the Wine Windows API emulator (@url{http://www.winehq.org}) or
@@ -69,6 +83,8 @@ performance.
 
 For system emulation, the following hardware targets are supported:
 @itemize
+@cindex emulated target systems
+@cindex supported target systems
 @item PC (x86 or x86_64 processor)
 @item ISA PC (old style PC without PCI bus)
 @item PREP (PowerPC processor)
@@ -96,7 +112,10 @@ For system emulation, the following hardware targets are supported:
 @item Petalogix Spartan 3aDSP1800 MMU ref design (MicroBlaze).
 @end itemize
 
-For user emulation, x86, PowerPC, ARM, 32-bit MIPS, Sparc32/64, ColdFire(m68k), CRISv32 and MicroBlaze CPUs are supported.
+@cindex supported user mode targets
+For user emulation, x86 (32 and 64 bit), PowerPC (32 and 64 bit),
+ARM, MIPS (32 bit only), Sparc (32 and 64 bit),
+Alpha, ColdFire(m68k), CRISv32 and MicroBlaze CPUs are supported.
 
 @node Installation
 @chapter Installation
@@ -111,24 +130,29 @@ If you want to compile QEMU yourself, see @ref{compilation}.
 
 @node install_linux
 @section Linux
+@cindex installation (Linux)
 
 If a precompiled package is available for your distribution - you just
 have to install it. Otherwise, see @ref{compilation}.
 
 @node install_windows
 @section Windows
+@cindex installation (Windows)
 
 Download the experimental binary installer at
 @url{http://www.free.oszoo.org/@/download.html}.
+TODO (no longer available)
 
 @node install_mac
 @section Mac OS X
 
 Download the experimental binary installer at
 @url{http://www.free.oszoo.org/@/download.html}.
+TODO (no longer available)
 
 @node QEMU PC System emulator
 @chapter QEMU PC System emulator
+@cindex system emulation (PC)
 
 @menu
 * pcsys_introduction:: Introduction
@@ -138,6 +162,7 @@ Download the experimental binary installer at
 * pcsys_monitor::      QEMU Monitor
 * disk_images::        Disk Images
 * pcsys_network::      Network emulation
+* pcsys_other_devs::   Other Devices
 * direct_linux_boot::  Direct Linux Boot
 * pcsys_usb::          USB emulation
 * vnc_security::       VNC security
@@ -176,7 +201,9 @@ ENSONIQ AudioPCI ES1370 sound card
 @item
 Intel 82801AA AC97 Audio compatible sound card
 @item
-Adlib(OPL2) - Yamaha YM3812 compatible chip
+Intel HD Audio Controller and HDA codec
+@item
+Adlib (OPL2) - Yamaha YM3812 compatible chip
 @item
 Gravis Ultrasound GF1 sound card
 @item
@@ -196,7 +223,7 @@ VGA BIOS.
 
 QEMU uses YM3812 emulation by Tatsuyuki Satoh.
 
-QEMU uses GUS emulation(GUSEMU32 @url{http://www.deinmeister.de/gusemu/})
+QEMU uses GUS emulation (GUSEMU32 @url{http://www.deinmeister.de/gusemu/})
 by Tibor "TS" Schütz.
 
 Not that, by default, GUS shares IRQ(7) with parallel ports and so
@@ -219,6 +246,7 @@ CS4231A is the chip used in Windows Sound System and GUSMAX products
 
 @node pcsys_quickstart
 @section Quick Start
+@cindex quick start
 
 Download and uncompress the linux image (@file{linux.img}) and type:
 
@@ -253,12 +281,15 @@ targets do not need a disk image.
 During the graphical emulation, you can use the following keys:
 @table @key
 @item Ctrl-Alt-f
+@kindex Ctrl-Alt-f
 Toggle full screen
 
 @item Ctrl-Alt-u
+@kindex Ctrl-Alt-u
 Restore the screen's un-scaled dimensions
 
 @item Ctrl-Alt-n
+@kindex Ctrl-Alt-n
 Switch to virtual console 'n'. Standard console mappings are:
 @table @emph
 @item 1
@@ -270,30 +301,44 @@ Serial port
 @end table
 
 @item Ctrl-Alt
+@kindex Ctrl-Alt
 Toggle mouse and keyboard grab.
 @end table
 
+@kindex Ctrl-Up
+@kindex Ctrl-Down
+@kindex Ctrl-PageUp
+@kindex Ctrl-PageDown
 In the virtual consoles, you can use @key{Ctrl-Up}, @key{Ctrl-Down},
 @key{Ctrl-PageUp} and @key{Ctrl-PageDown} to move in the back log.
 
+@kindex Ctrl-a h
 During emulation, if you are using the @option{-nographic} option, use
 @key{Ctrl-a h} to get terminal commands:
 
 @table @key
 @item Ctrl-a h
+@kindex Ctrl-a h
 @item Ctrl-a ?
+@kindex Ctrl-a ?
 Print this help
 @item Ctrl-a x
+@kindex Ctrl-a x
 Exit emulator
 @item Ctrl-a s
+@kindex Ctrl-a s
 Save disk data back to file (if -snapshot)
 @item Ctrl-a t
+@kindex Ctrl-a t
 Toggle console timestamps
 @item Ctrl-a b
+@kindex Ctrl-a b
 Send break (magic sysrq in Linux)
 @item Ctrl-a c
+@kindex Ctrl-a c
 Switch between console and monitor
 @item Ctrl-a Ctrl-a
+@kindex Ctrl-a a
 Send Ctrl-a
 @end table
 @c man end
@@ -313,6 +358,7 @@ Fabrice Bellard
 
 @node pcsys_monitor
 @section QEMU Monitor
+@cindex QEMU monitor
 
 The QEMU monitor is used to give complex commands to the QEMU
 emulator. You can use it to:
@@ -361,6 +407,7 @@ snapshots.
 * host_drives::               Using host drives
 * disk_images_fat_images::    Virtual FAT disk images
 * disk_images_nbd::           NBD access
+* disk_images_sheepdog::      Sheepdog disk images
 @end menu
 
 @node disk_images_quickstart
@@ -577,6 +624,64 @@ qemu linux1.img -hdb nbd:unix:/tmp/my_socket
 qemu linux2.img -hdb nbd:unix:/tmp/my_socket
 @end example
 
+If the nbd-server uses named exports (since NBD 2.9.18), you must use the
+"exportname" option:
+@example
+qemu -cdrom nbd:localhost:exportname=debian-500-ppc-netinst
+qemu -cdrom nbd:localhost:exportname=openSUSE-11.1-ppc-netinst
+@end example
+
+@node disk_images_sheepdog
+@subsection Sheepdog disk images
+
+Sheepdog is a distributed storage system for QEMU.  It provides highly
+available block level storage volumes that can be attached to
+QEMU-based virtual machines.
+
+You can create a Sheepdog disk image with the command:
+@example
+qemu-img create sheepdog:@var{image} @var{size}
+@end example
+where @var{image} is the Sheepdog image name and @var{size} is its
+size.
+
+To import the existing @var{filename} to Sheepdog, you can use a
+convert command.
+@example
+qemu-img convert @var{filename} sheepdog:@var{image}
+@end example
+
+You can boot from the Sheepdog disk image with the command:
+@example
+qemu sheepdog:@var{image}
+@end example
+
+You can also create a snapshot of the Sheepdog image like qcow2.
+@example
+qemu-img snapshot -c @var{tag} sheepdog:@var{image}
+@end example
+where @var{tag} is a tag name of the newly created snapshot.
+
+To boot from the Sheepdog snapshot, specify the tag name of the
+snapshot.
+@example
+qemu sheepdog:@var{image}:@var{tag}
+@end example
+
+You can create a cloned image from the existing snapshot.
+@example
+qemu-img create -b sheepdog:@var{base}:@var{tag} sheepdog:@var{image}
+@end example
+where @var{base} is a image name of the source snapshot and @var{tag}
+is its tag name.
+
+If the Sheepdog daemon doesn't run on the local host, you need to
+specify one of the Sheepdog servers to connect to.
+@example
+qemu-img create sheepdog:@var{hostname}:@var{port}:@var{image} @var{size}
+qemu sheepdog:@var{hostname}:@var{port}:@var{image}
+@end example
+
 @node pcsys_network
 @section Network emulation
 
@@ -663,6 +768,50 @@ Using the @option{-net socket} option, it is possible to make VLANs
 that span several QEMU instances. See @ref{sec_invocation} to have a
 basic example.
 
+@node pcsys_other_devs
+@section Other Devices
+
+@subsection Inter-VM Shared Memory device
+
+With KVM enabled on a Linux host, a shared memory device is available.  Guests
+map a POSIX shared memory region into the guest as a PCI device that enables
+zero-copy communication to the application level of the guests.  The basic
+syntax is:
+
+@example
+qemu -device ivshmem,size=<size in format accepted by -m>[,shm=<shm name>]
+@end example
+
+If desired, interrupts can be sent between guest VMs accessing the same shared
+memory region.  Interrupt support requires using a shared memory server and
+using a chardev socket to connect to it.  The code for the shared memory server
+is qemu.git/contrib/ivshmem-server.  An example syntax when using the shared
+memory server is:
+
+@example
+qemu -device ivshmem,size=<size in format accepted by -m>[,chardev=<id>]
+                        [,msi=on][,ioeventfd=on][,vectors=n][,role=peer|master]
+qemu -chardev socket,path=<path>,id=<id>
+@end example
+
+When using the server, the guest will be assigned a VM ID (>=0) that allows guests
+using the same server to communicate via interrupts.  Guests can read their
+VM ID from a device register (see example code).  Since receiving the shared
+memory region from the server is asynchronous, there is a (small) chance the
+guest may boot before the shared memory is attached.  To allow an application
+to ensure shared memory is attached, the VM ID register will return -1 (an
+invalid VM ID) until the memory is attached.  Once the shared memory is
+attached, the VM ID will return the guest's valid VM ID.  With these semantics,
+the guest application can check to ensure the shared memory is attached to the
+guest before proceeding.
+
+The @option{role} argument can be set to either master or peer and will affect
+how the shared memory is migrated.  With @option{role=master}, the guest will
+copy the shared memory on migration to the destination host.  With
+@option{role=peer}, the guest will not be able to migrate with the device attached.
+With the @option{peer} case, the device should be detached and then reattached
+after migration using the PCI hotplug support.
+
 @node direct_linux_boot
 @section Direct Linux Boot
 
@@ -737,7 +886,7 @@ Standard USB keyboard.  Will override the PS/2 keyboard (if present).
 Serial converter. This emulates an FTDI FT232BM chip connected to host character
 device @var{dev}. The available character devices are the same as for the
 @code{-serial} option. The @code{vendorid} and @code{productid} options can be
-used to override the default 0403:6001. For instance, 
+used to override the default 0403:6001. For instance,
 @example
 usb_add serial:productid=FA00:tcp:192.168.0.2:4444
 @end example
@@ -952,7 +1101,7 @@ qemu [...OPTIONS...] -vnc :1,tls,x509,sasl -monitor stdio
 
 The GNU TLS packages provides a command called @code{certtool} which can
 be used to generate certificates and keys in PEM format. At a minimum it
-is neccessary to setup a certificate authority, and issue certificates to
+is necessary to setup a certificate authority, and issue certificates to
 each server. If using certificates for authentication, then each client
 will also need to be issued a certificate. The recommendation is for the
 server to keep its certificates in either @code{/etc/pki/qemu} or for
@@ -1095,7 +1244,7 @@ keytab: /etc/qemu/krb5.tab
 For this to work the administrator of your KDC must generate a Kerberos
 principal for the server, with a name of  'qemu/somehost.example.com@@EXAMPLE.COM'
 replacing 'somehost.example.com' with the fully qualified host name of the
-machine running QEMU, and 'EXAMPLE.COM' with the Keberos Realm.
+machine running QEMU, and 'EXAMPLE.COM' with the Kerberos Realm.
 
 Other configurations will be left as an exercise for the reader. It should
 be noted that only Digest-MD5 and GSSAPI provides a SSF layer for data
@@ -1276,16 +1425,20 @@ machines. Most of the options are similar to the PC emulator. The
 differences are mentioned in the following sections.
 
 @menu
-* QEMU PowerPC System emulator::
+* PowerPC System emulator::
 * Sparc32 System emulator::
 * Sparc64 System emulator::
 * MIPS System emulator::
 * ARM System emulator::
 * ColdFire System emulator::
+* Cris System emulator::
+* Microblaze System emulator::
+* SH4 System emulator::
 @end menu
 
-@node QEMU PowerPC System emulator
-@section QEMU PowerPC System emulator
+@node PowerPC System emulator
+@section PowerPC System emulator
+@cindex system emulation (PowerPC)
 
 Use the executable @file{qemu-system-ppc} to simulate a complete PREP
 or PowerMac PowerPC system.
@@ -1368,6 +1521,7 @@ More information is available at
 
 @node Sparc32 System emulator
 @section Sparc32 System emulator
+@cindex system emulation (Sparc32)
 
 Use the executable @file{qemu-system-sparc} to simulate the following
 Sun4m architecture machines:
@@ -1456,7 +1610,7 @@ qemu-system-sparc -prom-env 'auto-boot?=false' \
  -prom-env 'boot-device=sd(0,2,0):d' -prom-env 'boot-args=linux single'
 @end example
 
-@item -M [SS-4|SS-5|SS-10|SS-20|SS-600MP|LX|Voyager|SPARCClassic|SPARCbook|SS-2|SS-1000|SS-2000]
+@item -M [SS-4|SS-5|SS-10|SS-20|SS-600MP|LX|Voyager|SPARCClassic] [|SPARCbook|SS-2|SS-1000|SS-2000]
 
 Set the emulated machine type. Default is SS-5.
 
@@ -1466,6 +1620,7 @@ Set the emulated machine type. Default is SS-5.
 
 @node Sparc64 System emulator
 @section Sparc64 System emulator
+@cindex system emulation (Sparc64)
 
 Use the executable @file{qemu-system-sparc64} to simulate a Sun4u
 (UltraSPARC PC-like machine), Sun4v (T1 PC-like machine), or generic
@@ -1515,6 +1670,7 @@ Set the emulated machine type. The default is sun4u.
 
 @node MIPS System emulator
 @section MIPS System emulator
+@cindex system emulation (MIPS)
 
 Four executables cover simulation of 32 and 64-bit MIPS systems in
 both endian options, @file{qemu-system-mips}, @file{qemu-system-mipsel}
@@ -1610,6 +1766,7 @@ G364 framebuffer
 
 @node ARM System emulator
 @section ARM System emulator
+@cindex system emulation (ARM)
 
 Use the executable @file{qemu-system-arm} to simulate a ARM
 machine. The ARM Integrator/CP board is emulated with the following
@@ -1659,8 +1816,17 @@ LSI53C895A PCI SCSI Host Bus Adapter with hard disk and CD-ROM devices.
 PL181 MultiMedia Card Interface with SD card.
 @end itemize
 
-The ARM RealView Emulation/Platform baseboard is emulated with the following
-devices:
+Several variants of the ARM RealView baseboard are emulated,
+including the EB, PB-A8 and PBX-A9.  Due to interactions with the
+bootloader, only certain Linux kernel configurations work out
+of the box on these boards.
+
+Kernels for the PB-A8 board should have CONFIG_REALVIEW_HIGH_PHYS_OFFSET
+enabled in the kernel, and expect 512M RAM.  Kernels for The PBX-A9 board
+should have CONFIG_SPARSEMEM enabled, CONFIG_REALVIEW_HIGH_PHYS_OFFSET
+disabled and expect 1024M RAM.
+
+The following devices are emulated:
 
 @itemize @minus
 @item
@@ -1760,7 +1926,7 @@ Secure Digital card connected to OMAP MMC/SD host
 @item
 Three OMAP on-chip UARTs and on-chip STI debugging console
 @item
-A Bluetooth(R) transciever and HCI connected to an UART
+A Bluetooth(R) transceiver and HCI connected to an UART
 @item
 Mentor Graphics "Inventra" dual-role USB controller embedded in a TI
 TUSB6010 chip - only USB host mode is supported
@@ -1816,13 +1982,13 @@ MV88W8xx8 Ethernet controller
 @item
 MV88W8618 audio controller, WM8750 CODEC and mixer
 @item
-128�64 display with brightness control
+128×64 display with brightness control
 @item
 2 buttons, 2 navigation wheels with button function
 @end itemize
 
 The Siemens SX1 models v1 and v2 (default) basic emulation.
-The emulaton includes the following elements:
+The emulation includes the following elements:
 
 @itemize @minus
 @item
@@ -1886,6 +2052,8 @@ so should only be used with trusted guest OS.
 
 @node ColdFire System emulator
 @section ColdFire System emulator
+@cindex system emulation (ColdFire)
+@cindex system emulation (M68K)
 
 Use the executable @file{qemu-system-m68k} to simulate a ColdFire machine.
 The emulator is able to boot a uClinux kernel.
@@ -1912,7 +2080,7 @@ Two on-chip UARTs.
 
 @c man begin OPTIONS
 
-The following options are specific to the ARM emulation:
+The following options are specific to the ColdFire emulation:
 
 @table @option
 
@@ -1925,6 +2093,24 @@ Note that this allows guest direct access to the host filesystem,
 so should only be used with trusted guest OS.
 
 @end table
+
+@node Cris System emulator
+@section Cris System emulator
+@cindex system emulation (Cris)
+
+TODO
+
+@node Microblaze System emulator
+@section Microblaze System emulator
+@cindex system emulation (Microblaze)
+
+TODO
+
+@node SH4 System emulator
+@section SH4 System emulator
+@cindex system emulation (SH4)
+
+TODO
 
 @node QEMU User space emulator
 @chapter QEMU User space emulator
@@ -1998,7 +2184,7 @@ Then you can launch the precompiled @file{ls} x86 executable:
 @example
 qemu-i386 tests/i386/ls
 @end example
-You can look at @file{qemu-binfmt-conf.sh} so that
+You can look at @file{scripts/qemu-binfmt-conf.sh} so that
 QEMU is automatically launched by the Linux kernel when you try to
 launch x86 executables. It requires the @code{binfmt_misc} module in the
 Linux kernel.
@@ -2044,7 +2230,7 @@ qemu-i386 /usr/local/qemu-i386/wine/bin/wine \
 @subsection Command line options
 
 @example
-usage: qemu-i386 [-h] [-d] [-L path] [-s size] [-cpu model] [-g port] [-B offset] program [arguments...]
+usage: qemu-i386 [-h] [-d] [-L path] [-s size] [-cpu model] [-g port] [-B offset] [-R size] program [arguments...]
 @end example
 
 @table @option
@@ -2056,10 +2242,20 @@ Set the x86 elf interpreter prefix (default=/usr/local/qemu-i386)
 Set the x86 stack size in bytes (default=524288)
 @item -cpu model
 Select CPU model (-cpu ? for list and additional feature selection)
+@item -ignore-environment
+Start with an empty environment. Without this option,
+the initial environment is a copy of the caller's environment.
+@item -E @var{var}=@var{value}
+Set environment @var{var} to @var{value}.
+@item -U @var{var}
+Remove @var{var} from the environment.
 @item -B offset
 Offset guest address by the specified number of bytes.  This is useful when
-the address region rewuired by guest applications is reserved on the host.
-Ths option is currently only supported on some hosts.
+the address region required by guest applications is reserved on the host.
+This option is currently only supported on some hosts.
+@item -R size
+Pre-allocate a guest virtual address space of the given size (in bytes).
+"G", "M", and "k" suffixes may be used when specifying the size.
 @end table
 
 Debug options:
@@ -2090,16 +2286,49 @@ flag-style arguments don't have decoders and will show up as numbers.
 @node Other binaries
 @subsection Other binaries
 
+@cindex user mode (Alpha)
+@command{qemu-alpha} TODO.
+
+@cindex user mode (ARM)
+@command{qemu-armeb} TODO.
+
+@cindex user mode (ARM)
 @command{qemu-arm} is also capable of running ARM "Angel" semihosted ELF
 binaries (as implemented by the arm-elf and arm-eabi Newlib/GDB
 configurations), and arm-uclinux bFLT format binaries.
 
+@cindex user mode (ColdFire)
+@cindex user mode (M68K)
 @command{qemu-m68k} is capable of running semihosted binaries using the BDM
 (m5xxx-ram-hosted.ld) or m68k-sim (sim.ld) syscall interfaces, and
 coldfire uClinux bFLT format binaries.
 
 The binary format is detected automatically.
 
+@cindex user mode (Cris)
+@command{qemu-cris} TODO.
+
+@cindex user mode (i386)
+@command{qemu-i386} TODO.
+@command{qemu-x86_64} TODO.
+
+@cindex user mode (Microblaze)
+@command{qemu-microblaze} TODO.
+
+@cindex user mode (MIPS)
+@command{qemu-mips} TODO.
+@command{qemu-mipsel} TODO.
+
+@cindex user mode (PowerPC)
+@command{qemu-ppc64abi32} TODO.
+@command{qemu-ppc64} TODO.
+@command{qemu-ppc} TODO.
+
+@cindex user mode (SH4)
+@command{qemu-sh4eb} TODO.
+@command{qemu-sh4} TODO.
+
+@cindex user mode (SPARC)
 @command{qemu-sparc} can execute Sparc32 binaries (Sparc32 CPU, 32 bit ABI).
 
 @command{qemu-sparc32plus} can execute Sparc32 and SPARC32PLUS binaries
@@ -2243,6 +2472,13 @@ Print the help
 Set the library root path (default=/)
 @item -s size
 Set the stack size in bytes (default=524288)
+@item -ignore-environment
+Start with an empty environment. Without this option,
+the initial environment is a copy of the caller's environment.
+@item -E @var{var}=@var{value}
+Set environment @var{var} to @var{value}.
+@item -U @var{var}
+Remove @var{var} from the environment.
 @item -bsd type
 Set the type of the emulated BSD Operating system. Valid values are
 FreeBSD, NetBSD and OpenBSD (default).
@@ -2267,6 +2503,7 @@ Run the emulation in single step mode.
 * Windows::
 * Cross compilation for Windows with Linux::
 * Mac OS X::
+* Make targets::
 @end menu
 
 @node Linux/Unix
@@ -2304,10 +2541,13 @@ instructions in the download section and the FAQ.
 @item Download
 the MinGW development library of SDL 1.2.x
 (@file{SDL-devel-1.2.x-@/mingw32.tar.gz}) from
-@url{http://www.libsdl.org}. Unpack it in a temporary place, and
-unpack the archive @file{i386-mingw32msvc.tar.gz} in the MinGW tool
-directory. Edit the @file{sdl-config} script so that it gives the
+@url{http://www.libsdl.org}. Unpack it in a temporary place and
+edit the @file{sdl-config} script so that it gives the
 correct SDL directory when invoked.
+
+@item Install the MinGW version of zlib and make sure
+@file{zlib.h} and @file{libz.dll.a} are in
+MinGW's default header and linker search paths.
 
 @item Extract the current version of QEMU.
 
@@ -2331,29 +2571,43 @@ correct SDL directory when invoked.
 Install the MinGW cross compilation tools available at
 @url{http://www.mingw.org/}.
 
-@item
-Install the Win32 version of SDL (@url{http://www.libsdl.org}) by
-unpacking @file{i386-mingw32msvc.tar.gz}. Set up the PATH environment
-variable so that @file{i386-mingw32msvc-sdl-config} can be launched by
+@item Download
+the MinGW development library of SDL 1.2.x
+(@file{SDL-devel-1.2.x-@/mingw32.tar.gz}) from
+@url{http://www.libsdl.org}. Unpack it in a temporary place and
+edit the @file{sdl-config} script so that it gives the
+correct SDL directory when invoked.  Set up the @code{PATH} environment
+variable so that @file{sdl-config} can be launched by
 the QEMU configuration script.
+
+@item Install the MinGW version of zlib and make sure
+@file{zlib.h} and @file{libz.dll.a} are in
+MinGW's default header and linker search paths.
 
 @item
 Configure QEMU for Windows cross compilation:
 @example
-./configure --enable-mingw32
+PATH=/usr/i686-pc-mingw32/sys-root/mingw/bin:$PATH ./configure --cross-prefix='i686-pc-mingw32-'
 @end example
-If necessary, you can change the cross-prefix according to the prefix
-chosen for the MinGW tools with --cross-prefix. You can also use
---prefix to set the Win32 install path.
+The example assumes @file{sdl-config} is installed under @file{/usr/i686-pc-mingw32/sys-root/mingw/bin} and
+MinGW cross compilation tools have names like @file{i686-pc-mingw32-gcc} and @file{i686-pc-mingw32-strip}.
+We set the @code{PATH} environment variable to ensure the MinGW version of @file{sdl-config} is used and
+use --cross-prefix to specify the name of the cross compiler.
+You can also use --prefix to set the Win32 install path which defaults to @file{c:/Program Files/Qemu}.
+
+Under Fedora Linux, you can run:
+@example
+yum -y install mingw32-gcc mingw32-SDL mingw32-zlib
+@end example
+to get a suitable cross compilation environment.
 
 @item You can install QEMU in the installation directory by typing
-@file{make install}. Don't forget to copy @file{SDL.dll} in the
+@code{make install}. Don't forget to copy @file{SDL.dll} and @file{zlib1.dll} into the
 installation directory.
 
 @end itemize
 
-Note: Currently, Wine does not seem able to launch
-QEMU for Win32.
+Wine can be used to launch the resulting qemu.exe compiled for Win32.
 
 @node Mac OS X
 @section Mac OS X
@@ -2362,8 +2616,98 @@ The Mac OS X patches are not fully merged in QEMU, so you should look
 at the QEMU mailing list archive to have all the necessary
 information.
 
+@node Make targets
+@section Make targets
+
+@table @code
+
+@item make
+@item make all
+Make everything which is typically needed.
+
+@item install
+TODO
+
+@item install-doc
+TODO
+
+@item make clean
+Remove most files which were built during make.
+
+@item make distclean
+Remove everything which was built during make.
+
+@item make dvi
+@item make html
+@item make info
+@item make pdf
+Create documentation in dvi, html, info or pdf format.
+
+@item make cscope
+TODO
+
+@item make defconfig
+(Re-)create some build configuration files.
+User made changes will be overwritten.
+
+@item tar
+@item tarbin
+TODO
+
+@end table
+
+@node License
+@appendix License
+
+QEMU is a trademark of Fabrice Bellard.
+
+QEMU is released under the GNU General Public License (TODO: add link).
+Parts of QEMU have specific licenses, see file LICENSE.
+
+TODO (refer to file LICENSE, include it, include the GPL?)
+
 @node Index
-@chapter Index
+@appendix Index
+@menu
+* Concept Index::
+* Function Index::
+* Keystroke Index::
+* Program Index::
+* Data Type Index::
+* Variable Index::
+@end menu
+
+@node Concept Index
+@section Concept Index
+This is the main index. Should we combine all keywords in one index? TODO
 @printindex cp
+
+@node Function Index
+@section Function Index
+This index could be used for command line options and monitor functions.
+@printindex fn
+
+@node Keystroke Index
+@section Keystroke Index
+
+This is a list of all keystrokes which have a special function
+in system emulation.
+
+@printindex ky
+
+@node Program Index
+@section Program Index
+@printindex pg
+
+@node Data Type Index
+@section Data Type Index
+
+This index could be used for qdev device names and options.
+
+@printindex tp
+
+@node Variable Index
+@section Variable Index
+@printindex vr
 
 @bye

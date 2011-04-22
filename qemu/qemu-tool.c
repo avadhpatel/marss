@@ -13,9 +13,9 @@
 
 #include "qemu-common.h"
 #include "monitor.h"
-#include "sysemu.h"
 #include "qemu-timer.h"
 #include "qemu-log.h"
+#include "sysemu.h"
 
 #include <sys/time.h>
 
@@ -34,6 +34,19 @@ void qemu_service_io(void)
 }
 
 Monitor *cur_mon;
+
+int monitor_cur_is_qmp(void)
+{
+    return 0;
+}
+
+void monitor_set_error(Monitor *mon, QError *qerror)
+{
+}
+
+void monitor_vprintf(Monitor *mon, const char *fmt, va_list ap)
+{
+}
 
 void monitor_printf(Monitor *mon, const char *fmt, ...)
 {
@@ -91,26 +104,10 @@ void qemu_bh_delete(QEMUBH *bh)
 }
 
 int qemu_set_fd_handler2(int fd,
-                         IOCanRWHandler *fd_read_poll,
+                         IOCanReadHandler *fd_read_poll,
                          IOHandler *fd_read,
                          IOHandler *fd_write,
                          void *opaque)
 {
     return 0;
-}
-
-int64_t qemu_get_clock(QEMUClock *clock)
-{
-    qemu_timeval tv;
-    qemu_gettimeofday(&tv);
-    return (tv.tv_sec * 1000000000LL + (tv.tv_usec * 1000)) / 1000000;
-}
-
-void qemu_error(const char *fmt, ...)
-{
-    va_list args;
-
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
 }

@@ -15,12 +15,10 @@
  */
 
 #include "hw.h"
-#include "ppc.h"
 #include "ppce500.h"
 #include "pci.h"
 #include "pci_host.h"
 #include "bswap.h"
-#include "qemu-log.h"
 
 #ifdef DEBUG_PCI
 #define pci_debug(fmt, ...) fprintf(stderr, fmt, ## __VA_ARGS__)
@@ -281,7 +279,8 @@ PCIBus *ppce500_pci_init(qemu_irq pci_irqs[4], target_phys_addr_t registers)
     controller->pci_state.bus = pci_register_bus(NULL, "pci",
                                                  mpc85xx_pci_set_irq,
                                                  mpc85xx_pci_map_irq,
-                                                 pci_irqs, 0x88, 4);
+                                                 pci_irqs, PCI_DEVFN(0x11, 0),
+                                                 4);
     d = pci_register_device(controller->pci_state.bus,
                             "host bridge", sizeof(PCIDevice),
                             0, NULL, NULL);
@@ -293,27 +292,30 @@ PCIBus *ppce500_pci_init(qemu_irq pci_irqs[4], target_phys_addr_t registers)
     controller->pci_dev = d;
 
     /* CFGADDR */
-    index = pci_host_conf_register_mmio_noswap(&controller->pci_state);
+    index = pci_host_conf_register_mmio(&controller->pci_state,
+                                        DEVICE_BIG_ENDIAN);
     if (index < 0)
         goto free;
     cpu_register_physical_memory(registers + PCIE500_CFGADDR, 4, index);
 
     /* CFGDATA */
-    index = pci_host_data_register_mmio(&controller->pci_state);
+    index = pci_host_data_register_mmio(&controller->pci_state,
+                                        DEVICE_BIG_ENDIAN);
     if (index < 0)
         goto free;
     cpu_register_physical_memory(registers + PCIE500_CFGDATA, 4, index);
 
     index = cpu_register_io_memory(e500_pci_reg_read,
-                                   e500_pci_reg_write, controller);
+                                   e500_pci_reg_write, controller,
+                                   DEVICE_NATIVE_ENDIAN);
     if (index < 0)
         goto free;
     cpu_register_physical_memory(registers + PCIE500_REG_BASE,
                                    PCIE500_REG_SIZE, index);
 
     /* XXX load/save code not tested. */
-    register_savevm("ppce500_pci", ppce500_pci_id++, 1,
-                    ppce500_pci_save, ppce500_pci_load, controller);
+    register_savevm(&d->qdev, "ppce500_pci", ppce500_pci_id++,
+                    1, ppce500_pci_save, ppce500_pci_load, controller);
 
     return controller->pci_state.bus;
 

@@ -206,7 +206,8 @@ static int syborg_pointer_init(SysBusDevice *dev)
 
     sysbus_init_irq(dev, &s->irq);
     iomemtype = cpu_register_io_memory(syborg_pointer_readfn,
-				       syborg_pointer_writefn, s);
+				       syborg_pointer_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
 
     if (s->fifo_size <= 0) {
@@ -218,7 +219,7 @@ static int syborg_pointer_init(SysBusDevice *dev)
     qemu_add_mouse_event_handler(syborg_pointer_event, s, s->absolute,
                                  "Syborg Pointer");
 
-    register_savevm("syborg_pointer", -1, 1,
+    register_savevm(&dev->qdev, "syborg_pointer", -1, 1,
                     syborg_pointer_save, syborg_pointer_load, s);
     return 0;
 }

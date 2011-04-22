@@ -23,6 +23,7 @@
  */
 #include "qemu-common.h"
 #include "host-utils.h"
+#include <math.h>
 
 void pstrcpy(char *buf, int buf_size, const char *str)
 {
@@ -168,28 +169,48 @@ void qemu_iovec_add(QEMUIOVector *qiov, void *base, size_t len)
 }
 
 /*
- * Copies iovecs from src to the end dst until src is completely copied or the
- * total size of the copied iovec reaches size. The size of the last copied
- * iovec is changed in order to fit the specified total size if it isn't a
- * perfect fit already.
+ * Copies iovecs from src to the end of dst. It starts copying after skipping
+ * the given number of bytes in src and copies until src is completely copied
+ * or the total size of the copied iovec reaches size.The size of the last
+ * copied iovec is changed in order to fit the specified total size if it isn't
+ * a perfect fit already.
  */
-void qemu_iovec_concat(QEMUIOVector *dst, QEMUIOVector *src, size_t size)
+void qemu_iovec_copy(QEMUIOVector *dst, QEMUIOVector *src, uint64_t skip,
+    size_t size)
 {
     int i;
     size_t done;
+    void *iov_base;
+    uint64_t iov_len;
 
     assert(dst->nalloc != -1);
 
     done = 0;
     for (i = 0; (i < src->niov) && (done != size); i++) {
-        if (done + src->iov[i].iov_len > size) {
-            qemu_iovec_add(dst, src->iov[i].iov_base, size - done);
+        if (skip >= src->iov[i].iov_len) {
+            /* Skip the whole iov */
+            skip -= src->iov[i].iov_len;
+            continue;
+        } else {
+            /* Skip only part (or nothing) of the iov */
+            iov_base = (uint8_t*) src->iov[i].iov_base + skip;
+            iov_len = src->iov[i].iov_len - skip;
+            skip = 0;
+        }
+
+        if (done + iov_len > size) {
+            qemu_iovec_add(dst, iov_base, size - done);
             break;
         } else {
-            qemu_iovec_add(dst, src->iov[i].iov_base, src->iov[i].iov_len);
+            qemu_iovec_add(dst, iov_base, iov_len);
         }
-        done += src->iov[i].iov_len;
+        done += iov_len;
     }
+}
+
+void qemu_iovec_concat(QEMUIOVector *dst, QEMUIOVector *src, size_t size)
+{
+    qemu_iovec_copy(dst, src, 0, size);
 }
 
 void qemu_iovec_destroy(QEMUIOVector *qiov)
@@ -232,4 +253,159 @@ void qemu_iovec_from_buffer(QEMUIOVector *qiov, const void *buf, size_t count)
         p     += copy;
         count -= copy;
     }
+}
+
+void qemu_iovec_memset(QEMUIOVector *qiov, int c, size_t count)
+{
+    size_t n;
+    int i;
+
+    for (i = 0; i < qiov->niov && count; ++i) {
+        n = MIN(count, qiov->iov[i].iov_len);
+        memset(qiov->iov[i].iov_base, c, n);
+        count -= n;
+    }
+}
+
+void qemu_iovec_memset_skip(QEMUIOVector *qiov, int c, size_t count,
+                            size_t skip)
+{
+    int i;
+    size_t done;
+    void *iov_base;
+    uint64_t iov_len;
+
+    done = 0;
+    for (i = 0; (i < qiov->niov) && (done != count); i++) {
+        if (skip >= qiov->iov[i].iov_len) {
+            /* Skip the whole iov */
+            skip -= qiov->iov[i].iov_len;
+            continue;
+        } else {
+            /* Skip only part (or nothing) of the iov */
+            iov_base = (uint8_t*) qiov->iov[i].iov_base + skip;
+            iov_len = qiov->iov[i].iov_len - skip;
+            skip = 0;
+        }
+
+        if (done + iov_len > count) {
+            memset(iov_base, c, count - done);
+            break;
+        } else {
+            memset(iov_base, c, iov_len);
+        }
+        done += iov_len;
+    }
+}
+
+#ifndef _WIN32
+/* Sets a specific flag */
+int fcntl_setfl(int fd, int flag)
+{
+    int flags;
+
+    flags = fcntl(fd, F_GETFL);
+    if (flags == -1)
+        return -errno;
+
+    if (fcntl(fd, F_SETFL, flags | flag) == -1)
+        return -errno;
+
+    return 0;
+}
+#endif
+
+/*
+ * Convert string to bytes, allowing either B/b for bytes, K/k for KB,
+ * M/m for MB, G/g for GB or T/t for TB. Default without any postfix
+ * is MB. End pointer will be returned in *end, if not NULL. A valid
+ * value must be terminated by whitespace, ',' or '\0'. Return -1 on
+ * error.
+ */
+int64_t strtosz_suffix(const char *nptr, char **end, const char default_suffix)
+{
+    int64_t retval = -1;
+    char *endptr;
+    unsigned char c, d;
+    int mul_required = 0;
+    double val, mul, integral, fraction;
+
+    errno = 0;
+    val = strtod(nptr, &endptr);
+    if (isnan(val) || endptr == nptr || errno != 0) {
+        goto fail;
+    }
+    fraction = modf(val, &integral);
+    if (fraction != 0) {
+        mul_required = 1;
+    }
+    /*
+     * Any whitespace character is fine for terminating the number,
+     * in addition we accept ',' to handle strings where the size is
+     * part of a multi token argument.
+     */
+    c = *endptr;
+    d = c;
+    if (qemu_isspace(c) || c == '\0' || c == ',') {
+        c = 0;
+        if (default_suffix) {
+            d = default_suffix;
+        } else {
+            d = c;
+        }
+    }
+    switch (qemu_toupper(d)) {
+    case STRTOSZ_DEFSUFFIX_B:
+        mul = 1;
+        if (mul_required) {
+            goto fail;
+        }
+        break;
+    case STRTOSZ_DEFSUFFIX_KB:
+        mul = 1 << 10;
+        break;
+    case 0:
+        if (mul_required) {
+            goto fail;
+        }
+    case STRTOSZ_DEFSUFFIX_MB:
+        mul = 1ULL << 20;
+        break;
+    case STRTOSZ_DEFSUFFIX_GB:
+        mul = 1ULL << 30;
+        break;
+    case STRTOSZ_DEFSUFFIX_TB:
+        mul = 1ULL << 40;
+        break;
+    default:
+        goto fail;
+    }
+    /*
+     * If not terminated by whitespace, ',', or \0, increment endptr
+     * to point to next character, then check that we are terminated
+     * by an appropriate separating character, ie. whitespace, ',', or
+     * \0. If not, we are seeing trailing garbage, thus fail.
+     */
+    if (c != 0) {
+        endptr++;
+        if (!qemu_isspace(*endptr) && *endptr != ',' && *endptr != 0) {
+            goto fail;
+        }
+    }
+    if ((val * mul >= INT64_MAX) || val < 0) {
+        goto fail;
+    }
+    retval = val * mul;
+
+fail:
+    if (end) {
+        *end = endptr;
+    }
+
+    return retval;
+}
+
+int64_t strtosz(const char *nptr, char **end)
+{
+    return strtosz_suffix(nptr, end, STRTOSZ_DEFSUFFIX_MB);
 }

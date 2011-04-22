@@ -15,8 +15,7 @@
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+    along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #ifndef __FPA11_H__
@@ -90,9 +89,9 @@ typedef struct tagFPA11 {
 
 extern FPA11* qemufpa;
 
-extern void resetFPA11(void);
-extern void SetRoundingMode(const unsigned int);
-extern void SetRoundingPrecision(const unsigned int);
+void resetFPA11(void);
+void SetRoundingMode(const unsigned int);
+void SetRoundingPrecision(const unsigned int);
 
 static inline unsigned int readRegister(unsigned int reg)
 {

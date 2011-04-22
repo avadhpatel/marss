@@ -28,6 +28,22 @@ typedef struct {
     uint32_t proc_id;
 } arm_sysctl_state;
 
+static const VMStateDescription vmstate_arm_sysctl = {
+    .name = "realview_sysctl",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINT32(leds, arm_sysctl_state),
+        VMSTATE_UINT16(lockval, arm_sysctl_state),
+        VMSTATE_UINT32(cfgdata1, arm_sysctl_state),
+        VMSTATE_UINT32(cfgdata2, arm_sysctl_state),
+        VMSTATE_UINT32(flags, arm_sysctl_state),
+        VMSTATE_UINT32(nvflags, arm_sysctl_state),
+        VMSTATE_UINT32(resetlevel, arm_sysctl_state),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 static void arm_sysctl_reset(DeviceState *d)
 {
     arm_sysctl_state *s = FROM_SYSBUS(arm_sysctl_state, sysbus_from_qdev(d));
@@ -208,7 +224,8 @@ static int arm_sysctl_init1(SysBusDevice *dev)
     int iomemtype;
 
     iomemtype = cpu_register_io_memory(arm_sysctl_readfn,
-                                       arm_sysctl_writefn, s);
+                                       arm_sysctl_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
     /* ??? Save/restore.  */
     return 0;
@@ -230,6 +247,7 @@ static SysBusDeviceInfo arm_sysctl_info = {
     .init = arm_sysctl_init1,
     .qdev.name  = "realview_sysctl",
     .qdev.size  = sizeof(arm_sysctl_state),
+    .qdev.vmsd = &vmstate_arm_sysctl,
     .qdev.reset = arm_sysctl_reset,
     .qdev.props = (Property[]) {
         DEFINE_PROP_UINT32("sys_id", arm_sysctl_state, sys_id, 0),

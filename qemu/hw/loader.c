@@ -107,7 +107,7 @@ int load_image_targphys(const char *filename,
 
     size = get_image_size(filename);
     if (size > 0)
-        rom_add_file_fixed(filename, addr);
+        rom_add_file_fixed(filename, addr, -1);
     return size;
 }
 
@@ -276,9 +276,9 @@ static void *load_at(int fd, int offset, int size)
 #include "elf_ops.h"
 
 /* return < 0 if error, otherwise the number of bytes loaded in memory */
-int load_elf(const char *filename, int64_t address_offset,
-             uint64_t *pentry, uint64_t *lowaddr, uint64_t *highaddr,
-             int big_endian, int elf_machine, int clear_lsb)
+int load_elf(const char *filename, uint64_t (*translate_fn)(void *, uint64_t),
+             void *translate_opaque, uint64_t *pentry, uint64_t *lowaddr,
+             uint64_t *highaddr, int big_endian, int elf_machine, int clear_lsb)
 {
     int fd, data_order, target_data_order, must_swab, ret;
     uint8_t e_ident[EI_NIDENT];
@@ -307,16 +307,17 @@ int load_elf(const char *filename, int64_t address_offset,
         target_data_order = ELFDATA2LSB;
     }
 
-    if (target_data_order != e_ident[EI_DATA])
-        return -1;
+    if (target_data_order != e_ident[EI_DATA]) {
+        goto fail;
+    }
 
     lseek(fd, 0, SEEK_SET);
     if (e_ident[EI_CLASS] == ELFCLASS64) {
-        ret = load_elf64(filename, fd, address_offset, must_swab, pentry,
-                         lowaddr, highaddr, elf_machine, clear_lsb);
+        ret = load_elf64(filename, fd, translate_fn, translate_opaque, must_swab,
+                         pentry, lowaddr, highaddr, elf_machine, clear_lsb);
     } else {
-        ret = load_elf32(filename, fd, address_offset, must_swab, pentry,
-                         lowaddr, highaddr, elf_machine, clear_lsb);
+        ret = load_elf32(filename, fd, translate_fn, translate_opaque, must_swab,
+                         pentry, lowaddr, highaddr, elf_machine, clear_lsb);
     }
 
     close(fd);
@@ -537,7 +538,6 @@ struct Rom {
 
 static FWCfgState *fw_cfg;
 static QTAILQ_HEAD(, Rom) roms = QTAILQ_HEAD_INITIALIZER(roms);
-int rom_enable_driver_roms;
 
 static void rom_insert(Rom *rom)
 {
@@ -558,10 +558,11 @@ static void rom_insert(Rom *rom)
 }
 
 int rom_add_file(const char *file, const char *fw_dir,
-                 target_phys_addr_t addr)
+                 target_phys_addr_t addr, int32_t bootindex)
 {
     Rom *rom;
     int rc, fd = -1;
+    char devpath[100];
 
     rom = qemu_mallocz(sizeof(*rom));
     rom->name = qemu_strdup(file);
@@ -593,8 +594,25 @@ int rom_add_file(const char *file, const char *fw_dir,
     }
     close(fd);
     rom_insert(rom);
-    if (rom->fw_file && fw_cfg)
-        fw_cfg_add_file(fw_cfg, rom->fw_dir, rom->fw_file, rom->data, rom->romsize);
+    if (rom->fw_file && fw_cfg) {
+        const char *basename;
+        char fw_file_name[56];
+
+        basename = strrchr(rom->fw_file, '/');
+        if (basename) {
+            basename++;
+        } else {
+            basename = rom->fw_file;
+        }
+        snprintf(fw_file_name, sizeof(fw_file_name), "%s/%s", rom->fw_dir,
+                 basename);
+        fw_cfg_add_file(fw_cfg, fw_file_name, rom->data, rom->romsize);
+        snprintf(devpath, sizeof(devpath), "/rom@%s", fw_file_name);
+    } else {
+        snprintf(devpath, sizeof(devpath), "/rom@" TARGET_FMT_plx, addr);
+    }
+
+    add_boot_device_path(bootindex, NULL, devpath);
     return 0;
 
 err:
@@ -624,16 +642,12 @@ int rom_add_blob(const char *name, const void *blob, size_t len,
 
 int rom_add_vga(const char *file)
 {
-    if (!rom_enable_driver_roms)
-        return 0;
-    return rom_add_file(file, "vgaroms", 0);
+    return rom_add_file(file, "vgaroms", 0, -1);
 }
 
-int rom_add_option(const char *file)
+int rom_add_option(const char *file, int32_t bootindex)
 {
-    if (!rom_enable_driver_roms)
-        return 0;
-    return rom_add_file(file, "genroms", 0);
+    return rom_add_file(file, "genroms", 0, bootindex);
 }
 
 static void rom_reset(void *unused)
@@ -738,11 +752,6 @@ int rom_copy(uint8_t *dest, target_phys_addr_t addr, size_t size)
         s = rom->data;
         l = rom->romsize;
 
-        if (rom->addr < addr) {
-            d = dest;
-            s += (addr - rom->addr);
-            l -= (addr - rom->addr);
-        }
         if ((d + l) > (dest + size)) {
             l = dest - d;
         }

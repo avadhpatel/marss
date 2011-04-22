@@ -510,7 +510,8 @@ static int syborg_fb_init(SysBusDevice *dev)
 
     sysbus_init_irq(dev, &s->irq);
     iomemtype = cpu_register_io_memory(syborg_fb_readfn,
-                                       syborg_fb_writefn, s);
+                                       syborg_fb_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
 
     s->ds = graphic_console_init(syborg_fb_update_display,
@@ -526,7 +527,7 @@ static int syborg_fb_init(SysBusDevice *dev)
     if (!s->rows)
         s->rows = ds_get_height(s->ds);
 
-    register_savevm("syborg_framebuffer", -1, 1,
+    register_savevm(&dev->qdev, "syborg_framebuffer", -1, 1,
                     syborg_fb_save, syborg_fb_load, s);
     return 0;
 }

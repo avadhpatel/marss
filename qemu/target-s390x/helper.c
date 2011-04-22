@@ -14,8 +14,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA  02110-1301 USA
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <stdio.h>
@@ -47,11 +46,6 @@ CPUS390XState *cpu_s390x_init(const char *cpu_model)
     return env;
 }
 
-target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong addr)
-{
-    return addr;
-}
-
 void cpu_reset(CPUS390XState *env)
 {
     if (qemu_loglevel_mask(CPU_LOG_RESET)) {
@@ -62,6 +56,11 @@ void cpu_reset(CPUS390XState *env)
     memset(env, 0, offsetof(CPUS390XState, breakpoints));
     /* FIXME: reset vector? */
     tlb_flush(env, 1);
+}
+
+target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong addr)
+{
+    return 0;
 }
 
 #ifndef CONFIG_USER_ONLY
@@ -75,10 +74,11 @@ int cpu_s390x_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
     /* XXX: implement mmu */
 
     phys = address;
-    prot = PAGE_READ | PAGE_WRITE;
+    prot = PAGE_READ | PAGE_WRITE | PAGE_EXEC;
 
-    return tlb_set_page(env, address & TARGET_PAGE_MASK,
-                        phys & TARGET_PAGE_MASK, prot,
-                        mmu_idx, is_softmmu);
+    tlb_set_page(env, address & TARGET_PAGE_MASK,
+                 phys & TARGET_PAGE_MASK, prot,
+                 mmu_idx, TARGET_PAGE_SIZE);
+    return 0;
 }
 #endif /* CONFIG_USER_ONLY */

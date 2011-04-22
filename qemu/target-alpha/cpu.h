@@ -41,7 +41,9 @@
 
 #define TARGET_PAGE_BITS 13
 
-#define VA_BITS 43
+/* ??? EV4 has 34 phys addr bits, EV5 has 40, EV6 has 44.  */
+#define TARGET_PHYS_ADDR_SPACE_BITS	44
+#define TARGET_VIRT_ADDR_SPACE_BITS	(30 + TARGET_PAGE_BITS)
 
 /* Alpha major type */
 enum {
@@ -139,9 +141,65 @@ enum {
     FP_ROUND_DYNAMIC = 0x3,
 };
 
+/* FPCR bits */
+#define FPCR_SUM		(1ULL << 63)
+#define FPCR_INED		(1ULL << 62)
+#define FPCR_UNFD		(1ULL << 61)
+#define FPCR_UNDZ		(1ULL << 60)
+#define FPCR_DYN_SHIFT		58
+#define FPCR_DYN_CHOPPED	(0ULL << FPCR_DYN_SHIFT)
+#define FPCR_DYN_MINUS		(1ULL << FPCR_DYN_SHIFT)
+#define FPCR_DYN_NORMAL		(2ULL << FPCR_DYN_SHIFT)
+#define FPCR_DYN_PLUS		(3ULL << FPCR_DYN_SHIFT)
+#define FPCR_DYN_MASK		(3ULL << FPCR_DYN_SHIFT)
+#define FPCR_IOV		(1ULL << 57)
+#define FPCR_INE		(1ULL << 56)
+#define FPCR_UNF		(1ULL << 55)
+#define FPCR_OVF		(1ULL << 54)
+#define FPCR_DZE		(1ULL << 53)
+#define FPCR_INV		(1ULL << 52)
+#define FPCR_OVFD		(1ULL << 51)
+#define FPCR_DZED		(1ULL << 50)
+#define FPCR_INVD		(1ULL << 49)
+#define FPCR_DNZ		(1ULL << 48)
+#define FPCR_DNOD		(1ULL << 47)
+#define FPCR_STATUS_MASK	(FPCR_IOV | FPCR_INE | FPCR_UNF \
+				 | FPCR_OVF | FPCR_DZE | FPCR_INV)
+
+/* The silly software trap enables implemented by the kernel emulation.
+   These are more or less architecturally required, since the real hardware
+   has read-as-zero bits in the FPCR when the features aren't implemented.
+   For the purposes of QEMU, we pretend the FPCR can hold everything.  */
+#define SWCR_TRAP_ENABLE_INV	(1ULL << 1)
+#define SWCR_TRAP_ENABLE_DZE	(1ULL << 2)
+#define SWCR_TRAP_ENABLE_OVF	(1ULL << 3)
+#define SWCR_TRAP_ENABLE_UNF	(1ULL << 4)
+#define SWCR_TRAP_ENABLE_INE	(1ULL << 5)
+#define SWCR_TRAP_ENABLE_DNO	(1ULL << 6)
+#define SWCR_TRAP_ENABLE_MASK	((1ULL << 7) - (1ULL << 1))
+
+#define SWCR_MAP_DMZ		(1ULL << 12)
+#define SWCR_MAP_UMZ		(1ULL << 13)
+#define SWCR_MAP_MASK		(SWCR_MAP_DMZ | SWCR_MAP_UMZ)
+
+#define SWCR_STATUS_INV		(1ULL << 17)
+#define SWCR_STATUS_DZE		(1ULL << 18)
+#define SWCR_STATUS_OVF		(1ULL << 19)
+#define SWCR_STATUS_UNF		(1ULL << 20)
+#define SWCR_STATUS_INE		(1ULL << 21)
+#define SWCR_STATUS_DNO		(1ULL << 22)
+#define SWCR_STATUS_MASK	((1ULL << 23) - (1ULL << 17))
+
+#define SWCR_MASK  (SWCR_TRAP_ENABLE_MASK | SWCR_MAP_MASK | SWCR_STATUS_MASK)
+
 /* Internal processor registers */
 /* XXX: TOFIX: most of those registers are implementation dependant */
 enum {
+#if defined(CONFIG_USER_ONLY)
+    IPR_EXC_ADDR,
+    IPR_EXC_SUM,
+    IPR_EXC_MASK,
+#else
     /* Ebox IPRs */
     IPR_CC           = 0xC0,            /* 21264 */
     IPR_CC_CTL       = 0xC1,            /* 21264 */
@@ -255,6 +313,7 @@ enum {
     IPR_VPTB,
     IPR_WHAMI,
     IPR_ALT_MODE,
+#endif
     IPR_LAST,
 };
 
@@ -294,17 +353,28 @@ struct pal_handler_t {
 
 struct CPUAlphaState {
     uint64_t ir[31];
-    float64  fir[31];
-    float_status fp_status;
-    uint64_t fpcr;
+    float64 fir[31];
     uint64_t pc;
-    uint64_t lock;
-    uint32_t pcc[2];
     uint64_t ipr[IPR_LAST];
     uint64_t ps;
     uint64_t unique;
-    int saved_mode; /* Used for HW_LD / HW_ST */
-    int intr_flag; /* For RC and RS */
+    uint64_t lock_addr;
+    uint64_t lock_st_addr;
+    uint64_t lock_value;
+    float_status fp_status;
+    /* The following fields make up the FPCR, but in FP_STATUS format.  */
+    uint8_t fpcr_exc_status;
+    uint8_t fpcr_exc_mask;
+    uint8_t fpcr_dyn_round;
+    uint8_t fpcr_flush_to_zero;
+    uint8_t fpcr_dnz;
+    uint8_t fpcr_dnod;
+    uint8_t fpcr_undz;
+
+    /* Used for HW_LD / HW_ST */
+    uint8_t saved_mode;
+    /* For RC and RS */
+    uint8_t intr_flag;
 
 #if TARGET_LONG_BITS > HOST_LONG_BITS
     /* temporary fixed-point registers
@@ -342,17 +412,7 @@ static inline int cpu_mmu_index (CPUState *env)
     return (env->ps >> 3) & 3;
 }
 
-#if defined(CONFIG_USER_ONLY)
-static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
-{
-    if (newsp)
-        env->ir[30] = newsp;
-    /* FIXME: Zero syscall return value.  */
-}
-#endif
-
 #include "cpu-all.h"
-#include "exec-all.h"
 
 enum {
     FEATURE_ASN    = 0x00000001,
@@ -380,12 +440,18 @@ enum {
     /* Pseudo exception for console */
     EXCP_CONSOLE_DISPATCH = 0x4001,
     EXCP_CONSOLE_FIXUP    = 0x4002,
+    EXCP_STL_C            = 0x4003,
+    EXCP_STQ_C            = 0x4004,
 };
 
 /* Arithmetic exception */
-enum {
-    EXCP_ARITH_OVERFLOW,
-};
+#define EXC_M_IOV       (1<<16)         /* Integer Overflow */
+#define EXC_M_INE       (1<<15)         /* Inexact result */
+#define EXC_M_UNF       (1<<14)         /* Underflow */
+#define EXC_M_FOV       (1<<13)         /* Overflow */
+#define EXC_M_DZE       (1<<12)         /* Division by zero */
+#define EXC_M_INV       (1<<11)         /* Invalid operation */
+#define EXC_M_SWC       (1<<10)         /* Software completion */
 
 enum {
     IR_V0   = 0,
@@ -404,7 +470,7 @@ enum {
     IR_S4   = 13,
     IR_S5   = 14,
     IR_S6   = 15,
-#define IR_FP IR_S6
+    IR_FP   = IR_S6,
     IR_A0   = 16,
     IR_A1   = 17,
     IR_A2   = 18,
@@ -417,7 +483,7 @@ enum {
     IR_T11  = 25,
     IR_RA   = 26,
     IR_T12  = 27,
-#define IR_PV IR_T12
+    IR_PV   = IR_T12,
     IR_AT   = 28,
     IR_GP   = 29,
     IR_SP   = 30,
@@ -436,19 +502,14 @@ int cpu_alpha_handle_mmu_fault (CPUState *env, uint64_t address, int rw,
 #define cpu_handle_mmu_fault cpu_alpha_handle_mmu_fault
 void do_interrupt (CPUState *env);
 
+uint64_t cpu_alpha_load_fpcr (CPUState *env);
+void cpu_alpha_store_fpcr (CPUState *env, uint64_t val);
 int cpu_alpha_mfpr (CPUState *env, int iprn, uint64_t *valp);
 int cpu_alpha_mtpr (CPUState *env, int iprn, uint64_t val, uint64_t *oldvalp);
-void pal_init (CPUState *env);
 #if !defined (CONFIG_USER_ONLY)
+void pal_init (CPUState *env);
 void call_pal (CPUState *env);
-#else
-void call_pal (CPUState *env, int palcode);
 #endif
-
-static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
-{
-    env->pc = tb->pc;
-}
 
 static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
                                         target_ulong *cs_base, int *flags)
@@ -457,5 +518,21 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
     *cs_base = 0;
     *flags = env->ps;
 }
+
+#if defined(CONFIG_USER_ONLY)
+static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
+{
+    if (newsp) {
+        env->ir[IR_SP] = newsp;
+    }
+    env->ir[IR_V0] = 0;
+    env->ir[IR_A3] = 0;
+}
+
+static inline void cpu_set_tls(CPUState *env, target_ulong newtls)
+{
+    env->unique = newtls;
+}
+#endif
 
 #endif /* !defined (__CPU_ALPHA_H__) */

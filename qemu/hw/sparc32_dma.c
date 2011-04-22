@@ -3,6 +3,9 @@
  *
  * Copyright (c) 2006 Fabrice Bellard
  *
+ * Modifications:
+ *  2010-Feb-14 Artyom Tarasenko : reworked irq generation
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
@@ -26,9 +29,7 @@
 #include "sparc32_dma.h"
 #include "sun4m.h"
 #include "sysbus.h"
-
-/* debug DMA */
-//#define DEBUG_DMA
+#include "trace.h"
 
 /*
  * This is the DMA controller part of chip STP2000 (Master I/O), also
@@ -38,26 +39,26 @@
  * http://www.ibiblio.org/pub/historic-linux/early-ports/Sparc/NCR/DMA2.txt
  */
 
-#ifdef DEBUG_DMA
-#define DPRINTF(fmt, ...)                               \
-    do { printf("DMA: " fmt , ## __VA_ARGS__); } while (0)
-#else
-#define DPRINTF(fmt, ...)
-#endif
-
 #define DMA_REGS 4
 #define DMA_SIZE (4 * sizeof(uint32_t))
 /* We need the mask, because one instance of the device is not page
    aligned (ledma, start address 0x0010) */
 #define DMA_MASK (DMA_SIZE - 1)
+/* OBP says 0x20 bytes for ledma, the extras are aliased to espdma */
+#define DMA_ETH_SIZE (8 * sizeof(uint32_t))
+#define DMA_MAX_REG_OFFSET (2 * DMA_SIZE - 1)
 
 #define DMA_VER 0xa0000000
 #define DMA_INTR 1
 #define DMA_INTREN 0x10
 #define DMA_WRITE_MEM 0x100
+#define DMA_EN 0x200
 #define DMA_LOADED 0x04000000
 #define DMA_DRAIN_FIFO 0x40
 #define DMA_RESET 0x80
+
+/* XXX SCSI and ethernet should have different read-only bit masks */
+#define DMA_CSR_RO_MASK 0xfe000007
 
 typedef struct DMAState DMAState;
 
@@ -66,7 +67,13 @@ struct DMAState {
     uint32_t dmaregs[DMA_REGS];
     qemu_irq irq;
     void *iommu;
-    qemu_irq dev_reset;
+    qemu_irq gpio[2];
+    uint32_t is_ledma;
+};
+
+enum {
+    GPIO_RESET = 0,
+    GPIO_DMA,
 };
 
 /* Note: on sparc, the lance 16 bit bus is swapped */
@@ -76,9 +83,8 @@ void ledma_memory_read(void *opaque, target_phys_addr_t addr,
     DMAState *s = opaque;
     int i;
 
-    DPRINTF("DMA write, direction: %c, addr 0x%8.8x\n",
-            s->dmaregs[0] & DMA_WRITE_MEM ? 'w': 'r', s->dmaregs[1]);
     addr |= s->dmaregs[3];
+    trace_ledma_memory_read(addr);
     if (do_bswap) {
         sparc_iommu_memory_read(s->iommu, addr, buf, len);
     } else {
@@ -98,9 +104,8 @@ void ledma_memory_write(void *opaque, target_phys_addr_t addr,
     int l, i;
     uint16_t tmp_buf[32];
 
-    DPRINTF("DMA read, direction: %c, addr 0x%8.8x\n",
-            s->dmaregs[0] & DMA_WRITE_MEM ? 'w': 'r', s->dmaregs[1]);
     addr |= s->dmaregs[3];
+    trace_ledma_memory_write(addr);
     if (do_bswap) {
         sparc_iommu_memory_write(s->iommu, addr, buf, len);
     } else {
@@ -125,13 +130,19 @@ static void dma_set_irq(void *opaque, int irq, int level)
 {
     DMAState *s = opaque;
     if (level) {
-        DPRINTF("Raise IRQ\n");
         s->dmaregs[0] |= DMA_INTR;
-        qemu_irq_raise(s->irq);
+        if (s->dmaregs[0] & DMA_INTREN) {
+            trace_sparc32_dma_set_irq_raise();
+            qemu_irq_raise(s->irq);
+        }
     } else {
-        s->dmaregs[0] &= ~DMA_INTR;
-        DPRINTF("Lower IRQ\n");
-        qemu_irq_lower(s->irq);
+        if (s->dmaregs[0] & DMA_INTR) {
+            s->dmaregs[0] &= ~DMA_INTR;
+            if (s->dmaregs[0] & DMA_INTREN) {
+                trace_sparc32_dma_set_irq_lower();
+                qemu_irq_lower(s->irq);
+            }
+        }
     }
 }
 
@@ -139,10 +150,8 @@ void espdma_memory_read(void *opaque, uint8_t *buf, int len)
 {
     DMAState *s = opaque;
 
-    DPRINTF("DMA read, direction: %c, addr 0x%8.8x\n",
-            s->dmaregs[0] & DMA_WRITE_MEM ? 'w': 'r', s->dmaregs[1]);
+    trace_espdma_memory_read(s->dmaregs[1]);
     sparc_iommu_memory_read(s->iommu, s->dmaregs[1], buf, len);
-    s->dmaregs[0] |= DMA_INTR;
     s->dmaregs[1] += len;
 }
 
@@ -150,10 +159,8 @@ void espdma_memory_write(void *opaque, uint8_t *buf, int len)
 {
     DMAState *s = opaque;
 
-    DPRINTF("DMA write, direction: %c, addr 0x%8.8x\n",
-            s->dmaregs[0] & DMA_WRITE_MEM ? 'w': 'r', s->dmaregs[1]);
+    trace_espdma_memory_write(s->dmaregs[1]);
     sparc_iommu_memory_write(s->iommu, s->dmaregs[1], buf, len);
-    s->dmaregs[0] |= DMA_INTR;
     s->dmaregs[1] += len;
 }
 
@@ -162,10 +169,14 @@ static uint32_t dma_mem_readl(void *opaque, target_phys_addr_t addr)
     DMAState *s = opaque;
     uint32_t saddr;
 
+    if (s->is_ledma && (addr > DMA_MAX_REG_OFFSET)) {
+        /* aliased to espdma, but we can't get there from here */
+        /* buggy driver if using undocumented behavior, just return 0 */
+        trace_sparc32_dma_mem_readl(addr, 0);
+        return 0;
+    }
     saddr = (addr & DMA_MASK) >> 2;
-    DPRINTF("read dmareg " TARGET_FMT_plx ": 0x%8.8x\n", addr,
-            s->dmaregs[saddr]);
-
+    trace_sparc32_dma_mem_readl(addr, s->dmaregs[saddr]);
     return s->dmaregs[saddr];
 }
 
@@ -174,32 +185,53 @@ static void dma_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
     DMAState *s = opaque;
     uint32_t saddr;
 
+    if (s->is_ledma && (addr > DMA_MAX_REG_OFFSET)) {
+        /* aliased to espdma, but we can't get there from here */
+        trace_sparc32_dma_mem_writel(addr, 0, val);
+        return;
+    }
     saddr = (addr & DMA_MASK) >> 2;
-    DPRINTF("write dmareg " TARGET_FMT_plx ": 0x%8.8x -> 0x%8.8x\n", addr,
-            s->dmaregs[saddr], val);
+    trace_sparc32_dma_mem_writel(addr, s->dmaregs[saddr], val);
     switch (saddr) {
     case 0:
-        if (!(val & DMA_INTREN)) {
-            DPRINTF("Lower IRQ\n");
-            qemu_irq_lower(s->irq);
+        if (val & DMA_INTREN) {
+            if (s->dmaregs[0] & DMA_INTR) {
+                trace_sparc32_dma_set_irq_raise();
+                qemu_irq_raise(s->irq);
+            }
+        } else {
+            if (s->dmaregs[0] & (DMA_INTR | DMA_INTREN)) {
+                trace_sparc32_dma_set_irq_lower();
+                qemu_irq_lower(s->irq);
+            }
         }
         if (val & DMA_RESET) {
-            qemu_irq_raise(s->dev_reset);
-            qemu_irq_lower(s->dev_reset);
+            qemu_irq_raise(s->gpio[GPIO_RESET]);
+            qemu_irq_lower(s->gpio[GPIO_RESET]);
         } else if (val & DMA_DRAIN_FIFO) {
             val &= ~DMA_DRAIN_FIFO;
         } else if (val == 0)
             val = DMA_DRAIN_FIFO;
-        val &= 0x0fffffff;
+
+        if (val & DMA_EN && !(s->dmaregs[0] & DMA_EN)) {
+            trace_sparc32_dma_enable_raise();
+            qemu_irq_raise(s->gpio[GPIO_DMA]);
+        } else if (!(val & DMA_EN) && !!(s->dmaregs[0] & DMA_EN)) {
+            trace_sparc32_dma_enable_lower();
+            qemu_irq_lower(s->gpio[GPIO_DMA]);
+        }
+
+        val &= ~DMA_CSR_RO_MASK;
         val |= DMA_VER;
+        s->dmaregs[0] = (s->dmaregs[0] & DMA_CSR_RO_MASK) | val;
         break;
     case 1:
         s->dmaregs[0] |= DMA_LOADED;
-        break;
+        /* fall through */
     default:
+        s->dmaregs[saddr] = val;
         break;
     }
-    s->dmaregs[saddr] = val;
 }
 
 static CPUReadMemoryFunc * const dma_mem_read[3] = {
@@ -237,14 +269,17 @@ static int sparc32_dma_init1(SysBusDevice *dev)
 {
     DMAState *s = FROM_SYSBUS(DMAState, dev);
     int dma_io_memory;
+    int reg_size;
 
     sysbus_init_irq(dev, &s->irq);
 
-    dma_io_memory = cpu_register_io_memory(dma_mem_read, dma_mem_write, s);
-    sysbus_init_mmio(dev, DMA_SIZE, dma_io_memory);
+    dma_io_memory = cpu_register_io_memory(dma_mem_read, dma_mem_write, s,
+                                           DEVICE_NATIVE_ENDIAN);
+    reg_size = s->is_ledma ? DMA_ETH_SIZE : DMA_SIZE;
+    sysbus_init_mmio(dev, reg_size, dma_io_memory);
 
     qdev_init_gpio_in(&dev->qdev, dma_set_irq, 1);
-    qdev_init_gpio_out(&dev->qdev, &s->dev_reset, 1);
+    qdev_init_gpio_out(&dev->qdev, s->gpio, 2);
 
     return 0;
 }
@@ -257,6 +292,7 @@ static SysBusDeviceInfo sparc32_dma_info = {
     .qdev.reset = dma_reset,
     .qdev.props = (Property[]) {
         DEFINE_PROP_PTR("iommu_opaque", DMAState, iommu),
+        DEFINE_PROP_UINT32("is_ledma", DMAState, is_ledma, 0),
         DEFINE_PROP_END_OF_LIST(),
     }
 };

@@ -402,7 +402,7 @@ static inline void stfq_le_p(void *ptr, float64 v)
 
 static inline int lduw_be_p(const void *ptr)
 {
-#if defined(__i386__)
+#if defined(__i386__) || defined(__x86_64__)
     int val;
     asm volatile ("movzwl %1, %0\n"
                   "xchgb %b0, %h0\n"
@@ -410,14 +410,14 @@ static inline int lduw_be_p(const void *ptr)
                   : "m" (*(uint16_t *)ptr));
     return val;
 #else
-    const uint8_t *b = (const uint8_t*)ptr;
+    const uint8_t *b = ptr;
     return ((b[0] << 8) | b[1]);
 #endif
 }
 
 static inline int ldsw_be_p(const void *ptr)
 {
-#if defined(__i386__)
+#if defined(__i386__) || defined(__x86_64__)
     int val;
     asm volatile ("movzwl %1, %0\n"
                   "xchgb %b0, %h0\n"
@@ -425,7 +425,7 @@ static inline int ldsw_be_p(const void *ptr)
                   : "m" (*(uint16_t *)ptr));
     return (int16_t)val;
 #else
-    const uint8_t *b = (const uint8_t*)ptr;
+    const uint8_t *b = ptr;
     return (int16_t)((b[0] << 8) | b[1]);
 #endif
 }
@@ -627,22 +627,31 @@ static inline void stfq_be_p(void *ptr, float64 v)
 #if defined(CONFIG_USE_GUEST_BASE)
 extern unsigned long guest_base;
 extern int have_guest_base;
+extern unsigned long reserved_va;
 #define GUEST_BASE guest_base
+#define RESERVED_VA reserved_va
 #else
 #define GUEST_BASE 0ul
+#define RESERVED_VA 0ul
 #endif
 
 /* All direct uses of g2h and h2g need to go away for usermode softmmu.  */
 #define g2h(x) ((void *)((unsigned long)(x) + GUEST_BASE))
+
+#if HOST_LONG_BITS <= TARGET_VIRT_ADDR_SPACE_BITS
+#define h2g_valid(x) 1
+#else
+#define h2g_valid(x) ({ \
+    unsigned long __guest = (unsigned long)(x) - GUEST_BASE; \
+    __guest < (1ul << TARGET_VIRT_ADDR_SPACE_BITS); \
+})
+#endif
+
 #define h2g(x) ({ \
     unsigned long __ret = (unsigned long)(x) - GUEST_BASE; \
     /* Check if given address fits target address space */ \
-    assert(__ret == (abi_ulong)__ret); \
+    assert(h2g_valid(x)); \
     (abi_ulong)__ret; \
-})
-#define h2g_valid(x) ({ \
-    unsigned long __guest = (unsigned long)(x) - GUEST_BASE; \
-    (__guest == (abi_ulong)__guest); \
 })
 
 #define saddr(x) g2h(x)
@@ -736,32 +745,37 @@ extern unsigned long qemu_host_page_mask;
 /* original state of the write flag (used when tracking self-modifying
    code */
 #define PAGE_WRITE_ORG 0x0010
+#if defined(CONFIG_BSD) && defined(CONFIG_USER_ONLY)
+/* FIXME: Code that sets/uses this is broken and needs to go away.  */
 #define PAGE_RESERVED  0x0020
+#endif
 
+#if defined(CONFIG_USER_ONLY)
 void page_dump(FILE *f);
-int walk_memory_regions(void *,
-    int (*fn)(void *, unsigned long, unsigned long, unsigned long));
+
+typedef int (*walk_memory_regions_fn)(void *, abi_ulong,
+                                      abi_ulong, unsigned long);
+int walk_memory_regions(void *, walk_memory_regions_fn);
+
 int page_get_flags(target_ulong address);
 void page_set_flags(target_ulong start, target_ulong end, int flags);
 int page_check_range(target_ulong start, target_ulong len, int flags);
+#endif
 
-void cpu_exec_init_all(unsigned long tb_size);
 CPUState *cpu_copy(CPUState *env);
 CPUState *qemu_get_cpu(int cpu);
 
-void cpu_dump_state(CPUState *env, FILE *f,
-                    int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
+#define CPU_DUMP_CODE 0x00010000
+
+void cpu_dump_state(CPUState *env, FILE *f, fprintf_function cpu_fprintf,
                     int flags);
-void cpu_dump_statistics (CPUState *env, FILE *f,
-                          int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
-                          int flags);
+void cpu_dump_statistics(CPUState *env, FILE *f, fprintf_function cpu_fprintf,
+                         int flags);
 
 void QEMU_NORETURN cpu_abort(CPUState *env, const char *fmt, ...)
-    __attribute__ ((__format__ (__printf__, 2, 3)));
+    GCC_FMT_ATTR(2, 3);
 extern CPUState *first_cpu;
 extern CPUState *cpu_single_env;
-extern int64_t qemu_icount;
-extern int use_icount;
 
 #define CPU_INTERRUPT_HARD   0x02 /* hardware interrupt pending */
 #define CPU_INTERRUPT_EXITTB 0x04 /* exit the current TB (use for x86 a20 case) */
@@ -810,11 +824,8 @@ void cpu_watchpoint_remove_all(CPUState *env, int mask);
 
 void cpu_single_step(CPUState *env, int enabled);
 void cpu_reset(CPUState *s);
-
-/* Return the physical page corresponding to a virtual one. Use it
-   only for debugging because no protection checks are done. Return -1
-   if no page found. */
-target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong addr);
+int cpu_is_stopped(CPUState *env);
+void run_on_cpu(CPUState *env, void (*func)(void *data), void *data);
 
 #define CPU_LOG_TB_OUT_ASM (1 << 0)
 #define CPU_LOG_TB_IN_ASM  (1 << 1)
@@ -840,15 +851,37 @@ void cpu_set_log(int log_flags);
 void cpu_set_log_filename(const char *filename);
 int cpu_str_to_log_mask(const char *str);
 
-/* IO ports API */
-#include "ioport.h"
+#if !defined(CONFIG_USER_ONLY)
+
+/* Return the physical page corresponding to a virtual one. Use it
+   only for debugging because no protection checks are done. Return -1
+   if no page found. */
+target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong addr);
 
 /* memory API */
 
 extern int phys_ram_fd;
-extern uint8_t *phys_ram_dirty;
 extern ram_addr_t ram_size;
-extern ram_addr_t last_ram_offset;
+
+typedef struct RAMBlock {
+    uint8_t *host;
+    ram_addr_t offset;
+    ram_addr_t length;
+    char idstr[256];
+    QLIST_ENTRY(RAMBlock) next;
+#if defined(__linux__) && !defined(TARGET_S390X)
+    int fd;
+#endif
+} RAMBlock;
+
+typedef struct RAMList {
+    uint8_t *phys_dirty;
+    QLIST_HEAD(ram, RAMBlock) blocks;
+} RAMList;
+extern RAMList ram_list;
+
+extern const char *mem_path;
+extern int mem_prealloc;
 
 /* physical memory access */
 
@@ -868,9 +901,6 @@ extern ram_addr_t last_ram_offset;
 /* Set if TLB entry is an IO callback.  */
 #define TLB_MMIO        (1 << 5)
 
-int cpu_memory_rw_debug(CPUState *env, target_ulong addr,
-                        uint8_t *buf, int len, int is_write);
-
 #define VGA_DIRTY_FLAG       0x01
 #define CODE_DIRTY_FLAG      0x02
 #define MIGRATION_DIRTY_FLAG 0x08
@@ -878,18 +908,44 @@ int cpu_memory_rw_debug(CPUState *env, target_ulong addr,
 /* read dirty bit (return 0 or 1) */
 static inline int cpu_physical_memory_is_dirty(ram_addr_t addr)
 {
-    return phys_ram_dirty[addr >> TARGET_PAGE_BITS] == 0xff;
+    return ram_list.phys_dirty[addr >> TARGET_PAGE_BITS] == 0xff;
+}
+
+static inline int cpu_physical_memory_get_dirty_flags(ram_addr_t addr)
+{
+    return ram_list.phys_dirty[addr >> TARGET_PAGE_BITS];
 }
 
 static inline int cpu_physical_memory_get_dirty(ram_addr_t addr,
                                                 int dirty_flags)
 {
-    return phys_ram_dirty[addr >> TARGET_PAGE_BITS] & dirty_flags;
+    return ram_list.phys_dirty[addr >> TARGET_PAGE_BITS] & dirty_flags;
 }
 
 static inline void cpu_physical_memory_set_dirty(ram_addr_t addr)
 {
-    phys_ram_dirty[addr >> TARGET_PAGE_BITS] = 0xff;
+    ram_list.phys_dirty[addr >> TARGET_PAGE_BITS] = 0xff;
+}
+
+static inline int cpu_physical_memory_set_dirty_flags(ram_addr_t addr,
+                                                      int dirty_flags)
+{
+    return ram_list.phys_dirty[addr >> TARGET_PAGE_BITS] |= dirty_flags;
+}
+
+static inline void cpu_physical_memory_mask_dirty_range(ram_addr_t start,
+                                                        int length,
+                                                        int dirty_flags)
+{
+    int i, mask, len;
+    uint8_t *p;
+
+    len = length >> TARGET_PAGE_BITS;
+    mask = ~dirty_flags;
+    p = ram_list.phys_dirty + (start >> TARGET_PAGE_BITS);
+    for (i = 0; i < len; i++) {
+        p[i] &= mask;
+    }
 }
 
 void cpu_physical_memory_reset_dirty(ram_addr_t start, ram_addr_t end,
@@ -903,178 +959,18 @@ int cpu_physical_memory_get_dirty_tracking(void);
 int cpu_physical_sync_dirty_bitmap(target_phys_addr_t start_addr,
                                    target_phys_addr_t end_addr);
 
-void dump_exec_info(FILE *f,
-                    int (*cpu_fprintf)(FILE *f, const char *fmt, ...));
+void dump_exec_info(FILE *f, fprintf_function cpu_fprintf);
+#endif /* !CONFIG_USER_ONLY */
+
+int cpu_memory_rw_debug(CPUState *env, target_ulong addr,
+                        uint8_t *buf, int len, int is_write);
+
+void cpu_inject_x86_mce(CPUState *cenv, int bank, uint64_t status,
+                        uint64_t mcg_status, uint64_t addr, uint64_t misc,
+                        int broadcast);
 
 #ifdef MARSS_QEMU
 void tlb_protect_code(ram_addr_t ram_addr);
 #endif
-
-/* Coalesced MMIO regions are areas where write operations can be reordered.
- * This usually implies that write operations are side-effect free.  This allows
- * batching which can make a major impact on performance when using
- * virtualization.
- */
-void qemu_register_coalesced_mmio(target_phys_addr_t addr, ram_addr_t size);
-
-void qemu_unregister_coalesced_mmio(target_phys_addr_t addr, ram_addr_t size);
-
-/*******************************************/
-/* host CPU ticks (if available) */
-
-#if defined(_ARCH_PPC)
-
-static inline int64_t cpu_get_real_ticks(void)
-{
-    int64_t retval;
-#ifdef _ARCH_PPC64
-    /* This reads timebase in one 64bit go and includes Cell workaround from:
-       http://ozlabs.org/pipermail/linuxppc-dev/2006-October/027052.html
-     */
-    __asm__ __volatile__ (
-        "mftb    %0\n\t"
-        "cmpwi   %0,0\n\t"
-        "beq-    $-8"
-        : "=r" (retval));
-#else
-    /* http://ozlabs.org/pipermail/linuxppc-dev/1999-October/003889.html */
-    unsigned long junk;
-    __asm__ __volatile__ (
-        "mftbu   %1\n\t"
-        "mftb    %L0\n\t"
-        "mftbu   %0\n\t"
-        "cmpw    %0,%1\n\t"
-        "bne     $-16"
-        : "=r" (retval), "=r" (junk));
-#endif
-    return retval;
-}
-
-#elif defined(__i386__)
-
-static inline int64_t cpu_get_real_ticks(void)
-{
-    int64_t val;
-    asm volatile ("rdtsc" : "=A" (val));
-    return val;
-}
-
-#elif defined(__x86_64__)
-
-static inline int64_t cpu_get_real_ticks(void)
-{
-    uint32_t low,high;
-    int64_t val;
-    asm volatile("rdtsc" : "=a" (low), "=d" (high));
-    val = high;
-    val <<= 32;
-    val |= low;
-    return val;
-}
-
-#elif defined(__hppa__)
-
-static inline int64_t cpu_get_real_ticks(void)
-{
-    int val;
-    asm volatile ("mfctl %%cr16, %0" : "=r"(val));
-    return val;
-}
-
-#elif defined(__ia64)
-
-static inline int64_t cpu_get_real_ticks(void)
-{
-	int64_t val;
-	asm volatile ("mov %0 = ar.itc" : "=r"(val) :: "memory");
-	return val;
-}
-
-#elif defined(__s390__)
-
-static inline int64_t cpu_get_real_ticks(void)
-{
-    int64_t val;
-    asm volatile("stck 0(%1)" : "=m" (val) : "a" (&val) : "cc");
-    return val;
-}
-
-#elif defined(__sparc_v8plus__) || defined(__sparc_v8plusa__) || defined(__sparc_v9__)
-
-static inline int64_t cpu_get_real_ticks (void)
-{
-#if     defined(_LP64)
-        uint64_t        rval;
-        asm volatile("rd %%tick,%0" : "=r"(rval));
-        return rval;
-#else
-        union {
-                uint64_t i64;
-                struct {
-                        uint32_t high;
-                        uint32_t low;
-                }       i32;
-        } rval;
-        asm volatile("rd %%tick,%1; srlx %1,32,%0"
-                : "=r"(rval.i32.high), "=r"(rval.i32.low));
-        return rval.i64;
-#endif
-}
-
-#elif defined(__mips__) && \
-      ((defined(__mips_isa_rev) && __mips_isa_rev >= 2) || defined(__linux__))
-/*
- * binutils wants to use rdhwr only on mips32r2
- * but as linux kernel emulate it, it's fine
- * to use it.
- *
- */
-#define MIPS_RDHWR(rd, value) {                 \
-    __asm__ __volatile__ (                      \
-                          ".set   push\n\t"     \
-                          ".set mips32r2\n\t"   \
-                          "rdhwr  %0, "rd"\n\t" \
-                          ".set   pop"          \
-                          : "=r" (value));      \
-}
-
-static inline int64_t cpu_get_real_ticks(void)
-{
-/* On kernels >= 2.6.25 rdhwr <reg>, $2 and $3 are emulated */
-    uint32_t count;
-    static uint32_t cyc_per_count = 0;
-
-    if (!cyc_per_count)
-        MIPS_RDHWR("$3", cyc_per_count);
-
-    MIPS_RDHWR("$2", count);
-    return (int64_t)(count * cyc_per_count);
-}
-
-#else
-/* The host CPU doesn't have an easily accessible cycle counter.
-   Just return a monotonically increasing value.  This will be
-   totally wrong, but hopefully better than nothing.  */
-static inline int64_t cpu_get_real_ticks (void)
-{
-    static int64_t ticks = 0;
-    return ticks++;
-}
-#endif
-
-/* profiling */
-#ifdef CONFIG_PROFILER
-static inline int64_t profile_getclock(void)
-{
-    return cpu_get_real_ticks();
-}
-
-extern int64_t qemu_time, qemu_time_start;
-extern int64_t tlb_flush_time;
-extern int64_t dev_time;
-#endif
-
-void cpu_inject_x86_mce(CPUState *cenv, int bank, uint64_t status,
-                        uint64_t mcg_status, uint64_t addr, uint64_t misc);
 
 #endif /* CPU_ALL_H */

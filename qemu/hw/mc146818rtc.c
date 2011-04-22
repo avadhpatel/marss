@@ -25,10 +25,24 @@
 #include "qemu-timer.h"
 #include "sysemu.h"
 #include "pc.h"
+#include "apic.h"
 #include "isa.h"
-#include "hpet_emul.h"
+#include "mc146818rtc.h"
 
 //#define DEBUG_CMOS
+//#define DEBUG_COALESCED
+
+#ifdef DEBUG_CMOS
+# define CMOS_DPRINTF(format, ...)      printf(format, ## __VA_ARGS__)
+#else
+# define CMOS_DPRINTF(format, ...)      do { } while (0)
+#endif
+
+#ifdef DEBUG_COALESCED
+# define DPRINTF_C(format, ...)      printf(format, ## __VA_ARGS__)
+#else
+# define DPRINTF_C(format, ...)      do { } while (0)
+#endif
 
 #define RTC_REINJECT_ON_ACK_COUNT 20
 
@@ -58,13 +72,14 @@
 #define REG_B_UIE  0x10
 #define REG_B_SQWE 0x08
 #define REG_B_DM   0x04
+#define REG_B_24H  0x02
 
 #define REG_C_UF   0x10
 #define REG_C_IRQF 0x80
 #define REG_C_PF   0x40
 #define REG_C_AF   0x20
 
-struct RTCState {
+typedef struct RTCState {
     ISADevice dev;
     uint8_t cmos_data[128];
     uint8_t cmos_index;
@@ -84,20 +99,7 @@ struct RTCState {
     QEMUTimer *coalesced_timer;
     QEMUTimer *second_timer;
     QEMUTimer *second_timer2;
-};
-
-static void rtc_irq_raise(qemu_irq irq)
-{
-    /* When HPET is operating in legacy mode, RTC interrupts are disabled
-     * We block qemu_irq_raise, but not qemu_irq_lower, in case legacy
-     * mode is established while interrupt is raised. We want it to
-     * be lowered in any case
-     */
-#if defined TARGET_I386
-    if (!hpet_in_legacy_mode())
-#endif
-        qemu_irq_raise(irq);
-}
+} RTCState;
 
 static void rtc_set_time(RTCState *s);
 static void rtc_copy_date(RTCState *s);
@@ -123,9 +125,12 @@ static void rtc_coalesced_timer(void *opaque)
     if (s->irq_coalesced != 0) {
         apic_reset_irq_delivered();
         s->cmos_data[RTC_REG_C] |= 0xc0;
-        rtc_irq_raise(s->irq);
+        DPRINTF_C("cmos: injecting from timer\n");
+        qemu_irq_raise(s->irq);
         if (apic_get_irq_delivered()) {
             s->irq_coalesced--;
+            DPRINTF_C("cmos: coalesced irqs decreased to %d\n",
+                      s->irq_coalesced);
         }
     }
 
@@ -137,27 +142,20 @@ static void rtc_timer_update(RTCState *s, int64_t current_time)
 {
     int period_code, period;
     int64_t cur_clock, next_irq_clock;
-    int enable_pie;
 
     period_code = s->cmos_data[RTC_REG_A] & 0x0f;
-#if defined TARGET_I386
-    /* disable periodic timer if hpet is in legacy mode, since interrupts are
-     * disabled anyway.
-     */
-    enable_pie = !hpet_in_legacy_mode();
-#else
-    enable_pie = 1;
-#endif
     if (period_code != 0
-        && (((s->cmos_data[RTC_REG_B] & REG_B_PIE) && enable_pie)
+        && ((s->cmos_data[RTC_REG_B] & REG_B_PIE)
             || ((s->cmos_data[RTC_REG_B] & REG_B_SQWE) && s->sqw_irq))) {
         if (period_code <= 2)
             period_code += 7;
         /* period in 32 Khz cycles */
         period = 1 << (period_code - 1);
 #ifdef TARGET_I386
-        if(period != s->period)
+        if (period != s->period) {
             s->irq_coalesced = (s->irq_coalesced * s->period) / period;
+            DPRINTF_C("cmos: coalesced irqs scaled to %d\n", s->irq_coalesced);
+        }
         s->period = period;
 #endif
         /* compute 32 khz clock */
@@ -186,14 +184,16 @@ static void rtc_periodic_timer(void *opaque)
             if (s->irq_reinject_on_ack_count >= RTC_REINJECT_ON_ACK_COUNT)
                 s->irq_reinject_on_ack_count = 0;		
             apic_reset_irq_delivered();
-            rtc_irq_raise(s->irq);
+            qemu_irq_raise(s->irq);
             if (!apic_get_irq_delivered()) {
                 s->irq_coalesced++;
                 rtc_coalesced_timer_update(s);
+                DPRINTF_C("cmos: coalesced irqs increased to %d\n",
+                          s->irq_coalesced);
             }
         } else
 #endif
-        rtc_irq_raise(s->irq);
+        qemu_irq_raise(s->irq);
     }
     if (s->cmos_data[RTC_REG_B] & REG_B_SQWE) {
         /* Not square wave at all but we don't want 2048Hz interrupts!
@@ -209,15 +209,12 @@ static void cmos_ioport_write(void *opaque, uint32_t addr, uint32_t data)
     if ((addr & 1) == 0) {
         s->cmos_index = data & 0x7f;
     } else {
-#ifdef DEBUG_CMOS
-        printf("cmos: write index=0x%02x val=0x%02x\n",
-               s->cmos_index, data);
-#endif
+        CMOS_DPRINTF("cmos: write index=0x%02x val=0x%02x\n",
+                     s->cmos_index, data);
         switch(s->cmos_index) {
         case RTC_SECONDS_ALARM:
         case RTC_MINUTES_ALARM:
         case RTC_HOURS_ALARM:
-            /* XXX: not supported */
             s->cmos_data[s->cmos_index] = data;
             break;
         case RTC_SECONDS:
@@ -250,7 +247,15 @@ static void cmos_ioport_write(void *opaque, uint32_t addr, uint32_t data)
                     rtc_set_time(s);
                 }
             }
-            s->cmos_data[RTC_REG_B] = data;
+            if (((s->cmos_data[RTC_REG_B] ^ data) & (REG_B_DM | REG_B_24H)) &&
+                !(data & REG_B_SET)) {
+                /* If the time format has changed and not in set mode,
+                   update the registers immediately. */
+                s->cmos_data[RTC_REG_B] = data;
+                rtc_copy_date(s);
+            } else {
+                s->cmos_data[RTC_REG_B] = data;
+            }
             rtc_timer_update(s, qemu_get_clock(rtc_clock));
             break;
         case RTC_REG_C:
@@ -289,7 +294,7 @@ static void rtc_set_time(RTCState *s)
     tm->tm_sec = rtc_from_bcd(s, s->cmos_data[RTC_SECONDS]);
     tm->tm_min = rtc_from_bcd(s, s->cmos_data[RTC_MINUTES]);
     tm->tm_hour = rtc_from_bcd(s, s->cmos_data[RTC_HOURS] & 0x7f);
-    if (!(s->cmos_data[RTC_REG_B] & 0x02) &&
+    if (!(s->cmos_data[RTC_REG_B] & REG_B_24H) &&
         (s->cmos_data[RTC_HOURS] & 0x80)) {
         tm->tm_hour += 12;
     }
@@ -297,6 +302,8 @@ static void rtc_set_time(RTCState *s)
     tm->tm_mday = rtc_from_bcd(s, s->cmos_data[RTC_DAY_OF_MONTH]);
     tm->tm_mon = rtc_from_bcd(s, s->cmos_data[RTC_MONTH]) - 1;
     tm->tm_year = rtc_from_bcd(s, s->cmos_data[RTC_YEAR]) + s->base_year - 1900;
+
+    rtc_change_mon_event(tm);
 }
 
 static void rtc_copy_date(RTCState *s)
@@ -306,7 +313,7 @@ static void rtc_copy_date(RTCState *s)
 
     s->cmos_data[RTC_SECONDS] = rtc_to_bcd(s, tm->tm_sec);
     s->cmos_data[RTC_MINUTES] = rtc_to_bcd(s, tm->tm_min);
-    if (s->cmos_data[RTC_REG_B] & 0x02) {
+    if (s->cmos_data[RTC_REG_B] & REG_B_24H) {
         /* 24 hour format */
         s->cmos_data[RTC_HOURS] = rtc_to_bcd(s, tm->tm_hour);
     } else {
@@ -415,22 +422,22 @@ static void rtc_update_second2(void *opaque)
     /* check alarm */
     if (s->cmos_data[RTC_REG_B] & REG_B_AIE) {
         if (((s->cmos_data[RTC_SECONDS_ALARM] & 0xc0) == 0xc0 ||
-             s->cmos_data[RTC_SECONDS_ALARM] == s->current_tm.tm_sec) &&
+             rtc_from_bcd(s, s->cmos_data[RTC_SECONDS_ALARM]) == s->current_tm.tm_sec) &&
             ((s->cmos_data[RTC_MINUTES_ALARM] & 0xc0) == 0xc0 ||
-             s->cmos_data[RTC_MINUTES_ALARM] == s->current_tm.tm_mon) &&
+             rtc_from_bcd(s, s->cmos_data[RTC_MINUTES_ALARM]) == s->current_tm.tm_min) &&
             ((s->cmos_data[RTC_HOURS_ALARM] & 0xc0) == 0xc0 ||
-             s->cmos_data[RTC_HOURS_ALARM] == s->current_tm.tm_hour)) {
+             rtc_from_bcd(s, s->cmos_data[RTC_HOURS_ALARM]) == s->current_tm.tm_hour)) {
 
             s->cmos_data[RTC_REG_C] |= 0xa0;
-            rtc_irq_raise(s->irq);
+            qemu_irq_raise(s->irq);
         }
     }
 
     /* update ended interrupt */
     s->cmos_data[RTC_REG_C] |= REG_C_UF;
     if (s->cmos_data[RTC_REG_B] & REG_B_UIE) {
-      s->cmos_data[RTC_REG_C] |= REG_C_IRQF;
-      rtc_irq_raise(s->irq);
+        s->cmos_data[RTC_REG_C] |= REG_C_IRQF;
+        qemu_irq_raise(s->irq);
     }
 
     /* clear update in progress bit */
@@ -468,9 +475,13 @@ static uint32_t cmos_ioport_read(void *opaque, uint32_t addr)
                     s->irq_reinject_on_ack_count < RTC_REINJECT_ON_ACK_COUNT) {
                 s->irq_reinject_on_ack_count++;
                 apic_reset_irq_delivered();
+                DPRINTF_C("cmos: injecting on ack\n");
                 qemu_irq_raise(s->irq);
-                if (apic_get_irq_delivered())
+                if (apic_get_irq_delivered()) {
                     s->irq_coalesced--;
+                    DPRINTF_C("cmos: coalesced irqs decreased to %d\n",
+                              s->irq_coalesced);
+                }
                 break;
             }
 #endif
@@ -481,22 +492,22 @@ static uint32_t cmos_ioport_read(void *opaque, uint32_t addr)
             ret = s->cmos_data[s->cmos_index];
             break;
         }
-#ifdef DEBUG_CMOS
-        printf("cmos: read index=0x%02x val=0x%02x\n",
-               s->cmos_index, ret);
-#endif
+        CMOS_DPRINTF("cmos: read index=0x%02x val=0x%02x\n",
+                     s->cmos_index, ret);
         return ret;
     }
 }
 
-void rtc_set_memory(RTCState *s, int addr, int val)
+void rtc_set_memory(ISADevice *dev, int addr, int val)
 {
+    RTCState *s = DO_UPCAST(RTCState, dev, dev);
     if (addr >= 0 && addr <= 127)
         s->cmos_data[addr] = val;
 }
 
-void rtc_set_date(RTCState *s, const struct tm *tm)
+void rtc_set_date(ISADevice *dev, const struct tm *tm)
 {
+    RTCState *s = DO_UPCAST(RTCState, dev, dev);
     s->current_tm = *tm;
     rtc_copy_date(s);
 }
@@ -505,18 +516,19 @@ void rtc_set_date(RTCState *s, const struct tm *tm)
 #define REG_IBM_CENTURY_BYTE        0x32
 #define REG_IBM_PS2_CENTURY_BYTE    0x37
 
-static void rtc_set_date_from_host(RTCState *s)
+static void rtc_set_date_from_host(ISADevice *dev)
 {
+    RTCState *s = DO_UPCAST(RTCState, dev, dev);
     struct tm tm;
     int val;
 
     /* set the CMOS date */
     qemu_get_timedate(&tm, 0);
-    rtc_set_date(s, &tm);
+    rtc_set_date(dev, &tm);
 
     val = rtc_to_bcd(s, (tm.tm_year / 100) + 19);
-    rtc_set_memory(s, REG_IBM_CENTURY_BYTE, val);
-    rtc_set_memory(s, REG_IBM_PS2_CENTURY_BYTE, val);
+    rtc_set_memory(dev, REG_IBM_CENTURY_BYTE, val);
+    rtc_set_memory(dev, REG_IBM_PS2_CENTURY_BYTE, val);
 }
 
 static int rtc_post_load(void *opaque, int version_id)
@@ -579,16 +591,13 @@ static int rtc_initfn(ISADevice *dev)
 {
     RTCState *s = DO_UPCAST(RTCState, dev, dev);
     int base = 0x70;
-    int isairq = 8;
-
-    isa_init_irq(dev, &s->irq, isairq);
 
     s->cmos_data[RTC_REG_A] = 0x26;
     s->cmos_data[RTC_REG_B] = 0x02;
     s->cmos_data[RTC_REG_C] = 0x00;
     s->cmos_data[RTC_REG_D] = 0x80;
 
-    rtc_set_date_from_host(s);
+    rtc_set_date_from_host(dev);
 
     s->periodic_timer = qemu_new_timer(rtc_clock, rtc_periodic_timer, s);
 #ifdef TARGET_I386
@@ -605,26 +614,35 @@ static int rtc_initfn(ISADevice *dev)
 
     register_ioport_write(base, 2, 1, cmos_ioport_write, s);
     register_ioport_read(base, 2, 1, cmos_ioport_read, s);
+    isa_init_ioport_range(dev, base, 2);
 
-    vmstate_register(base, &vmstate_rtc, s);
+    qdev_set_legacy_instance_id(&dev->qdev, base, 2);
     qemu_register_reset(rtc_reset, s);
     return 0;
 }
 
-RTCState *rtc_init(int base_year)
+ISADevice *rtc_init(int base_year, qemu_irq intercept_irq)
 {
     ISADevice *dev;
+    RTCState *s;
 
     dev = isa_create("mc146818rtc");
+    s = DO_UPCAST(RTCState, dev, dev);
     qdev_prop_set_int32(&dev->qdev, "base_year", base_year);
     qdev_init_nofail(&dev->qdev);
-    return DO_UPCAST(RTCState, dev, dev);
+    if (intercept_irq) {
+        s->irq = intercept_irq;
+    } else {
+        isa_init_irq(dev, &s->irq, RTC_ISA_IRQ);
+    }
+    return dev;
 }
 
 static ISADeviceInfo mc146818rtc_info = {
     .qdev.name     = "mc146818rtc",
     .qdev.size     = sizeof(RTCState),
     .qdev.no_user  = 1,
+    .qdev.vmsd     = &vmstate_rtc,
     .init          = rtc_initfn,
     .qdev.props    = (Property[]) {
         DEFINE_PROP_INT32("base_year", RTCState, base_year, 1980),

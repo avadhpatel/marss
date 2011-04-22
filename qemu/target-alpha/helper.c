@@ -23,6 +23,141 @@
 
 #include "cpu.h"
 #include "exec-all.h"
+#include "softfloat.h"
+
+uint64_t cpu_alpha_load_fpcr (CPUState *env)
+{
+    uint64_t r = 0;
+    uint8_t t;
+
+    t = env->fpcr_exc_status;
+    if (t) {
+        r = FPCR_SUM;
+        if (t & float_flag_invalid) {
+            r |= FPCR_INV;
+        }
+        if (t & float_flag_divbyzero) {
+            r |= FPCR_DZE;
+        }
+        if (t & float_flag_overflow) {
+            r |= FPCR_OVF;
+        }
+        if (t & float_flag_underflow) {
+            r |= FPCR_UNF;
+        }
+        if (t & float_flag_inexact) {
+            r |= FPCR_INE;
+        }
+    }
+
+    t = env->fpcr_exc_mask;
+    if (t & float_flag_invalid) {
+        r |= FPCR_INVD;
+    }
+    if (t & float_flag_divbyzero) {
+        r |= FPCR_DZED;
+    }
+    if (t & float_flag_overflow) {
+        r |= FPCR_OVFD;
+    }
+    if (t & float_flag_underflow) {
+        r |= FPCR_UNFD;
+    }
+    if (t & float_flag_inexact) {
+        r |= FPCR_INED;
+    }
+
+    switch (env->fpcr_dyn_round) {
+    case float_round_nearest_even:
+        r |= FPCR_DYN_NORMAL;
+        break;
+    case float_round_down:
+        r |= FPCR_DYN_MINUS;
+        break;
+    case float_round_up:
+        r |= FPCR_DYN_PLUS;
+        break;
+    case float_round_to_zero:
+        r |= FPCR_DYN_CHOPPED;
+        break;
+    }
+
+    if (env->fpcr_dnz) {
+        r |= FPCR_DNZ;
+    }
+    if (env->fpcr_dnod) {
+        r |= FPCR_DNOD;
+    }
+    if (env->fpcr_undz) {
+        r |= FPCR_UNDZ;
+    }
+
+    return r;
+}
+
+void cpu_alpha_store_fpcr (CPUState *env, uint64_t val)
+{
+    uint8_t t;
+
+    t = 0;
+    if (val & FPCR_INV) {
+        t |= float_flag_invalid;
+    }
+    if (val & FPCR_DZE) {
+        t |= float_flag_divbyzero;
+    }
+    if (val & FPCR_OVF) {
+        t |= float_flag_overflow;
+    }
+    if (val & FPCR_UNF) {
+        t |= float_flag_underflow;
+    }
+    if (val & FPCR_INE) {
+        t |= float_flag_inexact;
+    }
+    env->fpcr_exc_status = t;
+
+    t = 0;
+    if (val & FPCR_INVD) {
+        t |= float_flag_invalid;
+    }
+    if (val & FPCR_DZED) {
+        t |= float_flag_divbyzero;
+    }
+    if (val & FPCR_OVFD) {
+        t |= float_flag_overflow;
+    }
+    if (val & FPCR_UNFD) {
+        t |= float_flag_underflow;
+    }
+    if (val & FPCR_INED) {
+        t |= float_flag_inexact;
+    }
+    env->fpcr_exc_mask = t;
+
+    switch (val & FPCR_DYN_MASK) {
+    case FPCR_DYN_CHOPPED:
+        t = float_round_to_zero;
+        break;
+    case FPCR_DYN_MINUS:
+        t = float_round_down;
+        break;
+    case FPCR_DYN_NORMAL:
+        t = float_round_nearest_even;
+        break;
+    case FPCR_DYN_PLUS:
+        t = float_round_up;
+        break;
+    }
+    env->fpcr_dyn_round = t;
+
+    env->fpcr_flush_to_zero
+      = (val & (FPCR_UNDZ|FPCR_UNFD)) == (FPCR_UNDZ|FPCR_UNFD);
+
+    env->fpcr_dnz = (val & FPCR_DNZ) != 0;
+    env->fpcr_dnod = (val & FPCR_DNOD) != 0;
+    env->fpcr_undz = (val & FPCR_UNDZ) != 0;
+}
 
 #if defined(CONFIG_USER_ONLY)
 
@@ -36,11 +171,6 @@ int cpu_alpha_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
     env->ipr[IPR_EXC_ADDR] = address;
 
     return 1;
-}
-
-target_phys_addr_t cpu_get_phys_page_debug (CPUState *env, target_ulong addr)
-{
-    return addr;
 }
 
 void do_interrupt (CPUState *env)
@@ -336,6 +466,7 @@ int cpu_alpha_mtpr (CPUState *env, int iprn, uint64_t val, uint64_t *oldvalp)
             env->ipr[IPR_SYSPTBR] = val;
         else
             ret = -1;
+        break;
     case IPR_TBCHK:
         /* Read-only */
         ret = -1;
@@ -389,7 +520,7 @@ void do_interrupt (CPUState *env)
 
     env->ipr[IPR_EXC_ADDR] = env->pc | 1;
     excp = env->exception_index;
-    env->exception_index = 0;
+    env->exception_index = -1;
     env->error_code = 0;
     /* XXX: disable interrupts and memory mapping */
     if (env->ipr[IPR_PAL_BASE] != -1ULL) {
@@ -406,8 +537,7 @@ void do_interrupt (CPUState *env)
 }
 #endif
 
-void cpu_dump_state (CPUState *env, FILE *f,
-                     int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
+void cpu_dump_state (CPUState *env, FILE *f, fprintf_function cpu_fprintf,
                      int flags)
 {
     static const char *linux_reg_names[] = {
@@ -426,12 +556,15 @@ void cpu_dump_state (CPUState *env, FILE *f,
         if ((i % 3) == 2)
             cpu_fprintf(f, "\n");
     }
-    cpu_fprintf(f, "\n");
+
+    cpu_fprintf(f, "lock_a   " TARGET_FMT_lx " lock_v   " TARGET_FMT_lx "\n",
+                env->lock_addr, env->lock_value);
+
     for (i = 0; i < 31; i++) {
         cpu_fprintf(f, "FIR%02d    " TARGET_FMT_lx " ", i,
                     *((uint64_t *)(&env->fir[i])));
         if ((i % 3) == 2)
             cpu_fprintf(f, "\n");
     }
-    cpu_fprintf(f, "\nlock     " TARGET_FMT_lx "\n", env->lock);
+    cpu_fprintf(f, "\n");
 }

@@ -2153,6 +2153,28 @@ static const arg asi_table_v9[] =
   { 0x8a, "#ASI_PRIMARY_NOFAULT_LITTLE" },
   { 0x8b, "#ASI_SECONDARY_NOFAULT_LITTLE" },
   /* These are UltraSPARC extensions.  */
+  { 0x14, "#ASI_PHYS_USE_EC"},
+  { 0x15, "#ASI_PHYS_BYPASS_EC_WITH_EBIT"},
+  { 0x45, "#ASI_LSU_CONTROL_REG"},
+  { 0x47, "#ASI_DCACHE_TAG"},
+  { 0x4a, "#ASI_UPA_CONFIG_REG"},
+  { 0x50, "#ASI_IMMU" },
+  { 0x51, "#ASI_IMMU_TSB_8KB_PTR_REG" },
+  { 0x52, "#ASI_IMMU_TSB_64KB_PTR_REG" },
+  /*{ 0x53, "#reserved?" },*/
+  { 0x54, "#ASI_ITLB_DATA_IN_REG" },
+  { 0x55, "#ASI_ITLB_DATA_ACCESS_REG" },
+  { 0x56, "#ASI_ITLB_TAG_READ_REG" },
+  { 0x57, "#ASI_IMMU_DEMAP" },
+  { 0x58, "#ASI_DMMU" },
+  { 0x59, "#ASI_DMMU_TSB_8KB_PTR_REG" },
+  { 0x5a, "#ASI_DMMU_TSB_64KB_PTR_REG" },
+  { 0x5b, "#ASI_DMMU_TSB_DIRECT_PTR_REG" },
+  { 0x5c, "#ASI_DTLB_DATA_IN_REG" },
+  { 0x5d, "#ASI_DTLB_DATA_ACCESS_REG" },
+  { 0x5e, "#ASI_DTLB_TAG_READ_REG" },
+  { 0x5f, "#ASI_DMMU_DEMAP" },
+  { 0x67, "#ASI_IC_TAG"},
   /* FIXME: There are dozens of them.  Not sure we want them all.
      Most are for kernel building but some are for vis type stuff.  */
   { 0, NULL }
@@ -2760,7 +2782,7 @@ print_insn_sparc (bfd_vma memaddr, disassemble_info *info)
           int found_plus = 0;
 
           /* Nonzero means we have an annulled branch.  */
-          int is_annulled = 0;
+          /* int is_annulled = 0; */ /* see FIXME below */
 
           /* Do we have an `add' or `or' instruction combining an
              immediate with rs1?  */
@@ -2778,7 +2800,7 @@ print_insn_sparc (bfd_vma memaddr, disassemble_info *info)
               /* Can't do simple format if source and dest are different.  */
               continue;
 
-          (*info->fprintf_func) (stream, opcode->name);
+          (*info->fprintf_func) (stream, "%s", opcode->name);
 
           {
             const char *s;
@@ -2796,7 +2818,7 @@ print_insn_sparc (bfd_vma memaddr, disassemble_info *info)
                       {
                       case 'a':
                         (*info->fprintf_func) (stream, "a");
-                        is_annulled = 1;
+                        /* is_annulled = 1; */ /* see FIXME below */
                         ++s;
                         continue;
                       case 'N':

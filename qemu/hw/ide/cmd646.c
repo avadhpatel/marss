@@ -68,15 +68,9 @@ static void ide_map(PCIDevice *pci_dev, int region_num,
     }
 }
 
-static PCIIDEState *pci_from_bm(BMDMAState *bm)
+static uint32_t bmdma_readb_common(PCIIDEState *pci_dev, BMDMAState *bm,
+                                   uint32_t addr)
 {
-    return bm->pci_dev;
-}
-
-static uint32_t bmdma_readb(void *opaque, uint32_t addr)
-{
-    BMDMAState *bm = opaque;
-    PCIIDEState *pci_dev = pci_from_bm(bm);
     uint32_t val;
 
     switch(addr & 3) {
@@ -90,7 +84,7 @@ static uint32_t bmdma_readb(void *opaque, uint32_t addr)
         val = bm->status;
         break;
     case 3:
-        if (bm->unit == 0) {
+        if (bm == &pci_dev->bmdma[0]) {
             val = pci_dev->dev.config[UDIDETCR0];
         } else {
             val = pci_dev->dev.config[UDIDETCR1];
@@ -106,14 +100,32 @@ static uint32_t bmdma_readb(void *opaque, uint32_t addr)
     return val;
 }
 
-static void bmdma_writeb(void *opaque, uint32_t addr, uint32_t val)
+static uint32_t bmdma_readb_0(void *opaque, uint32_t addr)
 {
-    BMDMAState *bm = opaque;
-    PCIIDEState *pci_dev = pci_from_bm(bm);
+    PCIIDEState *pci_dev = opaque;
+    BMDMAState *bm = &pci_dev->bmdma[0];
+
+    return bmdma_readb_common(pci_dev, bm, addr);
+}
+
+static uint32_t bmdma_readb_1(void *opaque, uint32_t addr)
+{
+    PCIIDEState *pci_dev = opaque;
+    BMDMAState *bm = &pci_dev->bmdma[1];
+
+    return bmdma_readb_common(pci_dev, bm, addr);
+}
+
+static void bmdma_writeb_common(PCIIDEState *pci_dev, BMDMAState *bm,
+                                uint32_t addr, uint32_t val)
+{
 #ifdef DEBUG_IDE
     printf("bmdma: writeb 0x%02x : 0x%02x\n", addr, val);
 #endif
     switch(addr & 3) {
+    case 0:
+        bmdma_cmd_writeb(bm, addr, val);
+        break;
     case 1:
         pci_dev->dev.config[MRDMODE] =
             (pci_dev->dev.config[MRDMODE] & ~0x30) | (val & 0x30);
@@ -123,12 +135,28 @@ static void bmdma_writeb(void *opaque, uint32_t addr, uint32_t val)
         bm->status = (val & 0x60) | (bm->status & 1) | (bm->status & ~val & 0x06);
         break;
     case 3:
-        if (bm->unit == 0)
+        if (bm == &pci_dev->bmdma[0])
             pci_dev->dev.config[UDIDETCR0] = val;
         else
             pci_dev->dev.config[UDIDETCR1] = val;
         break;
     }
+}
+
+static void bmdma_writeb_0(void *opaque, uint32_t addr, uint32_t val)
+{
+    PCIIDEState *pci_dev = opaque;
+    BMDMAState *bm = &pci_dev->bmdma[0];
+
+    bmdma_writeb_common(pci_dev, bm, addr, val);
+}
+
+static void bmdma_writeb_1(void *opaque, uint32_t addr, uint32_t val)
+{
+    PCIIDEState *pci_dev = opaque;
+    BMDMAState *bm = &pci_dev->bmdma[1];
+
+    bmdma_writeb_common(pci_dev, bm, addr, val);
 }
 
 static void bmdma_map(PCIDevice *pci_dev, int region_num,
@@ -139,22 +167,17 @@ static void bmdma_map(PCIDevice *pci_dev, int region_num,
 
     for(i = 0;i < 2; i++) {
         BMDMAState *bm = &d->bmdma[i];
-        d->bus[i].bmdma = bm;
-        bm->bus = d->bus+i;
-        bm->pci_dev = d;
-        qemu_add_vm_change_state_handler(ide_dma_restart_cb, bm);
 
-        register_ioport_write(addr, 1, 1, bmdma_cmd_writeb, bm);
+        if (i == 0) {
+            register_ioport_write(addr, 4, 1, bmdma_writeb_0, d);
+            register_ioport_read(addr, 4, 1, bmdma_readb_0, d);
+        } else {
+            register_ioport_write(addr, 4, 1, bmdma_writeb_1, d);
+            register_ioport_read(addr, 4, 1, bmdma_readb_1, d);
+        }
 
-        register_ioport_write(addr + 1, 3, 1, bmdma_writeb, bm);
-        register_ioport_read(addr, 4, 1, bmdma_readb, bm);
-
-        register_ioport_write(addr + 4, 4, 1, bmdma_addr_writeb, bm);
-        register_ioport_read(addr + 4, 4, 1, bmdma_addr_readb, bm);
-        register_ioport_write(addr + 4, 4, 2, bmdma_addr_writew, bm);
-        register_ioport_read(addr + 4, 4, 2, bmdma_addr_readw, bm);
-        register_ioport_write(addr + 4, 4, 4, bmdma_addr_writel, bm);
-        register_ioport_read(addr + 4, 4, 4, bmdma_addr_readl, bm);
+        iorange_init(&bm->addr_ioport, &bmdma_addr_ioport_ops, addr + 4, 4);
+        ioport_register(&bm->addr_ioport);
         addr += 8;
     }
 }
@@ -192,7 +215,6 @@ static void cmd646_reset(void *opaque)
 
     for (i = 0; i < 2; i++) {
         ide_bus_reset(&d->bus[i]);
-        ide_dma_reset(&d->bmdma[i]);
     }
 }
 
@@ -202,15 +224,15 @@ static int pci_cmd646_ide_initfn(PCIDevice *dev)
     PCIIDEState *d = DO_UPCAST(PCIIDEState, dev, dev);
     uint8_t *pci_conf = d->dev.config;
     qemu_irq *irq;
+    int i;
 
     pci_config_set_vendor_id(pci_conf, PCI_VENDOR_ID_CMD);
     pci_config_set_device_id(pci_conf, PCI_DEVICE_ID_CMD_646);
 
-    pci_conf[0x08] = 0x07; // IDE controller revision
-    pci_conf[0x09] = 0x8f;
+    pci_conf[PCI_REVISION_ID] = 0x07; // IDE controller revision
+    pci_conf[PCI_CLASS_PROG] = 0x8f;
 
     pci_config_set_class(pci_conf, PCI_CLASS_STORAGE_IDE);
-    pci_conf[PCI_HEADER_TYPE] = PCI_HEADER_TYPE_NORMAL; // header_type
 
     pci_conf[0x51] = 0x04; // enable IDE0
     if (d->secondary) {
@@ -224,15 +246,21 @@ static int pci_cmd646_ide_initfn(PCIDevice *dev)
     pci_register_bar(dev, 3, 0x4, PCI_BASE_ADDRESS_SPACE_IO, ide_map);
     pci_register_bar(dev, 4, 0x10, PCI_BASE_ADDRESS_SPACE_IO, bmdma_map);
 
-    pci_conf[0x3d] = 0x01; // interrupt on pin 1
+    /* TODO: RST# value should be 0 */
+    pci_conf[PCI_INTERRUPT_PIN] = 0x01; // interrupt on pin 1
 
     irq = qemu_allocate_irqs(cmd646_set_irq, d, 2);
-    ide_bus_new(&d->bus[0], &d->dev.qdev);
-    ide_bus_new(&d->bus[1], &d->dev.qdev);
-    ide_init2(&d->bus[0], NULL, NULL, irq[0]);
-    ide_init2(&d->bus[1], NULL, NULL, irq[1]);
+    for (i = 0; i < 2; i++) {
+        ide_bus_new(&d->bus[i], &d->dev.qdev, i);
+        ide_init2(&d->bus[i], irq[i]);
 
-    vmstate_register(0, &vmstate_ide_pci, d);
+        bmdma_init(&d->bus[i], &d->bmdma[i]);
+        d->bmdma[i].bus = &d->bus[i];
+        qemu_add_vm_change_state_handler(d->bus[i].dma->ops->restart_cb,
+                                         &d->bmdma[i].dma);
+    }
+
+    vmstate_register(&dev->qdev, 0, &vmstate_ide_pci, d);
     qemu_register_reset(cmd646_reset, d);
     return 0;
 }

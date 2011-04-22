@@ -5,7 +5,8 @@ all: build-all
 include ../../config-host.mak
 include $(SRC_PATH)/rules.mak
 
-VPATH=$(SRC_PATH)/pc-bios/optionrom
+$(call set-vpath, $(SRC_PATH)/pc-bios/optionrom)
+
 .PHONY : all clean build-all
 
 CFLAGS := -Wall -Wstrict-prototypes -Werror -fomit-frame-pointer -fno-builtin
@@ -22,7 +23,7 @@ build-all: multiboot.bin linuxboot.bin
 	$(call quiet-command,$(OBJCOPY) -O binary -j .text $< $@,"  Building $(TARGET_DIR)$@")
 
 %.bin: %.raw
-	$(call quiet-command,$(SHELL) $(SRC_PATH)/pc-bios/optionrom/signrom.sh $< $@,"  Signing $(TARGET_DIR)$@")
+	$(call quiet-command,$(SHELL) $(SRC_PATH)/scripts/signrom.sh $< $@,"  Signing $(TARGET_DIR)$@")
 
 clean:
 	rm -f *.o *.d *.raw *.img *.bin *~

@@ -48,6 +48,28 @@ typedef struct {
     qemu_irq irq;
 } pl110_state;
 
+static const VMStateDescription vmstate_pl110 = {
+    .name = "pl110",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (VMStateField[]) {
+        VMSTATE_INT32(versatile, pl110_state),
+        VMSTATE_UINT32_ARRAY(timing, pl110_state, 4),
+        VMSTATE_UINT32(cr, pl110_state),
+        VMSTATE_UINT32(upbase, pl110_state),
+        VMSTATE_UINT32(lpbase, pl110_state),
+        VMSTATE_UINT32(int_status, pl110_state),
+        VMSTATE_UINT32(int_mask, pl110_state),
+        VMSTATE_INT32(cols, pl110_state),
+        VMSTATE_INT32(rows, pl110_state),
+        VMSTATE_UINT32(bpp, pl110_state),
+        VMSTATE_INT32(invalidate, pl110_state),
+        VMSTATE_UINT32_ARRAY(pallette, pl110_state, 256),
+        VMSTATE_UINT32_ARRAY(raw_pallette, pl110_state, 128),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 static const unsigned char pl110_id[] =
 { 0x10, 0x11, 0x04, 0x00, 0x0d, 0xf0, 0x05, 0xb1 };
 
@@ -358,13 +380,13 @@ static int pl110_init(SysBusDevice *dev)
     int iomemtype;
 
     iomemtype = cpu_register_io_memory(pl110_readfn,
-                                       pl110_writefn, s);
+                                       pl110_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
     sysbus_init_irq(dev, &s->irq);
     s->ds = graphic_console_init(pl110_update_display,
                                  pl110_invalidate_display,
                                  NULL, NULL, s);
-    /* ??? Save/restore.  */
     return 0;
 }
 
@@ -375,11 +397,26 @@ static int pl110_versatile_init(SysBusDevice *dev)
     return pl110_init(dev);
 }
 
+static SysBusDeviceInfo pl110_info = {
+    .init = pl110_init,
+    .qdev.name = "pl110",
+    .qdev.size = sizeof(pl110_state),
+    .qdev.vmsd = &vmstate_pl110,
+    .qdev.no_user = 1,
+};
+
+static SysBusDeviceInfo pl110_versatile_info = {
+    .init = pl110_versatile_init,
+    .qdev.name = "pl110_versatile",
+    .qdev.size = sizeof(pl110_state),
+    .qdev.vmsd = &vmstate_pl110,
+    .qdev.no_user = 1,
+};
+
 static void pl110_register_devices(void)
 {
-    sysbus_register_dev("pl110", sizeof(pl110_state), pl110_init);
-    sysbus_register_dev("pl110_versatile", sizeof(pl110_state),
-                        pl110_versatile_init);
+    sysbus_register_withprop(&pl110_info);
+    sysbus_register_withprop(&pl110_versatile_info);
 }
 
 device_init(pl110_register_devices)

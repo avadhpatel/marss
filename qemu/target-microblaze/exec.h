@@ -23,19 +23,9 @@ register struct CPUMBState *env asm(AREG0);
 #include "cpu.h"
 #include "exec-all.h"
 
-static inline void env_to_regs(void)
-{
-}
-
-static inline void regs_to_env(void)
-{
-}
-
 #if !defined(CONFIG_USER_ONLY)
 #include "softmmu_exec.h"
 #endif
-
-void cpu_mb_flush_flags(CPUMBState *env, int cc_op);
 
 static inline int cpu_has_work(CPUState *env)
 {
@@ -54,3 +44,9 @@ static inline int cpu_halted(CPUState *env) {
 	}
 	return EXCP_HALTED;
 }
+
+static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
+{
+    env->sregs[SR_PC] = tb->pc;
+}
+

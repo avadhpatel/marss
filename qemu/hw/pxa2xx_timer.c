@@ -452,10 +452,10 @@ static pxa2xx_timer_info *pxa2xx_timer_init(target_phys_addr_t base,
     }
 
     iomemtype = cpu_register_io_memory(pxa2xx_timer_readfn,
-                    pxa2xx_timer_writefn, s);
+                    pxa2xx_timer_writefn, s, DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x00001000, iomemtype);
 
-    register_savevm("pxa2xx_timer", 0, 0,
+    register_savevm(NULL, "pxa2xx_timer", 0, 0,
                     pxa2xx_timer_save, pxa2xx_timer_load, s);
 
     return s;

@@ -47,13 +47,15 @@
 #define VBE_DISPI_INDEX_VIRT_HEIGHT     0x7
 #define VBE_DISPI_INDEX_X_OFFSET        0x8
 #define VBE_DISPI_INDEX_Y_OFFSET        0x9
-#define VBE_DISPI_INDEX_NB              0xa
+#define VBE_DISPI_INDEX_NB              0xa /* size of vbe_regs[] */
+#define VBE_DISPI_INDEX_VIDEO_MEMORY_64K 0xa /* read-only, not in vbe_regs */
 
 #define VBE_DISPI_ID0                   0xB0C0
 #define VBE_DISPI_ID1                   0xB0C1
 #define VBE_DISPI_ID2                   0xB0C2
 #define VBE_DISPI_ID3                   0xB0C3
 #define VBE_DISPI_ID4                   0xB0C4
+#define VBE_DISPI_ID5                   0xB0C5
 
 #define VBE_DISPI_DISABLED              0x00
 #define VBE_DISPI_ENABLED               0x01
@@ -104,14 +106,12 @@ typedef void (* vga_update_retrace_info_fn)(struct VGACommonState *s);
 typedef struct VGACommonState {
     uint8_t *vram_ptr;
     ram_addr_t vram_offset;
-    unsigned int vram_size;
+    uint32_t vram_size;
     uint32_t lfb_addr;
     uint32_t lfb_end;
     uint32_t map_addr;
     uint32_t map_end;
     uint32_t lfb_vram_mapped; /* whether 0xa0000 is mapped as ram */
-    uint32_t bios_offset;
-    uint32_t bios_size;
     uint32_t latch;
     uint8_t sr_index;
     uint8_t sr[256];

@@ -292,7 +292,8 @@ static int pl011_init(SysBusDevice *dev, const unsigned char *id)
     pl011_state *s = FROM_SYSBUS(pl011_state, dev);
 
     iomemtype = cpu_register_io_memory(pl011_readfn,
-                                       pl011_writefn, s);
+                                       pl011_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000,iomemtype);
     sysbus_init_irq(dev, &s->irq);
     s->id = id;
@@ -306,7 +307,7 @@ static int pl011_init(SysBusDevice *dev, const unsigned char *id)
         qemu_chr_add_handlers(s->chr, pl011_can_receive, pl011_receive,
                               pl011_event, s);
     }
-    register_savevm("pl011_uart", -1, 1, pl011_save, pl011_load, s);
+    register_savevm(&dev->qdev, "pl011_uart", -1, 1, pl011_save, pl011_load, s);
     return 0;
 }
 

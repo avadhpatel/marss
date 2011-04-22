@@ -385,6 +385,9 @@ UNUSED static struct flags mmap_prot_flags[] = {
     FLAG_GENERIC(PROT_EXEC),
     FLAG_GENERIC(PROT_READ),
     FLAG_GENERIC(PROT_WRITE),
+    FLAG_TARGET(PROT_SEM),
+    FLAG_GENERIC(PROT_GROWSDOWN),
+    FLAG_GENERIC(PROT_GROWSUP),
     FLAG_END,
 };
 
@@ -1252,8 +1255,10 @@ if( cmd == val ) { \
 
     int cmd = (int)tswap32(tflag);
 #ifdef FUTEX_PRIVATE_FLAG
-    if (cmd == FUTEX_PRIVATE_FLAG)
+    if (cmd & FUTEX_PRIVATE_FLAG) {
         gemu_log("FUTEX_PRIVATE_FLAG|");
+        cmd &= ~FUTEX_PRIVATE_FLAG;
+    }
 #endif
     print_op(FUTEX_WAIT)
     print_op(FUTEX_WAKE)

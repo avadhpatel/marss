@@ -40,6 +40,8 @@ typedef struct MACIOIDEState {
     BlockDriverAIOCB *aiocb;
 } MACIOIDEState;
 
+#define MACIO_PAGE_SIZE 4096
+
 static void pmac_ide_atapi_transfer_cb(void *opaque, int ret)
 {
     DBDMA_io *io = opaque;
@@ -77,7 +79,7 @@ static void pmac_ide_atapi_transfer_cb(void *opaque, int ret)
 
     s->io_buffer_size = io->len;
 
-    qemu_sglist_init(&s->sg, io->len / TARGET_PAGE_SIZE + 1);
+    qemu_sglist_init(&s->sg, io->len / MACIO_PAGE_SIZE + 1);
     qemu_sglist_add(&s->sg, io->addr, io->len);
     io->addr += io->len;
     io->len = 0;
@@ -139,7 +141,7 @@ static void pmac_ide_transfer_cb(void *opaque, int ret)
     s->io_buffer_index = 0;
     s->io_buffer_size = io->len;
 
-    qemu_sglist_init(&s->sg, io->len / TARGET_PAGE_SIZE + 1);
+    qemu_sglist_init(&s->sg, io->len / MACIO_PAGE_SIZE + 1);
     qemu_sglist_add(&s->sg, io->addr, io->len);
     io->addr += io->len;
     io->len = 0;
@@ -160,7 +162,7 @@ static void pmac_ide_transfer(DBDMA_io *io)
     IDEState *s = idebus_active_if(&m->bus);
 
     s->io_buffer_size = 0;
-    if (s->is_cdrom) {
+    if (s->drive_kind == IDE_CD) {
         pmac_ide_atapi_transfer_cb(io, 0);
         return;
     }
@@ -223,9 +225,7 @@ static void pmac_ide_writew (void *opaque,
     MACIOIDEState *d = opaque;
 
     addr = (addr & 0xFFF) >> 4;
-#ifdef TARGET_WORDS_BIGENDIAN
     val = bswap16(val);
-#endif
     if (addr == 0) {
         ide_data_writew(&d->bus, 0, val);
     }
@@ -242,9 +242,7 @@ static uint32_t pmac_ide_readw (void *opaque,target_phys_addr_t addr)
     } else {
         retval = 0xFFFF;
     }
-#ifdef TARGET_WORDS_BIGENDIAN
     retval = bswap16(retval);
-#endif
     return retval;
 }
 
@@ -254,9 +252,7 @@ static void pmac_ide_writel (void *opaque,
     MACIOIDEState *d = opaque;
 
     addr = (addr & 0xFFF) >> 4;
-#ifdef TARGET_WORDS_BIGENDIAN
     val = bswap32(val);
-#endif
     if (addr == 0) {
         ide_data_writel(&d->bus, 0, val);
     }
@@ -273,9 +269,7 @@ static uint32_t pmac_ide_readl (void *opaque,target_phys_addr_t addr)
     } else {
         retval = 0xFFFFFFFF;
     }
-#ifdef TARGET_WORDS_BIGENDIAN
     retval = bswap32(retval);
-#endif
     return retval;
 }
 
@@ -320,14 +314,15 @@ int pmac_ide_init (DriveInfo **hd_table, qemu_irq irq,
     int pmac_ide_memory;
 
     d = qemu_mallocz(sizeof(MACIOIDEState));
-    ide_init2(&d->bus, hd_table[0], hd_table[1], irq);
+    ide_init2_with_non_qdev_drives(&d->bus, hd_table[0], hd_table[1], irq);
 
     if (dbdma)
         DBDMA_register_channel(dbdma, channel, dma_irq, pmac_ide_transfer, pmac_ide_flush, d);
 
     pmac_ide_memory = cpu_register_io_memory(pmac_ide_read,
-                                             pmac_ide_write, d);
-    vmstate_register(0, &vmstate_pmac, d);
+                                             pmac_ide_write, d,
+                                             DEVICE_NATIVE_ENDIAN);
+    vmstate_register(NULL, 0, &vmstate_pmac, d);
     qemu_register_reset(pmac_ide_reset, d);
 
     return pmac_ide_memory;

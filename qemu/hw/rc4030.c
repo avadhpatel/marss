@@ -240,8 +240,9 @@ static uint32_t rc4030_readl(void *opaque, target_phys_addr_t addr)
         break;
     }
 
-    if ((addr & ~3) != 0x230)
+    if ((addr & ~3) != 0x230) {
         DPRINTF("read 0x%02x at " TARGET_FMT_plx "\n", val, addr);
+    }
 
     return val;
 }
@@ -748,7 +749,10 @@ static void rc4030_do_dma(void *opaque, int n, uint8_t *buf, int len, int is_wri
         printf("rc4030 dma: Copying %d bytes %s host %p\n",
             len, is_write ? "from" : "to", buf);
         for (i = 0; i < len; i += 16) {
-            int n = min(16, len - i);
+            int n = 16;
+            if (n > len - i) {
+                n = len - i;
+            }
             for (j = 0; j < n; j++)
                 printf("%02x ", buf[i + j]);
             while (j++ < 16)
@@ -812,12 +816,14 @@ void *rc4030_init(qemu_irq timer, qemu_irq jazz_bus,
     s->jazz_bus_irq = jazz_bus;
 
     qemu_register_reset(rc4030_reset, s);
-    register_savevm("rc4030", 0, 2, rc4030_save, rc4030_load, s);
+    register_savevm(NULL, "rc4030", 0, 2, rc4030_save, rc4030_load, s);
     rc4030_reset(s);
 
-    s_chipset = cpu_register_io_memory(rc4030_read, rc4030_write, s);
+    s_chipset = cpu_register_io_memory(rc4030_read, rc4030_write, s,
+                                       DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(0x80000000, 0x300, s_chipset);
-    s_jazzio = cpu_register_io_memory(jazzio_read, jazzio_write, s);
+    s_jazzio = cpu_register_io_memory(jazzio_read, jazzio_write, s,
+                                      DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(0xf0000000, 0x00001000, s_jazzio);
 
     return s;

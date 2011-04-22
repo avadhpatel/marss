@@ -15,8 +15,7 @@
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+    along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #ifndef __FPOPCODE_H__
@@ -385,7 +384,7 @@ static inline float32 getSingleConstant(const unsigned int nIndex)
    return float32Constant[nIndex];
 }
 
-extern unsigned int getRegisterCount(const unsigned int opcode);
-extern unsigned int getDestinationSize(const unsigned int opcode);
+unsigned int getRegisterCount(const unsigned int opcode);
+unsigned int getDestinationSize(const unsigned int opcode);
 
 #endif

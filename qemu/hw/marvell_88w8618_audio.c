@@ -34,7 +34,6 @@
 #define MP_AUDIO_CLOCK_24MHZ    (1 << 9)
 #define MP_AUDIO_MONO           (1 << 14)
 
-#ifdef HAS_AUDIO
 typedef struct mv88w8618_audio_state {
     SysBusDevice busdev;
     qemu_irq irq;
@@ -250,7 +249,8 @@ static int mv88w8618_audio_init(SysBusDevice *dev)
     wm8750_data_req_set(s->wm, mv88w8618_audio_callback, s);
 
     iomemtype = cpu_register_io_memory(mv88w8618_audio_readfn,
-                                       mv88w8618_audio_writefn, s);
+                                       mv88w8618_audio_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, MP_AUDIO_SIZE, iomemtype);
 
     return 0;
@@ -290,13 +290,10 @@ static SysBusDeviceInfo mv88w8618_audio_info = {
         {/* end of list */}
     }
 };
-#endif
 
 static void mv88w8618_register_devices(void)
 {
-#ifdef HAS_AUDIO
     sysbus_register_withprop(&mv88w8618_audio_info);
-#endif
 }
 
 device_init(mv88w8618_register_devices)

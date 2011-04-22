@@ -144,7 +144,7 @@ ip_input(struct mbuf *m)
 	   m_adj(m, ip->ip_len - m->m_len);
 
 	/* check ip_ttl for a correct ICMP reply */
-	if(ip->ip_ttl==0 || ip->ip_ttl==1) {
+	if(ip->ip_ttl==0) {
 	  icmp_error(m, ICMP_TIMXCEED,ICMP_TIMXCEED_INTRANS, 0,"ttl");
 	  goto bad;
 	}
@@ -477,7 +477,7 @@ ip_dooptions(m)
 	register struct in_ifaddr *ia;
 	int opt, optlen, cnt, off, code, type, forward = 0;
 	struct in_addr *sin, dst;
-typedef u_int32_t n_time;
+typedef uint32_t n_time;
 	n_time ntime;
 
 	dst = ip->ip_dst;

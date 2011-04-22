@@ -73,6 +73,21 @@ generic_symbol_at_address (bfd_vma addr, struct disassemble_info *info)
   return 1;
 }
 
+bfd_vma bfd_getl64 (const bfd_byte *addr)
+{
+  unsigned long long v;
+
+  v = (unsigned long long) addr[0];
+  v |= (unsigned long long) addr[1] << 8;
+  v |= (unsigned long long) addr[2] << 16;
+  v |= (unsigned long long) addr[3] << 24;
+  v |= (unsigned long long) addr[4] << 32;
+  v |= (unsigned long long) addr[5] << 40;
+  v |= (unsigned long long) addr[6] << 48;
+  v |= (unsigned long long) addr[7] << 56;
+  return (bfd_vma) v;
+}
+
 bfd_vma bfd_getl32 (const bfd_byte *addr)
 {
   unsigned long v;
@@ -193,8 +208,13 @@ void target_disas(FILE *out, target_ulong code, target_ulong size, int flags)
     disasm_info.mach = bfd_mach_alpha;
     print_insn = print_insn_alpha;
 #elif defined(TARGET_CRIS)
-    disasm_info.mach = bfd_mach_cris_v32;
-    print_insn = print_insn_crisv32;
+    if (flags != 32) {
+        disasm_info.mach = bfd_mach_cris_v0_v10;
+        print_insn = print_insn_crisv10;
+    } else {
+        disasm_info.mach = bfd_mach_cris_v32;
+        print_insn = print_insn_crisv32;
+    }
 #elif defined(TARGET_MICROBLAZE)
     disasm_info.mach = bfd_arch_microblaze;
     print_insn = print_insn_microblaze;
@@ -278,6 +298,8 @@ void disas(FILE *out, void *code, unsigned long size)
     print_insn = print_insn_s390;
 #elif defined(__hppa__)
     print_insn = print_insn_hppa;
+#elif defined(__ia64__)
+    print_insn = print_insn_ia64;
 #else
     fprintf(out, "0x%lx: Asm output not supported on this arch\n",
 	    (long) code);
@@ -285,11 +307,6 @@ void disas(FILE *out, void *code, unsigned long size)
 #endif
     for (pc = (unsigned long)code; size > 0; pc += count, size -= count) {
 	fprintf(out, "0x%08lx:  ", pc);
-#ifdef __arm__
-        /* since data is included in the code, it is better to
-           display code data too */
-        fprintf(out, "%08x  ", (int)bfd_getl32((const bfd_byte *)pc));
-#endif
 	count = print_insn(pc, &disasm_info);
 	fprintf(out, "\n");
 	if (count < 0)
@@ -332,7 +349,8 @@ monitor_read_memory (bfd_vma memaddr, bfd_byte *myaddr, int length,
     return 0;
 }
 
-static int monitor_fprintf(FILE *stream, const char *fmt, ...)
+static int GCC_FMT_ATTR(2, 3)
+monitor_fprintf(FILE *stream, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);

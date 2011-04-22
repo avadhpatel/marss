@@ -24,6 +24,7 @@
 #define CPUState struct CPUMBState
 
 #include "cpu-defs.h"
+#include "softfloat.h"
 struct CPUMBState;
 #if !defined(CONFIG_USER_ONLY)
 #include "mmu.h"
@@ -31,7 +32,7 @@ struct CPUMBState;
 
 #define TARGET_HAS_ICE 1
 
-#define ELF_MACHINE	EM_XILINX_MICROBLAZE
+#define ELF_MACHINE	EM_MICROBLAZE
 
 #define EXCP_NMI        1
 #define EXCP_MMU        2
@@ -90,6 +91,13 @@ struct CPUMBState;
 #define          ESR_EC_INSN_STORAGE    9
 #define          ESR_EC_DATA_TLB        10
 #define          ESR_EC_INSN_TLB        11
+
+/* Floating Point Status Register (FSR) Bits */
+#define FSR_IO          (1<<4) /* Invalid operation */
+#define FSR_DZ          (1<<3) /* Divide-by-zero */
+#define FSR_OF          (1<<2) /* Overflow */
+#define FSR_UF          (1<<1) /* Underflow */
+#define FSR_DO          (1<<0) /* Denormalized operand error */
 
 /* Version reg.  */
 /* Basic PVR mask */
@@ -208,6 +216,7 @@ typedef struct CPUMBState {
     uint32_t imm;
     uint32_t regs[33];
     uint32_t sregs[24];
+    float_status fp_status;
 
     /* Internal flags.  */
 #define IMM_FLAG	4
@@ -217,8 +226,7 @@ typedef struct CPUMBState {
 #define DRTB_FLAG	(1 << 18)
 #define D_FLAG		(1 << 19)  /* Bit in ESR.  */
 /* TB dependant CPUState.  */
-#define IFLAGS_TB_MASK  (D_FLAG | IMM_FLAG | DRTI_FLAG \
-                         | DRTE_FLAG | DRTB_FLAG | MSR_EE_FLAG)
+#define IFLAGS_TB_MASK  (D_FLAG | IMM_FLAG | DRTI_FLAG | DRTE_FLAG | DRTB_FLAG)
     uint32_t iflags;
 
     struct {
@@ -252,6 +260,9 @@ enum {
 /* FIXME: MB uses variable pages down to 1K but linux only uses 4k.  */
 #define TARGET_PAGE_BITS 12
 #define MMAP_SHIFT TARGET_PAGE_BITS
+
+#define TARGET_PHYS_ADDR_SPACE_BITS 32
+#define TARGET_VIRT_ADDR_SPACE_BITS 32
 
 #define cpu_init cpu_mb_init
 #define cpu_exec cpu_mb_exec
@@ -303,12 +314,6 @@ static inline int cpu_interrupts_enabled(CPUState *env)
 }
 
 #include "cpu-all.h"
-#include "exec-all.h"
-
-static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
-{
-    env->sregs[SR_PC] = tb->pc;
-}
 
 static inline target_ulong cpu_get_pc(CPUState *env)
 {
@@ -320,10 +325,12 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
 {
     *pc = env->sregs[SR_PC];
     *cs_base = 0;
-    env->iflags |= env->sregs[SR_MSR] & MSR_EE;
-    *flags = env->iflags & IFLAGS_TB_MASK;
+    *flags = (env->iflags & IFLAGS_TB_MASK) |
+                 (env->sregs[SR_MSR] & (MSR_UM | MSR_VM | MSR_EE));
 }
 
+#if !defined(CONFIG_USER_ONLY)
 void do_unassigned_access(target_phys_addr_t addr, int is_write, int is_exec,
                           int is_asi, int size);
+#endif
 #endif

@@ -123,7 +123,7 @@
 #undef IN_T
 #undef SHIFT
 
-/* Unsigned 16 bit */
+/* Unsigned 32 bit */
 #define IN_T uint32_t
 #define IN_MIN 0
 #define IN_MAX UINT32_MAX
@@ -332,4 +332,29 @@ void st_rate_stop (void *opaque)
 void mixeng_clear (struct st_sample *buf, int len)
 {
     memset (buf, 0, len * sizeof (struct st_sample));
+}
+
+void mixeng_volume (struct st_sample *buf, int len, struct mixeng_volume *vol)
+{
+#ifdef CONFIG_MIXEMU
+    if (vol->mute) {
+        mixeng_clear (buf, len);
+        return;
+    }
+
+    while (len--) {
+#ifdef FLOAT_MIXENG
+        buf->l = buf->l * vol->l;
+        buf->r = buf->r * vol->r;
+#else
+        buf->l = (buf->l * vol->l) >> 32;
+        buf->r = (buf->r * vol->r) >> 32;
+#endif
+        buf += 1;
+    }
+#else
+    (void) buf;
+    (void) len;
+    (void) vol;
+#endif
 }
