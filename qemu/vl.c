@@ -1429,8 +1429,8 @@ static void main_loop(void)
             }
 
             if (start_simulation) {
-                in_simulation = 1;
                 cpu_set_sim_ticks();
+                in_simulation = 1;
                 start_simulation = 0;
             }
 
