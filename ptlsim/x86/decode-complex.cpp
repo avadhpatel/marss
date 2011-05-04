@@ -1805,12 +1805,14 @@ bool TraceDecoder::decode_complex() {
 
   case 0xf4: {
     // hlt (nop)
-    // This should be trapped by hypervisor to properly do idle time
     EndOfDecode();
 	// If it has rep prefix then do SVM_EXIT
 	if(svm_check_intercept(*this, SVM_EXIT_PAUSE))
 		break;
-    this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
+	TransOp ast(OP_ast, REG_temp1, REG_zero, REG_zero, REG_zero, 3);
+	ast.riptaken = L_ASSIST_PAUSE;
+	ast.nouserflags = 1;
+	this << ast;
     break;
   }
 
@@ -1989,11 +1991,7 @@ bool TraceDecoder::decode_complex() {
 //		if(svm_check_intercept(*this, SVM_EXIT_PAUSE))
 //			break;
 //	}
-//	this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
-	TransOp ast(OP_ast, REG_temp1, REG_zero, REG_zero, REG_zero, 3);
-	ast.riptaken = L_ASSIST_PAUSE;
-	ast.nouserflags = 1;
-	this << ast;
+    this << TransOp(OP_nop, REG_temp0, REG_zero, REG_zero, REG_zero, 3);
     break;
   }
 

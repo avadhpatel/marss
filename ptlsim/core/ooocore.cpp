@@ -486,10 +486,15 @@ bool OutOfOrderCore::runcycle() {
 		thread->pause_counter--;
         if(thread->handle_interrupt_at_next_eom) {
             commitrc[tid] = COMMIT_RESULT_INTERRUPT;
-            thread->pause_counter = 0;
+            if(thread->ctx.is_int_pending()) {
+                per_context_ooocore_stats_update(thread->threadid,
+                        cycles_in_pause -= thread->pause_counter);
+                thread->pause_counter = 0;
+            }
         } else {
             commitrc[tid] = COMMIT_RESULT_OK;
         }
+        thread->last_commit_at_cycle = sim_cycle;
 		continue;
 	}
 

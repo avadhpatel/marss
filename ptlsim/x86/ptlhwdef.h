@@ -998,6 +998,7 @@ struct Context: public CPUX86State {
 
   void update_mode_count();
   bool check_events() const;
+  bool is_int_pending() const;
   bool event_upcall();
 
   int page_table_level_count() const {
