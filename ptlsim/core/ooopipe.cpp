@@ -259,6 +259,11 @@ void ThreadContext::flush_pipeline() {
   dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES;
   last_commit_at_cycle = sim_cycle;
   external_to_core_state();
+
+  if(pause_counter)
+      per_context_ooocore_stats_update(threadid,
+              cycles_in_pause -= pause_counter);
+  pause_counter = 0;
 }
 
 //
@@ -1453,7 +1458,7 @@ int ThreadContext::dispatch() {
   per_ooo_core_stats_update(coreid, dispatch.width[core.dispatchcount]++);
 
   if likely (core.dispatchcount) {
-    dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES;
+    dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES + pause_counter;
   } else if unlikely (!rob_ready_to_dispatch_list.empty()) {
     dispatch_deadlock_countdown--;
     if (!dispatch_deadlock_countdown) {
