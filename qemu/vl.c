@@ -1441,7 +1441,7 @@ static void main_loop(void)
 #endif
 #ifndef CONFIG_IOTHREAD
 #ifdef MARSS_QEMU
-            if(in_simulation) {
+            if(in_simulation && !qemu_alarm_pending()) {
                 /* cur_cpu = first_cpu; */
                 sim_cpu_exec();
             } else {
