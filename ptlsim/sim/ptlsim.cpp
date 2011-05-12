@@ -1167,6 +1167,12 @@ extern "C" uint8_t ptl_simulate() {
         kill_simulation();
 	}
 
+    machine->first_run = 1;
+
+    if(config.stop) {
+        config.stop = false;
+    }
+
 	return 0;
 }
 
