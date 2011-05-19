@@ -32,6 +32,7 @@
 #include <superstl.h>
 
 #include <ptlsim.h>
+#include <machine.h>
 #include <memoryRequest.h>
 #include <controller.h>
 #include <interconnect.h>
@@ -154,7 +155,7 @@ namespace Memory {
 
   class MemoryHierarchy {
   public:
-    MemoryHierarchy(PTLsimMachine& machine);
+    MemoryHierarchy(BaseMachine& machine);
     ~MemoryHierarchy(); // release memory for pool
 
 	// check L1 availability
@@ -217,7 +218,26 @@ namespace Memory {
 
 	int get_core_pending_offchip_miss(W8 coreid);
 
-    PTLsimMachine& get_machine() { return machine_; }
+    BaseMachine& get_machine() { return machine_; }
+
+    void add_cpu_controller(Controller* cont) {
+        cpuControllers_.push(cont);
+    }
+
+    void add_cache_mem_controller(Controller* cont) {
+        allControllers_.push(cont);
+    }
+
+    void add_interconnect(Interconnect* conn) {
+        allInterconnects_.push(conn);
+    }
+
+    void setup_full_flags() {
+        // Setup the full flags
+        cpuFullFlags_.resize(cpuControllers_.count(), false);
+        controllersFullFlags_.resize(allControllers_.count(), false);
+        interconnectsFullFlags_.resize(allInterconnects_.count(), false);
+    }
 
   private:
 
@@ -226,7 +246,7 @@ namespace Memory {
     void private_L2_configuration();
 
     // machine
-    PTLsimMachine &machine_;
+    BaseMachine &machine_;
 
 	// array of caches and memory
 	dynarray<Controller*> cpuControllers_;

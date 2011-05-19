@@ -37,139 +37,29 @@
 #include <memoryHierarchy.h>
 #include <mesiCache.h>
 
+#include <machine.h>
+
 using namespace Memory;
 using namespace Memory::MESICache;
 
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::CacheLines(int readPorts, int writePorts) :
-    readPorts_(readPorts)
-    , writePorts_(writePorts)
-{
-    lastAccessCycle_ = 0;
-    readPortUsed_ = 0;
-    writePortUsed_ = 0;
-}
 
-    template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::init()
-{
-    foreach(i, SET_COUNT) {
-        Set &set = base_t::sets[i];
-        foreach(j, WAY_COUNT) {
-            set.data[j].init(-1);
-        }
-    }
-}
-
-    template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-W64 CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::tagOf(W64 address)
-{
-    return floor(address, LINE_SIZE);
-}
-
-
-// Return true if valid line is found, else return false
-    template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-CacheLine* CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::probe(MemoryRequest *request)
-{
-    W64 physAddress = request->get_physical_address();
-    CacheLine *line = base_t::probe(physAddress);
-
-    return line;
-}
-
-    template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-CacheLine* CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::insert(MemoryRequest *request, W64& oldTag)
-{
-    W64 physAddress = request->get_physical_address();
-    CacheLine *line = base_t::select(physAddress, oldTag);
-
-    return line;
-}
-
-    template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-int CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::invalidate(MemoryRequest *request)
-{
-    return base_t::invalidate(request->get_physical_address());
-}
-
-
-    template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-bool CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::get_port(MemoryRequest *request)
-{
-    bool rc = false;
-
-    if(lastAccessCycle_ < sim_cycle) {
-        lastAccessCycle_ = sim_cycle;
-        writePortUsed_ = 0;
-        readPortUsed_ = 0;
-    }
-
-    switch(request->get_type()) {
-        case MEMORY_OP_READ:
-            rc = (readPortUsed_ < readPorts_) ? ++readPortUsed_ : 0;
-            break;
-        case MEMORY_OP_WRITE:
-        case MEMORY_OP_UPDATE:
-        case MEMORY_OP_EVICT:
-            rc = (writePortUsed_ < writePorts_) ? ++writePortUsed_ : 0;
-            break;
-        default:
-            memdebug("Unknown type of memory request: ",
-                    request->get_type(), endl);
-            assert(0);
-    };
-    return rc;
-}
-
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::print(ostream& os) const
-{
-    foreach(i, SET_COUNT) {
-        const Set &set = base_t::sets[i];
-        foreach(j, WAY_COUNT) {
-            os << set.data[j];
-        }
-    }
-}
-
-
-CacheController::CacheController(W8 coreid, char *name,
+CacheController::CacheController(W8 coreid, const char *name,
         MemoryHierarchy *memoryHierarchy, CacheType type) :
     Controller(coreid, name, memoryHierarchy)
     , new_stats(name, &memoryHierarchy->get_machine())
     , type_(type)
     , isLowestPrivate_(false)
 {
-    switch(type_) {
-        case L1_I_CACHE:
-            cacheLines_ = new L1ICacheLines(L1I_READ_PORT, L1I_WRITE_PORT);
-            cacheLineBits_ = log2(L1I_LINE_SIZE);
-            cacheAccessLatency_ = L1I_LATENCY;
-            SETUP_STATS(L1I);
-            break;
-        case L1_D_CACHE:
-            cacheLines_ = new L1DCacheLines(L1D_READ_PORT, L1D_WRITE_PORT);
-            cacheLineBits_ = log2(L1D_LINE_SIZE);
-            cacheAccessLatency_ = L1D_LATENCY;
-            SETUP_STATS(L1D);
-            break;
-        case L2_CACHE:
-            cacheLines_ = new L2CacheLines(L2_READ_PORT, L2_WRITE_PORT);
-            cacheLineBits_ = log2(L2_LINE_SIZE);
-            cacheAccessLatency_ = L2_LATENCY;
-            SETUP_STATS(L2);
-            break;
-        case L3_CACHE:
-            cacheLines_ = new L3CacheLines(L3_READ_PORT, L3_WRITE_PORT);
-            cacheLineBits_ = log2(L3_LINE_SIZE);
-            cacheAccessLatency_ = L3_LATENCY;
-            SETUP_STATS(L3);
-            break;
-        default:
-            memdebug("Unknown type of cache: ", type_, endl);
-            assert(0);
-    };
+    memoryHierarchy_->add_cache_mem_controller(this);
+
+    cacheLines_ = get_cachelines(type);
+
+    if(!memoryHierarchy_->get_machine().get_option(name, "last_private", isLowestPrivate_)) {
+        isLowestPrivate_ = false;
+    }
+
+    cacheLineBits_ = cacheLines_->get_line_bits();
+    cacheAccessLatency_ = cacheLines_->get_access_latency();
 
     cacheLines_->init();
 
@@ -392,7 +282,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
 MESICacheLineState CacheController::get_new_state(
         CacheQueueEntry *queueEntry, bool isShared)
 {
-    MESICacheLineState oldState = queueEntry->line->state;
+    MESICacheLineState oldState = (MESICacheLineState)queueEntry->line->state;
     MESICacheLineState newState = MESI_INVALID;
     OP_TYPE type = queueEntry->request->get_type();
     bool kernel_req = queueEntry->request->is_kernel();
@@ -505,7 +395,7 @@ MESICacheLineState CacheController::get_new_state(
 
 void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
 {
-    MESICacheLineState oldState = queueEntry->line->state;
+    MESICacheLineState oldState = (MESICacheLineState)queueEntry->line->state;
     MESICacheLineState newState = NO_MESI_STATES;
     OP_TYPE type = queueEntry->request->get_type();
     bool kernel_req = queueEntry->request->is_kernel();
@@ -586,7 +476,7 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
 
 void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
 {
-    MESICacheLineState oldState = queueEntry->line->state;
+    MESICacheLineState oldState = (MESICacheLineState)queueEntry->line->state;
     MESICacheLineState newState = NO_MESI_STATES;
     OP_TYPE type = queueEntry->request->get_type();
     bool kernel_req = queueEntry->request->is_kernel();
@@ -719,7 +609,7 @@ void CacheController::send_evict_message(CacheQueueEntry *queueEntry,
 void CacheController::handle_cache_insert(CacheQueueEntry *queueEntry,
         W64 oldTag)
 {
-    MESICacheLineState oldState = queueEntry->line->state;
+    MESICacheLineState oldState = (MESICacheLineState)queueEntry->line->state;
     /*
      * if evicting line state is modified, then create a new
      * memory request of type MEMORY_OP_UPDATE and send it to
@@ -881,6 +771,24 @@ void CacheController::print_map(ostream& os)
         os << "\t\tupper2: ", upperInterconnect2_->get_name(), endl;
     if(lowerInterconnect_)
         os << "\t\tlower: ",  lowerInterconnect_->get_name(), endl;
+}
+
+void CacheController::register_interconnect(Interconnect *interconnect,
+        int type)
+{
+    switch(type) {
+        case INTERCONN_TYPE_UPPER:
+            upperInterconnect_ = interconnect;
+            break;
+        case INTERCONN_TYPE_UPPER2:
+            upperInterconnect2_ = interconnect;
+            break;
+        case INTERCONN_TYPE_LOWER:
+            lowerInterconnect_ = interconnect;
+            break;
+        default:
+            assert(0);
+    }
 }
 
 void CacheController::register_upper_interconnect(Interconnect *interconnect)
@@ -1221,3 +1129,19 @@ void CacheController::annul_request(MemoryRequest *request)
         }
     }
 }
+
+
+/* MESI Controller Builder */
+struct MESICacheControllerBuilder : public ControllerBuilder
+{
+    MESICacheControllerBuilder(const char* name) :
+        ControllerBuilder(name)
+    {}
+
+    Controller* get_new_controller(W8 coreid, W8 type,
+            MemoryHierarchy& mem, const char *name) {
+        return new CacheController(coreid, name, &mem, (Memory::CacheType)(type));
+    }
+};
+
+MESICacheControllerBuilder mesiCacheBuilder("mesi_cache");

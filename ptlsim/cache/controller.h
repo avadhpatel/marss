@@ -74,7 +74,7 @@ class MemoryHierarchy;
 class Controller
 {
 	private:
-		char *name_;
+        stringbuf name_;
 		Signal handle_request_;
 		Signal handle_interconnect_;
 		bool isPrivate_;
@@ -83,14 +83,14 @@ class Controller
 		MemoryHierarchy *memoryHierarchy_;
 		W8 coreid_;
 
-		Controller(W8 coreid, char *name,
+		Controller(W8 coreid, const char *name,
 				MemoryHierarchy *memoryHierarchy) :
 			memoryHierarchy_(memoryHierarchy)
 			, coreid_(coreid)
 			, handle_request_("handle_request")
 			, handle_interconnect_("handle_interconnect")
 		{
-			name_ = name;
+			name_ << name;
 			isPrivate_ = false;
 
 			handle_request_.connect(signal_mem_ptr \
@@ -102,13 +102,14 @@ class Controller
         ~Controller()
         {
             memoryHierarchy_ = NULL;
-            name_ = NULL;
         }
 
 		virtual bool handle_request_cb(void* arg)=0;
 		virtual bool handle_interconnect_cb(void* arg)=0;
 		virtual int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request)=0;
+        virtual void register_interconnect(Interconnect* interconnect,
+                int conn_type)=0;
 		virtual void print_map(ostream& os)=0;
 
 		virtual void print(ostream& os) const =0;
@@ -130,7 +131,7 @@ class Controller
 		}
 
 		char* get_name() const {
-			return name_;
+			return name_.buf;
 		}
 
 		void set_private(bool flag) {

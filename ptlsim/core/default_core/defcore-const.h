@@ -2,7 +2,75 @@
 #ifndef DEFCORE_CONST_H
 #define DEFCORE_CONST_H
 
-namespace DefaultCoreModel {
+#ifndef OOO_ISSUE_WIDTH
+#define OOO_ISSUE_WIDTH 4
+#endif
+
+#ifndef OOO_MAX_PHYS_REG_FILE_SIZE
+#define OOO_MAX_PHYS_REG_FILE_SIZE 256
+#endif
+
+#ifndef OOO_PHYS_REG_FILE_SIZE
+#define OOO_PHYS_REG_FILE_SIZE 256
+#endif
+
+#ifndef OOO_BRANCH_IN_FLIGHT
+#define OOO_BRANCH_IN_FLIGHT 24
+#endif
+
+#ifndef OOO_LOAD_Q_SIZE
+#define OOO_LOAD_Q_SIZE 48
+#endif
+
+#ifndef OOO_STORE_Q_SIZE
+#define OOO_STORE_Q_SIZE 48
+#endif
+
+#ifndef OOO_FETCH_Q_SIZE
+#define OOO_FETCH_Q_SIZE 48
+#endif
+
+#ifndef OOO_ISSUE_Q_SIZE
+#define OOO_ISSUE_Q_SIZE 64
+#endif
+
+#ifndef OOO_ROB_SIZE
+#define OOO_ROB_SIZE 128
+#endif
+
+#ifndef OOO_FETCH_WIDTH
+#define OOO_FETCH_WIDTH 4
+#endif
+
+#ifndef OOO_FRONTEND_WIDTH
+#define OOO_FRONTEND_WIDTH 4
+#endif
+
+#ifndef OOO_FRONTEND_STAGES
+#define OOO_FRONTEND_STAGES 4
+#endif
+
+#ifndef OOO_DISPATCH_WIDTH
+#define OOO_DISPATCH_WIDTH 4
+#endif
+
+#ifndef OOO_WRITEBACK_WIDTH
+#define OOO_WRITEBACK_WIDTH 4
+#endif
+
+#ifndef OOO_COMMIT_WIDTH
+#define OOO_COMMIT_WIDTH 4
+#endif
+
+#ifndef OOO_ITLB_SIZE
+#define OOO_ITLB_SIZE 32
+#endif
+
+#ifndef OOO_DTLB_SIZE
+#define OOO_DTLB_SIZE 32
+#endif
+
+namespace OOO_CORE_MODEL {
 
     static const int MAX_THREADS_BIT = 4; // up to 16 threads
     static const int MAX_ROB_IDX_BIT = 12; // up to 4096 ROB entries
@@ -28,12 +96,12 @@ namespace DefaultCoreModel {
     // Global limits
     //
 
-    const int MAX_ISSUE_WIDTH = 4;
+    const int MAX_ISSUE_WIDTH = OOO_ISSUE_WIDTH;
 
     // Largest size of any physical register file or the store queue:
-    const int MAX_PHYS_REG_FILE_SIZE = 256;
+    const int MAX_PHYS_REG_FILE_SIZE = OOO_MAX_PHYS_REG_FILE_SIZE;
     //  const int PHYS_REG_FILE_SIZE = 256;
-    const int PHYS_REG_FILE_SIZE = 128;
+    const int PHYS_REG_FILE_SIZE = OOO_PHYS_REG_FILE_SIZE;
     const int PHYS_REG_NULL = 0;
 
     enum { PHYSREG_NONE, PHYSREG_FREE, PHYSREG_WAITING, PHYSREG_BYPASS,
@@ -48,11 +116,11 @@ namespace DefaultCoreModel {
     //
 #define BIG_ROB
 
-    const int ROB_SIZE = 128;
+    const int ROB_SIZE = OOO_ROB_SIZE;
     //  const int ROB_SIZE = 64;
 
     // Maximum number of branches in the pipeline at any given time
-    const int MAX_BRANCHES_IN_FLIGHT = 24;
+    const int MAX_BRANCHES_IN_FLIGHT = OOO_BRANCH_IN_FLIGHT;
 
     // Set this to combine the integer and FP phys reg files:
     // #define UNIFIED_INT_FP_PHYS_REG_FILE
@@ -68,35 +136,35 @@ namespace DefaultCoreModel {
     //
     // Load and Store Queues
     //
-    const int LDQ_SIZE = 48;
-    const int STQ_SIZE = 44;
+    const int LDQ_SIZE = OOO_LOAD_Q_SIZE;
+    const int STQ_SIZE = OOO_STORE_Q_SIZE;
 
     //
     // Fetch
     //
-    const int FETCH_QUEUE_SIZE = 32;
-    const int FETCH_WIDTH = 4;
+    const int FETCH_QUEUE_SIZE = OOO_FETCH_Q_SIZE;
+    const int FETCH_WIDTH = OOO_FETCH_WIDTH;
 
     //
     // Frontend (Rename and Decode)
     //
-    const int FRONTEND_WIDTH = 4;
-    const int FRONTEND_STAGES = 7;
+    const int FRONTEND_WIDTH = OOO_FRONTEND_WIDTH;
+    const int FRONTEND_STAGES = OOO_FRONTEND_STAGES;
 
     //
     // Dispatch
     //
-    const int DISPATCH_WIDTH = 4;
+    const int DISPATCH_WIDTH = OOO_DISPATCH_WIDTH;
 
     //
     // Writeback
     //
-    const int WRITEBACK_WIDTH = 4;
+    const int WRITEBACK_WIDTH = OOO_WRITEBACK_WIDTH;
 
     //
     // Commit
     //
-    const int COMMIT_WIDTH = 4;
+    const int COMMIT_WIDTH = OOO_COMMIT_WIDTH;
 
     // #define MULTI_IQ
 
@@ -122,12 +190,12 @@ namespace DefaultCoreModel {
 
     const int MAX_FORWARDING_LATENCY = 0;
 
-    static const int ISSUE_QUEUE_SIZE = 64;
+    static const int ISSUE_QUEUE_SIZE = OOO_ISSUE_Q_SIZE;
 #endif
 
     // TLBs
-    const int ITLB_SIZE = 32;
-    const int DTLB_SIZE = 128;
+    const int ITLB_SIZE = OOO_ITLB_SIZE;
+    const int DTLB_SIZE = OOO_DTLB_SIZE;
 
     // How many bytes of x86 code to fetch into decode buffer at once
     static const int ICACHE_FETCH_GRANULARITY = 16;

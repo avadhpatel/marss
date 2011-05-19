@@ -37,12 +37,16 @@
 #include <cpuController.h>
 #include <memoryHierarchy.h>
 
+#include <machine.h>
+
 using namespace Memory;
 
-CPUController::CPUController(W8 coreid, char *name,
+CPUController::CPUController(W8 coreid, const char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Controller(coreid, name, memoryHierarchy)
 {
+    memoryHierarchy_->add_cpu_controller(this);
+
 	int_L1_i_ = NULL;
 	int_L1_d_ = NULL;
 	icacheLineBits_ = log2(L1I_LINE_SIZE);
@@ -445,6 +449,21 @@ void CPUController::print(ostream& os) const
 	os << "---End CPU-Controller: "<< get_name()<< endl;
 }
 
+void CPUController::register_interconnect(Interconnect *interconnect,
+        int type)
+{
+    switch(type) {
+        case INTERCONN_TYPE_I:
+            int_L1_i_ = interconnect;
+            break;
+        case INTERCONN_TYPE_D:
+            int_L1_d_ = interconnect;
+            break;
+        default:
+            assert(0);
+    }
+}
+
 void CPUController::register_interconnect_L1_i(Interconnect *interconnect)
 {
 	int_L1_i_ = interconnect;
@@ -454,3 +473,18 @@ void CPUController::register_interconnect_L1_d(Interconnect *interconnect)
 {
 	int_L1_d_ = interconnect;
 }
+
+/* CPU Controller Builder */
+struct CPUControllerBuilder : public ControllerBuilder
+{
+    CPUControllerBuilder(const char* name) :
+        ControllerBuilder(name)
+    {}
+
+    Controller* get_new_controller(W8 coreid, W8 type,
+            MemoryHierarchy& mem, const char *name) {
+        return new CPUController(coreid, name, &mem);
+    }
+};
+
+CPUControllerBuilder cpuBuilder("cpu");

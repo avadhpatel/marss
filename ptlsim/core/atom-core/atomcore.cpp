@@ -8,7 +8,7 @@
 
 //#define DISABLE_LDST_FWD
 
-using namespace AtomCoreModel;
+using namespace ATOM_CORE_MODEL;
 using namespace Memory;
 
 
@@ -86,7 +86,7 @@ static inline W64 extract_bytes(byte* target, int SIZESHIFT, bool SIGNEXT) {
     return data;
 }
 
-W8 AtomCoreModel::first_set_fu_map[1<<FU_COUNT] = {
+W8 ATOM_CORE_MODEL::first_set_fu_map[1<<FU_COUNT] = {
    //0     1     2     3     4     5     6     7     8     9     a     b     c     d     e     f
     0x00, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
     0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
@@ -94,7 +94,7 @@ W8 AtomCoreModel::first_set_fu_map[1<<FU_COUNT] = {
     0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
 };
 
-W8 AtomCoreModel::fu_map_to_fu[1 << FU_COUNT] = {
+W8 ATOM_CORE_MODEL::fu_map_to_fu[1 << FU_COUNT] = {
   //0   1   2   3   4   5   6   7   8   9   a   b   c   d   e   f
     0,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
     4,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
@@ -2666,14 +2666,19 @@ W64 AtomThread::read_reg(W16 reg)
  * @param machine BaseMachine that glue all cores and memory
  * @param num_threads Number of Hardware-threads per core
  */
-AtomCore::AtomCore(BaseCoreMachine& machine, int num_threads)
-    : BaseCore(machine), Statable("atom", &machine)
+AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
+    : BaseCore(machine), Statable(name, &machine)
       , threadcount(num_threads)
 {
     stringbuf corename;
 
+    int th_count;
+    if(!machine.get_option(name, "threads", th_count)) {
+        th_count = 1;
+    }
+    threadcount = th_count;
+
     coreid = machine.get_next_coreid();
-    corename << "atom_" << coreid;
 
     update_name(corename.buf);
 
@@ -3045,10 +3050,24 @@ W8 AtomCore::get_coreid()
     return coreid;
 }
 
+AtomCoreBuilder::AtomCoreBuilder(const char* name)
+    : CoreBuilder(name)
+{
+}
+
+BaseCore* AtomCoreBuilder::get_new_core(BaseMachine& machine, const char* name)
+{
+    AtomCore* core = new AtomCore(machine, 1, name);
+    return core;
+}
+
+namespace ATOM_CORE_MODEL {
+    AtomCoreBuilder atomBuilder(ATOM_CORE_NAME);
+};
 
 /* Checker */
 
-namespace AtomCoreModel {
+namespace ATOM_CORE_MODEL {
     CheckStores *checker_stores = NULL;
     int checker_stores_count = 0;
 

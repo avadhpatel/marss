@@ -297,8 +297,8 @@ struct PTLsimConfig {
   bool overshoot_and_dump;
   stringbuf bbcache_dump_filename;
 
-  // Core Design configurations
-  stringbuf core_config;
+  // Machine configurations
+  stringbuf machine_config;
 
   ///
   /// for memory hierarchy implementaion

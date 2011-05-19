@@ -133,7 +133,7 @@ class CPUController : public Controller
 		}
 
 	public:
-		CPUController(W8 coreid, char *name,
+		CPUController(W8 coreid, const char *name,
 				MemoryHierarchy *memoryHierarchy);
 
 		bool handle_request_cb(void *arg);
@@ -144,6 +144,7 @@ class CPUController : public Controller
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);
 		void clock();
+        void register_interconnect(Interconnect *interconnect, int type);
 		void register_interconnect_L1_d(Interconnect *interconnect);
 		void register_interconnect_L1_i(Interconnect *interconnect);
 		void print(ostream& os) const;

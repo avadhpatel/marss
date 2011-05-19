@@ -35,12 +35,12 @@
 #include <cacheConstants.h>
 #include <memoryStats.h>
 #include <statsBuilder.h>
+#include <cacheLines.h>
+
 #define UPDATE_MESI_TRANS_STATS(old_state, new_state, mode) \
     if(mode) { /* kernel mode */ \
-        kernelStats_->mesi_stats.state_transition[(old_state << 2) | new_state]++; \
         new_stats.state_transition(n_kernel_stats)[(old_state << 2) | new_state]++; \
     } else { \
-        userStats_->mesi_stats.state_transition[(old_state << 2) | new_state]++; \
         new_stats.state_transition(n_user_stats)[(old_state << 2) | new_state]++; \
     }
 
@@ -51,18 +51,18 @@ namespace Memory {
         // CacheLine : a single cache line for MESI coherenent cache
 
         enum MESICacheLineState {
-            MESI_MODIFIED = 0,
+            MESI_INVALID = 0, // 0 has to be invalid as its default
+            MESI_MODIFIED,
             MESI_EXCLUSIVE,
             MESI_SHARED,
-            MESI_INVALID,
             NO_MESI_STATES
         };
 
         enum MESITransations {
-            MM=0, ME, MS, MI,
-            EM, EE, ES, EI,
-            SM, SE, SS, SI,
-            IM, IE, IS, II
+            II=0, IM, IE, IS,
+            MI, MM, ME, MS,
+            EI, EM, EE, ES,
+            SI, SM, SE, SS,
         };
 
         static const char* MESIStateNames[NO_MESI_STATES] = {
@@ -71,106 +71,6 @@ namespace Memory {
             "Shared",
             "Modified"
         };
-
-        struct CacheLine
-        {
-            W64 tag;
-            MESICacheLineState state;
-
-            void init(W64 tag_t) {
-                tag = tag_t;
-                state = MESI_INVALID;
-            }
-
-            void reset() {
-                tag = -1;
-                state = MESI_INVALID;
-            }
-
-            void invalidate() { reset(); }
-
-            void print(ostream& os) const {
-                os << "Cacheline: tag[", hexstring(tag, 48) , "] ";
-                os << "state[", MESIStateNames[state], "] ";
-            }
-        };
-
-        static inline ostream& operator <<(ostream& os, const CacheLine& line)
-        {
-            line.print(os);
-            return os;
-        }
-
-        // A base struct to provide a pointer to CacheLines without any need
-        // of a template
-        struct CacheLinesBase
-        {
-            public:
-                virtual void init()=0;
-                virtual W64 tagOf(W64 address)=0;
-                virtual int latency() const =0;
-                virtual CacheLine* probe(MemoryRequest *request)=0;
-                virtual CacheLine* insert(MemoryRequest *request,
-                        W64& oldTag)=0;
-                virtual int invalidate(MemoryRequest *request)=0;
-                virtual bool get_port(MemoryRequest *request)=0;
-                virtual void print(ostream& os) const =0;
-        };
-
-        template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-            class CacheLines : public CacheLinesBase,
-            public AssociativeArray<W64, CacheLine, SET_COUNT,
-            WAY_COUNT, LINE_SIZE>
-        {
-            private:
-                int readPortUsed_;
-                int writePortUsed_;
-                int readPorts_;
-                int writePorts_;
-                W64 lastAccessCycle_;
-
-            public:
-                typedef AssociativeArray<W64, CacheLine, SET_COUNT,
-                        WAY_COUNT, LINE_SIZE> base_t;
-                typedef FullyAssociativeArray<W64, CacheLine, WAY_COUNT,
-                        NullAssociativeArrayStatisticsCollector<W64,
-                        CacheLine> > Set;
-
-                CacheLines(int readPorts, int writePorts);
-                void init();
-                W64 tagOf(W64 address);
-                int latency() const { return LATENCY; };
-                CacheLine* probe(MemoryRequest *request);
-                CacheLine* insert(MemoryRequest *request, W64& oldTag);
-                int invalidate(MemoryRequest *request);
-                bool get_port(MemoryRequest *reqest);
-                void print(ostream& os) const;
-        };
-
-        template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-            static inline ostream& operator <<(ostream& os, const
-                    CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>&
-                    cacheLines)
-            {
-                cacheLines.print(os);
-                return os;
-            }
-
-        // L1D cache lines
-        typedef CacheLines<L1D_SET_COUNT, L1D_WAY_COUNT, L1D_LINE_SIZE,
-                L1D_LATENCY> L1DCacheLines;
-
-        // L1I cache lines
-        typedef CacheLines<L1I_SET_COUNT, L1I_WAY_COUNT, L1I_LINE_SIZE,
-                L1I_LATENCY> L1ICacheLines;
-
-        // L2 cache lines
-        typedef CacheLines<L2_SET_COUNT, L2_WAY_COUNT, L2_LINE_SIZE,
-                L2_LATENCY> L2CacheLines;
-
-        // L3 cache lines
-        typedef CacheLines<L3_SET_COUNT, L3_WAY_COUNT, L3_LINE_SIZE,
-                L3_LATENCY> L3CacheLines;
 
         // Cache Events enum used for Queue entry flags
         enum {
@@ -341,7 +241,7 @@ namespace Memory {
 
 
             public:
-                CacheController(W8 coreid, char *name,
+                CacheController(W8 coreid, const char *name,
                         MemoryHierarchy *memoryHierarchy, CacheType type);
                 bool handle_request_cb(void *arg);
                 bool handle_interconnect_cb(void *arg);
@@ -349,6 +249,7 @@ namespace Memory {
                         MemoryRequest *request);
                 void print_map(ostream& os);
 
+                void register_interconnect(Interconnect *interconnect, int type);
                 void register_upper_interconnect(Interconnect *interconnect);
                 void register_lower_interconnect(Interconnect *interconnect);
                 void register_second_upper_interconnect(Interconnect

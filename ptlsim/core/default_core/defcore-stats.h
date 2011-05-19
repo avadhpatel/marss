@@ -7,7 +7,7 @@
 #include <statsBuilder.h>
 #include <defcore-const.h>
 
-namespace DefaultCoreModel {
+namespace OOO_CORE_MODEL {
 
     struct DefaultCoreThreadStats : public Statable
     {

@@ -164,8 +164,7 @@ void PTLsimConfig::reset() {
   overshoot_and_dump = 0;
   bbcache_dump_filename.reset();
 
-  // Core Design configurations
-  core_config = "default";
+  machine_config = "";
 
   ///
   /// memory hierarchy implementation
@@ -295,13 +294,11 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(atomic_bus_enabled,               "atomic_bus",               "Using single atomic bus instead of split bus");
 
   section("core configuration");
-  add(core_config,      "core-config",
-          "Use given core configuration, default is set to \'default\', other" \
-          " options are :\n" \
-          "\t\t\'ht-smt\' - Hetrogenous Multi-threaded and single-threaded OOO cores\n" \
-          "\t\t             Minimum of 4 CPU-Contexts required\n" \
-          "\t\t\'atom\' - Simple Atom like In-order single-threaded cores\n" \
-          "");
+  stringbuf* m_names = new stringbuf();
+  *m_names << "Available Machine: ";
+  MachineBuilder::get_all_machine_names(*m_names);
+  add(machine_config, "machine", m_names->buf);
+
  ///
  /// following are for the new memory hierarchy implementation:
  ///
@@ -697,8 +694,9 @@ void ptl_reconfigure(char* config_str) {
 	curr_ptl_machine = NULL;
 }
 
-static bool ptl_machine_configured=false;
 extern "C" void ptl_machine_configure(const char* config_str_) {
+
+    static bool ptl_machine_configured=false;
 
     char *config_str = (char*)qemu_mallocz(strlen(config_str_) + 1);
     pstrcpy(config_str, strlen(config_str_)+1, config_str_);
@@ -753,10 +751,10 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
     ptl_machine.disable_dump();
 }
 
-static int ctx_counter = 0;
 extern "C"
 CPUX86State* ptl_create_new_context() {
 
+    static int ctx_counter = 0;
 	assert(ctx_counter < contextcount);
 
 	// Create a new CPU context and add it to contexts array

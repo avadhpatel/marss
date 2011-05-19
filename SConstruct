@@ -2,6 +2,7 @@
 # Top level SConstruct for MARSSx86
 
 import os
+import config_helper
 
 # Automatically set the -j option to No of available CPUs*2
 # This options gives the best compilation time.
@@ -36,7 +37,6 @@ ptl_dir = "%s/ptlsim" % curr_dir
 
 # Colored Output of Compilation
 import sys
-import os
 
 colors = {}
 colors['cyan']   = '\033[96m'
@@ -52,11 +52,11 @@ if not sys.stdout.isatty():
    for key, value in colors.iteritems():
       colors[key] = ''
 
-compile_source_message = '%sCompiling %s==> %s$SOURCE%s' % \
+compile_source_message = '%sCompiling %s:: %s$SOURCE ==> $TARGET%s' % \
    (colors['blue'], colors['purple'], colors['yellow'], colors['end'])
 
-create_header_message = '%sCreating %s==> %s$SOURCE%s' % \
-   (colors['blue'], colors['purple'], colors['yellow'], colors['end'])
+create_header_message = '%sCreating %s==> %s$TARGET%s' % \
+   (colors['green'], colors['purple'], colors['yellow'], colors['end'])
 
 compile_shared_source_message = '%sCompiling shared %s==> %s$SOURCE%s' % \
    (colors['blue'], colors['purple'], colors['yellow'], colors['end'])
@@ -74,6 +74,9 @@ link_shared_library_message = '%sLinking Shared Library %s==> %s$TARGET%s' % \
    (colors['red'], colors['purple'], colors['yellow'], colors['end'])
 
 pretty_printing=ARGUMENTS.get('pretty',1)
+
+config_file = ARGUMENTS.get('config', "config/default.conf")
+config_debug = ARGUMENTS.get('config-debug', False)
 
 # Base Environment used to compile Marss code (QEMU and PTLSIM both)
 if int(pretty_printing) :
@@ -96,6 +99,10 @@ base_env['ENV'] = os.environ
 # set the correct path to your c++ compiler
 base_env['CXX'] = "g++"
 base_env['CC'] = base_env['CXX']
+
+base_env['config'] = config_helper.parse_config(config_file, debug=config_debug)
+
+# Check the required number of cores
 
 # 1. Configure QEMU
 qemu_env = base_env.Clone()

@@ -3,15 +3,14 @@
 #define BASE_CORE_H
 
 #include <ptlsim.h>
+#include <machine.h>
 #include <statsBuilder.h>
 #include <memoryHierarchy.h>
 
 namespace Core {
 
-    struct BaseCoreMachine;
-
     struct BaseCore {
-        BaseCore(BaseCoreMachine& machine);
+        BaseCore(BaseMachine& machine);
 
         virtual void reset() = 0;
         virtual bool runcycle() = 0;
@@ -25,38 +24,10 @@ namespace Core {
 
         void update_memory_hierarchy_ptr();
 
-        BaseCoreMachine& machine;
+        BaseMachine& machine;
         Memory::MemoryHierarchy* memoryHierarchy;
     };
 
-    struct BaseCoreMachine: public PTLsimMachine {
-        dynarray<BaseCore*> cores;
-        Memory::MemoryHierarchy* memoryHierarchyPtr;
-
-        BaseCoreMachine(const char* name);
-        virtual bool init(PTLsimConfig& config);
-        virtual int run(PTLsimConfig& config);
-        virtual W8 get_num_cores();
-        virtual void dump_state(ostream& os);
-        virtual void update_stats(PTLsimStats* stats);
-        virtual void flush_tlb(Context& ctx);
-        virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);
-        void flush_all_pipelines();
-        virtual void reset();
-        ~BaseCoreMachine();
-
-        bitvec<NUM_SIM_CORES> context_used;
-        W8 context_counter;
-        W8 coreid_counter;
-
-        Context& get_next_context();
-        W8 get_next_coreid();
-
-        // Core configuration functions
-        void setup_smt_mc_cores();
-        void setup_default_cores();
-        void setup_atom_cores();
-    };
 };
 
 #endif // BASE_CORE_H

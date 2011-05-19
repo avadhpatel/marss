@@ -20,7 +20,7 @@
 #include <memoryHierarchy.h>
 
 // Include ooocore.h for stats - untill we start using new stats
-#include <ooocore.h>
+// #include <ooocore.h>
 #include <stats.h>
 
 #ifndef ENABLE_CHECKS
@@ -36,7 +36,7 @@
 // This will disable issue of load/store if any store is pending
 //#define DISABLE_SF
 
-using namespace DefaultCoreModel;
+using namespace OOO_CORE_MODEL;
 
 //
 // Issue Queue
@@ -890,7 +890,7 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
     return true;
 }
 
-namespace DefaultCoreModel {
+namespace OOO_CORE_MODEL {
     // One global interlock buffer for all VCPUs:
     MemoryInterlockBuffer interlocks;
 };

@@ -72,13 +72,14 @@ class MemoryController : public Controller
 
 		FixStateList<MemoryQueueEntry, MEM_REQ_NUM> pendingRequests_;
 
+        int latency_;
 		int bankBits_;
 		int get_bank_id(W64 addr);
 
         RAMStats new_stats;
 
 	public:
-		MemoryController(W8 coreid, char *name,
+		MemoryController(W8 coreid, const char *name,
 				 MemoryHierarchy *memoryHierarchy);
 		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);
@@ -86,6 +87,7 @@ class MemoryController : public Controller
 				MemoryRequest *request);
 		void print(ostream& os) const;
 
+        void register_interconnect(Interconnect *interconnect, int type);
 		void register_cache_interconnect(Interconnect *interconnect);
 
 		bool access_completed_cb(void *arg);

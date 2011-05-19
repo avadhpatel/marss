@@ -12,6 +12,7 @@
 #define _OOOCORE_H_
 
 #include <statelist.h>
+#include <machine.h>
 
 // With these disabled, simulation is faster
 #define ENABLE_CHECKS

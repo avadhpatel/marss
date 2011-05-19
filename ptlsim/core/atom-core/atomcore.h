@@ -8,6 +8,8 @@
 
 #include <statsBuilder.h>
 
+#include <atomcore-const.h>
+
 /* Logging Macros */
 // Base Logging Level
 #define ATOM_BASE_LL 5
@@ -41,7 +43,7 @@
 #define HEXADDR(addr) hexstring(addr,48)
 #define HEXDATA(data) hexstring(data,64)
 
-namespace AtomCoreModel {
+namespace ATOM_CORE_MODEL {
 
     using namespace superstl;
     using namespace Core;
@@ -49,35 +51,35 @@ namespace AtomCoreModel {
     /* Constants */
     const W8 FU_COUNT = 6;
 
-    const W8 NUM_ATOM_OPS_PER_THREAD = 32;
+    const W8 NUM_ATOM_OPS_PER_THREAD = ATOM_OPS_PER_THREAD;
 
-    const W8 MAX_UOPS_PER_ATOMOP = 4;
+    const W8 MAX_UOPS_PER_ATOMOP = ATOM_UOPS_PER_ATOMOP;
     const W8 MAX_REG_ACCESS_PER_ATOMOP = 16;
 
-    const int NUM_FRONTEND_STAGES = 6;
+    const int NUM_FRONTEND_STAGES = ATOM_FRONTEND_STAGES;
 
-    const int DISPATCH_QUEUE_SIZE = 16;
+    const int DISPATCH_QUEUE_SIZE = ATOM_DISPATCH_Q_SIZE;
 
-    const int DTLB_SIZE = 32;
-    const int ITLB_SIZE = 32;
+    const int DTLB_SIZE = ATOM_DTLB_SIZE;
+    const int ITLB_SIZE = ATOM_ITLB_SIZE;
 
-    const W8 MAX_FETCH_WIDTH = 2;
+    const W8 MAX_FETCH_WIDTH = ATOM_FETCH_WIDTH;
 
     const W8 ICACHE_FETCH_GRANULARITY = 16;
 
-    const W8 MAX_ISSUE_PER_CYCLE = 2;
+    const W8 MAX_ISSUE_PER_CYCLE = ATOM_ISSUE_PER_CYCLE;
 
-    const W8 MIN_PIPELINE_CYCLES = 2;
+    const W8 MIN_PIPELINE_CYCLES = ATOM_MIN_PIPELINE_CYCLES;
 
-    const W8 STORE_BUF_SIZE = 16;
+    const W8 STORE_BUF_SIZE = ATOM_STORE_BUF_SIZE;
 
-    const W8 MAX_BRANCH_IN_FLIGHT = 3;
+    const W8 MAX_BRANCH_IN_FLIGHT = ATOM_MAX_BRANCH_IN_FLIGHT;
 
-    const int FORWARD_BUF_SIZE = 32;
+    const int FORWARD_BUF_SIZE = ATOM_FORWARD_BUF_SIZE;
     
     const W8 MAX_FORWARDING_LATENCY = 1;
 
-    const W8 COMMIT_BUF_SIZE = 32;
+    const W8 COMMIT_BUF_SIZE = ATOM_COMMIT_BUF_SIZE;
 
     const W8 THREAD_PAUSE_CYCLES = 20;
 
@@ -912,7 +914,7 @@ namespace AtomCoreModel {
      */
     struct AtomCore : public BaseCore , Statable {
 
-        AtomCore(BaseCoreMachine& machine, int num_threads);
+        AtomCore(BaseMachine& machine, int num_threads, const char* name=NULL);
         
         void reset();
         bool runcycle();
@@ -983,6 +985,11 @@ namespace AtomCoreModel {
         W8  port_available;
     };
 
+    struct AtomCoreBuilder : public CoreBuilder {
+        AtomCoreBuilder(const char* name);
+        BaseCore* get_new_core(BaseMachine& machine, const char* name);
+    };
+
     /* Checker - saved stores to compare after executing emulated instruction */
     struct CheckStores {
       W64 virtaddr;
@@ -998,6 +1005,6 @@ namespace AtomCoreModel {
 
     void add_checker_store(StoreBufferEntry* buf, W8 sizeshift);
     
-}; // namespace AtomCoreModel
+}; // namespace
 
 #endif // MARSS_ATOM_CORE_H

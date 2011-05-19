@@ -2,6 +2,7 @@
 
 import os
 import platform
+import config_helper
 
 # List of subdirectories where we have source code
 dirs = ['cache', 'core', 'lib', 'sim', 'stats', 'tools', 'x86']
@@ -53,6 +54,7 @@ for dir in dirs:
 
 num_sim_cores = ARGUMENTS.get('c', 1)
 env.Append(CCFLAGS = '-DNUM_SIM_CORES=%d' % int(num_sim_cores))
+env['num_cpus'] = int(num_sim_cores)
 if int(num_sim_cores) == 1:
     env.Append(CCFLAGS = '-DSINGLE_CORE_MEM_CONFIG')
 
@@ -78,6 +80,10 @@ Export('env')
 # print("\tCPPPATH:%s" % env['CPPPATH'])
 
 # Setup the build directory
+# Save configuration to build/config.yaml
+env['config_file'] = env.File('build/config')
+env['config_gen'] = env.File('tools/config_gen.py')
+config_helper.save_config(str(env['config_file']), env['config'])
 
 # Now call the SConscript in all subdirectories to build object files
 objs = []

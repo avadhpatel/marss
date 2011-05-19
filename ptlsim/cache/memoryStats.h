@@ -41,14 +41,7 @@
    totalKernelStats_ = &(kernel_stats.memory.total.type);
 
 
-// #define STAT_UPDATE(expr) stats_->expr, totalStats_->expr
-#define STAT_UPDATE(expr, mode) { \
-    if(mode) { /* kernel mode */ \
-        kernelStats_->expr, totalKernelStats_->expr; \
-    } else { \
-        userStats_->expr, totalUserStats_->expr; \
-    }\
-}
+#define STAT_UPDATE(expr, mode) 0
 
 #define N_STAT_UPDATE(counter, expr, mode) { \
     if(mode) { /* kernel mode */ \

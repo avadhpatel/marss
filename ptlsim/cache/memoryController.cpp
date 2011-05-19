@@ -36,13 +36,21 @@
 #include <memoryController.h>
 #include <memoryHierarchy.h>
 
+#include <machine.h>
+
 using namespace Memory;
 
-MemoryController::MemoryController(W8 coreid, char *name,
+MemoryController::MemoryController(W8 coreid, const char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Controller(coreid, name, memoryHierarchy)
     , new_stats(name, &memoryHierarchy->get_machine())
 {
+    memoryHierarchy_->add_cache_mem_controller(this);
+
+    if(!memoryHierarchy_->get_machine().get_option(name, "latency", latency_)) {
+        latency_ = 20;
+    }
+
 	GET_STRINGBUF_PTR(access_name, name, "_access_completed");
 	accessCompleted_.set_name(access_name->buf);
 	accessCompleted_.connect(signal_mem_ptr(*this,
@@ -63,6 +71,18 @@ MemoryController::MemoryController(W8 coreid, char *name,
 int MemoryController::get_bank_id(W64 addr)
 {
 	return lowbits(addr >> 16, bankBits_);
+}
+
+void MemoryController::register_interconnect(Interconnect *interconnect,
+        int type)
+{
+    switch(type) {
+        case INTERCONN_TYPE_UPPER:
+            cacheInterconnect_ = interconnect;
+            break;
+        default:
+            assert(0);
+    }
 }
 
 void MemoryController::register_cache_interconnect(
@@ -298,3 +318,17 @@ int MemoryController::get_no_pending_request(W8 coreid)
 	return count;
 }
 
+/* Memory Controller Builder */
+struct MemoryControllerBuilder : public ControllerBuilder
+{
+    MemoryControllerBuilder(const char* name) :
+        ControllerBuilder(name)
+    {}
+
+    Controller* get_new_controller(W8 coreid, W8 type,
+            MemoryHierarchy& mem, const char *name) {
+        return new MemoryController(coreid, name, &mem);
+    }
+};
+
+MemoryControllerBuilder memControllerBuilder("simple_dram_cont");

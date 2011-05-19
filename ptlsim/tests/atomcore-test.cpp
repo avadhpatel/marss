@@ -5,28 +5,133 @@
 
 #define DISABLE_ASSERT
 #include <decode.h>
-#include <atomcore.h>
+
+#define ATOM_CORE_NAME "Atom_Test"
+#define ATOM_CORE_MODEL Atom_Test
+#include <atomcore.cpp>
+
+#include <machine.h>
+
+void gen_atom_test_machine(BaseMachine& machine)
+{
+    while(!machine.context_used.allset()) {
+        CoreBuilder::add_new_core(machine, "atom_", "Atom_Test");
+    }
+
+    foreach(i, machine.get_num_cores()) {
+        ControllerBuilder::add_new_cont(machine, i, "core_", "cpu", 0);
+    }
+
+    foreach(i, machine.get_num_cores()) {
+        machine.add_option("L1_I_", i, "private", true);
+        ControllerBuilder::add_new_cont(machine, i, "L1_I_", "mesi_cache", 0);
+    }
+
+    foreach(i, machine.get_num_cores()) {
+        machine.add_option("L1_D_", i, "private", true);
+        ControllerBuilder::add_new_cont(machine, i, "L1_D_", "mesi_cache", 0);
+    }
+
+
+    foreach(i, machine.get_num_cores()) {
+        machine.add_option("L2_", i, "last_private", true);
+        machine.add_option("L2_", i, "private", true);
+        ControllerBuilder::add_new_cont(machine, i, "L2_", "mesi_cache", 0);
+    }
+
+    foreach(i, 1) {
+        ControllerBuilder::add_new_cont(machine, i, "MEM_", "simple_dram_cont", 0);
+    }
+
+    foreach(i, machine.get_num_cores()) {
+        ConnectionDef* connDef = machine.get_new_connection_def("p2p",
+                "p2p_core_L1_I_", i);
+
+        stringbuf core_;
+        core_ << "core_" << i;
+        machine.add_new_connection(connDef, core_.buf, INTERCONN_TYPE_I);
+
+        stringbuf L1_I_;
+        L1_I_ << "L1_I_" << i;
+        machine.add_new_connection(connDef, L1_I_.buf, INTERCONN_TYPE_UPPER);
+    }
+
+    foreach(i, machine.get_num_cores()) {
+        ConnectionDef* connDef = machine.get_new_connection_def("p2p",
+                "p2p_core_L1_D_", i);
+        stringbuf core_;
+        core_ << "core_" << i;
+        machine.add_new_connection(connDef, core_.buf, INTERCONN_TYPE_D);
+
+        stringbuf L1_D_;
+        L1_D_ << "L1_D_" << i;
+        machine.add_new_connection(connDef, L1_D_.buf, INTERCONN_TYPE_UPPER);
+    }
+
+    foreach(i, machine.get_num_cores()) {
+        ConnectionDef* connDef = machine.get_new_connection_def("p2p",
+                "p2p_L1_I_L2_", i);
+        stringbuf L1_I_;
+        L1_I_ << "L1_I_" << i;
+        machine.add_new_connection(connDef, L1_I_.buf, INTERCONN_TYPE_LOWER);
+
+        stringbuf L2_;
+        L2_ << "L2_" << i;
+        machine.add_new_connection(connDef, L2_.buf, INTERCONN_TYPE_UPPER);
+    }
+
+    foreach(i, machine.get_num_cores()) {
+        ConnectionDef* connDef = machine.get_new_connection_def("p2p",
+                "p2p_L1_D_L2_", i);
+        stringbuf L1_D_;
+        L1_D_ << "L1_D_" << i;
+        machine.add_new_connection(connDef, L1_D_.buf, INTERCONN_TYPE_LOWER);
+
+        stringbuf L2_;
+        L2_ << "L2_" << i;
+        machine.add_new_connection(connDef, L2_.buf, INTERCONN_TYPE_UPPER2);
+    }
+
+    foreach(i, 1) {
+        ConnectionDef* connDef = machine.get_new_connection_def("mesi_bus",
+                "mesi_bus_0", i);
+        foreach(j, machine.get_num_cores()) {
+            stringbuf L2_;
+            L2_ << "L2_" << j;
+            machine.add_new_connection(connDef, L2_.buf, INTERCONN_TYPE_LOWER);
+        }
+
+        stringbuf MEM_0;
+        MEM_0 << "MEM_0";
+        machine.add_new_connection(connDef, MEM_0.buf, INTERCONN_TYPE_UPPER);
+    }
+
+    machine.setup_interconnects();
+    machine.memoryHierarchyPtr->setup_full_flags();
+}
+
+MachineBuilder atom_test_machine("atom-test", &gen_atom_test_machine);
 
 namespace {
 
     using namespace Core;
-    using namespace AtomCoreModel;
+    using namespace ATOM_CORE_MODEL;
 
 
     class AtomCoreTest : public ::testing::Test {
         public:
-            BaseCoreMachine *base_machine;
+            BaseMachine *base_machine;
             AtomCore *atom_core;
 
             AtomCoreTest()
             {
-                base_machine = (BaseCoreMachine*)PTLsimMachine::getmachine(
+                base_machine = (BaseMachine*)PTLsimMachine::getmachine(
                         "base");
 
                 // If machine is not configured to use AtomCore, change
                 // configuration
-                if(strcmp(config.core_config, "atom")) {
-                    config.core_config = "atom";
+                if(strcmp(config.machine_config, "atom-test")) {
+                    config.machine_config = "atom-test";
 
                     base_machine->reset();
                 }
@@ -150,7 +255,7 @@ namespace {
     TEST_F(AtomCoreTest, InitializedBaseMachine)
     {
         ASSERT_TRUE(base_machine);
-        ASSERT_STREQ(config.core_config.buf, "atom");
+        ASSERT_STREQ(config.machine_config.buf, "atom-test");
 
         ASSERT_TRUE(base_machine->context_used.allset());
         ASSERT_EQ(base_machine->context_counter, NUM_SIM_CORES);

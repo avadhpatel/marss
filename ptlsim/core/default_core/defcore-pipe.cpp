@@ -35,7 +35,7 @@
 #define logable(level) (0)
 #endif
 
-using namespace DefaultCoreModel;
+using namespace OOO_CORE_MODEL;
 
 bool DefaultCore::icache_wakeup(void *arg) {
     Memory::MemoryRequest *request = (Memory::MemoryRequest*)arg;
@@ -1784,7 +1784,7 @@ bool rip_is_in_spinlock(W64 rip) {
 #endif
 
 /* Checker - saved stores to compare after executing emulated instruction */
-namespace DefaultCoreModel {
+namespace OOO_CORE_MODEL {
     CheckStores *checker_stores = NULL;
     int checker_stores_count = 0;
 
@@ -2457,7 +2457,7 @@ int ReorderBufferEntry::commit() {
     return COMMIT_RESULT_OK;
 }
 
-namespace DefaultCoreModel {
+namespace OOO_CORE_MODEL {
     const byte archdest_is_visible[TRANSREG_COUNT] = {
         // Integer registers
         1, 1, 1, 1, 1, 1, 1, 1,

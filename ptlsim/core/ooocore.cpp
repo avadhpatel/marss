@@ -1924,7 +1924,7 @@ bool OutOfOrderMachine::init(PTLsimConfig& config) {
   assert(NUMBER_OF_CORES * NUMBER_OF_THREAD_PER_CORE == contextcount);
   int context_idx = 0;
   // create a memoryHierarchy
-  memoryHierarchyPtr = new Memory::MemoryHierarchy(*this);
+  // memoryHierarchyPtr = new Memory::MemoryHierarchy(*this);
   assert(memoryHierarchyPtr);
   msdebug << " after create memoryHierarchyPtr", endl;
 

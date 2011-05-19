@@ -41,10 +41,10 @@
 #define logable(level) (0)
 #endif
 
-using namespace DefaultCoreModel;
+using namespace OOO_CORE_MODEL;
 using namespace superstl;
 
-namespace DefaultCoreModel {
+namespace OOO_CORE_MODEL {
     byte uop_executable_on_cluster[OP_MAX_OPCODE];
     W32 forward_at_cycle_lut[MAX_CLUSTERS][MAX_FORWARDING_LATENCY+1];
     bool globals_initialized = false;
@@ -177,24 +177,34 @@ void ThreadContext::init() {
 }
 
 
-DefaultCore::DefaultCore(BaseCoreMachine& machine_, W8 num_threads)
+DefaultCore::DefaultCore(BaseMachine& machine_, W8 num_threads,
+        const char* name)
 : BaseCore(machine_)
     , core_stats("core", &machine_)
 {
     coreid = machine.get_next_coreid();
-    threadcount = num_threads;
+
+    if(!machine_.get_option(name, "threads", threadcount)) {
+        threadcount = 1;
+    }
+
     setzero(threads);
 
     assert(num_threads > 0 && "Core has atleast 1 thread");
 
     // Rename the stats
-    stringbuf stats_name;
-    stats_name << "core" << coreid;
-    core_stats.update_name(stats_name.buf);
+    stringbuf core_name;
+    if(name) {
+        core_name << name << "_" << coreid;
+    } else {
+        core_name << "core_" << coreid;
+    }
+
+    core_stats.update_name(core_name.buf);
 
     // Setup Cache Signals
     stringbuf sig_name;
-    sig_name << "Core" << coreid << "-dcache-wakeup";
+    sig_name << core_name << "-dcache-wakeup";
 
     dcache_signal.set_name(sig_name.buf);
     dcache_signal.connect(signal_mem_ptr(*this,
@@ -202,7 +212,7 @@ DefaultCore::DefaultCore(BaseCoreMachine& machine_, W8 num_threads)
 
     sig_name.reset();
 
-    sig_name << "Core" << coreid << "-icache-wakeup";
+    sig_name << core_name << "-icache-wakeup";
     icache_signal.set_name(sig_name.buf);
     icache_signal.connect(signal_mem_ptr(*this,
                 &DefaultCore::icache_wakeup));
@@ -266,7 +276,7 @@ void DefaultCore::init_generic() {
 }
 
 template <typename T>
-static void DefaultCoreModel::print_list_of_state_lists(ostream& os, const ListOfStateLists& lol, const char* title) {
+static void OOO_CORE_MODEL::print_list_of_state_lists(ostream& os, const ListOfStateLists& lol, const char* title) {
     os << title, ":", endl;
     foreach (i, lol.count) {
         StateList& list = *lol[i];
@@ -365,7 +375,7 @@ StateList& PhysicalRegister::get_state_list(int s) const {
     return core->physregfiles[rfid].states[s];
 }
 
-namespace DefaultCoreModel {
+namespace OOO_CORE_MODEL {
     ostream& operator <<(ostream& os, const PhysicalRegister& physreg) {
         stringbuf sb;
         print_value_and_flags(sb, physreg.data, physreg.flags);
@@ -1380,7 +1390,7 @@ void PhysicalRegister::fill_operand_info(PhysicalRegisterOperandInfo& opinfo) {
     }
 }
 
-ostream& DefaultCoreModel::operator <<(ostream& os, const PhysicalRegisterOperandInfo& opinfo) {
+ostream& OOO_CORE_MODEL::operator <<(ostream& os, const PhysicalRegisterOperandInfo& opinfo) {
     os << "[r", opinfo.physreg, " ", short_physreg_state_names[opinfo.state], " ";
     switch (opinfo.state) {
         case PHYSREG_WAITING:
@@ -2044,7 +2054,23 @@ void DefaultCore::update_stats(PTLsimStats* stats)
     global_stats.ooocore_context_total.commit.ipc = (double)global_stats.ooocore_context_total.commit.insns / (double)global_stats.ooocore_total.cycles;
 }
 
-namespace DefaultCoreModel {
+DefaultCoreBuilder::DefaultCoreBuilder(const char* name)
+    : CoreBuilder(name)
+{
+}
+
+BaseCore* DefaultCoreBuilder::get_new_core(BaseMachine& machine,
+        const char* name)
+{
+    DefaultCore* core = new DefaultCore(machine, 1, name);
+    return core;
+}
+
+namespace OOO_CORE_MODEL {
+    DefaultCoreBuilder defaultCoreBuilder(OOO_CORE_NAME);
+};
+
+namespace OOO_CORE_MODEL {
     CycleTimer cttotal;
     CycleTimer ctfetch;
     CycleTimer ctdecode;

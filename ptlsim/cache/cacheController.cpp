@@ -37,6 +37,8 @@
 #include <memoryHierarchy.h>
 #include <cacheController.h>
 
+#include <machine.h>
+
 // Remove following comments to debug this file's code
 //#ifdef memdebug
 //#undef memdebug
@@ -47,112 +49,8 @@
 using namespace Memory;
 using namespace Memory::SimpleWTCache;
 
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::CacheLines(int readPorts, int writePorts) :
-	readPorts_(readPorts)
-	, writePorts_(writePorts)
-{
-	lastAccessCycle_ = 0;
-	readPortUsed_ = 0;
-	writePortUsed_ = 0;
-}
 
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::init()
-{
-	foreach(i, SET_COUNT) {
-		Set &set = base_t::sets[i];
-		foreach(j, WAY_COUNT) {
-			set.data[j].init(-1);
-		}
-	}
-}
-
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-W64 CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::tagOf(W64 address)
-{
-	return floor(address, LINE_SIZE);
-}
-
-
-// Return true if valid line is found, else return false
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-CacheLine* CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::probe(MemoryRequest *request)
-{
-	W64 physAddress = request->get_physical_address();
-	CacheLine *line = base_t::probe(physAddress);
-
-	return line;
-}
-
-// Line Update is called when upper level cache has write the line
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::update(MemoryRequest *request)
-{
-	W64 physAddress = request->get_physical_address();
-	CacheLine *line = base_t::probe(physAddress);
-
-	// If we find a line to update, mark it as valid
-	if(line) {
-		line->isValid = true;
-	}
-}
-
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-CacheLine* CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::insert(MemoryRequest *request, W64& oldTag)
-{
-	W64 physAddress = request->get_physical_address();
-	CacheLine *line = base_t::select(physAddress, oldTag);
-
-	return line;
-}
-
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-int CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::invalidate(MemoryRequest *request)
-{
-	return base_t::invalidate(request->get_physical_address());
-}
-
-
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-bool CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::get_port(MemoryRequest *request)
-{
-	bool rc = false;
-
-	if(lastAccessCycle_ < sim_cycle) {
-		lastAccessCycle_ = sim_cycle;
-		writePortUsed_ = 0;
-		readPortUsed_ = 0;
-	}
-
-	switch(request->get_type()) {
-		case MEMORY_OP_READ:
-			rc = (readPortUsed_ < readPorts_) ? ++readPortUsed_ : 0;
-			break;
-		case MEMORY_OP_WRITE:
-		case MEMORY_OP_UPDATE:
-			rc = (writePortUsed_ < writePorts_) ? ++writePortUsed_ : 0;
-			break;
-		default:
-			memdebug("Unknown type of memory request: ",
-					request->get_type(), endl);
-			assert(0);
-	};
-	return rc;
-}
-
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::print(ostream& os) const
-{
-	foreach(i, SET_COUNT) {
-		const Set &set = base_t::sets[i];
-		foreach(j, WAY_COUNT) {
-			os << set.data[j];
-		}
-	}
-}
-
-CacheController::CacheController(W8 coreid, char *name,
+CacheController::CacheController(W8 coreid, const char *name,
 		MemoryHierarchy *memoryHierarchy, CacheType type) :
 	Controller(coreid, name, memoryHierarchy)
     , new_stats(name, &memoryHierarchy->get_machine())
@@ -162,36 +60,16 @@ CacheController::CacheController(W8 coreid, char *name,
 	, prefetchEnabled_(false)
 	, prefetchDelay_(1)
 {
-	switch(type_) {
-		case L1_I_CACHE:
-			cacheLines_ = new L1ICacheLines(L1I_READ_PORT, L1I_WRITE_PORT);
-			cacheLineBits_ = log2(L1I_LINE_SIZE);
-			cacheAccessLatency_ = L1I_LATENCY;
-            SETUP_STATS(L1I);
-			break;
-		case L1_D_CACHE:
-			cacheLines_ = new L1DCacheLines(L1D_READ_PORT, L1D_WRITE_PORT);
-			cacheLineBits_ = log2(L1D_LINE_SIZE);
-			cacheAccessLatency_ = L1D_LATENCY;
-            SETUP_STATS(L1D);
-			break;
-		case L2_CACHE:
-			cacheLines_ = new L2CacheLines(L2_READ_PORT, L2_WRITE_PORT);
-			cacheLineBits_ = log2(L2_LINE_SIZE);
-			cacheAccessLatency_ = L2_LATENCY;
-            SETUP_STATS(L2);
-			prefetchEnabled_ = true;
-			break;
-		case L3_CACHE:
-			cacheLines_ = new L3CacheLines(L3_READ_PORT, L3_WRITE_PORT);
-			cacheLineBits_ = log2(L3_LINE_SIZE);
-			cacheAccessLatency_ = L3_LATENCY;
-            SETUP_STATS(L3);
-			break;
-		default:
-			memdebug("Unknown type of cache: ", type_, endl);
-			assert(0);
-	};
+    memoryHierarchy_->add_cache_mem_controller(this);
+
+    cacheLines_ = get_cachelines(type);
+
+    if(!memoryHierarchy_->get_machine().get_option(name, "last_private", isLowestPrivate_)) {
+        isLowestPrivate_ = false;
+    }
+
+    cacheLineBits_ = cacheLines_->get_line_bits();
+    cacheAccessLatency_ = cacheLines_->get_access_latency();
 
 	cacheLines_->init();
 
@@ -521,6 +399,24 @@ int CacheController::access_fast_path(Interconnect *interconnect,
 	return -1;
 }
 
+void CacheController::register_interconnect(Interconnect *interconnect,
+        int type)
+{
+    switch(type) {
+        case INTERCONN_TYPE_UPPER:
+            upperInterconnect_ = interconnect;
+            break;
+        case INTERCONN_TYPE_UPPER2:
+            upperInterconnect2_ = interconnect;
+            break;
+        case INTERCONN_TYPE_LOWER:
+            lowerInterconnect_ = interconnect;
+            break;
+        default:
+            assert(0);
+    }
+}
+
 void CacheController::register_upper_interconnect(Interconnect *interconnect)
 {
 	upperInterconnect_ = interconnect;
@@ -628,13 +524,13 @@ bool CacheController::cache_insert_cb(void *arg)
 		CacheLine *line = cacheLines_->insert(queueEntry->request,
 				oldTag);
 		if(oldTag != InvalidTag<W64>::INVALID || oldTag != -1) {
-			if(wt_disabled_ && line->isModified) {
+            if(wt_disabled_ && line->state == LINE_MODIFIED) {
 				if(!send_update_message(queueEntry, oldTag))
 					goto retry_insert;
 			}
 		}
 
-		line->isValid = true;
+        line->state = LINE_VALID;
 
 		queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
 		memoryHierarchy_->add_event(&cacheInsertComplete_,
@@ -674,7 +570,7 @@ bool CacheController::cache_access_cb(void *arg)
 
 	if(cacheLines_->get_port(queueEntry->request)) {
 		CacheLine *line = cacheLines_->probe(queueEntry->request);
-		bool hit = (line == NULL) ? false : line->isValid;
+		bool hit = (line == NULL) ? false : line->state;
 
 		// Testing 100 % L2 Hit
         //		if(type_ == L2_CACHE)
@@ -697,7 +593,7 @@ bool CacheController::cache_access_cb(void *arg)
                  */
 				if(type == MEMORY_OP_WRITE) {
 					if(wt_disabled_) {
-						line->isModified = true;
+                        line->state = LINE_MODIFIED;
 					} else {
 						if(!send_update_message(queueEntry))
 							goto retry_cache_access;
@@ -956,3 +852,39 @@ void CacheController::do_prefetch(MemoryRequest *request, int additional_delay)
 	memoryHierarchy_->add_event(&cacheAccess_, prefetchDelay_+additional_delay,
 		   new_entry);
 }
+
+
+/* Cache Controller Builder */
+
+struct WTCacheControllerBuilder : public ControllerBuilder
+{
+    WTCacheControllerBuilder(const char* name) :
+        ControllerBuilder(name)
+    {}
+
+    Controller* get_new_controller(W8 coreid, W8 type,
+            MemoryHierarchy& mem, const char *name) {
+        Controller* cont = new CacheController(coreid, name, &mem,
+                (Memory::CacheType)(type));
+        ((CacheController*)cont)->set_wt_disable(false);
+        return cont;
+    }
+};
+
+struct WBCacheControllerBuilder : public ControllerBuilder
+{
+    WBCacheControllerBuilder(const char* name) :
+        ControllerBuilder(name)
+    {}
+
+    Controller* get_new_controller(W8 coreid, W8 type,
+            MemoryHierarchy& mem, const char *name) {
+        Controller* cont = new CacheController(coreid, name, &mem,
+                (Memory::CacheType)(type));
+        ((CacheController*)cont)->set_wt_disable(true);
+        return cont;
+    }
+};
+
+WTCacheControllerBuilder wtCacheBuilder("wt_cache");
+WBCacheControllerBuilder wbCacheBuilder("wb_cache");

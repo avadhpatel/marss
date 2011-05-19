@@ -35,15 +35,18 @@
 
 #include <p2p.h>
 #include <memoryHierarchy.h>
+#include <machine.h>
 
 using namespace Memory;
 
-P2PInterconnect::P2PInterconnect(char *name,
+P2PInterconnect::P2PInterconnect(const char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Interconnect(name, memoryHierarchy)
 {
 	controllers_[0] = NULL;
 	controllers_[1] = NULL;
+
+    memoryHierarchy->add_interconnect(this);
 }
 
 void P2PInterconnect::register_controller(Controller *controller)
@@ -117,3 +120,18 @@ bool P2PInterconnect::send_request(Controller *sender,
 	assert(0);
 	return false;
 }
+
+struct P2PBuilder : public InterconnectBuilder
+{
+    P2PBuilder(const char* name) :
+        InterconnectBuilder(name)
+    { }
+
+    Interconnect* get_new_interconnect(MemoryHierarchy& mem,
+            const char* name)
+    {
+        return new P2PInterconnect(name, &mem);
+    }
+};
+
+P2PBuilder p2pBuilder("p2p");

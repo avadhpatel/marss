@@ -33,14 +33,17 @@
 
 #include <bus.h>
 #include <memoryHierarchy.h>
+#include <machine.h>
 
 using namespace Memory;
 
-BusInterconnect::BusInterconnect(char *name,
+BusInterconnect::BusInterconnect(const char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Interconnect(name,memoryHierarchy),
 	busBusy_(false)
 {
+    memoryHierarchy_->add_interconnect(this);
+
 	GET_STRINGBUF_PTR(broadcast_name, name, "_broadcast");
 	broadcast_.set_name(broadcast_name->buf);
 	broadcast_.connect(signal_mem_ptr(*this,
@@ -265,3 +268,17 @@ void BusInterconnect::print_map(ostream& os)
 	}
 }
 
+struct BusBuilder : public InterconnectBuilder
+{
+    BusBuilder(const char* name) :
+        InterconnectBuilder(name)
+    { }
+
+    Interconnect* get_new_interconnect(MemoryHierarchy& mem,
+            const char* name)
+    {
+        return new BusInterconnect(name, &mem);
+    }
+};
+
+BusBuilder busBuilder("bus");

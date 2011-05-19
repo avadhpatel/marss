@@ -36,11 +36,12 @@
 #include <mesiBus.h>
 #include <memoryHierarchy.h>
 #include <stats.h>
+#include <machine.h>
 
 using namespace Memory;
 using namespace Memory::MESICache;
 
-BusInterconnect::BusInterconnect(char *name,
+BusInterconnect::BusInterconnect(const char *name,
         MemoryHierarchy *memoryHierarchy) :
     Interconnect(name,memoryHierarchy),
     busBusy_(false),
@@ -48,6 +49,8 @@ BusInterconnect::BusInterconnect(char *name,
     lastAccessQueue(NULL),
     new_stats(name, &memoryHierarchy->get_machine())
 {
+    memoryHierarchy_->add_interconnect(this);
+
     GET_STRINGBUF_PTR(broadcast_name, name, "_broadcast");
     broadcast_.set_name(broadcast_name->buf);
     broadcast_.connect(signal_mem_ptr(*this,
@@ -513,3 +516,18 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
 
     return true;
 }
+
+struct MESIBusBuilder : public InterconnectBuilder
+{
+    MESIBusBuilder(const char* name) :
+        InterconnectBuilder(name)
+    { }
+
+    Interconnect* get_new_interconnect(MemoryHierarchy& mem,
+            const char* name)
+    {
+        return new MESICache::BusInterconnect(name, &mem);
+    }
+};
+
+MESIBusBuilder mesiBusBuilder("mesi_bus");

@@ -54,7 +54,7 @@ namespace Memory{
     class MemoryRequest;
 }
 
-namespace DefaultCoreModel {
+namespace OOO_CORE_MODEL {
 
     using namespace Core;
 
@@ -1515,7 +1515,7 @@ namespace DefaultCoreModel {
 #define for_each_cluster(iter) foreach (iter, MAX_CLUSTERS)
 #define for_each_operand(iter) foreach (iter, MAX_OPERANDS)
 
-        DefaultCore(BaseCoreMachine& machine_, W8 num_threads);
+        DefaultCore(BaseMachine& machine_, W8 num_threads, const char* name=NULL);
 
         //       coreid(coreid_), caches(coreid_), machine(machine_), cache_callbacks(*this), memoryHierarchy(machine_.memoryHierarchy)
         //     {
@@ -1688,6 +1688,10 @@ namespace DefaultCoreModel {
 
 #endif // INSIDE_DEFCORE
 
+    struct DefaultCoreBuilder : public CoreBuilder {
+        DefaultCoreBuilder(const char* name);
+        BaseCore* get_new_core(BaseMachine& machine, const char* name);
+    };
 };
 
 
@@ -1731,7 +1735,7 @@ struct PerContextDefaultCoreStats { // rootnode:
             }
         } stop;
         W64 opclass[OPCLASS_COUNT]; // label: opclass_names
-        W64 width[DefaultCoreModel::FETCH_WIDTH+1]; // histo: 0, DefaultCoreModel::FETCH_WIDTH, 1
+        W64 width[OOO_CORE_MODEL::FETCH_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::FETCH_WIDTH, 1
         W64 blocks;
         W64 uops;
         W64 user_insns;
@@ -1740,7 +1744,7 @@ struct PerContextDefaultCoreStats { // rootnode:
             stop += rhs.stop;
             foreach(i, OPCLASS_COUNT)
                 opclass[i] += rhs.opclass[i];
-            foreach(i, DefaultCoreModel::FETCH_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::FETCH_WIDTH+1)
                 width[i] += rhs.width[i];
             blocks += rhs.blocks;
             uops += rhs.uops;
@@ -1767,7 +1771,7 @@ struct PerContextDefaultCoreStats { // rootnode:
                 return *this;
             }
         } status;
-        W64 width[DefaultCoreModel::FRONTEND_WIDTH+1]; // histo: 0, DefaultCoreModel::FRONTEND_WIDTH, 1
+        W64 width[OOO_CORE_MODEL::FRONTEND_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::FRONTEND_WIDTH, 1
         struct renamed {
             W64 none;
             W64 reg;
@@ -1799,7 +1803,7 @@ struct PerContextDefaultCoreStats { // rootnode:
 
         frontend& operator+=(const frontend &rhs) { // operator
             status += rhs.status;
-            foreach(i, DefaultCoreModel::FRONTEND_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::FRONTEND_WIDTH+1)
                 width[i] += rhs.width[i];
             renamed += rhs.renamed;
             alloc += rhs.alloc;
@@ -1811,24 +1815,24 @@ struct PerContextDefaultCoreStats { // rootnode:
     } frontend;
 
     struct dispatch {
-        W64 cluster[DefaultCoreModel::MAX_CLUSTERS]; // label: DefaultCoreModel::cluster_names
+        W64 cluster[OOO_CORE_MODEL::MAX_CLUSTERS]; // label: OOO_CORE_MODEL::cluster_names
         struct redispatch {
             W64 trigger_uops;
             W64 deadlock_flushes;
             W64 deadlock_uops_flushed;
-            W64 dependent_uops[DefaultCoreModel::ROB_SIZE+1]; // histo: 0, DefaultCoreModel::ROB_SIZE, 1
+            W64 dependent_uops[OOO_CORE_MODEL::ROB_SIZE+1]; // histo: 0, OOO_CORE_MODEL::ROB_SIZE, 1
             redispatch& operator+=(const redispatch &rhs) { // operator
                 trigger_uops += rhs.trigger_uops;
                 deadlock_flushes += rhs.deadlock_flushes;
                 deadlock_uops_flushed += rhs.deadlock_uops_flushed;
-                foreach(i, DefaultCoreModel::ROB_SIZE+1)
+                foreach(i, OOO_CORE_MODEL::ROB_SIZE+1)
                     dependent_uops[i] += rhs.dependent_uops[i];
                 return *this;
             }
         } redispatch;
 
         dispatch& operator+=(const dispatch &rhs) { // operator
-            foreach(i, DefaultCoreModel::MAX_CLUSTERS)
+            foreach(i, OOO_CORE_MODEL::MAX_CLUSTERS)
                 cluster[i] += rhs.cluster[i];
             redispatch += rhs.redispatch;
             return *this;
@@ -1869,9 +1873,9 @@ struct PerContextDefaultCoreStats { // rootnode:
     } issue;
 
     struct writeback {
-        W64 writebacks[DefaultCoreModel::PHYS_REG_FILE_COUNT]; // label: DefaultCoreModel::phys_reg_file_names
+        W64 writebacks[OOO_CORE_MODEL::PHYS_REG_FILE_COUNT]; // label: OOO_CORE_MODEL::phys_reg_file_names
         writeback& operator+=(const writeback &rhs) { // operator
-            foreach(i, DefaultCoreModel::PHYS_REG_FILE_COUNT)
+            foreach(i, OOO_CORE_MODEL::PHYS_REG_FILE_COUNT)
                 writebacks[i] += rhs.writebacks[i];
             return *this;
         }
@@ -2239,23 +2243,23 @@ struct DefaultCoreStats { // rootnode:
 
     struct dispatch {
         struct source { // node: summable
-            W64 integer[DefaultCoreModel::MAX_PHYSREG_STATE]; // label: DefaultCoreModel::physreg_state_names
-            W64 fp[DefaultCoreModel::MAX_PHYSREG_STATE]; // label: DefaultCoreModel::physreg_state_names
-            W64 st[DefaultCoreModel::MAX_PHYSREG_STATE]; // label: DefaultCoreModel::physreg_state_names
-            W64 br[DefaultCoreModel::MAX_PHYSREG_STATE]; // label: DefaultCoreModel::physreg_state_names
+            W64 integer[OOO_CORE_MODEL::MAX_PHYSREG_STATE]; // label: OOO_CORE_MODEL::physreg_state_names
+            W64 fp[OOO_CORE_MODEL::MAX_PHYSREG_STATE]; // label: OOO_CORE_MODEL::physreg_state_names
+            W64 st[OOO_CORE_MODEL::MAX_PHYSREG_STATE]; // label: OOO_CORE_MODEL::physreg_state_names
+            W64 br[OOO_CORE_MODEL::MAX_PHYSREG_STATE]; // label: OOO_CORE_MODEL::physreg_state_names
         } source;
-        W64 width[DefaultCoreModel::DISPATCH_WIDTH+1]; // histo: 0, DefaultCoreModel::DISPATCH_WIDTH, 1
+        W64 width[OOO_CORE_MODEL::DISPATCH_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::DISPATCH_WIDTH, 1
 
         dispatch& operator+=(const dispatch &rhs) { // operator
-            foreach(i, DefaultCoreModel::MAX_PHYSREG_STATE)
+            foreach(i, OOO_CORE_MODEL::MAX_PHYSREG_STATE)
                 source.integer[i] += rhs.source.integer[i];
-            foreach(i, DefaultCoreModel::MAX_PHYSREG_STATE)
+            foreach(i, OOO_CORE_MODEL::MAX_PHYSREG_STATE)
                 source.fp[i] += rhs.source.fp[i];
-            foreach(i, DefaultCoreModel::MAX_PHYSREG_STATE)
+            foreach(i, OOO_CORE_MODEL::MAX_PHYSREG_STATE)
                 source.st[i] += rhs.source.st[i];
-            foreach(i, DefaultCoreModel::MAX_PHYSREG_STATE)
+            foreach(i, OOO_CORE_MODEL::MAX_PHYSREG_STATE)
                 source.br[i] += rhs.source.br[i];
-            foreach(i, DefaultCoreModel::DISPATCH_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::DISPATCH_WIDTH+1)
                 width[i] += rhs.width[i];
             return *this;
         }
@@ -2263,42 +2267,42 @@ struct DefaultCoreStats { // rootnode:
 
     struct issue {
         struct source { // node: summable
-            W64 integer[DefaultCoreModel::MAX_PHYSREG_STATE]; // label: DefaultCoreModel::physreg_state_names
-            W64 fp[DefaultCoreModel::MAX_PHYSREG_STATE]; // label: DefaultCoreModel::physreg_state_names
-            W64 st[DefaultCoreModel::MAX_PHYSREG_STATE]; // label: DefaultCoreModel::physreg_state_names
-            W64 br[DefaultCoreModel::MAX_PHYSREG_STATE]; // label: DefaultCoreModel::physreg_state_names
+            W64 integer[OOO_CORE_MODEL::MAX_PHYSREG_STATE]; // label: OOO_CORE_MODEL::physreg_state_names
+            W64 fp[OOO_CORE_MODEL::MAX_PHYSREG_STATE]; // label: OOO_CORE_MODEL::physreg_state_names
+            W64 st[OOO_CORE_MODEL::MAX_PHYSREG_STATE]; // label: OOO_CORE_MODEL::physreg_state_names
+            W64 br[OOO_CORE_MODEL::MAX_PHYSREG_STATE]; // label: OOO_CORE_MODEL::physreg_state_names
         } source;
         struct width {
 #ifdef MULTI_IQ
-            W64 int0[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
-            W64 int1[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
-            W64 ld[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
-            W64 fp[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
+            W64 int0[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
+            W64 int1[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
+            W64 ld[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
+            W64 fp[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
 #else
-            W64 all[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
+            W64 all[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
 #endif
         } width;
 
         issue& operator+=(const issue &rhs) { // operator
-            foreach(i, DefaultCoreModel::MAX_PHYSREG_STATE)
+            foreach(i, OOO_CORE_MODEL::MAX_PHYSREG_STATE)
                 source.integer[i] += rhs.source.integer[i];
-            foreach(i, DefaultCoreModel::MAX_PHYSREG_STATE)
+            foreach(i, OOO_CORE_MODEL::MAX_PHYSREG_STATE)
                 source.fp[i] += rhs.source.fp[i];
-            foreach(i, DefaultCoreModel::MAX_PHYSREG_STATE)
+            foreach(i, OOO_CORE_MODEL::MAX_PHYSREG_STATE)
                 source.st[i] += rhs.source.st[i];
-            foreach(i, DefaultCoreModel::MAX_PHYSREG_STATE)
+            foreach(i, OOO_CORE_MODEL::MAX_PHYSREG_STATE)
                 source.br[i] += rhs.source.br[i];
 #ifdef MULTI_IQ
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.int0[i] += rhs.width.int0[i];
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.int1[i] += rhs.width.int1[i];
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.ld[i] += rhs.width.ld[i];
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.fp[i] += rhs.width.fp[i];
 #else
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.all[i] += rhs.width.all[i];
 #endif
             return *this;
@@ -2308,27 +2312,27 @@ struct DefaultCoreStats { // rootnode:
     struct writeback {
         struct width {
 #ifdef MULTI_IQ
-            W64 int0[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
-            W64 int1[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
-            W64 ld[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
-            W64 fp[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
+            W64 int0[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
+            W64 int1[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
+            W64 ld[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
+            W64 fp[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
 #else
-            W64 all[DefaultCoreModel::MAX_ISSUE_WIDTH+1]; // histo: 0, DefaultCoreModel::MAX_ISSUE_WIDTH, 1
+            W64 all[OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::MAX_ISSUE_WIDTH, 1
 #endif
         } width;
 
         writeback& operator+=(const writeback &rhs) { // operator
 #ifdef MULTI_IQ
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.int0[i] += rhs.width.int0[i];
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.int1[i] += rhs.width.int1[i];
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.ld[i] += rhs.width.ld[i];
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.fp[i] += rhs.width.fp[i];
 #else
-            foreach(i, DefaultCoreModel::MAX_ISSUE_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::MAX_ISSUE_WIDTH+1)
                 width.all[i] += rhs.width.all[i];
 #endif
             return *this;
@@ -2343,13 +2347,13 @@ struct DefaultCoreStats { // rootnode:
 
         W64 free_regs_recycled;
 
-        W64 width[DefaultCoreModel::COMMIT_WIDTH+1]; // histo: 0, DefaultCoreModel::COMMIT_WIDTH, 1
+        W64 width[OOO_CORE_MODEL::COMMIT_WIDTH+1]; // histo: 0, OOO_CORE_MODEL::COMMIT_WIDTH, 1
 
         commit& operator+=(const commit &rhs) { // operator
             freereg.pending += rhs.freereg.pending;
             freereg.free += rhs.freereg.free;
             free_regs_recycled += rhs.free_regs_recycled;
-            foreach(i, DefaultCoreModel::COMMIT_WIDTH+1)
+            foreach(i, OOO_CORE_MODEL::COMMIT_WIDTH+1)
                 width[i] += rhs.width[i];
             return *this;
         }

@@ -3,8 +3,27 @@
 # Import envrionment
 Import('env')
 
+###################################
+# Cache related autogeneration
+##################################
+
+cache_type_h = env.Command("cacheTypes.h", env['config_file'],
+        Action("%s -c $SOURCE -t cache -n header -o $TARGET" %
+            (env['config_gen']),
+        cmdstr="$CREATECOMSTR"))[0]
+
+env['cache_type_h'] = cache_type_h
+
+cache_cpp = env.Command("cacheTypes.cpp", env['config_file'],
+        Action("%s -c $SOURCE -t cache -n logic -o $TARGET" %
+            (env['config_gen']),
+            cmdstr="$CREATECOMSTR"))[0]
+
 # Now get list of .cpp files
 src_files = Glob('*.cpp')
 
-objs = env.Object(src_files)
+objs = env.Object(src_files, CXXFLAGS = "$CXXFLAGS -include %s" %
+        cache_type_h.rfile().abspath)
+env.Depends(objs, cache_type_h)
+
 Return('objs')

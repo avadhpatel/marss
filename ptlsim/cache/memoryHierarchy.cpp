@@ -54,7 +54,7 @@
 
 using namespace Memory;
 
-MemoryHierarchy::MemoryHierarchy(PTLsimMachine& machine) :
+MemoryHierarchy::MemoryHierarchy(BaseMachine& machine) :
     machine_(machine)
     , someStructIsFull_(false)
 {
@@ -88,6 +88,8 @@ void MemoryHierarchy::setup_topology()
       shared_L2_configuration();
     }else if(!strcmp(config.cache_config_type, "private_L2")){
       private_L2_configuration();
+    } else if(config.cache_config_type == "auto") {
+        return;
     }else{
       ptl_logfile << " unknown cache-config-type: ", config.cache_config_type, endl;
       assert(0);
