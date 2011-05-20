@@ -2293,20 +2293,6 @@ OutOfOrderCore& OutOfOrderModel::coreof(W8 coreid) {
   return *ooomodel.cores[coreid];
 }
 
-extern "C" void ptl_flush_bbcache(int8_t context_id) {
-    if(in_simulation) {
-      foreach(i, NUM_SIM_CORES) {
-        bbcache[i].flush(context_id);
-        // Get the current ptlsim machine and call its flush tlb
-        PTLsimMachine* machine = PTLsimMachine::getcurrent();
-        assert(machine);
-
-        Context& ctx = machine->contextof(context_id);
-        machine->flush_tlb(ctx);
-      }
-    }
-}
-
 namespace Memory{
   using namespace OutOfOrderModel;
 
