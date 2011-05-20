@@ -49,13 +49,27 @@
 
 #define TX_TIMER_INTERVAL 150000 /* 150 us */
 
+/* Limit the number of packets that can be sent via a single flush
+ * of the TX queue.  This gives us a guaranteed exit condition and
+ * ensures fairness in the io path.  256 conveniently matches the
+ * length of the TX queue and shows a good balance of performance
+ * and latency. */
+#define TX_BURST 256
+
+typedef struct virtio_net_conf
+{
+    uint32_t txtimer;
+    int32_t txburst;
+    char *tx;
+} virtio_net_conf;
+
 /* Maximum packet size we can receive from tap device: header + 64k */
 #define VIRTIO_NET_MAX_BUFSIZE (sizeof(struct virtio_net_hdr) + (64 << 10))
 
 struct virtio_net_config
 {
-    /* The config defining mac address (6 bytes) */
-    uint8_t mac[6];
+    /* The config defining mac address ($ETH_ALEN bytes) */
+    uint8_t mac[ETH_ALEN];
     /* See VIRTIO_NET_F_STATUS and VIRTIO_NET_S_* above */
     uint16_t status;
 } __attribute__((packed));
@@ -153,4 +167,23 @@ struct virtio_net_ctrl_mac {
  #define VIRTIO_NET_CTRL_VLAN_ADD             0
  #define VIRTIO_NET_CTRL_VLAN_DEL             1
 
+#define DEFINE_VIRTIO_NET_FEATURES(_state, _field) \
+        DEFINE_VIRTIO_COMMON_FEATURES(_state, _field), \
+        DEFINE_PROP_BIT("csum", _state, _field, VIRTIO_NET_F_CSUM, true), \
+        DEFINE_PROP_BIT("guest_csum", _state, _field, VIRTIO_NET_F_GUEST_CSUM, true), \
+        DEFINE_PROP_BIT("gso", _state, _field, VIRTIO_NET_F_GSO, true), \
+        DEFINE_PROP_BIT("guest_tso4", _state, _field, VIRTIO_NET_F_GUEST_TSO4, true), \
+        DEFINE_PROP_BIT("guest_tso6", _state, _field, VIRTIO_NET_F_GUEST_TSO6, true), \
+        DEFINE_PROP_BIT("guest_ecn", _state, _field, VIRTIO_NET_F_GUEST_ECN, true), \
+        DEFINE_PROP_BIT("guest_ufo", _state, _field, VIRTIO_NET_F_GUEST_UFO, true), \
+        DEFINE_PROP_BIT("host_tso4", _state, _field, VIRTIO_NET_F_HOST_TSO4, true), \
+        DEFINE_PROP_BIT("host_tso6", _state, _field, VIRTIO_NET_F_HOST_TSO6, true), \
+        DEFINE_PROP_BIT("host_ecn", _state, _field, VIRTIO_NET_F_HOST_ECN, true), \
+        DEFINE_PROP_BIT("host_ufo", _state, _field, VIRTIO_NET_F_HOST_UFO, true), \
+        DEFINE_PROP_BIT("mrg_rxbuf", _state, _field, VIRTIO_NET_F_MRG_RXBUF, true), \
+        DEFINE_PROP_BIT("status", _state, _field, VIRTIO_NET_F_STATUS, true), \
+        DEFINE_PROP_BIT("ctrl_vq", _state, _field, VIRTIO_NET_F_CTRL_VQ, true), \
+        DEFINE_PROP_BIT("ctrl_rx", _state, _field, VIRTIO_NET_F_CTRL_RX, true), \
+        DEFINE_PROP_BIT("ctrl_vlan", _state, _field, VIRTIO_NET_F_CTRL_VLAN, true), \
+        DEFINE_PROP_BIT("ctrl_rx_extra", _state, _field, VIRTIO_NET_F_CTRL_RX_EXTRA, true)
 #endif

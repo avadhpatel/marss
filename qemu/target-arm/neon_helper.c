@@ -198,6 +198,28 @@ NEON_VOP_ENV(qadd_u16, neon_u16, 2)
 #undef NEON_FN
 #undef NEON_USAT
 
+uint32_t HELPER(neon_qadd_u32)(CPUState *env, uint32_t a, uint32_t b)
+{
+    uint32_t res = a + b;
+    if (res < a) {
+        SET_QC();
+        res = ~0;
+    }
+    return res;
+}
+
+uint64_t HELPER(neon_qadd_u64)(CPUState *env, uint64_t src1, uint64_t src2)
+{
+    uint64_t res;
+
+    res = src1 + src2;
+    if (res < src1) {
+        SET_QC();
+        res = ~(uint64_t)0;
+    }
+    return res;
+}
+
 #define NEON_SSAT(dest, src1, src2, type) do { \
     int32_t tmp = (uint32_t)src1 + (uint32_t)src2; \
     if (tmp != (type)tmp) { \
@@ -218,6 +240,28 @@ NEON_VOP_ENV(qadd_s16, neon_s16, 2)
 #undef NEON_FN
 #undef NEON_SSAT
 
+uint32_t HELPER(neon_qadd_s32)(CPUState *env, uint32_t a, uint32_t b)
+{
+    uint32_t res = a + b;
+    if (((res ^ a) & SIGNBIT) && !((a ^ b) & SIGNBIT)) {
+        SET_QC();
+        res = ~(((int32_t)a >> 31) ^ SIGNBIT);
+    }
+    return res;
+}
+
+uint64_t HELPER(neon_qadd_s64)(CPUState *env, uint64_t src1, uint64_t src2)
+{
+    uint64_t res;
+
+    res = src1 + src2;
+    if (((res ^ src1) & SIGNBIT64) && !((src1 ^ src2) & SIGNBIT64)) {
+        SET_QC();
+        res = ((int64_t)src1 >> 63) ^ ~SIGNBIT64;
+    }
+    return res;
+}
+
 #define NEON_USAT(dest, src1, src2, type) do { \
     uint32_t tmp = (uint32_t)src1 - (uint32_t)src2; \
     if (tmp != (type)tmp) { \
@@ -233,6 +277,29 @@ NEON_VOP_ENV(qsub_u8, neon_u8, 4)
 NEON_VOP_ENV(qsub_u16, neon_u16, 2)
 #undef NEON_FN
 #undef NEON_USAT
+
+uint32_t HELPER(neon_qsub_u32)(CPUState *env, uint32_t a, uint32_t b)
+{
+    uint32_t res = a - b;
+    if (res > a) {
+        SET_QC();
+        res = 0;
+    }
+    return res;
+}
+
+uint64_t HELPER(neon_qsub_u64)(CPUState *env, uint64_t src1, uint64_t src2)
+{
+    uint64_t res;
+
+    if (src1 < src2) {
+        SET_QC();
+        res = 0;
+    } else {
+        res = src1 - src2;
+    }
+    return res;
+}
 
 #define NEON_SSAT(dest, src1, src2, type) do { \
     int32_t tmp = (uint32_t)src1 - (uint32_t)src2; \
@@ -253,6 +320,28 @@ NEON_VOP_ENV(qsub_s8, neon_s8, 4)
 NEON_VOP_ENV(qsub_s16, neon_s16, 2)
 #undef NEON_FN
 #undef NEON_SSAT
+
+uint32_t HELPER(neon_qsub_s32)(CPUState *env, uint32_t a, uint32_t b)
+{
+    uint32_t res = a - b;
+    if (((res ^ a) & SIGNBIT) && ((a ^ b) & SIGNBIT)) {
+        SET_QC();
+        res = ~(((int32_t)a >> 31) ^ SIGNBIT);
+    }
+    return res;
+}
+
+uint64_t HELPER(neon_qsub_s64)(CPUState *env, uint64_t src1, uint64_t src2)
+{
+    uint64_t res;
+
+    res = src1 - src2;
+    if (((res ^ src1) & SIGNBIT64) && ((src1 ^ src2) & SIGNBIT64)) {
+        SET_QC();
+        res = ((int64_t)src1 >> 63) ^ ~SIGNBIT64;
+    }
+    return res;
+}
 
 #define NEON_FN(dest, src1, src2) dest = (src1 + src2) >> 1
 NEON_VOP(hadd_s8, neon_s8, 4)
@@ -560,8 +649,6 @@ uint64_t HELPER(neon_qshl_u64)(CPUState *env, uint64_t val, uint64_t shiftop)
         if (val) {
             val = ~(uint64_t)0;
             SET_QC();
-        } else {
-            val = 0;
         }
     } else if (shift <= -64) {
         val = 0;
@@ -582,9 +669,15 @@ uint64_t HELPER(neon_qshl_u64)(CPUState *env, uint64_t val, uint64_t shiftop)
     int8_t tmp; \
     tmp = (int8_t)src2; \
     if (tmp >= (ssize_t)sizeof(src1) * 8) { \
-        if (src1) \
+        if (src1) { \
             SET_QC(); \
-        dest = src1 >> 31; \
+            dest = (uint32_t)(1 << (sizeof(src1) * 8 - 1)); \
+            if (src1 > 0) { \
+                dest--; \
+            } \
+        } else { \
+            dest = src1; \
+        } \
     } else if (tmp <= -(ssize_t)sizeof(src1) * 8) { \
         dest = src1 >> 31; \
     } else if (tmp < 0) { \
@@ -593,7 +686,10 @@ uint64_t HELPER(neon_qshl_u64)(CPUState *env, uint64_t val, uint64_t shiftop)
         dest = src1 << tmp; \
         if ((dest >> tmp) != src1) { \
             SET_QC(); \
-            dest = src2 >> 31; \
+            dest = (uint32_t)(1 << (sizeof(src1) * 8 - 1)); \
+            if (src1 > 0) { \
+                dest--; \
+            } \
         } \
     }} while (0)
 NEON_VOP_ENV(qshl_s8, neon_s8, 4)
@@ -608,9 +704,9 @@ uint64_t HELPER(neon_qshl_s64)(CPUState *env, uint64_t valop, uint64_t shiftop)
     if (shift >= 64) {
         if (val) {
             SET_QC();
-            val = (val >> 63) & ~SIGNBIT64;
+            val = (val >> 63) ^ ~SIGNBIT64;
         }
-    } else if (shift <= 64) {
+    } else if (shift <= -64) {
         val >>= 63;
     } else if (shift < 0) {
         val >>= -shift;
@@ -625,6 +721,53 @@ uint64_t HELPER(neon_qshl_s64)(CPUState *env, uint64_t valop, uint64_t shiftop)
     return val;
 }
 
+#define NEON_FN(dest, src1, src2) do { \
+    if (src1 & (1 << (sizeof(src1) * 8 - 1))) { \
+        SET_QC(); \
+        dest = 0; \
+    } else { \
+        int8_t tmp; \
+        tmp = (int8_t)src2; \
+        if (tmp >= (ssize_t)sizeof(src1) * 8) { \
+            if (src1) { \
+                SET_QC(); \
+                dest = ~0; \
+            } else { \
+                dest = 0; \
+            } \
+        } else if (tmp <= -(ssize_t)sizeof(src1) * 8) { \
+            dest = 0; \
+        } else if (tmp < 0) { \
+            dest = src1 >> -tmp; \
+        } else { \
+            dest = src1 << tmp; \
+            if ((dest >> tmp) != src1) { \
+                SET_QC(); \
+                dest = ~0; \
+            } \
+        } \
+    }} while (0)
+NEON_VOP_ENV(qshlu_s8, neon_u8, 4)
+NEON_VOP_ENV(qshlu_s16, neon_u16, 2)
+#undef NEON_FN
+
+uint32_t HELPER(neon_qshlu_s32)(CPUState *env, uint32_t valop, uint32_t shiftop)
+{
+    if ((int32_t)valop < 0) {
+        SET_QC();
+        return 0;
+    }
+    return helper_neon_qshl_u32(env, valop, shiftop);
+}
+
+uint64_t HELPER(neon_qshlu_s64)(CPUState *env, uint64_t valop, uint64_t shiftop)
+{
+    if ((int64_t)valop < 0) {
+        SET_QC();
+        return 0;
+    }
+    return helper_neon_qshl_u64(env, valop, shiftop);
+}
 
 /* FIXME: This is wrong.  */
 #define NEON_FN(dest, src1, src2) do { \
@@ -826,8 +969,9 @@ uint32_t HELPER(neon_cnt_u8)(uint32_t x)
     if ((tmp ^ (tmp << 1)) & SIGNBIT) { \
         SET_QC(); \
         tmp = (tmp >> 31) ^ ~SIGNBIT; \
+    } else { \
+        tmp <<= 1; \
     } \
-    tmp <<= 1; \
     if (round) { \
         int32_t old = tmp; \
         tmp += 1 << 15; \

@@ -204,7 +204,7 @@ namespace OOO_CORE_MODEL {
     // Size of unaligned predictor Bloom filter
     static const int UNALIGNED_PREDICTOR_SIZE = 4096;
 
-    static const int THREAD_PAUSE_CYCLES = 20;
+    static const int THREAD_PAUSE_CYCLES = 10000;
 
     // String names used in stats labels
     static const char* physreg_state_names[MAX_PHYSREG_STATE] = {"none", "free",

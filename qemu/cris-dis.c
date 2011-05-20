@@ -18,13 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, see <http://www.gnu.org/licenses/>. */
 
+#include "qemu-common.h"
 #include "dis-asm.h"
 //#include "sysdep.h"
 #include "target-cris/opcode-cris.h"
 //#include "libiberty.h"
-
-
-void *qemu_malloc(size_t len); /* can't include qemu-common.h here */
 
 #define CONST_STRNEQ(STR1,STR2) (strncmp ((STR1), (STR2), sizeof (STR2) - 1) == 0)
 
@@ -2769,7 +2767,6 @@ print_insn_cris_generic (bfd_vma memaddr,
 }
 
 /* Disassemble, prefixing register names with `$'.  CRIS v0..v10.  */
-#if 0
 static int
 print_insn_cris_with_register_prefix (bfd_vma vma,
 				      disassemble_info *info)
@@ -2779,7 +2776,6 @@ print_insn_cris_with_register_prefix (bfd_vma vma,
     return -1;
   return print_insn_cris_generic (vma, info, true);
 }
-#endif
 /* Disassemble, prefixing register names with `$'.  CRIS v32.  */
 
 static int
@@ -2843,6 +2839,13 @@ print_insn_crisv10_v32_without_register_prefix (bfd_vma vma,
   return print_insn_cris_generic (vma, info, false);
 }
 #endif
+
+int
+print_insn_crisv10 (bfd_vma vma,
+		    disassemble_info *info)
+{
+  return print_insn_cris_with_register_prefix(vma, info);
+}
 
 int
 print_insn_crisv32 (bfd_vma vma,

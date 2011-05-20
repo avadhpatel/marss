@@ -9,6 +9,7 @@
 */
 #include "hw.h"
 #include "mips.h"
+#include "mips_cpudevs.h"
 #include "pc.h"
 #include "isa.h"
 #include "net.h"
@@ -20,10 +21,8 @@
 #include "ide.h"
 #include "loader.h"
 #include "elf.h"
-
-#define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
-
-#define VIRT_TO_PHYS_ADDEND (-((int64_t)(int32_t)0x80000000))
+#include "mc146818rtc.h"
+#include "blockdev.h"
 
 #define MAX_IDE_BUS 2
 
@@ -77,7 +76,7 @@ typedef struct ResetData {
 
 static int64_t load_kernel(void)
 {
-    int64_t entry, kernel_low, kernel_high;
+    int64_t entry, kernel_high;
     long kernel_size, initrd_size, params_size;
     ram_addr_t initrd_offset;
     uint32_t *params_buf;
@@ -88,9 +87,10 @@ static int64_t load_kernel(void)
 #else
     big_endian = 0;
 #endif
-    kernel_size = load_elf(loaderparams.kernel_filename, VIRT_TO_PHYS_ADDEND,
-                           (uint64_t *)&entry, (uint64_t *)&kernel_low,
-                           (uint64_t *)&kernel_high, big_endian, ELF_MACHINE, 1);
+    kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys,
+                           NULL, (uint64_t *)&entry, NULL,
+                           (uint64_t *)&kernel_high, big_endian,
+                           ELF_MACHINE, 1);
     if (kernel_size >= 0) {
         if ((entry & ~0x7fffffffULL) == 0x80000000)
             entry = (int32_t)entry;
@@ -132,8 +132,8 @@ static int64_t load_kernel(void)
     params_buf[1] = tswap32(0x12345678);
 
     if (initrd_size > 0) {
-        snprintf((char *)params_buf + 8, 256, "rd_start=0x" TARGET_FMT_lx " rd_size=%li %s",
-                 PHYS_TO_VIRT((uint32_t)initrd_offset),
+        snprintf((char *)params_buf + 8, 256, "rd_start=0x%" PRIx64 " rd_size=%li %s",
+                 cpu_mips_phys_to_kseg0(NULL, initrd_offset),
                  initrd_size, loaderparams.kernel_cmdline);
     } else {
         snprintf((char *)params_buf + 8, 256, "%s", loaderparams.kernel_cmdline);
@@ -167,11 +167,11 @@ void mips_r4k_init (ram_addr_t ram_size,
     int bios_size;
     CPUState *env;
     ResetData *reset_info;
-    RTCState *rtc_state;
     int i;
     qemu_irq *i8259;
     DriveInfo *hd[MAX_IDE_BUS * MAX_IDE_DEVS];
     DriveInfo *dinfo;
+    int be;
 
     /* init CPUs */
     if (cpu_model == NULL) {
@@ -198,13 +198,14 @@ void mips_r4k_init (ram_addr_t ram_size,
                 ((unsigned int)ram_size / (1 << 20)));
         exit(1);
     }
-    ram_offset = qemu_ram_alloc(ram_size);
+    ram_offset = qemu_ram_alloc(NULL, "mips_r4k.ram", ram_size);
 
     cpu_register_physical_memory(0, ram_size, ram_offset | IO_MEM_RAM);
 
     if (!mips_qemu_iomemtype) {
         mips_qemu_iomemtype = cpu_register_io_memory(mips_qemu_read,
-                                                     mips_qemu_write, NULL);
+                                                     mips_qemu_write, NULL,
+                                                     DEVICE_NATIVE_ENDIAN);
     }
     cpu_register_physical_memory(0x1fbf0000, 0x10000, mips_qemu_iomemtype);
 
@@ -220,18 +221,24 @@ void mips_r4k_init (ram_addr_t ram_size,
     } else {
         bios_size = -1;
     }
+#ifdef TARGET_WORDS_BIGENDIAN
+    be = 1;
+#else
+    be = 0;
+#endif
     if ((bios_size > 0) && (bios_size <= BIOS_SIZE)) {
-        bios_offset = qemu_ram_alloc(BIOS_SIZE);
+        bios_offset = qemu_ram_alloc(NULL, "mips_r4k.bios", BIOS_SIZE);
 	cpu_register_physical_memory(0x1fc00000, BIOS_SIZE,
                                      bios_offset | IO_MEM_ROM);
 
         load_image_targphys(filename, 0x1fc00000, BIOS_SIZE);
     } else if ((dinfo = drive_get(IF_PFLASH, 0, 0)) != NULL) {
         uint32_t mips_rom = 0x00400000;
-        bios_offset = qemu_ram_alloc(mips_rom);
+        bios_offset = qemu_ram_alloc(NULL, "mips_r4k.bios", mips_rom);
         if (!pflash_cfi01_register(0x1fc00000, bios_offset,
-            dinfo->bdrv, sector_len, mips_rom / sector_len,
-            4, 0, 0, 0, 0)) {
+                                   dinfo->bdrv, sector_len,
+                                   mips_rom / sector_len,
+                                   4, 0, 0, 0, 0, be)) {
             fprintf(stderr, "qemu: Error registering flash memory.\n");
 	}
     }
@@ -261,7 +268,7 @@ void mips_r4k_init (ram_addr_t ram_size,
     isa_bus_new(NULL);
     isa_bus_irqs(i8259);
 
-    rtc_state = rtc_init(2000);
+    rtc_init(2000, NULL);
 
     /* Register 64 KB of ISA IO space at 0x14000000 */
     isa_mmio_init(0x14000000, 0x00010000);

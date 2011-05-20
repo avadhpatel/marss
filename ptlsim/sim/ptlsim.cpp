@@ -184,6 +184,9 @@ void PTLsimConfig::reset() {
 
   // Test Framework
   run_tests = 0;
+
+  // Utilities/Tools
+  execute_after_kill = "";
 }
 
 template <>
@@ -318,6 +321,10 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   // Test Framework
   section("Unit Test Framework");
   add(run_tests,            "run-tests",            "Run Test cases");
+
+  // Utilities/Tools
+  section("options for tools/utilities");
+  add(execute_after_kill,	"execute-after-kill" ,	"Execute a shell command (on the host shell) after simulation receives kill signal");
 };
 
 #ifndef CONFIG_ONLY
@@ -516,12 +523,22 @@ static void kill_simulation()
     assert(config.kill || config.kill_after_run);
 
     ptl_logfile << "Received simulation kill signal, stopped the simulation and killing the VM\n";
-    ptl_logfile.flush();
-    ptl_logfile.close();
 #ifdef TRACE_RIP
     ptl_rip_trace.flush();
     ptl_rip_trace.close();
 #endif
+
+    if (config.execute_after_kill.size() > 0) {
+        ptl_logfile << "Executing: " << config.execute_after_kill << endl;
+        int ret = system(config.execute_after_kill.buf);
+        if(ret != 0) {
+            ptl_logfile << "execute-after-kill command return " << ret << endl;
+        }
+    }
+
+    ptl_logfile.flush();
+    ptl_logfile.close();
+
     exit(0);
 }
 
@@ -538,10 +555,12 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 		ptl_rip_trace.open("ptl_rip_trace");
 #endif
 
-    statswriter.open(config.stats_filename, &_binary_ptlsim_build_ptlsim_dst_start,
-                     &_binary_ptlsim_build_ptlsim_dst_end - &_binary_ptlsim_build_ptlsim_dst_start,
-                     sizeof(PTLsimStats));
-    current_stats_filename = config.stats_filename;
+    if(config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
+        statswriter.open(config.stats_filename, &_binary_ptlsim_build_ptlsim_dst_start,
+                &_binary_ptlsim_build_ptlsim_dst_end - &_binary_ptlsim_build_ptlsim_dst_start,
+                sizeof(PTLsimStats));
+        current_stats_filename = config.stats_filename;
+    }
 
   if (config.trace_memory_updates_logfile.set() && (config.trace_memory_updates_logfile != current_trace_memory_updates_logfile)) {
     backup_and_reopen_memory_logfile();
@@ -1268,6 +1287,12 @@ extern "C" uint8_t ptl_simulate() {
         kill_simulation();
 	}
 
+    machine->first_run = 1;
+
+    if(config.stop) {
+        config.stop = false;
+    }
+
 	return 0;
 }
 
@@ -1304,7 +1329,10 @@ extern "C" void update_progress() {
     //while (sb.size() < 160) sb << ' ';
 
     ptl_logfile << sb, endl;
-    cerr << "\r  ", sb;
+    if (!config.quiet) {
+        cerr << "\r  ", sb;
+    }
+
     last_printed_status_at_ticks = ticks;
     last_printed_status_at_cycle = sim_cycle;
     last_printed_status_at_user_insn = total_user_insns_committed;
@@ -1327,71 +1355,6 @@ void dump_all_info() {
 		curr_ptl_machine->dump_state(ptl_logfile);
 		ptl_logfile.flush();
 	}
-}
-
-
-bool simulate(const char* machinename) {
-  PTLsimMachine* machine = PTLsimMachine::getmachine(machinename);
-
-  if (!machine) {
-    ptl_logfile << "Cannot find core named '", machinename, "'", endl;
-    cerr << "Cannot find core named '", machinename, "'", endl;
-    return 0;
-  }
-
-  if (!machine->initialized) {
-    ptl_logfile << "Initializing core '", machinename, "'", endl;
-    if (!machine->init(config)) {
-      ptl_logfile << "Cannot initialize core model; check its configuration!", endl;
-      return 0;
-    }
-    machine->initialized = 1;
-  }
-
-  ptl_logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
-  cerr <<  "Switching to simulation core '", machinename, "'...", endl, flush;
-  ptl_logfile << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
-  cerr << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
-
-  /* Update stats every half second: */
-  ticks_per_update = seconds_to_ticks(0.2);
-  //ticks_per_update = seconds_to_ticks(0.1);
-  last_printed_status_at_ticks = 0;
-  last_printed_status_at_user_insn = 0;
-  last_printed_status_at_cycle = 0;
-
-  W64 tsc_at_start = rdtsc();
-  curr_ptl_machine = machine;
-  machine->run(config);
-  W64 tsc_at_end = rdtsc();
-  machine->update_stats(stats);
-  curr_ptl_machine = NULL;
-
-  W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
-  stats->elapse_seconds = seconds;
-  stringbuf sb;
-  sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_user_insns_committed, " instructions and ",
-    seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_user_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_user_insns_committed) / double(sim_cycle), ")", endl;
-
-  ptl_logfile << sb, flush;
-  cerr << sb, flush;
-
-  if (config.dumpcode_filename.set()) {
-//    byte insnbuf[256];
-//    PageFaultErrorCode pfec;
-//    Waddr faultaddr;
-//    Waddr rip = contextof(0).eip;
-//    int n = contextof(0).copy_from_user(insnbuf, rip, sizeof(insnbuf), pfec, faultaddr);
-//    ptl_logfile << "Saving ", n, " bytes from rip ", (void*)rip, " to ", config.dumpcode_filename, endl, flush;
-//    ostream(config.dumpcode_filename).write(insnbuf, n);
-  }
-
-  last_printed_status_at_ticks = 0;
-  update_progress();
-  cerr << endl;
-  print_stats_in_log();
-
-  return 0;
 }
 
 extern void shutdown_uops();

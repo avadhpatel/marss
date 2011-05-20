@@ -197,10 +197,10 @@ static uint32_t nvic_readl(void *opaque, uint32_t offset)
     case 0xd18: case 0xd1c: case 0xd20: /* System Handler Priority.  */
         irq = offset - 0xd14;
         val = 0;
-        val = s->gic.priority1[irq++][0];
-        val = s->gic.priority1[irq++][0] << 8;
-        val = s->gic.priority1[irq++][0] << 16;
-        val = s->gic.priority1[irq][0] << 24;
+        val |= s->gic.priority1[irq++][0];
+        val |= s->gic.priority1[irq++][0] << 8;
+        val |= s->gic.priority1[irq++][0] << 16;
+        val |= s->gic.priority1[irq][0] << 24;
         return val;
     case 0xd24: /* System Handler Status.  */
         val = 0;
@@ -397,7 +397,7 @@ static int armv7m_nvic_init(SysBusDevice *dev)
     gic_init(&s->gic);
     cpu_register_physical_memory(0xe000e000, 0x1000, s->gic.iomemtype);
     s->systick.timer = qemu_new_timer(vm_clock, systick_timer_tick, s);
-    register_savevm("armv7m_nvic", -1, 1, nvic_save, nvic_load, s);
+    register_savevm(&dev->qdev, "armv7m_nvic", -1, 1, nvic_save, nvic_load, s);
     return 0;
 }
 

@@ -164,7 +164,9 @@ void helper_movl_sreg_reg (uint32_t sreg, uint32_t reg)
 
 			D_LOG("tlb flush vaddr=%x v=%d pc=%x\n", 
 				  vaddr, tlb_v, env->pc);
-			tlb_flush_page(env, vaddr);
+			if (tlb_v) {
+				tlb_flush_page(env, vaddr);
+			}
 		}
 	}
 #endif
@@ -276,6 +278,8 @@ uint32_t helper_btst(uint32_t t0, uint32_t t1, uint32_t ccs)
 
 	/* Clear the X, N and Z flags.  */
 	ccs = ccs & ~(X_FLAG | N_FLAG | Z_FLAG);
+	if (env->pregs[PR_VR] < 32)
+		ccs &= ~(V_FLAG | C_FLAG);
 	/* Set the N and Z flags accordingly.  */
 	ccs |= (bset << 3) | (fz << 2);
 	return ccs;

@@ -242,7 +242,7 @@ void ptlsim_init() {
 
     /* Register PTLsim PTLCALL mmio page */
     W64 ptlcall_mmio_pd = cpu_register_io_memory(ptlcall_mmio_read_ops,
-            ptlcall_mmio_write_ops, NULL);
+            ptlcall_mmio_write_ops, NULL, DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR, 4096,
             ptlcall_mmio_pd);
 
@@ -828,11 +828,20 @@ redo:
             assert(0);
         }
         if (paddr > qemu_ram_size) {
-            printf("ERROR: guest physical address 0x%llx is out of bounds\n", paddr);
+            if (qemu_ram_size < 0xe0000000 ) {
+                printf("ERROR: guest physical address 0x%llx is out of bounds\n", paddr);
+            } else {
+                // we have a split memory from 0 to 3.5G and from 4G+
+                if (paddr < 0x100000000ULL && paddr > 0xe0000000) {
+                    // It seems that qemu won't allocate paddrs in this range so warn about it
+                    printf("ERROR: guest physical address 0x%llx is between 3.5GB and 4.0GB\n", paddr);
+                } else if (paddr >= 0x100000000ULL && paddr - (0x100000000ULL-0xe0000000) > qemu_ram_size) {
+                    printf("ERROR: guest physical address 0x%llx is out of bounds\n", paddr);
+                }
+            }
         }
         return paddr;
     }
-
     mmio = 0;
 
     /* Can't find valid TLB entry, its an exception */

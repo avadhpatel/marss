@@ -10,8 +10,12 @@
 
 #if defined(TARGET_MIPS64)
 #define TARGET_LONG_BITS 64
+#define TARGET_PHYS_ADDR_SPACE_BITS 36
+#define TARGET_VIRT_ADDR_SPACE_BITS 42
 #else
 #define TARGET_LONG_BITS 32
+#define TARGET_PHYS_ADDR_SPACE_BITS 36
+#define TARGET_VIRT_ADDR_SPACE_BITS 32
 #endif
 
 /* Masks used to mark instructions to indicate which ISA level they
@@ -34,8 +38,11 @@
 #define		ASE_DSPR2	0x00010000
 #define		ASE_MT		0x00020000
 #define		ASE_SMARTMIPS	0x00040000
+#define 	ASE_MICROMIPS	0x00080000
 
 /* Chip specific instructions. */
+#define		INSN_LOONGSON2E  0x20000000
+#define		INSN_LOONGSON2F  0x40000000
 #define		INSN_VR54XX	0x80000000
 
 /* MIPS CPU defines. */
@@ -44,6 +51,8 @@
 #define		CPU_MIPS3	(CPU_MIPS2 | ISA_MIPS3)
 #define		CPU_MIPS4	(CPU_MIPS3 | ISA_MIPS4)
 #define		CPU_VR54XX	(CPU_MIPS4 | INSN_VR54XX)
+#define		CPU_LOONGSON2E  (CPU_MIPS3 | INSN_LOONGSON2E)
+#define		CPU_LOONGSON2F  (CPU_MIPS3 | INSN_LOONGSON2F)
 
 #define		CPU_MIPS5	(CPU_MIPS4 | ISA_MIPS5)
 

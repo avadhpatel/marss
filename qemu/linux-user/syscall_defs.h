@@ -49,7 +49,7 @@
 #define TARGET_IOC_TYPEBITS	8
 
 #if defined(TARGET_I386) || defined(TARGET_ARM) || defined(TARGET_SPARC) \
-    || defined(TARGET_M68K) || defined(TARGET_SH4) || defined(TARGET_CRIS)
+    || defined(TARGET_M68K) || defined(TARGET_SH4) || defined(TARGET_CRIS) || defined(TARGET_PPC) || defined(TARGET_MIPS)
     /* 16 bit uid wrappers emulation */
 #define USE_UID16
 #endif
@@ -336,6 +336,14 @@ int do_sigaction(int sig, const struct target_sigaction *act,
 #if !defined(TARGET_ABI_MIPSN32) && !defined(TARGET_ABI_MIPSN64)
 #define TARGET_SA_RESTORER	0x04000000	/* Only for O32 */
 #endif
+#elif defined(TARGET_ALPHA)
+#define TARGET_SA_ONSTACK	0x00000001
+#define TARGET_SA_RESTART	0x00000002
+#define TARGET_SA_NOCLDSTOP	0x00000004
+#define TARGET_SA_NODEFER	0x00000008
+#define TARGET_SA_RESETHAND	0x00000010
+#define TARGET_SA_NOCLDWAIT	0x00000020 /* not supported yet */
+#define TARGET_SA_SIGINFO	0x00000040
 #else
 #define TARGET_SA_NOCLDSTOP	0x00000001
 #define TARGET_SA_NOCLDWAIT	0x00000002 /* not supported yet */
@@ -472,8 +480,28 @@ int do_sigaction(int sig, const struct target_sigaction *act,
 
 #endif
 
-#if defined(TARGET_MIPS)
+#if defined(TARGET_ALPHA)
+struct target_old_sigaction {
+    abi_ulong _sa_handler;
+    abi_ulong sa_mask;
+    abi_ulong sa_flags;
+};
 
+struct target_rt_sigaction {
+    abi_ulong _sa_handler;
+    abi_ulong sa_flags;
+    target_sigset_t sa_mask;
+};
+
+/* This is the struct used inside the kernel.  The ka_restorer
+   field comes from the 5th argument to sys_rt_sigaction.  */
+struct target_sigaction {
+    abi_ulong _sa_handler;
+    abi_ulong sa_flags;
+    target_sigset_t sa_mask;
+    abi_ulong sa_restorer;
+};
+#elif defined(TARGET_MIPS)
 struct target_sigaction {
 	uint32_t	sa_flags;
 #if defined(TARGET_ABI_MIPSN32)
@@ -483,7 +511,6 @@ struct target_sigaction {
 #endif
 	target_sigset_t	sa_mask;
 };
-
 #else
 struct target_old_sigaction {
         abi_ulong _sa_handler;
@@ -650,6 +677,14 @@ struct target_rlimit {
         abi_ulong   rlim_max;
 };
 
+#if defined(TARGET_ALPHA)
+#define TARGET_RLIM_INFINITY	0x7fffffffffffffffull
+#elif defined(TARGET_MIPS) || defined(TARGET_SPARC)
+#define TARGET_RLIM_INFINITY	0x7fffffffUL
+#else
+#define TARGET_RLIM_INFINITY	((target_ulong)~0UL)
+#endif
+
 struct target_pollfd {
     int fd;           /* file descriptor */
     short events;     /* requested events */
@@ -748,6 +783,7 @@ struct target_pollfd {
 #define TARGET_BLKGETSIZE64 TARGET_IOR(0x12,114,sizeof(uint64_t)) /* return device size in bytes (u64 *arg) */
 #define TARGET_FIBMAP     TARGET_IO(0x00,1)  /* bmap access */
 #define TARGET_FIGETBSZ   TARGET_IO(0x00,2)  /* get the block size used for bmap */
+#define TARGET_FS_IOC_FIEMAP TARGET_IOWR('f',11,struct fiemap)
 
 /* cdrom commands */
 #define TARGET_CDROMPAUSE		0x5301 /* Pause Audio Operation */
@@ -910,6 +946,12 @@ struct target_winsize {
 };
 
 #include "termbits.h"
+
+#if defined(TARGET_MIPS)
+#define TARGET_PROT_SEM         0x10
+#else
+#define TARGET_PROT_SEM         0x08
+#endif
 
 /* Common */
 #define TARGET_MAP_SHARED	0x01		/* Share changes */
@@ -1241,7 +1283,10 @@ struct target_stat {
 /* FIXME: Microblaze no-mmu user-space has a difference stat64 layout...  */
 struct __attribute__((__packed__)) target_stat64 {
 	uint64_t st_dev;
-        uint64_t st_ino;
+#define TARGET_STAT64_HAS_BROKEN_ST_INO 1
+	uint32_t pad0;
+	uint32_t __st_ino;
+
 	uint32_t st_mode;
 	uint32_t st_nlink;
 	uint32_t st_uid;
@@ -1255,13 +1300,12 @@ struct __attribute__((__packed__)) target_stat64 {
 	int64_t st_blocks;	/* Number 512-byte blocks allocated. */
 
 	int	       target_st_atime;
-        unsigned int   target_st_atime_nsec;
+	unsigned int   target_st_atime_nsec;
 	int	       target_st_mtime;
-        unsigned int   target_st_mtime_nsec;
+	unsigned int   target_st_mtime_nsec;
 	int            target_st_ctime;
-        unsigned int   target_st_ctime_nsec;
-        uint32_t   __unused4;
-        uint32_t   __unused5;
+	unsigned int   target_st_ctime_nsec;
+	uint64_t st_ino;
 };
 
 #elif defined(TARGET_M68K)

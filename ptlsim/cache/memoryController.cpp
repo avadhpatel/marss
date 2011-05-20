@@ -51,15 +51,11 @@ MemoryController::MemoryController(W8 coreid, const char *name,
         latency_ = 20;
     }
 
-	GET_STRINGBUF_PTR(access_name, name, "_access_completed");
-	accessCompleted_.set_name(access_name->buf);
-	accessCompleted_.connect(signal_mem_ptr(*this,
-				&MemoryController::access_completed_cb));
+    SET_SIGNAL_CB(name, "_Access_Completed", accessCompleted_,
+            &MemoryController::access_completed_cb);
 
-	GET_STRINGBUF_PTR(wait_interconnect_name, name, "_wait_interconnect");
-	waitInterconnect_.set_name(wait_interconnect_name->buf);
-	waitInterconnect_.connect(signal_mem_ptr(*this,
-				&MemoryController::wait_interconnect_cb));
+    SET_SIGNAL_CB(name, "_Wait_Interconnect", waitInterconnect_,
+            &MemoryController::wait_interconnect_cb);
 
 	bankBits_ = log2(MEM_BANKS);
 

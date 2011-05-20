@@ -13,19 +13,16 @@
 #include <linux/unistd.h>
 #include <asm/vm86.h>
 
+extern int vm86 (unsigned long int subfunction,
+		 struct vm86plus_struct *info);
+
+#define VIF_MASK                0x00080000
+
 //#define SIGTEST
-
-#undef __syscall_return
-#define __syscall_return(type, res) \
-do { \
-	return (type) (res); \
-} while (0)
-
-_syscall2(int, vm86, int, func, struct vm86plus_struct *, v86)
 
 #define COM_BASE_ADDR    0x10100
 
-void usage(void)
+static void usage(void)
 {
     printf("runcom version 0.1 (c) 2003 Fabrice Bellard\n"
            "usage: runcom file.com\n"

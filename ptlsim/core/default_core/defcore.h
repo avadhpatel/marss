@@ -1359,7 +1359,7 @@ namespace OOO_CORE_MODEL {
         W64 load_to_store_parallel_forwarding_buffer[LOAD_FU_COUNT];
 
         W64 consecutive_commits_inside_spinlock;
-        W16 pause_counter;
+        W64 pause_counter;
 
         // statistics:
         W64 total_uops_committed;

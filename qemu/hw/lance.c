@@ -40,8 +40,8 @@
 #include "qemu-timer.h"
 #include "qemu_socket.h"
 #include "sun4m.h"
-
 #include "pcnet.h"
+#include "trace.h"
 
 typedef struct {
     SysBusDevice busdev;
@@ -59,10 +59,8 @@ static void lance_mem_writew(void *opaque, target_phys_addr_t addr,
                              uint32_t val)
 {
     SysBusPCNetState *d = opaque;
-#ifdef PCNET_DEBUG_IO
-    printf("lance_mem_writew addr=" TARGET_FMT_plx " val=0x%04x\n", addr,
-           val & 0xffff);
-#endif
+
+    trace_lance_mem_writew(addr, val & 0xffff);
     pcnet_ioport_writew(&d->state, addr, val & 0xffff);
 }
 
@@ -72,11 +70,7 @@ static uint32_t lance_mem_readw(void *opaque, target_phys_addr_t addr)
     uint32_t val;
 
     val = pcnet_ioport_readw(&d->state, addr);
-#ifdef PCNET_DEBUG_IO
-    printf("lance_mem_readw addr=" TARGET_FMT_plx " val = 0x%04x\n", addr,
-           val & 0xffff);
-#endif
-
+    trace_lance_mem_readw(addr, val & 0xffff);
     return val & 0xffff;
 }
 
@@ -124,7 +118,8 @@ static int lance_init(SysBusDevice *dev)
     PCNetState *s = &d->state;
 
     s->mmio_index =
-        cpu_register_io_memory(lance_mem_read, lance_mem_write, d);
+        cpu_register_io_memory(lance_mem_read, lance_mem_write, d,
+                               DEVICE_NATIVE_ENDIAN);
 
     qdev_init_gpio_in(&dev->qdev, parent_lance_reset, 1);
 
@@ -147,6 +142,7 @@ static void lance_reset(DeviceState *dev)
 static SysBusDeviceInfo lance_info = {
     .init       = lance_init,
     .qdev.name  = "lance",
+    .qdev.fw_name  = "ethernet",
     .qdev.size  = sizeof(SysBusPCNetState),
     .qdev.reset = lance_reset,
     .qdev.vmsd  = &vmstate_lance,

@@ -31,6 +31,7 @@
 #include "qemu-common.h"
 #include "net.h"
 #include "sysemu.h"
+#include "qemu-error.h"
 #include <stdio.h>
 #include <windows.h>
 #include <winioctl.h>
@@ -578,7 +579,6 @@ static int tap_win32_open(tap_win32_overlapped_t **phandle,
     } version;
     DWORD version_len;
     DWORD idThread;
-    HANDLE hThread;
 
     if (prefered_name != NULL)
         snprintf(name_buffer, sizeof(name_buffer), "%s", prefered_name);
@@ -622,8 +622,8 @@ static int tap_win32_open(tap_win32_overlapped_t **phandle,
 
     *phandle = &tap_overlapped;
 
-    hThread = CreateThread(NULL, 0, tap_win32_thread_entry,
-                           (LPVOID)&tap_overlapped, 0, &idThread);
+    CreateThread(NULL, 0, tap_win32_thread_entry,
+                 (LPVOID)&tap_overlapped, 0, &idThread);
     return 0;
 }
 
@@ -706,7 +706,7 @@ int net_init_tap(QemuOpts *opts, Monitor *mon, const char *name, VLANState *vlan
     ifname = qemu_opt_get(opts, "ifname");
 
     if (!ifname) {
-        qemu_error("tap: no interface name\n");
+        error_report("tap: no interface name");
         return -1;
     }
 
@@ -727,6 +727,15 @@ int tap_has_vnet_hdr(VLANClientState *vc)
     return 0;
 }
 
+int tap_probe_vnet_hdr_len(int fd, int len)
+{
+    return 0;
+}
+
+void tap_fd_set_vnet_hdr_len(int fd, int len)
+{
+}
+
 void tap_using_vnet_hdr(VLANClientState *vc, int using_vnet_hdr)
 {
 }
@@ -734,4 +743,9 @@ void tap_using_vnet_hdr(VLANClientState *vc, int using_vnet_hdr)
 void tap_set_offload(VLANClientState *vc, int csum, int tso4,
                      int tso6, int ecn, int ufo)
 {
+}
+
+struct vhost_net *tap_get_vhost_net(VLANClientState *nc)
+{
+    return NULL;
 }

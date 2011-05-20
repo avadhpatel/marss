@@ -18,6 +18,7 @@
 #include "boards.h"
 #include "bitbang_i2c.h"
 #include "sysbus.h"
+#include "blockdev.h"
 
 #define SMP_BOOT_ADDR 0xe0000000
 
@@ -80,7 +81,8 @@ static int realview_i2c_init(SysBusDevice *dev)
     bus = i2c_init_bus(&dev->qdev, "i2c");
     s->bitbang = bitbang_i2c_init(bus);
     iomemtype = cpu_register_io_memory(realview_i2c_readfn,
-                                       realview_i2c_writefn, s);
+                                       realview_i2c_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
     return 0;
 }
@@ -192,11 +194,19 @@ static void realview_init(ram_addr_t ram_size,
         proc_id = 0x02000000;
     }
 
-    ram_offset = qemu_ram_alloc(ram_size);
+    if (is_pb && ram_size > 0x20000000) {
+        /* Core tile RAM.  */
+        low_ram_size = ram_size - 0x20000000;
+        ram_size = 0x20000000;
+        ram_offset = qemu_ram_alloc(NULL, "realview.lowmem", low_ram_size);
+        cpu_register_physical_memory(0x20000000, low_ram_size,
+                                     ram_offset | IO_MEM_RAM);
+    }
+
+    ram_offset = qemu_ram_alloc(NULL, "realview.highmem", ram_size);
     low_ram_size = ram_size;
     if (low_ram_size > 0x10000000)
       low_ram_size = 0x10000000;
-    /* ??? RAM should repeat to fill physical memory space.  */
     /* SDRAM at address zero.  */
     cpu_register_physical_memory(0, low_ram_size, ram_offset | IO_MEM_RAM);
     if (is_pb) {
@@ -346,7 +356,7 @@ static void realview_init(ram_addr_t ram_size,
        startup code.  I guess this works on real hardware because the
        BootROM happens to be in ROM/flash or in memory that isn't clobbered
        until after Linux boots the secondary CPUs.  */
-    ram_offset = qemu_ram_alloc(0x1000);
+    ram_offset = qemu_ram_alloc(NULL, "realview.hack", 0x1000);
     cpu_register_physical_memory(SMP_BOOT_ADDR, 0x1000,
                                  ram_offset | IO_MEM_RAM);
 
@@ -356,7 +366,7 @@ static void realview_init(ram_addr_t ram_size,
     realview_binfo.initrd_filename = initrd_filename;
     realview_binfo.nb_cpus = smp_cpus;
     realview_binfo.board_id = realview_board_id[board_type];
-    realview_binfo.loader_start = is_pb ? 0x70000000 : 0;
+    realview_binfo.loader_start = (board_type == BOARD_PB_A8 ? 0x70000000 : 0);
     arm_load_kernel(first_cpu, &realview_binfo);
 }
 

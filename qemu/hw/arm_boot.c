@@ -187,6 +187,7 @@ static void main_cpu_reset(void *opaque)
             env->regs[15] = info->entry & 0xfffffffe;
             env->thumb = info->entry & 1;
         } else {
+            env->regs[15] = info->loader_start;
             if (old_param) {
                 set_kernel_args_old(info, info->initrd_size,
                                     info->loader_start);
@@ -225,8 +226,8 @@ void arm_load_kernel(CPUState *env, struct arm_boot_info *info)
 #endif
 
     /* Assume that raw images are linux kernels, and ELF images are not.  */
-    kernel_size = load_elf(info->kernel_filename, 0, &elf_entry, NULL, NULL,
-                           big_endian, ELF_MACHINE, 1);
+    kernel_size = load_elf(info->kernel_filename, NULL, NULL, &elf_entry,
+                           NULL, NULL, big_endian, ELF_MACHINE, 1);
     entry = elf_entry;
     if (kernel_size < 0) {
         kernel_size = load_uimage(info->kernel_filename, &entry, NULL,

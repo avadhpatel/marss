@@ -12,8 +12,6 @@ void set_float_rounding_mode(int val STATUS_PARAM)
 #if (defined(CONFIG_BSD) && !defined(__APPLE__) && !defined(__GLIBC__)) || \
     (defined(CONFIG_SOLARIS) && CONFIG_SOLARIS_VERSION < 10)
     fpsetround(val);
-#elif defined(__arm__)
-    /* nothing to do */
 #else
     fesetround(val);
 #endif
@@ -256,7 +254,7 @@ int float32_is_signaling_nan( float32 a1)
     return ( ( ( a>>22 ) & 0x1FF ) == 0x1FE ) && ( a & 0x003FFFFF );
 }
 
-int float32_is_nan( float32 a1 )
+int float32_is_quiet_nan( float32 a1 )
 {
     float32u u;
     uint64_t a;
@@ -365,25 +363,7 @@ float64 float64_trunc_to_int( float64 a STATUS_PARAM )
 
 float64 float64_round_to_int( float64 a STATUS_PARAM )
 {
-#if defined(__arm__)
-    switch(STATUS(float_rounding_mode)) {
-    default:
-    case float_round_nearest_even:
-        asm("rndd %0, %1" : "=f" (a) : "f"(a));
-        break;
-    case float_round_down:
-        asm("rnddm %0, %1" : "=f" (a) : "f"(a));
-        break;
-    case float_round_up:
-        asm("rnddp %0, %1" : "=f" (a) : "f"(a));
-        break;
-    case float_round_to_zero:
-        asm("rnddz %0, %1" : "=f" (a) : "f"(a));
-        break;
-    }
-#else
     return rint(a);
-#endif
 }
 
 float64 float64_rem( float64 a, float64 b STATUS_PARAM)
@@ -431,7 +411,7 @@ int float64_is_signaling_nan( float64 a1)
 
 }
 
-int float64_is_nan( float64 a1 )
+int float64_is_quiet_nan( float64 a1 )
 {
     float64u u;
     uint64_t a;
@@ -524,7 +504,7 @@ int floatx80_is_signaling_nan( floatx80 a1)
         && ( u.i.low == aLow );
 }
 
-int floatx80_is_nan( floatx80 a1 )
+int floatx80_is_quiet_nan( floatx80 a1 )
 {
     floatx80u u;
     u.f = a1;

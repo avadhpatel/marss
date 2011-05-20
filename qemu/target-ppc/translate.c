@@ -3398,7 +3398,7 @@ static void gen_b(DisasContext *ctx)
 static inline void gen_bcond(DisasContext *ctx, int type)
 {
     uint32_t bo = BO(ctx->opcode);
-    int l1 = gen_new_label();
+    int l1;
     TCGv target;
 
     ctx->exception = POWERPC_EXCP_BRANCH;
@@ -3719,16 +3719,14 @@ static void gen_mfmsr(DisasContext *ctx)
 #endif
 }
 
-#if 1
-#define SPR_NOACCESS ((void *)(-1UL))
-#else
-static void spr_noaccess (void *opaque, int sprn)
+static void spr_noaccess(void *opaque, int gprn, int sprn)
 {
+#if 0
     sprn = ((sprn >> 5) & 0x1F) | ((sprn & 0x1F) << 5);
     printf("ERROR: try to access SPR %d !\n", sprn);
+#endif
 }
 #define SPR_NOACCESS (&spr_noaccess)
-#endif
 
 /* mfspr */
 static inline void gen_op_mfspr(DisasContext *ctx)
@@ -5876,7 +5874,7 @@ static void gen_tlbre_440(DisasContext *ctx)
     case 2:
         {
             TCGv_i32 t0 = tcg_const_i32(rB(ctx->opcode));
-            gen_helper_440_tlbwe(t0, cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)]);
+            gen_helper_440_tlbre(cpu_gpr[rD(ctx->opcode)], t0, cpu_gpr[rA(ctx->opcode)]);
             tcg_temp_free_i32(t0);
         }
         break;
@@ -6384,6 +6382,7 @@ GEN_VXFORM_NOA(vupkhpx, 7, 13);
 GEN_VXFORM_NOA(vupklpx, 7, 15);
 GEN_VXFORM_NOA(vrefp, 5, 4);
 GEN_VXFORM_NOA(vrsqrtefp, 5, 5);
+GEN_VXFORM_NOA(vexptefp, 5, 6);
 GEN_VXFORM_NOA(vlogefp, 5, 7);
 GEN_VXFORM_NOA(vrfim, 5, 8);
 GEN_VXFORM_NOA(vrfin, 5, 9);
@@ -6733,7 +6732,7 @@ static inline void gen_op_evsrwu(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
     tcg_gen_br(l2);
     gen_set_label(l1);
     tcg_gen_movi_i32(ret, 0);
-    tcg_gen_br(l2);
+    gen_set_label(l2);
     tcg_temp_free_i32(t0);
 }
 GEN_SPEOP_ARITH2(evsrwu, gen_op_evsrwu);
@@ -6752,7 +6751,7 @@ static inline void gen_op_evsrws(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
     tcg_gen_br(l2);
     gen_set_label(l1);
     tcg_gen_movi_i32(ret, 0);
-    tcg_gen_br(l2);
+    gen_set_label(l2);
     tcg_temp_free_i32(t0);
 }
 GEN_SPEOP_ARITH2(evsrws, gen_op_evsrws);
@@ -6771,7 +6770,7 @@ static inline void gen_op_evslw(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
     tcg_gen_br(l2);
     gen_set_label(l1);
     tcg_gen_movi_i32(ret, 0);
-    tcg_gen_br(l2);
+    gen_set_label(l2);
     tcg_temp_free_i32(t0);
 }
 GEN_SPEOP_ARITH2(evslw, gen_op_evslw);
@@ -7001,7 +7000,7 @@ static inline void gen_evmergelohi(DisasContext *ctx)
 }
 static inline void gen_evsplati(DisasContext *ctx)
 {
-    uint64_t imm = ((int32_t)(rA(ctx->opcode) << 11)) >> 27;
+    uint64_t imm = ((int32_t)(rA(ctx->opcode) << 27)) >> 27;
 
 #if defined(TARGET_PPC64)
     tcg_gen_movi_tl(cpu_gpr[rD(ctx->opcode)], (imm << 32) | imm);
@@ -7012,7 +7011,7 @@ static inline void gen_evsplati(DisasContext *ctx)
 }
 static inline void gen_evsplatfi(DisasContext *ctx)
 {
-    uint64_t imm = rA(ctx->opcode) << 11;
+    uint64_t imm = rA(ctx->opcode) << 27;
 
 #if defined(TARGET_PPC64)
     tcg_gen_movi_tl(cpu_gpr[rD(ctx->opcode)], (imm << 32) | imm);
@@ -7752,10 +7751,10 @@ static inline void gen_evfsabs(DisasContext *ctx)
         return;
     }
 #if defined(TARGET_PPC64)
-    tcg_gen_andi_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], ~0x8000000080000000LL);
+    tcg_gen_andi_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], ~0x8000000080000000LL);
 #else
-    tcg_gen_andi_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], ~0x80000000);
-    tcg_gen_andi_tl(cpu_gprh[rA(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], ~0x80000000);
+    tcg_gen_andi_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], ~0x80000000);
+    tcg_gen_andi_tl(cpu_gprh[rD(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], ~0x80000000);
 #endif
 }
 static inline void gen_evfsnabs(DisasContext *ctx)
@@ -7765,10 +7764,10 @@ static inline void gen_evfsnabs(DisasContext *ctx)
         return;
     }
 #if defined(TARGET_PPC64)
-    tcg_gen_ori_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x8000000080000000LL);
+    tcg_gen_ori_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x8000000080000000LL);
 #else
-    tcg_gen_ori_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x80000000);
-    tcg_gen_ori_tl(cpu_gprh[rA(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], 0x80000000);
+    tcg_gen_ori_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x80000000);
+    tcg_gen_ori_tl(cpu_gprh[rD(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], 0x80000000);
 #endif
 }
 static inline void gen_evfsneg(DisasContext *ctx)
@@ -7778,10 +7777,10 @@ static inline void gen_evfsneg(DisasContext *ctx)
         return;
     }
 #if defined(TARGET_PPC64)
-    tcg_gen_xori_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x8000000080000000LL);
+    tcg_gen_xori_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x8000000080000000LL);
 #else
-    tcg_gen_xori_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x80000000);
-    tcg_gen_xori_tl(cpu_gprh[rA(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], 0x80000000);
+    tcg_gen_xori_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x80000000);
+    tcg_gen_xori_tl(cpu_gprh[rD(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], 0x80000000);
 #endif
 }
 
@@ -7833,7 +7832,7 @@ static inline void gen_efsabs(DisasContext *ctx)
         gen_exception(ctx, POWERPC_EXCP_APU);
         return;
     }
-    tcg_gen_andi_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], (target_long)~0x80000000LL);
+    tcg_gen_andi_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], (target_long)~0x80000000LL);
 }
 static inline void gen_efsnabs(DisasContext *ctx)
 {
@@ -7841,7 +7840,7 @@ static inline void gen_efsnabs(DisasContext *ctx)
         gen_exception(ctx, POWERPC_EXCP_APU);
         return;
     }
-    tcg_gen_ori_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x80000000);
+    tcg_gen_ori_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x80000000);
 }
 static inline void gen_efsneg(DisasContext *ctx)
 {
@@ -7849,7 +7848,7 @@ static inline void gen_efsneg(DisasContext *ctx)
         gen_exception(ctx, POWERPC_EXCP_APU);
         return;
     }
-    tcg_gen_xori_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x80000000);
+    tcg_gen_xori_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x80000000);
 }
 
 /* Conversion */
@@ -7902,9 +7901,10 @@ static inline void gen_efdabs(DisasContext *ctx)
         return;
     }
 #if defined(TARGET_PPC64)
-    tcg_gen_andi_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], ~0x8000000000000000LL);
+    tcg_gen_andi_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], ~0x8000000000000000LL);
 #else
-    tcg_gen_andi_tl(cpu_gprh[rA(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], ~0x80000000);
+    tcg_gen_mov_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)]);
+    tcg_gen_andi_tl(cpu_gprh[rD(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], ~0x80000000);
 #endif
 }
 static inline void gen_efdnabs(DisasContext *ctx)
@@ -7914,9 +7914,10 @@ static inline void gen_efdnabs(DisasContext *ctx)
         return;
     }
 #if defined(TARGET_PPC64)
-    tcg_gen_ori_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x8000000000000000LL);
+    tcg_gen_ori_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x8000000000000000LL);
 #else
-    tcg_gen_ori_tl(cpu_gprh[rA(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], 0x80000000);
+    tcg_gen_mov_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)]);
+    tcg_gen_ori_tl(cpu_gprh[rD(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], 0x80000000);
 #endif
 }
 static inline void gen_efdneg(DisasContext *ctx)
@@ -7926,9 +7927,10 @@ static inline void gen_efdneg(DisasContext *ctx)
         return;
     }
 #if defined(TARGET_PPC64)
-    tcg_gen_xori_tl(cpu_gpr[rA(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x8000000000000000LL);
+    tcg_gen_xori_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)], 0x8000000000000000LL);
 #else
-    tcg_gen_xori_tl(cpu_gprh[rA(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], 0x80000000);
+    tcg_gen_mov_tl(cpu_gpr[rD(ctx->opcode)], cpu_gpr[rA(ctx->opcode)]);
+    tcg_gen_xori_tl(cpu_gprh[rD(ctx->opcode)], cpu_gprh[rA(ctx->opcode)], 0x80000000);
 #endif
 }
 
@@ -8049,10 +8051,10 @@ GEN_HANDLER(stswi, 0x1F, 0x15, 0x16, 0x00000001, PPC_STRING),
 GEN_HANDLER(stswx, 0x1F, 0x15, 0x14, 0x00000001, PPC_STRING),
 GEN_HANDLER(eieio, 0x1F, 0x16, 0x1A, 0x03FFF801, PPC_MEM_EIEIO),
 GEN_HANDLER(isync, 0x13, 0x16, 0x04, 0x03FFF801, PPC_MEM),
-GEN_HANDLER(lwarx, 0x1F, 0x14, 0x00, 0x00000001, PPC_RES),
+GEN_HANDLER(lwarx, 0x1F, 0x14, 0x00, 0x00000000, PPC_RES),
 GEN_HANDLER2(stwcx_, "stwcx.", 0x1F, 0x16, 0x04, 0x00000000, PPC_RES),
 #if defined(TARGET_PPC64)
-GEN_HANDLER(ldarx, 0x1F, 0x14, 0x02, 0x00000001, PPC_64B),
+GEN_HANDLER(ldarx, 0x1F, 0x14, 0x02, 0x00000000, PPC_64B),
 GEN_HANDLER2(stdcx_, "stdcx.", 0x1F, 0x16, 0x06, 0x00000000, PPC_64B),
 #endif
 GEN_HANDLER(sync, 0x1F, 0x16, 0x12, 0x039FF801, PPC_MEM_SYNC),
@@ -8698,6 +8700,7 @@ GEN_VXFORM_NOA(vupkhpx, 7, 13),
 GEN_VXFORM_NOA(vupklpx, 7, 15),
 GEN_VXFORM_NOA(vrefp, 5, 4),
 GEN_VXFORM_NOA(vrsqrtefp, 5, 5),
+GEN_VXFORM_NOA(vexptefp, 5, 6),
 GEN_VXFORM_NOA(vlogefp, 5, 7),
 GEN_VXFORM_NOA(vrfim, 5, 8),
 GEN_VXFORM_NOA(vrfin, 5, 9),
@@ -8830,8 +8833,7 @@ GEN_SPEOP_LDST(evstwwo, 0x1E, 2),
 
 /*****************************************************************************/
 /* Misc PowerPC helpers */
-void cpu_dump_state (CPUState *env, FILE *f,
-                     int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
+void cpu_dump_state (CPUState *env, FILE *f, fprintf_function cpu_fprintf,
                      int flags)
 {
 #define RGPL  4
@@ -8840,15 +8842,15 @@ void cpu_dump_state (CPUState *env, FILE *f,
     int i;
 
     cpu_fprintf(f, "NIP " TARGET_FMT_lx "   LR " TARGET_FMT_lx " CTR "
-                TARGET_FMT_lx " XER %08x\n", env->nip, env->lr, env->ctr,
-                env->xer);
+                TARGET_FMT_lx " XER " TARGET_FMT_lx "\n",
+                env->nip, env->lr, env->ctr, env->xer);
     cpu_fprintf(f, "MSR " TARGET_FMT_lx " HID0 " TARGET_FMT_lx "  HF "
                 TARGET_FMT_lx " idx %d\n", env->msr, env->spr[SPR_HID0],
                 env->hflags, env->mmu_idx);
 #if !defined(NO_TIMER_DUMP)
-    cpu_fprintf(f, "TB %08x %08x "
+    cpu_fprintf(f, "TB %08" PRIu32 " %08" PRIu64
 #if !defined(CONFIG_USER_ONLY)
-                "DECR %08x"
+                " DECR %08" PRIu32
 #endif
                 "\n",
                 cpu_ppc_load_tbu(env), cpu_ppc_load_tbl(env)
@@ -8898,8 +8900,7 @@ void cpu_dump_state (CPUState *env, FILE *f,
 #undef RFPL
 }
 
-void cpu_dump_statistics (CPUState *env, FILE*f,
-                          int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
+void cpu_dump_statistics (CPUState *env, FILE*f, fprintf_function cpu_fprintf,
                           int flags)
 {
 #if defined(DO_PPC_STATISTICS)
@@ -8920,7 +8921,7 @@ void cpu_dump_statistics (CPUState *env, FILE*f,
                         if (handler->count == 0)
                             continue;
                         cpu_fprintf(f, "%02x %02x %02x (%02x %04d) %16s: "
-                                    "%016llx %lld\n",
+                                    "%016" PRIx64 " %" PRId64 "\n",
                                     op1, op2, op3, op1, (op3 << 5) | op2,
                                     handler->oname,
                                     handler->count, handler->count);
@@ -8929,7 +8930,7 @@ void cpu_dump_statistics (CPUState *env, FILE*f,
                     if (handler->count == 0)
                         continue;
                     cpu_fprintf(f, "%02x %02x    (%02x %04d) %16s: "
-                                "%016llx %lld\n",
+                                "%016" PRIx64 " %" PRId64 "\n",
                                 op1, op2, op1, op2, handler->oname,
                                 handler->count, handler->count);
                 }
@@ -8937,7 +8938,8 @@ void cpu_dump_statistics (CPUState *env, FILE*f,
         } else {
             if (handler->count == 0)
                 continue;
-            cpu_fprintf(f, "%02x       (%02x     ) %16s: %016llx %lld\n",
+            cpu_fprintf(f, "%02x       (%02x     ) %16s: %016" PRIx64
+                        " %" PRId64 "\n",
                         op1, op1, handler->oname,
                         handler->count, handler->count);
         }
@@ -9053,11 +9055,6 @@ static inline void gen_intermediate_code_internal(CPUState *env,
                          "%02x - %02x - %02x (%08x) " TARGET_FMT_lx " %d\n",
                          opc1(ctx.opcode), opc2(ctx.opcode),
                          opc3(ctx.opcode), ctx.opcode, ctx.nip - 4, (int)msr_ir);
-            } else {
-                printf("invalid/unsupported opcode: "
-                       "%02x - %02x - %02x (%08x) " TARGET_FMT_lx " %d\n",
-                       opc1(ctx.opcode), opc2(ctx.opcode),
-                       opc3(ctx.opcode), ctx.opcode, ctx.nip - 4, (int)msr_ir);
             }
         } else {
             if (unlikely((ctx.opcode & handler->inval) != 0)) {
@@ -9067,12 +9064,6 @@ static inline void gen_intermediate_code_internal(CPUState *env,
                              ctx.opcode & handler->inval, opc1(ctx.opcode),
                              opc2(ctx.opcode), opc3(ctx.opcode),
                              ctx.opcode, ctx.nip - 4);
-                } else {
-                    printf("invalid bits: %08x for opcode: "
-                           "%02x - %02x - %02x (%08x) " TARGET_FMT_lx "\n",
-                           ctx.opcode & handler->inval, opc1(ctx.opcode),
-                           opc2(ctx.opcode), opc3(ctx.opcode),
-                           ctx.opcode, ctx.nip - 4);
                 }
                 gen_inval_exception(ctxp, POWERPC_EXCP_INVAL_INVAL);
                 break;
@@ -9122,8 +9113,6 @@ static inline void gen_intermediate_code_internal(CPUState *env,
         tb->icount = num_insns;
     }
 #if defined(DEBUG_DISAS)
-    qemu_log_mask(CPU_LOG_TB_CPU, "---------------- excp: %04x\n", ctx.exception);
-    log_cpu_state_mask(CPU_LOG_TB_CPU, env, 0);
     if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM)) {
         int flags;
         flags = env->bfd_mach;

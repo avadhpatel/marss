@@ -95,6 +95,7 @@ DEF_HELPER_3(fsel, i64, i64, i64, i64)
 
 #define dh_alias_avr ptr
 #define dh_ctype_avr ppc_avr_t *
+#define dh_is_signed_avr dh_is_signed_ptr
 
 DEF_HELPER_3(vaddubm, void, avr, avr, avr)
 DEF_HELPER_3(vadduhm, void, avr, avr, avr)
@@ -245,6 +246,7 @@ DEF_HELPER_2(vrefp, void, avr, avr)
 DEF_HELPER_2(vrsqrtefp, void, avr, avr)
 DEF_HELPER_4(vmaddfp, void, avr, avr, avr, avr)
 DEF_HELPER_4(vnmsubfp, void, avr, avr, avr, avr)
+DEF_HELPER_2(vexptefp, void, avr, avr)
 DEF_HELPER_2(vlogefp, void, avr, avr)
 DEF_HELPER_2(vrfim, void, avr, avr)
 DEF_HELPER_2(vrfin, void, avr, avr)

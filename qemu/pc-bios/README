@@ -7,23 +7,23 @@
 - The PowerPC Open Hack'Ware Open Firmware Compatible BIOS is
   available at http://perso.magic.fr/l_indien/OpenHackWare/index.htm.
 
-- video.x is a PowerMac NDRV compatible driver for a VGA frame
-  buffer. It comes from the Mac-on-Linux project
-  (http://www.maconlinux.org/).
-
 - OpenBIOS (http://www.openbios.org/) is a free (GPL v2) portable
   firmware implementation. The goal is to implement a 100% IEEE
   1275-1994 (referred to as Open Firmware) compliant firmware.
-  The included images for Sparc32, Sparc64 and PowerPC (for 32 and 64 bit
-  PPC CPUs) are built from OpenBIOS SVN revision 569.
+  The included image for PowerPC (for 32 and 64 bit PPC CPUs), Sparc32
+  and Sparc64 are built from OpenBIOS SVN revision 1018.
 
 - The PXE roms come from Rom-o-Matic gPXE 0.9.9 with BANNER_TIMEOUT=0
 
   e1000 8086:100E
-  pcnet32 1022:2000
+  eepro100 8086:1209 (also used for 8086:1229 and 8086:2449)
   ns8390 1050:0940
+  pcnet32 1022:2000
   rtl8139 10ec:8139
-  eepro100 8086:1209
   virtio 1af4:1000
 
   http://rom-o-matic.net/
+
+- The S390 zipl loader is an addition to the official IBM s390-tools
+  package. That fork is maintained in its own git repository at:
+  git://repo.or.cz/s390-tools.git

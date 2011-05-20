@@ -28,6 +28,8 @@
 #include "nvram.h"
 #include "qemu-log.h"
 #include "loader.h"
+#include "kvm.h"
+#include "kvm_ppc.h"
 
 //#define PPC_DEBUG_IRQ
 //#define PPC_DEBUG_TB
@@ -50,6 +52,8 @@ static void cpu_ppc_tb_start (CPUState *env);
 
 static void ppc_set_irq (CPUState *env, int n_IRQ, int level)
 {
+    unsigned int old_pending = env->pending_interrupts;
+
     if (level) {
         env->pending_interrupts |= 1 << n_IRQ;
         cpu_interrupt(env, CPU_INTERRUPT_HARD);
@@ -58,6 +62,13 @@ static void ppc_set_irq (CPUState *env, int n_IRQ, int level)
         if (env->pending_interrupts == 0)
             cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
     }
+
+    if (old_pending != env->pending_interrupts) {
+#ifdef CONFIG_KVM
+        kvmppc_set_interrupt(env, n_IRQ, level);
+#endif
+    }
+
     LOG_IRQ("%s: %p n_IRQ %d level %d => pending %08" PRIx32
                 "req %08x\n", __func__, env, n_IRQ, level,
                 env->pending_interrupts, env->interrupt_request);
@@ -401,7 +412,7 @@ static inline uint64_t cpu_ppc_get_tb(ppc_tb_t *tb_env, uint64_t vmclk,
     return muldiv64(vmclk, tb_env->tb_freq, get_ticks_per_sec()) + tb_offset;
 }
 
-uint32_t cpu_ppc_load_tbl (CPUState *env)
+uint64_t cpu_ppc_load_tbl (CPUState *env)
 {
     ppc_tb_t *tb_env = env->tb_env;
     uint64_t tb;
@@ -409,7 +420,7 @@ uint32_t cpu_ppc_load_tbl (CPUState *env)
     tb = cpu_ppc_get_tb(tb_env, qemu_get_clock(vm_clock), tb_env->tb_offset);
     LOG_TB("%s: tb %016" PRIx64 "\n", __func__, tb);
 
-    return tb & 0xFFFFFFFF;
+    return tb;
 }
 
 static inline uint32_t _cpu_ppc_load_tbu(CPUState *env)
@@ -463,7 +474,7 @@ void cpu_ppc_store_tbu (CPUState *env, uint32_t value)
     _cpu_ppc_store_tbu(env, value);
 }
 
-uint32_t cpu_ppc_load_atbl (CPUState *env)
+uint64_t cpu_ppc_load_atbl (CPUState *env)
 {
     ppc_tb_t *tb_env = env->tb_env;
     uint64_t tb;
@@ -471,7 +482,7 @@ uint32_t cpu_ppc_load_atbl (CPUState *env)
     tb = cpu_ppc_get_tb(tb_env, qemu_get_clock(vm_clock), tb_env->atb_offset);
     LOG_TB("%s: tb %016" PRIx64 "\n", __func__, tb);
 
-    return tb & 0xFFFFFFFF;
+    return tb;
 }
 
 uint32_t cpu_ppc_load_atbu (CPUState *env)
@@ -758,6 +769,9 @@ struct ppcemb_timer_t {
     struct QEMUTimer *fit_timer;
     uint64_t wdt_next;    /* Tick for next WDT interrupt  */
     struct QEMUTimer *wdt_timer;
+
+    /* 405 have the PIT, 440 have a DECR.  */
+    unsigned int decr_excp;
 };
 
 /* Fixed interval timer */
@@ -840,7 +854,7 @@ static void cpu_4xx_pit_cb (void *opaque)
     ppcemb_timer = tb_env->opaque;
     env->spr[SPR_40x_TSR] |= 1 << 27;
     if ((env->spr[SPR_40x_TCR] >> 26) & 0x1)
-        ppc_set_irq(env, PPC_INTERRUPT_PIT, 1);
+        ppc_set_irq(env, ppcemb_timer->decr_excp, 1);
     start_stop_pit(env, tb_env, 1);
     LOG_TB("%s: ar %d ir %d TCR " TARGET_FMT_lx " TSR " TARGET_FMT_lx " "
            "%016" PRIx64 "\n", __func__,
@@ -937,10 +951,15 @@ target_ulong load_40x_pit (CPUState *env)
 
 void store_booke_tsr (CPUState *env, target_ulong val)
 {
+    ppc_tb_t *tb_env = env->tb_env;
+    ppcemb_timer_t *ppcemb_timer;
+
+    ppcemb_timer = tb_env->opaque;
+
     LOG_TB("%s: val " TARGET_FMT_lx "\n", __func__, val);
     env->spr[SPR_40x_TSR] &= ~(val & 0xFC000000);
     if (val & 0x80000000)
-        ppc_set_irq(env, PPC_INTERRUPT_PIT, 0);
+        ppc_set_irq(env, ppcemb_timer->decr_excp, 0);
 }
 
 void store_booke_tcr (CPUState *env, target_ulong val)
@@ -966,7 +985,8 @@ static void ppc_emb_set_tb_clk (void *opaque, uint32_t freq)
     /* XXX: we should also update all timers */
 }
 
-clk_setup_cb ppc_emb_timers_init (CPUState *env, uint32_t freq)
+clk_setup_cb ppc_emb_timers_init (CPUState *env, uint32_t freq,
+                                  unsigned int decr_excp)
 {
     ppc_tb_t *tb_env;
     ppcemb_timer_t *ppcemb_timer;
@@ -985,6 +1005,7 @@ clk_setup_cb ppc_emb_timers_init (CPUState *env, uint32_t freq)
             qemu_new_timer(vm_clock, &cpu_4xx_fit_cb, env);
         ppcemb_timer->wdt_timer =
             qemu_new_timer(vm_clock, &cpu_4xx_wdt_cb, env);
+        ppcemb_timer->decr_excp = decr_excp;
     }
 
     return &ppc_emb_set_tb_clk;
@@ -1009,7 +1030,7 @@ struct ppc_dcr_t {
     int (*write_error)(int dcrn);
 };
 
-int ppc_dcr_read (ppc_dcr_t *dcr_env, int dcrn, target_ulong *valp)
+int ppc_dcr_read (ppc_dcr_t *dcr_env, int dcrn, uint32_t *valp)
 {
     ppc_dcrn_t *dcr;
 
@@ -1029,7 +1050,7 @@ int ppc_dcr_read (ppc_dcr_t *dcr_env, int dcrn, target_ulong *valp)
     return -1;
 }
 
-int ppc_dcr_write (ppc_dcr_t *dcr_env, int dcrn, target_ulong val)
+int ppc_dcr_write (ppc_dcr_t *dcr_env, int dcrn, uint32_t val)
 {
     ppc_dcrn_t *dcr;
 
@@ -1084,16 +1105,6 @@ int ppc_dcr_init (CPUState *env, int (*read_error)(int dcrn),
 
     return 0;
 }
-
-#if 0
-/*****************************************************************************/
-/* Handle system reset (for now, just stop emulation) */
-void cpu_reset(CPUState *env)
-{
-    printf("Reset asked... Stop emulation\n");
-    abort();
-}
-#endif
 
 /*****************************************************************************/
 /* Debug port */

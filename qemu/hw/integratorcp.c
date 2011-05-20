@@ -253,10 +253,11 @@ static int integratorcm_init(SysBusDevice *dev)
     }
     memcpy(integrator_spd + 73, "QEMU-MEMORY", 11);
     s->cm_init = 0x00000112;
-    s->flash_offset = qemu_ram_alloc(0x100000);
+    s->flash_offset = qemu_ram_alloc(NULL, "integrator.flash", 0x100000);
 
     iomemtype = cpu_register_io_memory(integratorcm_readfn,
-                                       integratorcm_writefn, s);
+                                       integratorcm_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x00800000, iomemtype);
     integratorcm_do_remap(s, 1);
     /* ??? Save/restore.  */
@@ -382,7 +383,8 @@ static int icp_pic_init(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->parent_irq);
     sysbus_init_irq(dev, &s->parent_fiq);
     iomemtype = cpu_register_io_memory(icp_pic_readfn,
-                                       icp_pic_writefn, s);
+                                       icp_pic_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x00800000, iomemtype);
     return 0;
 }
@@ -435,7 +437,8 @@ static void icp_control_init(uint32_t base)
     int iomemtype;
 
     iomemtype = cpu_register_io_memory(icp_control_readfn,
-                                       icp_control_writefn, NULL);
+                                       icp_control_writefn, NULL,
+                                       DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x00800000, iomemtype);
     /* ??? Save/restore.  */
 }
@@ -467,7 +470,7 @@ static void integratorcp_init(ram_addr_t ram_size,
         fprintf(stderr, "Unable to find CPU definition\n");
         exit(1);
     }
-    ram_offset = qemu_ram_alloc(ram_size);
+    ram_offset = qemu_ram_alloc(NULL, "integrator.ram", ram_size);
     /* ??? On a real system the first 1Mb is mapped as SSRAM or boot flash.  */
     /* ??? RAM should repeat to fill physical memory space.  */
     /* SDRAM at address zero*/

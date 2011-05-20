@@ -6,13 +6,38 @@
 
 static void usb_bus_dev_print(Monitor *mon, DeviceState *qdev, int indent);
 
+static char *usb_get_dev_path(DeviceState *dev);
+static char *usb_get_fw_dev_path(DeviceState *qdev);
+
 static struct BusInfo usb_bus_info = {
     .name      = "USB",
     .size      = sizeof(USBBus),
     .print_dev = usb_bus_dev_print,
+    .get_dev_path = usb_get_dev_path,
+    .get_fw_dev_path = usb_get_fw_dev_path,
+    .props      = (Property[]) {
+        DEFINE_PROP_STRING("port", USBDevice, port_path),
+        DEFINE_PROP_END_OF_LIST()
+    },
 };
 static int next_usb_bus = 0;
 static QTAILQ_HEAD(, USBBus) busses = QTAILQ_HEAD_INITIALIZER(busses);
+
+const VMStateDescription vmstate_usb_device = {
+    .name = "USBDevice",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (VMStateField []) {
+        VMSTATE_UINT8(addr, USBDevice),
+        VMSTATE_INT32(state, USBDevice),
+        VMSTATE_INT32(remote_wakeup, USBDevice),
+        VMSTATE_INT32(setup_state, USBDevice),
+        VMSTATE_INT32(setup_len, USBDevice),
+        VMSTATE_INT32(setup_index, USBDevice),
+        VMSTATE_UINT8_ARRAY(setup_buf, USBDevice, 8),
+        VMSTATE_END_OF_LIST(),
+    }
+};
 
 void usb_bus_new(USBBus *bus, DeviceState *host)
 {
@@ -46,6 +71,7 @@ static int usb_qdev_init(DeviceState *qdev, DeviceInfo *base)
     pstrcpy(dev->product_desc, sizeof(dev->product_desc), info->product_desc);
     dev->info = info;
     dev->auto_attach = 1;
+    QLIST_INIT(&dev->strings);
     rc = dev->info->init(dev);
     if (rc == 0 && dev->auto_attach)
         usb_device_attach(dev);
@@ -102,18 +128,34 @@ USBDevice *usb_create(USBBus *bus, const char *name)
 USBDevice *usb_create_simple(USBBus *bus, const char *name)
 {
     USBDevice *dev = usb_create(bus, name);
+    if (!dev) {
+        hw_error("Failed to create USB device '%s'\n", name);
+    }
     qdev_init_nofail(&dev->qdev);
     return dev;
 }
 
 void usb_register_port(USBBus *bus, USBPort *port, void *opaque, int index,
-                       usb_attachfn attach)
+                       USBPortOps *ops, int speedmask)
 {
     port->opaque = opaque;
     port->index = index;
-    port->attach = attach;
+    port->opaque = opaque;
+    port->index = index;
+    port->ops = ops;
+    port->speedmask = speedmask;
     QTAILQ_INSERT_TAIL(&bus->free, port, next);
     bus->nfree++;
+}
+
+void usb_port_location(USBPort *downstream, USBPort *upstream, int portnr)
+{
+    if (upstream) {
+        snprintf(downstream->path, sizeof(downstream->path), "%s.%d",
+                 upstream->path, portnr);
+    } else {
+        snprintf(downstream->path, sizeof(downstream->path), "%d", portnr);
+    }
 }
 
 void usb_unregister_port(USBBus *bus, USBPort *port)
@@ -134,9 +176,22 @@ static void do_attach(USBDevice *dev)
                 dev->product_desc);
         return;
     }
-    dev->attached++;
+    if (dev->port_path) {
+        QTAILQ_FOREACH(port, &bus->free, next) {
+            if (strcmp(port->path, dev->port_path) == 0) {
+                break;
+            }
+        }
+        if (port == NULL) {
+            fprintf(stderr, "Warning: usb port %s (bus %s) not found\n",
+                    dev->port_path, bus->qbus.name);
+            return;
+        }
+    } else {
+        port = QTAILQ_FIRST(&bus->free);
+    }
 
-    port = QTAILQ_FIRST(&bus->free);
+    dev->attached++;
     QTAILQ_REMOVE(&bus->free, port, next);
     bus->nfree--;
 
@@ -149,11 +204,11 @@ static void do_attach(USBDevice *dev)
 int usb_device_attach(USBDevice *dev)
 {
     USBBus *bus = usb_bus_from_device(dev);
-    USBDevice *hub;
 
-    if (bus->nfree == 1) {
-        /* Create a new hub and chain it on.  */
-        hub = usb_create_simple(bus, "usb-hub");
+    if (bus->nfree == 1 && dev->port_path == NULL) {
+        /* Create a new hub and chain it on
+           (unless a physical port location is specified). */
+        usb_create_simple(bus, "usb-hub");
     }
     do_attach(dev);
     return 0;
@@ -226,10 +281,43 @@ static void usb_bus_dev_print(Monitor *mon, DeviceState *qdev, int indent)
     USBDevice *dev = DO_UPCAST(USBDevice, qdev, qdev);
     USBBus *bus = usb_bus_from_device(dev);
 
-    monitor_printf(mon, "%*saddr %d.%d, speed %s, name %s%s\n",
+    monitor_printf(mon, "%*saddr %d.%d, port %s, speed %s, name %s%s\n",
                    indent, "", bus->busnr, dev->addr,
+                   dev->port ? dev->port->path : "-",
                    usb_speed(dev->speed), dev->product_desc,
                    dev->attached ? ", attached" : "");
+}
+
+static char *usb_get_dev_path(DeviceState *qdev)
+{
+    USBDevice *dev = DO_UPCAST(USBDevice, qdev, qdev);
+    return qemu_strdup(dev->port->path);
+}
+
+static char *usb_get_fw_dev_path(DeviceState *qdev)
+{
+    USBDevice *dev = DO_UPCAST(USBDevice, qdev, qdev);
+    char *fw_path, *in;
+    ssize_t pos = 0, fw_len;
+    long nr;
+
+    fw_len = 32 + strlen(dev->port->path) * 6;
+    fw_path = qemu_malloc(fw_len);
+    in = dev->port->path;
+    while (fw_len - pos > 0) {
+        nr = strtol(in, &in, 10);
+        if (in[0] == '.') {
+            /* some hub between root port and device */
+            pos += snprintf(fw_path + pos, fw_len - pos, "hub@%ld/", nr);
+            in++;
+        } else {
+            /* the device itself */
+            pos += snprintf(fw_path + pos, fw_len - pos, "%s@%ld",
+                            qdev_fw_name(qdev), nr);
+            break;
+        }
+    }
+    return fw_path;
 }
 
 void usb_info(Monitor *mon)
@@ -248,8 +336,8 @@ void usb_info(Monitor *mon)
             dev = port->dev;
             if (!dev)
                 continue;
-            monitor_printf(mon, "  Device %d.%d, Speed %s Mb/s, Product %s\n",
-                           bus->busnr, dev->addr, usb_speed(dev->speed),
+            monitor_printf(mon, "  Device %d.%d, Port %s, Speed %s Mb/s, Product %s\n",
+                           bus->busnr, dev->addr, port->path, usb_speed(dev->speed),
                            dev->product_desc);
         }
     }
@@ -261,7 +349,8 @@ USBDevice *usbdevice_create(const char *cmdline)
     USBBus *bus = usb_bus_find(-1 /* any */);
     DeviceInfo *info;
     USBDeviceInfo *usb;
-    char driver[32], *params;
+    char driver[32];
+    const char *params;
     int len;
 
     params = strchr(cmdline,':');
@@ -272,6 +361,7 @@ USBDevice *usbdevice_create(const char *cmdline)
             len = sizeof(driver);
         pstrcpy(driver, len, cmdline);
     } else {
+        params = "";
         pstrcpy(driver, sizeof(driver), cmdline);
     }
 
@@ -288,14 +378,14 @@ USBDevice *usbdevice_create(const char *cmdline)
     if (info == NULL) {
 #if 0
         /* no error because some drivers are not converted (yet) */
-        qemu_error("usbdevice %s not found\n", driver);
+        error_report("usbdevice %s not found", driver);
 #endif
         return NULL;
     }
 
     if (!usb->usbdevice_init) {
-        if (params) {
-            qemu_error("usbdevice %s accepts no params\n", driver);
+        if (*params) {
+            error_report("usbdevice %s accepts no params", driver);
             return NULL;
         }
         return usb_create_simple(bus, usb->qdev.name);

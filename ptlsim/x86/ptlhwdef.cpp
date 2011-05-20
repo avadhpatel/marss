@@ -288,6 +288,12 @@ bool Context::check_events() const {
 	return false;
 }
 
+bool Context::is_int_pending() const {
+    if(eflags & IF_MASK)
+        return (interrupt_request > 0);
+    return false;
+}
+
 bool Context::event_upcall() {
 	// In QEMU based ptlsim, in our main execution loop we will
 	// check if any of the CPU has any interrupt or exception pending

@@ -67,16 +67,18 @@ static int isa_ide_initfn(ISADevice *dev)
 {
     ISAIDEState *s = DO_UPCAST(ISAIDEState, dev, dev);
 
-    ide_bus_new(&s->bus, &s->dev.qdev);
+    ide_bus_new(&s->bus, &s->dev.qdev, 0);
     ide_init_ioport(&s->bus, s->iobase, s->iobase2);
     isa_init_irq(dev, &s->irq, s->isairq);
-    ide_init2(&s->bus, NULL, NULL, s->irq);
-    vmstate_register(0, &vmstate_ide_isa, s);
+    isa_init_ioport_range(dev, s->iobase, 8);
+    isa_init_ioport(dev, s->iobase2);
+    ide_init2(&s->bus, s->irq);
+    vmstate_register(&dev->qdev, 0, &vmstate_ide_isa, s);
     return 0;
 };
 
-int isa_ide_init(int iobase, int iobase2, int isairq,
-                 DriveInfo *hd0, DriveInfo *hd1)
+ISADevice *isa_ide_init(int iobase, int iobase2, int isairq,
+                        DriveInfo *hd0, DriveInfo *hd1)
 {
     ISADevice *dev;
     ISAIDEState *s;
@@ -86,18 +88,19 @@ int isa_ide_init(int iobase, int iobase2, int isairq,
     qdev_prop_set_uint32(&dev->qdev, "iobase2", iobase2);
     qdev_prop_set_uint32(&dev->qdev, "irq",     isairq);
     if (qdev_init(&dev->qdev) < 0)
-        return -1;
+        return NULL;
 
     s = DO_UPCAST(ISAIDEState, dev, dev);
     if (hd0)
         ide_create_drive(&s->bus, 0, hd0);
     if (hd1)
         ide_create_drive(&s->bus, 1, hd1);
-    return 0;
+    return dev;
 }
 
 static ISADeviceInfo isa_ide_info = {
     .qdev.name  = "isa-ide",
+    .qdev.fw_name  = "ide",
     .qdev.size  = sizeof(ISAIDEState),
     .init       = isa_ide_initfn,
     .qdev.reset = isa_ide_reset,

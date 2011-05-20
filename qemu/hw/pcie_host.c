@@ -16,8 +16,7 @@
  * GNU General Public License for more details.
 
  * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "hw.h"
@@ -138,7 +137,8 @@ int pcie_host_init(PCIExpressHost *e)
 {
     e->base_addr = PCIE_BASE_ADDR_UNMAPPED;
     e->mmio_index =
-        cpu_register_io_memory(pcie_mmcfg_read, pcie_mmcfg_write, e);
+        cpu_register_io_memory(pcie_mmcfg_read, pcie_mmcfg_write, e,
+                               DEVICE_NATIVE_ENDIAN);
     if (e->mmio_index < 0) {
         return -1;
     }

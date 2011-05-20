@@ -14,8 +14,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA  02110-1301 USA
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "cpu.h"
@@ -24,8 +23,7 @@
 #include "tcg-op.h"
 #include "qemu-log.h"
 
-void cpu_dump_state(CPUState *env, FILE *f,
-                    int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
+void cpu_dump_state(CPUState *env, FILE *f, fprintf_function cpu_fprintf,
                     int flags)
 {
     int i;
@@ -38,7 +36,7 @@ void cpu_dump_state(CPUState *env, FILE *f,
         }
     }
     for (i = 0; i < 16; i++) {
-        cpu_fprintf(f, "F%02d=%016lx", i, env->fregs[i]);
+        cpu_fprintf(f, "F%02d=%016lx", i, (long)env->fregs[i].i);
         if ((i % 4) == 3) {
             cpu_fprintf(f, "\n");
         } else {

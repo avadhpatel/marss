@@ -8,6 +8,9 @@
 #include "helpers.h"
 #include "qemu-common.h"
 #include "host-utils.h"
+#if !defined(CONFIG_USER_ONLY)
+#include "hw/loader.h"
+#endif
 
 static uint32_t cortexa9_cp15_c0_c1[8] =
 { 0x1031, 0x11, 0x000, 0, 0x00100103, 0x20000000, 0x01230000, 0x00002111 };
@@ -73,6 +76,7 @@ static void cpu_reset_model_id(CPUARMState *env, uint32_t id)
         memcpy(env->cp15.c0_c1, arm1136_cp15_c0_c1, 8 * sizeof(uint32_t));
         memcpy(env->cp15.c0_c2, arm1136_cp15_c0_c2, 8 * sizeof(uint32_t));
         env->cp15.c0_cachetype = 0x1dd20d2;
+        env->cp15.c1_sys = 0x00050078;
         break;
     case ARM_CPUID_ARM11MPCORE:
         set_feature(env, ARM_FEATURE_V6);
@@ -106,6 +110,7 @@ static void cpu_reset_model_id(CPUARMState *env, uint32_t id)
         env->cp15.c0_ccsid[0] = 0xe007e01a; /* 16k L1 dcache. */
         env->cp15.c0_ccsid[1] = 0x2007e01a; /* 16k L1 icache. */
         env->cp15.c0_ccsid[2] = 0xf0000000; /* No L2 icache. */
+        env->cp15.c1_sys = 0x00c50078;
         break;
     case ARM_CPUID_CORTEXA9:
         set_feature(env, ARM_FEATURE_V6);
@@ -127,6 +132,7 @@ static void cpu_reset_model_id(CPUARMState *env, uint32_t id)
         env->cp15.c0_clid = (1 << 27) | (1 << 24) | 3;
         env->cp15.c0_ccsid[0] = 0xe00fe015; /* 16k L1 dcache. */
         env->cp15.c0_ccsid[1] = 0x200fe015; /* 16k L1 icache. */
+        env->cp15.c1_sys = 0x00c50078;
         break;
     case ARM_CPUID_CORTEXM3:
         set_feature(env, ARM_FEATURE_V6);
@@ -200,18 +206,40 @@ void cpu_reset(CPUARMState *env)
         cpu_reset_model_id(env, id);
 #if defined (CONFIG_USER_ONLY)
     env->uncached_cpsr = ARM_CPU_MODE_USR;
+    /* For user mode we must enable access to coprocessors */
     env->vfp.xregs[ARM_VFP_FPEXC] = 1 << 30;
+    if (arm_feature(env, ARM_FEATURE_IWMMXT)) {
+        env->cp15.c15_cpar = 3;
+    } else if (arm_feature(env, ARM_FEATURE_XSCALE)) {
+        env->cp15.c15_cpar = 1;
+    }
 #else
     /* SVC mode with interrupts disabled.  */
     env->uncached_cpsr = ARM_CPU_MODE_SVC | CPSR_A | CPSR_F | CPSR_I;
     /* On ARMv7-M the CPSR_I is the value of the PRIMASK register, and is
-       clear at reset.  */
-    if (IS_M(env))
+       clear at reset.  Initial SP and PC are loaded from ROM.  */
+    if (IS_M(env)) {
+        uint32_t pc;
+        uint8_t *rom;
         env->uncached_cpsr &= ~CPSR_I;
+        rom = rom_ptr(0);
+        if (rom) {
+            /* We should really use ldl_phys here, in case the guest
+               modified flash and reset itself.  However images
+               loaded via -kenrel have not been copied yet, so load the
+               values directly from there.  */
+            env->regs[13] = ldl_p(rom);
+            pc = ldl_p(rom + 4);
+            env->thumb = pc & 1;
+            env->regs[15] = pc & ~1;
+        }
+    }
     env->vfp.xregs[ARM_VFP_FPEXC] = 0;
     env->cp15.c2_base_mask = 0xffffc000u;
 #endif
-    env->regs[15] = 0;
+    set_flush_to_zero(1, &env->vfp.standard_fp_status);
+    set_flush_inputs_to_zero(1, &env->vfp.standard_fp_status);
+    set_default_nan_mode(1, &env->vfp.standard_fp_status);
     tlb_flush(env, 1);
 }
 
@@ -332,7 +360,7 @@ static const struct arm_cpu_t arm_cpu_names[] = {
     { 0, NULL}
 };
 
-void arm_cpu_list(FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt, ...))
+void arm_cpu_list(FILE *f, fprintf_function cpu_fprintf)
 {
     int i;
 
@@ -483,11 +511,6 @@ int cpu_arm_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
     return 1;
 }
 
-target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong addr)
-{
-    return addr;
-}
-
 /* These should probably raise undefined insn exceptions.  */
 void HELPER(set_cp)(CPUState *env, uint32_t insn, uint32_t val)
 {
@@ -511,7 +534,6 @@ void HELPER(set_cp15)(CPUState *env, uint32_t insn, uint32_t val)
 uint32_t HELPER(get_cp15)(CPUState *env, uint32_t insn)
 {
     cpu_abort(env, "cp15 insn %08x\n", insn);
-    return 0;
 }
 
 /* These should probably raise undefined insn exceptions.  */
@@ -630,7 +652,7 @@ static void do_v7m_exception_exit(CPUARMState *env)
 
     type = env->regs[15];
     if (env->v7m.exception != 0)
-        armv7m_nvic_complete_irq(env->v7m.nvic, env->v7m.exception);
+        armv7m_nvic_complete_irq(env->nvic, env->v7m.exception);
 
     /* Switch to the target stack.  */
     switch_v7m_sp(env, (type & 4) != 0);
@@ -672,15 +694,15 @@ static void do_interrupt_v7m(CPUARMState *env)
        one we're raising.  */
     switch (env->exception_index) {
     case EXCP_UDEF:
-        armv7m_nvic_set_pending(env->v7m.nvic, ARMV7M_EXCP_USAGE);
+        armv7m_nvic_set_pending(env->nvic, ARMV7M_EXCP_USAGE);
         return;
     case EXCP_SWI:
         env->regs[15] += 2;
-        armv7m_nvic_set_pending(env->v7m.nvic, ARMV7M_EXCP_SVC);
+        armv7m_nvic_set_pending(env->nvic, ARMV7M_EXCP_SVC);
         return;
     case EXCP_PREFETCH_ABORT:
     case EXCP_DATA_ABORT:
-        armv7m_nvic_set_pending(env->v7m.nvic, ARMV7M_EXCP_MEM);
+        armv7m_nvic_set_pending(env->nvic, ARMV7M_EXCP_MEM);
         return;
     case EXCP_BKPT:
         if (semihosting_enabled) {
@@ -692,10 +714,10 @@ static void do_interrupt_v7m(CPUARMState *env)
                 return;
             }
         }
-        armv7m_nvic_set_pending(env->v7m.nvic, ARMV7M_EXCP_DEBUG);
+        armv7m_nvic_set_pending(env->nvic, ARMV7M_EXCP_DEBUG);
         return;
     case EXCP_IRQ:
-        env->v7m.exception = armv7m_nvic_acknowledge_irq(env->v7m.nvic);
+        env->v7m.exception = armv7m_nvic_acknowledge_irq(env->nvic);
         break;
     case EXCP_EXCEPTION_EXIT:
         do_v7m_exception_exit(env);
@@ -825,11 +847,10 @@ void do_interrupt(CPUARMState *env)
     env->spsr = cpsr_read(env);
     /* Clear IT bits.  */
     env->condexec_bits = 0;
-    /* Switch to the new mode, and switch to Arm mode.  */
-    /* ??? Thumb interrupt handlers not implemented.  */
+    /* Switch to the new mode, and to the correct instruction set.  */
     env->uncached_cpsr = (env->uncached_cpsr & ~CPSR_M) | new_mode;
     env->uncached_cpsr |= mask;
-    env->thumb = 0;
+    env->thumb = (env->cp15.c1_sys & (1 << 30)) != 0;
     env->regs[14] = env->regs[15] + offset;
     env->regs[15] = addr;
     env->interrupt_request |= CPU_INTERRUPT_EXITTB;
@@ -901,7 +922,8 @@ static uint32_t get_level1_table_address(CPUState *env, uint32_t address)
 }
 
 static int get_phys_addr_v5(CPUState *env, uint32_t address, int access_type,
-			    int is_user, uint32_t *phys_ptr, int *prot)
+			    int is_user, uint32_t *phys_ptr, int *prot,
+                            target_ulong *page_size)
 {
     int code;
     uint32_t table;
@@ -934,6 +956,7 @@ static int get_phys_addr_v5(CPUState *env, uint32_t address, int access_type,
         phys_addr = (desc & 0xfff00000) | (address & 0x000fffff);
         ap = (desc >> 10) & 3;
         code = 13;
+        *page_size = 1024 * 1024;
     } else {
         /* Lookup l2 entry.  */
 	if (type == 1) {
@@ -951,10 +974,12 @@ static int get_phys_addr_v5(CPUState *env, uint32_t address, int access_type,
         case 1: /* 64k page.  */
             phys_addr = (desc & 0xffff0000) | (address & 0xffff);
             ap = (desc >> (4 + ((address >> 13) & 6))) & 3;
+            *page_size = 0x10000;
             break;
         case 2: /* 4k page.  */
             phys_addr = (desc & 0xfffff000) | (address & 0xfff);
             ap = (desc >> (4 + ((address >> 13) & 6))) & 3;
+            *page_size = 0x1000;
             break;
         case 3: /* 1k page.  */
 	    if (type == 1) {
@@ -969,6 +994,7 @@ static int get_phys_addr_v5(CPUState *env, uint32_t address, int access_type,
 		phys_addr = (desc & 0xfffffc00) | (address & 0x3ff);
 	    }
             ap = (desc >> 4) & 3;
+            *page_size = 0x400;
             break;
         default:
             /* Never happens, but compiler isn't smart enough to tell.  */
@@ -981,6 +1007,7 @@ static int get_phys_addr_v5(CPUState *env, uint32_t address, int access_type,
         /* Access permission fault.  */
         goto do_fault;
     }
+    *prot |= PAGE_EXEC;
     *phys_ptr = phys_addr;
     return 0;
 do_fault:
@@ -988,7 +1015,8 @@ do_fault:
 }
 
 static int get_phys_addr_v6(CPUState *env, uint32_t address, int access_type,
-			    int is_user, uint32_t *phys_ptr, int *prot)
+			    int is_user, uint32_t *phys_ptr, int *prot,
+                            target_ulong *page_size)
 {
     int code;
     uint32_t table;
@@ -1028,9 +1056,11 @@ static int get_phys_addr_v6(CPUState *env, uint32_t address, int access_type,
         if (desc & (1 << 18)) {
             /* Supersection.  */
             phys_addr = (desc & 0xff000000) | (address & 0x00ffffff);
+            *page_size = 0x1000000;
         } else {
             /* Section.  */
             phys_addr = (desc & 0xfff00000) | (address & 0x000fffff);
+            *page_size = 0x100000;
         }
         ap = ((desc >> 10) & 3) | ((desc >> 13) & 4);
         xn = desc & (1 << 4);
@@ -1047,10 +1077,12 @@ static int get_phys_addr_v6(CPUState *env, uint32_t address, int access_type,
         case 1: /* 64k page.  */
             phys_addr = (desc & 0xffff0000) | (address & 0xffff);
             xn = desc & (1 << 15);
+            *page_size = 0x10000;
             break;
         case 2: case 3: /* 4k page.  */
             phys_addr = (desc & 0xfffff000) | (address & 0xfff);
             xn = desc & 1;
+            *page_size = 0x1000;
             break;
         default:
             /* Never happens, but compiler isn't smart enough to tell.  */
@@ -1058,19 +1090,26 @@ static int get_phys_addr_v6(CPUState *env, uint32_t address, int access_type,
         }
         code = 15;
     }
-    if (xn && access_type == 2)
-        goto do_fault;
+    if (domain == 3) {
+        *prot = PAGE_READ | PAGE_WRITE | PAGE_EXEC;
+    } else {
+        if (xn && access_type == 2)
+            goto do_fault;
 
-    /* The simplified model uses AP[0] as an access control bit.  */
-    if ((env->cp15.c1_sys & (1 << 29)) && (ap & 1) == 0) {
-        /* Access flag fault.  */
-        code = (code == 15) ? 6 : 3;
-        goto do_fault;
-    }
-    *prot = check_ap(env, ap, domain, access_type, is_user);
-    if (!*prot) {
-        /* Access permission fault.  */
-        goto do_fault;
+        /* The simplified model uses AP[0] as an access control bit.  */
+        if ((env->cp15.c1_sys & (1 << 29)) && (ap & 1) == 0) {
+            /* Access flag fault.  */
+            code = (code == 15) ? 6 : 3;
+            goto do_fault;
+        }
+        *prot = check_ap(env, ap, domain, access_type, is_user);
+        if (!*prot) {
+            /* Access permission fault.  */
+            goto do_fault;
+        }
+        if (!xn) {
+            *prot |= PAGE_EXEC;
+        }
     }
     *phys_ptr = phys_addr;
     return 0;
@@ -1134,12 +1173,14 @@ static int get_phys_addr_mpu(CPUState *env, uint32_t address, int access_type,
 	/* Bad permission.  */
 	return 1;
     }
+    *prot |= PAGE_EXEC;
     return 0;
 }
 
 static inline int get_phys_addr(CPUState *env, uint32_t address,
                                 int access_type, int is_user,
-                                uint32_t *phys_ptr, int *prot)
+                                uint32_t *phys_ptr, int *prot,
+                                target_ulong *page_size)
 {
     /* Fast Context Switch Extension.  */
     if (address < 0x02000000)
@@ -1148,17 +1189,19 @@ static inline int get_phys_addr(CPUState *env, uint32_t address,
     if ((env->cp15.c1_sys & 1) == 0) {
         /* MMU/MPU disabled.  */
         *phys_ptr = address;
-        *prot = PAGE_READ | PAGE_WRITE;
+        *prot = PAGE_READ | PAGE_WRITE | PAGE_EXEC;
+        *page_size = TARGET_PAGE_SIZE;
         return 0;
     } else if (arm_feature(env, ARM_FEATURE_MPU)) {
+        *page_size = TARGET_PAGE_SIZE;
 	return get_phys_addr_mpu(env, address, access_type, is_user, phys_ptr,
 				 prot);
     } else if (env->cp15.c1_sys & (1 << 23)) {
         return get_phys_addr_v6(env, address, access_type, is_user, phys_ptr,
-                                prot);
+                                prot, page_size);
     } else {
         return get_phys_addr_v5(env, address, access_type, is_user, phys_ptr,
-                                prot);
+                                prot, page_size);
     }
 }
 
@@ -1166,17 +1209,19 @@ int cpu_arm_handle_mmu_fault (CPUState *env, target_ulong address,
                               int access_type, int mmu_idx, int is_softmmu)
 {
     uint32_t phys_addr;
+    target_ulong page_size;
     int prot;
     int ret, is_user;
 
     is_user = mmu_idx == MMU_USER_IDX;
-    ret = get_phys_addr(env, address, access_type, is_user, &phys_addr, &prot);
+    ret = get_phys_addr(env, address, access_type, is_user, &phys_addr, &prot,
+                        &page_size);
     if (ret == 0) {
         /* Map a single [sub]page.  */
         phys_addr &= ~(uint32_t)0x3ff;
         address &= ~(uint32_t)0x3ff;
-        return tlb_set_page (env, address, phys_addr, prot, mmu_idx,
-                             is_softmmu);
+        tlb_set_page (env, address, phys_addr, prot, mmu_idx, page_size);
+        return 0;
     }
 
     if (access_type == 2) {
@@ -1196,10 +1241,11 @@ int cpu_arm_handle_mmu_fault (CPUState *env, target_ulong address,
 target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong addr)
 {
     uint32_t phys_addr;
+    target_ulong page_size;
     int prot;
     int ret;
 
-    ret = get_phys_addr(env, addr, 0, 0, &phys_addr, &prot);
+    ret = get_phys_addr(env, addr, 0, 0, &phys_addr, &prot, &page_size);
 
     if (ret != 0)
         return -1;
@@ -1413,18 +1459,7 @@ void HELPER(set_cp15)(CPUState *env, uint32_t insn, uint32_t val)
             tlb_flush(env, 0);
             break;
         case 1: /* Invalidate single TLB entry.  */
-#if 0
-            /* ??? This is wrong for large pages and sections.  */
-            /* As an ugly hack to make linux work we always flush a 4K
-               pages.  */
-            val &= 0xfffff000;
-            tlb_flush_page(env, val);
-            tlb_flush_page(env, val + 0x400);
-            tlb_flush_page(env, val + 0x800);
-            tlb_flush_page(env, val + 0xc00);
-#else
-            tlb_flush(env, 1);
-#endif
+            tlb_flush_page(env, val & TARGET_PAGE_MASK);
             break;
         case 2: /* Invalidate on ASID.  */
             tlb_flush(env, val == 0);
@@ -1490,15 +1525,6 @@ void HELPER(set_cp15)(CPUState *env, uint32_t insn, uint32_t val)
                 && !arm_feature(env, ARM_FEATURE_MPU))
               tlb_flush(env, 0);
             env->cp15.c13_context = val;
-            break;
-        case 2:
-            env->cp15.c13_tls1 = val;
-            break;
-        case 3:
-            env->cp15.c13_tls2 = val;
-            break;
-        case 4:
-            env->cp15.c13_tls3 = val;
             break;
         default:
             goto bad_reg;
@@ -1779,12 +1805,6 @@ uint32_t HELPER(get_cp15)(CPUState *env, uint32_t insn)
             return env->cp15.c13_fcse;
         case 1:
             return env->cp15.c13_context;
-        case 2:
-            return env->cp15.c13_tls1;
-        case 3:
-            return env->cp15.c13_tls2;
-        case 4:
-            return env->cp15.c13_tls3;
         default:
             goto bad_reg;
         }
@@ -1829,12 +1849,20 @@ bad_reg:
 
 void HELPER(set_r13_banked)(CPUState *env, uint32_t mode, uint32_t val)
 {
-    env->banked_r13[bank_number(mode)] = val;
+    if ((env->uncached_cpsr & CPSR_M) == mode) {
+        env->regs[13] = val;
+    } else {
+        env->banked_r13[bank_number(mode)] = val;
+    }
 }
 
 uint32_t HELPER(get_r13_banked)(CPUState *env, uint32_t mode)
 {
-    return env->banked_r13[bank_number(mode)];
+    if ((env->uncached_cpsr & CPSR_M) == mode) {
+        return env->regs[13];
+    } else {
+        return env->banked_r13[bank_number(mode)];
+    }
 }
 
 uint32_t HELPER(v7m_mrs)(CPUState *env, uint32_t reg)
@@ -2043,7 +2071,7 @@ static inline uint16_t add16_usat(uint16_t a, uint16_t b)
 
 static inline uint16_t sub16_usat(uint16_t a, uint16_t b)
 {
-    if (a < b)
+    if (a > b)
         return a - b;
     else
         return 0;
@@ -2060,7 +2088,7 @@ static inline uint8_t add8_usat(uint8_t a, uint8_t b)
 
 static inline uint8_t sub8_usat(uint8_t a, uint8_t b)
 {
-    if (a < b)
+    if (a > b)
         return a - b;
     else
         return 0;
@@ -2225,6 +2253,8 @@ static inline int vfp_exceptbits_from_host(int host_bits)
         target_bits |= 8;
     if (host_bits & float_flag_inexact)
         target_bits |= 0x10;
+    if (host_bits & float_flag_input_denormal)
+        target_bits |= 0x80;
     return target_bits;
 }
 
@@ -2237,8 +2267,14 @@ uint32_t HELPER(vfp_get_fpscr)(CPUState *env)
             | (env->vfp.vec_len << 16)
             | (env->vfp.vec_stride << 20);
     i = get_float_exception_flags(&env->vfp.fp_status);
+    i |= get_float_exception_flags(&env->vfp.standard_fp_status);
     fpscr |= vfp_exceptbits_from_host(i);
     return fpscr;
+}
+
+uint32_t vfp_get_fpscr(CPUState *env)
+{
+    return HELPER(vfp_get_fpscr)(env);
 }
 
 /* Convert vfp exception flags to target form.  */
@@ -2256,6 +2292,8 @@ static inline int vfp_exceptbits_to_host(int target_bits)
         host_bits |= float_flag_underflow;
     if (target_bits & 0x10)
         host_bits |= float_flag_inexact;
+    if (target_bits & 0x80)
+        host_bits |= float_flag_input_denormal;
     return host_bits;
 }
 
@@ -2288,13 +2326,21 @@ void HELPER(vfp_set_fpscr)(CPUState *env, uint32_t val)
         }
         set_float_rounding_mode(i, &env->vfp.fp_status);
     }
-    if (changed & (1 << 24))
+    if (changed & (1 << 24)) {
         set_flush_to_zero((val & (1 << 24)) != 0, &env->vfp.fp_status);
+        set_flush_inputs_to_zero((val & (1 << 24)) != 0, &env->vfp.fp_status);
+    }
     if (changed & (1 << 25))
         set_default_nan_mode((val & (1 << 25)) != 0, &env->vfp.fp_status);
 
-    i = vfp_exceptbits_to_host((val >> 8) & 0x1f);
+    i = vfp_exceptbits_to_host(val);
     set_float_exception_flags(i, &env->vfp.fp_status);
+    set_float_exception_flags(0, &env->vfp.standard_fp_status);
+}
+
+void vfp_set_fpscr(CPUState *env, uint32_t val)
+{
+    HELPER(vfp_set_fpscr)(env, val);
 }
 
 #define VFP_HELPER(name, p) HELPER(glue(glue(vfp_,name),p))
@@ -2443,53 +2489,85 @@ float64 VFP_HELPER(sito, d)(float32 x, CPUState *env)
 /* Float to integer conversion.  */
 float32 VFP_HELPER(toui, s)(float32 x, CPUState *env)
 {
+    if (float32_is_any_nan(x)) {
+        return float32_zero;
+    }
     return vfp_itos(float32_to_uint32(x, &env->vfp.fp_status));
 }
 
 float32 VFP_HELPER(toui, d)(float64 x, CPUState *env)
 {
+    if (float64_is_any_nan(x)) {
+        return float32_zero;
+    }
     return vfp_itos(float64_to_uint32(x, &env->vfp.fp_status));
 }
 
 float32 VFP_HELPER(tosi, s)(float32 x, CPUState *env)
 {
+    if (float32_is_any_nan(x)) {
+        return float32_zero;
+    }
     return vfp_itos(float32_to_int32(x, &env->vfp.fp_status));
 }
 
 float32 VFP_HELPER(tosi, d)(float64 x, CPUState *env)
 {
+    if (float64_is_any_nan(x)) {
+        return float32_zero;
+    }
     return vfp_itos(float64_to_int32(x, &env->vfp.fp_status));
 }
 
 float32 VFP_HELPER(touiz, s)(float32 x, CPUState *env)
 {
+    if (float32_is_any_nan(x)) {
+        return float32_zero;
+    }
     return vfp_itos(float32_to_uint32_round_to_zero(x, &env->vfp.fp_status));
 }
 
 float32 VFP_HELPER(touiz, d)(float64 x, CPUState *env)
 {
+    if (float64_is_any_nan(x)) {
+        return float32_zero;
+    }
     return vfp_itos(float64_to_uint32_round_to_zero(x, &env->vfp.fp_status));
 }
 
 float32 VFP_HELPER(tosiz, s)(float32 x, CPUState *env)
 {
+    if (float32_is_any_nan(x)) {
+        return float32_zero;
+    }
     return vfp_itos(float32_to_int32_round_to_zero(x, &env->vfp.fp_status));
 }
 
 float32 VFP_HELPER(tosiz, d)(float64 x, CPUState *env)
 {
+    if (float64_is_any_nan(x)) {
+        return float32_zero;
+    }
     return vfp_itos(float64_to_int32_round_to_zero(x, &env->vfp.fp_status));
 }
 
 /* floating point conversion */
 float64 VFP_HELPER(fcvtd, s)(float32 x, CPUState *env)
 {
-    return float32_to_float64(x, &env->vfp.fp_status);
+    float64 r = float32_to_float64(x, &env->vfp.fp_status);
+    /* ARM requires that S<->D conversion of any kind of NaN generates
+     * a quiet NaN by forcing the most significant frac bit to 1.
+     */
+    return float64_maybe_silence_nan(r);
 }
 
 float32 VFP_HELPER(fcvts, d)(float64 x, CPUState *env)
 {
-    return float64_to_float32(x, &env->vfp.fp_status);
+    float32 r =  float64_to_float32(x, &env->vfp.fp_status);
+    /* ARM requires that S<->D conversion of any kind of NaN generates
+     * a quiet NaN by forcing the most significant frac bit to 1.
+     */
+    return float32_maybe_silence_nan(r);
 }
 
 /* VFP3 fixed point conversion.  */
@@ -2497,15 +2575,18 @@ float32 VFP_HELPER(fcvts, d)(float64 x, CPUState *env)
 ftype VFP_HELPER(name##to, p)(ftype x, uint32_t shift, CPUState *env) \
 { \
     ftype tmp; \
-    tmp = sign##int32_to_##ftype ((itype)vfp_##p##toi(x), \
+    tmp = sign##int32_to_##ftype ((itype##_t)vfp_##p##toi(x), \
                                   &env->vfp.fp_status); \
     return ftype##_scalbn(tmp, -(int)shift, &env->vfp.fp_status); \
 } \
 ftype VFP_HELPER(to##name, p)(ftype x, uint32_t shift, CPUState *env) \
 { \
     ftype tmp; \
+    if (ftype##_is_any_nan(x)) { \
+        return ftype##_zero; \
+    } \
     tmp = ftype##_scalbn(x, shift, &env->vfp.fp_status); \
-    return vfp_ito##p((itype)ftype##_to_##sign##int32_round_to_zero(tmp, \
+    return vfp_ito##p(ftype##_to_##itype##_round_to_zero(tmp, \
         &env->vfp.fp_status)); \
 }
 
@@ -2543,9 +2624,17 @@ float32 HELPER(recps_f32)(float32 a, float32 b, CPUState *env)
 
 float32 HELPER(rsqrts_f32)(float32 a, float32 b, CPUState *env)
 {
-    float_status *s = &env->vfp.fp_status;
+    float_status *s = &env->vfp.standard_fp_status;
+    float32 two = int32_to_float32(2, s);
     float32 three = int32_to_float32(3, s);
-    return float32_sub(three, float32_mul(a, b, s), s);
+    float32 product;
+    if ((float32_is_infinity(a) && float32_is_zero_or_denormal(b)) ||
+        (float32_is_infinity(b) && float32_is_zero_or_denormal(a))) {
+        product = float32_zero;
+    } else {
+        product = float32_mul(a, b, s);
+    }
+    return float32_div(float32_sub(three, product, s), two, s);
 }
 
 /* NEON helpers.  */

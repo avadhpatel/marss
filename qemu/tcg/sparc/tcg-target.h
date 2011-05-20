@@ -87,26 +87,55 @@ enum {
 #define TCG_TARGET_STACK_ALIGN 8
 #endif
 
+#ifdef __arch64__
+#define TCG_TARGET_EXTEND_ARGS 1
+#endif
+
 /* optional instructions */
-//#define TCG_TARGET_HAS_bswap32_i32
-//#define TCG_TARGET_HAS_bswap64_i64
-//#define TCG_TARGET_HAS_neg_i32
-//#define TCG_TARGET_HAS_neg_i64
+#define TCG_TARGET_HAS_div_i32
+// #define TCG_TARGET_HAS_rot_i32
+// #define TCG_TARGET_HAS_ext8s_i32
+// #define TCG_TARGET_HAS_ext16s_i32
+// #define TCG_TARGET_HAS_ext8u_i32
+// #define TCG_TARGET_HAS_ext16u_i32
+// #define TCG_TARGET_HAS_bswap16_i32
+// #define TCG_TARGET_HAS_bswap32_i32
+#define TCG_TARGET_HAS_neg_i32
+#define TCG_TARGET_HAS_not_i32
+#define TCG_TARGET_HAS_andc_i32
+#define TCG_TARGET_HAS_orc_i32
+// #define TCG_TARGET_HAS_eqv_i32
+// #define TCG_TARGET_HAS_nand_i32
+// #define TCG_TARGET_HAS_nor_i32
 
+#if TCG_TARGET_REG_BITS == 64
+#define TCG_TARGET_HAS_div_i64
+// #define TCG_TARGET_HAS_rot_i64
+// #define TCG_TARGET_HAS_ext8s_i64
+// #define TCG_TARGET_HAS_ext16s_i64
+#define TCG_TARGET_HAS_ext32s_i64
+// #define TCG_TARGET_HAS_ext8u_i64
+// #define TCG_TARGET_HAS_ext16u_i64
+#define TCG_TARGET_HAS_ext32u_i64
+// #define TCG_TARGET_HAS_bswap16_i64
+// #define TCG_TARGET_HAS_bswap32_i64
+// #define TCG_TARGET_HAS_bswap64_i64
+#define TCG_TARGET_HAS_neg_i64
+#define TCG_TARGET_HAS_not_i64
+#define TCG_TARGET_HAS_andc_i64
+#define TCG_TARGET_HAS_orc_i64
+// #define TCG_TARGET_HAS_eqv_i64
+// #define TCG_TARGET_HAS_nand_i64
+// #define TCG_TARGET_HAS_nor_i64
+#endif
 
-/* Note: must be synced with dyngen-exec.h and Makefile.target */
+/* Note: must be synced with dyngen-exec.h */
 #ifdef CONFIG_SOLARIS
 #define TCG_AREG0 TCG_REG_G2
-#define TCG_AREG1 TCG_REG_G3
-#define TCG_AREG2 TCG_REG_G4
 #elif defined(__sparc_v9__)
 #define TCG_AREG0 TCG_REG_G5
-#define TCG_AREG1 TCG_REG_G6
-#define TCG_AREG2 TCG_REG_G7
 #else
 #define TCG_AREG0 TCG_REG_G6
-#define TCG_AREG1 TCG_REG_G1
-#define TCG_AREG2 TCG_REG_G2
 #endif
 
 static inline void flush_icache_range(unsigned long start, unsigned long stop)

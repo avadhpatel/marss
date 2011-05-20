@@ -105,7 +105,7 @@ int sh_intc_get_pending_vector(struct intc_desc *desc, int imask)
 	}
     }
 
-    assert(0);
+    abort();
 }
 
 #define INTC_MODE_NONE       0
@@ -181,7 +181,7 @@ static void sh_intc_locate(struct intc_desc *desc,
 	}
     }
 
-    assert(0);
+    abort();
 }
 
 static void sh_intc_toggle_mask(struct intc_desc *desc, intc_enum id,
@@ -260,7 +260,7 @@ static void sh_intc_write(void *opaque, target_phys_addr_t offset,
     case INTC_MODE_ENABLE_REG | INTC_MODE_IS_PRIO: break;
     case INTC_MODE_DUAL_SET: value |= *valuep; break;
     case INTC_MODE_DUAL_CLR: value = *valuep & ~value; break;
-    default: assert(0);
+    default: abort();
     }
 
     for (k = 0; k <= first; k++) {
@@ -431,9 +431,8 @@ int sh_intc_init(struct intc_desc *desc,
     desc->nr_prio_regs = nr_prio_regs;
 
     i = sizeof(struct intc_source) * nr_sources;
-    desc->sources = qemu_malloc(i);
+    desc->sources = qemu_mallocz(i);
 
-    memset(desc->sources, 0, i);
     for (i = 0; i < desc->nr_sources; i++) {
         struct intc_source *source = desc->sources + i;
 
@@ -443,7 +442,8 @@ int sh_intc_init(struct intc_desc *desc,
     desc->irqs = qemu_allocate_irqs(sh_intc_set_irq, desc, nr_sources);
  
     desc->iomemtype = cpu_register_io_memory(sh_intc_readfn,
-					     sh_intc_writefn, desc);
+					     sh_intc_writefn, desc,
+                                             DEVICE_NATIVE_ENDIAN);
     if (desc->mask_regs) {
         for (i = 0; i < desc->nr_mask_regs; i++) {
 	    struct intc_mask_reg *mr = desc->mask_regs + i;

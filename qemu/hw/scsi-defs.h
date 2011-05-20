@@ -12,9 +12,8 @@
    Lesser General Public License for more details.
 
    You should have received a copy of the GNU Lesser General Public
-   License along with the GNU C Library; if not, write to the Free
-   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
-   02111-1307 USA.  */
+   License along with this library; if not, see <http://www.gnu.org/licenses/>.
+*/
 
 /*
  * This header file contains public constants and structures used by
@@ -85,6 +84,9 @@
 #define MODE_SENSE_10         0x5a
 #define PERSISTENT_RESERVE_IN 0x5e
 #define PERSISTENT_RESERVE_OUT 0x5f
+#define WRITE_SAME_16         0x93
+#define MAINTENANCE_IN        0xa3
+#define MAINTENANCE_OUT       0xa4
 #define MOVE_MEDIUM           0xa5
 #define READ_12               0xa8
 #define WRITE_12              0xaa
@@ -110,18 +112,20 @@
 #define BLANK 0xa1
 
 /*
- *  Status codes
+ *  SAM Status codes
  */
 
 #define GOOD                 0x00
-#define CHECK_CONDITION      0x01
-#define CONDITION_GOOD       0x02
-#define BUSY                 0x04
-#define INTERMEDIATE_GOOD    0x08
-#define INTERMEDIATE_C_GOOD  0x0a
-#define RESERVATION_CONFLICT 0x0c
-#define COMMAND_TERMINATED   0x11
-#define QUEUE_FULL           0x14
+#define CHECK_CONDITION      0x02
+#define CONDITION_GOOD       0x04
+#define BUSY                 0x08
+#define INTERMEDIATE_GOOD    0x10
+#define INTERMEDIATE_C_GOOD  0x14
+#define RESERVATION_CONFLICT 0x18
+#define COMMAND_TERMINATED   0x22
+#define TASK_SET_FULL        0x28
+#define ACA_ACTIVE           0x30
+#define TASK_ABORTED         0x40
 
 #define STATUS_MASK          0x3e
 

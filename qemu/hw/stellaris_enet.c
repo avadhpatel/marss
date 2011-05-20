@@ -389,7 +389,7 @@ static void stellaris_enet_cleanup(VLANClientState *nc)
 {
     stellaris_enet_state *s = DO_UPCAST(NICState, nc, nc)->opaque;
 
-    unregister_savevm("stellaris_enet", s);
+    unregister_savevm(&s->busdev.qdev, "stellaris_enet", s);
 
     cpu_unregister_io_memory(s->mmio_index);
 
@@ -409,7 +409,8 @@ static int stellaris_enet_init(SysBusDevice *dev)
     stellaris_enet_state *s = FROM_SYSBUS(stellaris_enet_state, dev);
 
     s->mmio_index = cpu_register_io_memory(stellaris_enet_readfn,
-                                           stellaris_enet_writefn, s);
+                                           stellaris_enet_writefn, s,
+                                           DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, s->mmio_index);
     sysbus_init_irq(dev, &s->irq);
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
@@ -419,7 +420,7 @@ static int stellaris_enet_init(SysBusDevice *dev)
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
     stellaris_enet_reset(s);
-    register_savevm("stellaris_enet", -1, 1,
+    register_savevm(&s->busdev.qdev, "stellaris_enet", -1, 1,
                     stellaris_enet_save, stellaris_enet_load, s);
     return 0;
 }

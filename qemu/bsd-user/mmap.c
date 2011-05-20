@@ -77,16 +77,15 @@ void mmap_unlock(void)
 void *qemu_vmalloc(size_t size)
 {
     void *p;
-    unsigned long addr;
     mmap_lock();
     /* Use map and mark the pages as used.  */
     p = mmap(NULL, size, PROT_READ | PROT_WRITE,
              MAP_PRIVATE | MAP_ANON, -1, 0);
 
-    addr = (unsigned long)p;
-    if (addr == (target_ulong) addr) {
+    if (h2g_valid(p)) {
         /* Allocated region overlaps guest address space.
            This may recurse.  */
+        abi_ulong addr = h2g(p);
         page_set_flags(addr & TARGET_PAGE_MASK, TARGET_PAGE_ALIGN(addr + size),
                        PAGE_RESERVED);
     }
@@ -240,7 +239,7 @@ static int mmap_frag(abi_ulong real_start,
            possible while it is a shared mapping */
         if ((flags & TARGET_BSD_MAP_FLAGMASK) == MAP_SHARED &&
             (prot & PROT_WRITE))
-            return -EINVAL;
+            return -1;
 
         /* adjust protection to be able to read */
         if (!(prot1 & PROT_WRITE))

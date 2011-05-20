@@ -82,9 +82,9 @@ static inline uint64_t cpu_ppc_get_tb (CPUState *env)
     return 0;
 }
 
-uint32_t cpu_ppc_load_tbl (CPUState *env)
+uint64_t cpu_ppc_load_tbl (CPUState *env)
 {
-    return cpu_ppc_get_tb(env) & 0xFFFFFFFF;
+    return cpu_ppc_get_tb(env);
 }
 
 uint32_t cpu_ppc_load_tbu (CPUState *env)
@@ -92,9 +92,9 @@ uint32_t cpu_ppc_load_tbu (CPUState *env)
     return cpu_ppc_get_tb(env) >> 32;
 }
 
-uint32_t cpu_ppc_load_atbl (CPUState *env)
+uint64_t cpu_ppc_load_atbl (CPUState *env)
 {
-    return cpu_ppc_get_tb(env) & 0xFFFFFFFF;
+    return cpu_ppc_get_tb(env);
 }
 
 uint32_t cpu_ppc_load_atbu (CPUState *env)
@@ -113,12 +113,12 @@ uint32_t cpu_ppc601_load_rtcl (CPUState *env)
 }
 
 /* XXX: to be fixed */
-int ppc_dcr_read (ppc_dcr_t *dcr_env, int dcrn, target_ulong *valp)
+int ppc_dcr_read (ppc_dcr_t *dcr_env, int dcrn, uint32_t *valp)
 {
     return -1;
 }
 
-int ppc_dcr_write (ppc_dcr_t *dcr_env, int dcrn, target_ulong val)
+int ppc_dcr_write (ppc_dcr_t *dcr_env, int dcrn, uint32_t val)
 {
     return -1;
 }
@@ -704,7 +704,7 @@ void cpu_loop(CPUX86State *env)
 }
 #endif
 
-void usage(void)
+static void usage(void)
 {
     printf("qemu-" TARGET_ARCH " version " QEMU_VERSION ", Copyright (c) 2003-2004 Fabrice Bellard\n"
            "usage: qemu-" TARGET_ARCH " [-h] [-d opts] [-L path] [-s size] program [arguments...]\n"

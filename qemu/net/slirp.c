@@ -25,6 +25,9 @@
 
 #include "config-host.h"
 
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 #include "net.h"
 #include "monitor.h"
 #include "sysemu.h"
@@ -410,14 +413,14 @@ static int slirp_hostfwd(SlirpState *s, const char *redir_str,
 
     if (slirp_add_hostfwd(s->slirp, is_udp, host_addr, host_port, guest_addr,
                           guest_port) < 0) {
-        qemu_error("could not set up host forwarding rule '%s'\n",
-                   redir_str);
+        error_report("could not set up host forwarding rule '%s'",
+                     redir_str);
         return -1;
     }
     return 0;
 
  fail_syntax:
-    qemu_error("invalid host forwarding rule '%s'\n", redir_str);
+    error_report("invalid host forwarding rule '%s'", redir_str);
     return -1;
 }
 
@@ -464,10 +467,17 @@ int net_slirp_redir(const char *redir_str)
 static void slirp_smb_cleanup(SlirpState *s)
 {
     char cmd[128];
+    int ret;
 
     if (s->smb_dir[0] != '\0') {
         snprintf(cmd, sizeof(cmd), "rm -rf %s", s->smb_dir);
-        system(cmd);
+        ret = system(cmd);
+        if (ret == -1 || !WIFEXITED(ret)) {
+            error_report("'%s' failed.", cmd);
+        } else if (WEXITSTATUS(ret)) {
+            error_report("'%s' failed. Error code: %d",
+                         cmd, WEXITSTATUS(ret));
+        }
         s->smb_dir[0] = '\0';
     }
 }
@@ -483,7 +493,7 @@ static int slirp_smb(SlirpState* s, const char *exported_dir,
     snprintf(s->smb_dir, sizeof(s->smb_dir), "/tmp/qemu-smb.%ld-%d",
              (long)getpid(), instance++);
     if (mkdir(s->smb_dir, 0700) < 0) {
-        qemu_error("could not create samba server dir '%s'\n", s->smb_dir);
+        error_report("could not create samba server dir '%s'", s->smb_dir);
         return -1;
     }
     snprintf(smb_conf, sizeof(smb_conf), "%s/%s", s->smb_dir, "smb.conf");
@@ -491,8 +501,8 @@ static int slirp_smb(SlirpState* s, const char *exported_dir,
     f = fopen(smb_conf, "w");
     if (!f) {
         slirp_smb_cleanup(s);
-        qemu_error("could not create samba server configuration file '%s'\n",
-                   smb_conf);
+        error_report("could not create samba server configuration file '%s'",
+                     smb_conf);
         return -1;
     }
     fprintf(f,
@@ -523,7 +533,7 @@ static int slirp_smb(SlirpState* s, const char *exported_dir,
 
     if (slirp_add_exec(s->slirp, 0, smb_cmdline, &vserver_addr, 139) < 0) {
         slirp_smb_cleanup(s);
-        qemu_error("conflicting/invalid smbserver address\n");
+        error_report("conflicting/invalid smbserver address");
         return -1;
     }
     return 0;
@@ -608,14 +618,14 @@ static int slirp_guestfwd(SlirpState *s, const char *config_str,
     snprintf(buf, sizeof(buf), "guestfwd.tcp:%d", port);
     fwd->hd = qemu_chr_open(buf, p, NULL);
     if (!fwd->hd) {
-        qemu_error("could not open guest forwarding device '%s'\n", buf);
+        error_report("could not open guest forwarding device '%s'", buf);
         qemu_free(fwd);
         return -1;
     }
 
     if (slirp_add_exec(s->slirp, 3, fwd->hd, &server, port) < 0) {
-        qemu_error("conflicting/invalid host:port in guest forwarding "
-                   "rule '%s'\n", config_str);
+        error_report("conflicting/invalid host:port in guest forwarding "
+                     "rule '%s'", config_str);
         qemu_free(fwd);
         return -1;
     }
@@ -628,7 +638,7 @@ static int slirp_guestfwd(SlirpState *s, const char *config_str,
     return 0;
 
  fail_syntax:
-    qemu_error("invalid guest forwarding rule '%s'\n", config_str);
+    error_report("invalid guest forwarding rule '%s'", config_str);
     return -1;
 }
 

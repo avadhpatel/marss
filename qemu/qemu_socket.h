@@ -17,6 +17,7 @@ int inet_aton(const char *cp, struct in_addr *ia);
 
 #else
 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -44,6 +45,7 @@ int inet_listen(const char *str, char *ostr, int olen,
 int inet_connect_opts(QemuOpts *opts);
 int inet_connect(const char *str, int socktype);
 int inet_dgram_opts(QemuOpts *opts);
+const char *inet_strfamily(int family);
 
 int unix_listen_opts(QemuOpts *opts);
 int unix_listen(const char *path, char *ostr, int olen);
@@ -55,5 +57,6 @@ int parse_host_port(struct sockaddr_in *saddr, const char *str);
 int parse_host_src_port(struct sockaddr_in *haddr,
                         struct sockaddr_in *saddr,
                         const char *str);
+int socket_init(void);
 
 #endif /* QEMU_SOCKET_H */

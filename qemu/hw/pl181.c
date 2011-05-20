@@ -7,9 +7,9 @@
  * This code is licenced under the GPL.
  */
 
+#include "blockdev.h"
 #include "sysbus.h"
 #include "sd.h"
-#include "sysemu.h"
 
 //#define DEBUG_PL181 1
 
@@ -182,39 +182,40 @@ error:
 static void pl181_fifo_run(pl181_state *s)
 {
     uint32_t bits;
-    uint32_t value;
+    uint32_t value = 0;
     int n;
-    int limit;
     int is_read;
 
     is_read = (s->datactrl & PL181_DATA_DIRECTION) != 0;
     if (s->datacnt != 0 && (!is_read || sd_data_ready(s->card))
             && !s->linux_hack) {
-        limit = is_read ? PL181_FIFO_LEN : 0;
-        n = 0;
-        value = 0;
-        while (s->datacnt && s->fifo_len != limit) {
-            if (is_read) {
+        if (is_read) {
+            n = 0;
+            while (s->datacnt && s->fifo_len < PL181_FIFO_LEN) {
                 value |= (uint32_t)sd_read_data(s->card) << (n * 8);
+                s->datacnt--;
                 n++;
                 if (n == 4) {
                     pl181_fifo_push(s, value);
-                    value = 0;
                     n = 0;
+                    value = 0;
                 }
-            } else {
+            }
+            if (n != 0) {
+                pl181_fifo_push(s, value);
+            }
+        } else { /* write */
+            n = 0;
+            while (s->datacnt > 0 && (s->fifo_len > 0 || n > 0)) {
                 if (n == 0) {
                     value = pl181_fifo_pop(s);
                     n = 4;
                 }
+                n--;
+                s->datacnt--;
                 sd_write_data(s->card, value & 0xff);
                 value >>= 8;
-                n--;
             }
-            s->datacnt--;
-        }
-        if (n && is_read) {
-            pl181_fifo_push(s, value);
         }
     }
     s->status &= ~(PL181_STATUS_RX_FIFO | PL181_STATUS_TX_FIFO);
@@ -449,15 +450,15 @@ static int pl181_init(SysBusDevice *dev)
 {
     int iomemtype;
     pl181_state *s = FROM_SYSBUS(pl181_state, dev);
-    BlockDriverState *bd;
+    DriveInfo *dinfo;
 
-    iomemtype = cpu_register_io_memory(pl181_readfn,
-                                       pl181_writefn, s);
+    iomemtype = cpu_register_io_memory(pl181_readfn, pl181_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
     sysbus_init_irq(dev, &s->irq[0]);
     sysbus_init_irq(dev, &s->irq[1]);
-    bd = qdev_init_bdrv(&dev->qdev, IF_SD);
-    s->card = sd_init(bd, 0);
+    dinfo = drive_get_next(IF_SD);
+    s->card = sd_init(dinfo ? dinfo->bdrv : NULL, 0);
     qemu_register_reset(pl181_reset, s);
     pl181_reset(s);
     /* ??? Save/restore.  */

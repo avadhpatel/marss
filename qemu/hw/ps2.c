@@ -185,6 +185,7 @@ static void ps2_reset_keyboard(PS2KbdState *s)
 {
     s->scan_enabled = 1;
     s->scancode_set = 2;
+    kbd_put_ledstate(0);
 }
 
 void ps2_write_keyboard(void *opaque, int val)
@@ -259,6 +260,7 @@ void ps2_write_keyboard(void *opaque, int val)
         s->common.write_cmd = -1;
         break;
     case KBD_CMD_SET_LEDS:
+        kbd_put_ledstate(val);
         ps2_queue(&s->common, KBD_REPLY_ACK);
         s->common.write_cmd = -1;
         break;
@@ -593,7 +595,7 @@ void *ps2_kbd_init(void (*update_irq)(void *, int), void *update_arg)
     s->common.update_irq = update_irq;
     s->common.update_arg = update_arg;
     s->scancode_set = 2;
-    vmstate_register(0, &vmstate_ps2_keyboard, s);
+    vmstate_register(NULL, 0, &vmstate_ps2_keyboard, s);
     qemu_add_kbd_event_handler(ps2_put_keycode, s);
     qemu_register_reset(ps2_kbd_reset, s);
     return s;
@@ -605,7 +607,7 @@ void *ps2_mouse_init(void (*update_irq)(void *, int), void *update_arg)
 
     s->common.update_irq = update_irq;
     s->common.update_arg = update_arg;
-    vmstate_register(0, &vmstate_ps2_mouse, s);
+    vmstate_register(NULL, 0, &vmstate_ps2_mouse, s);
     qemu_add_mouse_event_handler(ps2_mouse_event, s, 0, "QEMU PS/2 Mouse");
     qemu_register_reset(ps2_mouse_reset, s);
     return s;

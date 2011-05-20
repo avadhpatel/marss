@@ -81,7 +81,7 @@ static ssize_t mipsnet_receive(VLANClientState *nc, const uint8_t *buf, size_t s
     MIPSnetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
 
 #ifdef DEBUG_MIPSNET_RECEIVE
-    printf("mipsnet: receiving len=%d\n", size);
+    printf("mipsnet: receiving len=%zu\n", size);
 #endif
     if (!mipsnet_can_receive(nc))
         return -1;
@@ -239,7 +239,7 @@ static void mipsnet_cleanup(VLANClientState *nc)
 {
     MIPSnetState *s = DO_UPCAST(NICState, nc, nc)->opaque;
 
-    unregister_savevm("mipsnet", s);
+    unregister_savevm(NULL, "mipsnet", s);
 
     isa_unassign_ioport(s->io_base, 36);
 
@@ -284,5 +284,5 @@ void mipsnet_init (int base, qemu_irq irq, NICInfo *nd)
     }
 
     mipsnet_reset(s);
-    register_savevm("mipsnet", 0, 0, mipsnet_save, mipsnet_load, s);
+    register_savevm(NULL, "mipsnet", 0, 0, mipsnet_save, mipsnet_load, s);
 }

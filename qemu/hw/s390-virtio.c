@@ -19,6 +19,7 @@
 
 #include "hw.h"
 #include "block.h"
+#include "blockdev.h"
 #include "sysemu.h"
 #include "net.h"
 #include "boards.h"
@@ -26,7 +27,6 @@
 #include "loader.h"
 #include "elf.h"
 #include "hw/virtio.h"
-#include "hw/virtio-console.h"
 #include "hw/sysbus.h"
 #include "kvm.h"
 
@@ -52,6 +52,10 @@
 #define INITRD_PARM_START               0x010408UL
 #define INITRD_PARM_SIZE                0x010410UL
 #define PARMFILE_START                  0x001000UL
+
+#define ZIPL_START			0x009000UL
+#define ZIPL_LOAD_ADDR			0x009000UL
+#define ZIPL_FILENAME			"s390-zipl.rom"
 
 #define MAX_BLK_DEVS                    10
 
@@ -100,10 +104,11 @@ int s390_virtio_hypercall(CPUState *env)
         break;
     case KVM_S390_VIRTIO_RESET:
     {
-        /* Virtio_reset resets the internal addresses, so we'd have to sync
-           them up again. We don't want to reallocate a vring though, so let's
-           just not reset. */
-        /* virtio_reset(dev->vdev); */
+        VirtIOS390Device *dev;
+
+        dev = s390_virtio_bus_find_mem(s390_bus, mem);
+        virtio_reset(dev->vdev);
+        s390_virtio_device_sync(dev);
         break;
     }
     case KVM_S390_VIRTIO_SET_STATUS:
@@ -153,7 +158,7 @@ static void s390_init(ram_addr_t ram_size,
     s390_bus = s390_virtio_bus_init(&ram_size);
 
     /* allocate RAM */
-    ram_addr = qemu_ram_alloc(ram_size);
+    ram_addr = qemu_ram_alloc(NULL, "s390.ram", ram_size);
     cpu_register_physical_memory(0, ram_size, ram_addr);
 
     /* init CPUs */
@@ -186,8 +191,29 @@ static void s390_init(ram_addr_t ram_size,
             exit(1);
         }
 
-        cpu_synchronize_state(env);
         env->psw.addr = KERN_IMAGE_START;
+        env->psw.mask = 0x0000000180000000ULL;
+    } else {
+        ram_addr_t bios_size = 0;
+        char *bios_filename;
+
+        /* Load zipl bootloader */
+        if (bios_name == NULL) {
+            bios_name = ZIPL_FILENAME;
+        }
+
+        bios_filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
+        bios_size = load_image(bios_filename, qemu_get_ram_ptr(ZIPL_LOAD_ADDR));
+
+        if ((long)bios_size < 0) {
+            hw_error("could not load bootloader '%s'\n", bios_name);
+        }
+
+        if (bios_size > 4096) {
+            hw_error("stage1 bootloader is > 4k\n");
+        }
+
+        env->psw.addr = ZIPL_START;
         env->psw.mask = 0x0000000180000000ULL;
     }
 
@@ -205,13 +231,6 @@ static void s390_init(ram_addr_t ram_size,
     if (kernel_cmdline) {
         cpu_physical_memory_rw(KERN_PARM_AREA, (uint8_t *)kernel_cmdline,
                                strlen(kernel_cmdline), 1);
-    }
-
-    /* Create VirtIO console */
-    for(i = 0; i < MAX_VIRTIO_CONSOLES; i++) {
-        if (virtcon_hds[i]) {
-            qdev_init_nofail(qdev_create((BusState *)s390_bus, "virtio-console-s390"));
-        }
     }
 
     /* Create VirtIO network adapters */
@@ -244,7 +263,7 @@ static void s390_init(ram_addr_t ram_size,
         }
 
         dev = qdev_create((BusState *)s390_bus, "virtio-blk-s390");
-        qdev_prop_set_drive(dev, "drive", dinfo);
+        qdev_prop_set_drive_nofail(dev, "drive", dinfo->bdrv);
         qdev_init_nofail(dev);
     }
 }

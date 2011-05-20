@@ -19,10 +19,10 @@
  */
 
 #include "qemu-common.h"
+#include "hw.h"
 #include "flash.h"
 #include "irq.h"
-#include "sysemu.h"
-#include "block.h"
+#include "blockdev.h"
 
 /* 11 for 2kB-page OneNAND ("2nd generation") and 10 for 1kB-page chips */
 #define PAGE_SHIFT	11
@@ -631,7 +631,7 @@ void *onenand_init(uint32_t id, int regshift, qemu_irq irq)
     s->blockwp = qemu_malloc(s->blocks);
     s->density_mask = (id & (1 << 11)) ? (1 << (6 + ((id >> 12) & 7))) : 0;
     s->iomemtype = cpu_register_io_memory(onenand_readfn,
-                    onenand_writefn, s);
+                    onenand_writefn, s, DEVICE_NATIVE_ENDIAN);
     if (!dinfo)
         s->image = memset(qemu_malloc(size + (size >> 5)),
                         0xff, size + (size >> 5));
@@ -639,7 +639,7 @@ void *onenand_init(uint32_t id, int regshift, qemu_irq irq)
         s->bdrv = dinfo->bdrv;
     s->otp = memset(qemu_malloc((64 + 2) << PAGE_SHIFT),
                     0xff, (64 + 2) << PAGE_SHIFT);
-    s->ram = qemu_ram_alloc(0xc000 << s->shift);
+    s->ram = qemu_ram_alloc(NULL, "onenand.ram", 0xc000 << s->shift);
     ram = qemu_get_ram_ptr(s->ram);
     s->boot[0] = ram + (0x0000 << s->shift);
     s->boot[1] = ram + (0x8000 << s->shift);

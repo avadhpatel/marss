@@ -9,7 +9,7 @@
 #define B 2
 #define R 1
 
-extern inline int cris_swap(const int mode, int x)
+static inline int cris_swap(const int mode, int x)
 {
 	switch (mode)
 	{
@@ -41,7 +41,7 @@ do {                                                    \
         cris_tst_mov_cc(n, z);                          \
 	if (r != expected)                              \
 		err();                                  \
-} while(0);
+} while(0)
 
 void check_swap(void)
 {

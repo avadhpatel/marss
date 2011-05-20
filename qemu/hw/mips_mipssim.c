@@ -26,6 +26,7 @@
  */
 #include "hw.h"
 #include "mips.h"
+#include "mips_cpudevs.h"
 #include "pc.h"
 #include "isa.h"
 #include "net.h"
@@ -34,14 +35,6 @@
 #include "mips-bios.h"
 #include "loader.h"
 #include "elf.h"
-
-#ifdef TARGET_MIPS64
-#define PHYS_TO_VIRT(x) ((x) | ~0x7fffffffULL)
-#else
-#define PHYS_TO_VIRT(x) ((x) | ~0x7fffffffU)
-#endif
-
-#define VIRT_TO_PHYS_ADDEND (-((int64_t)(int32_t)0x80000000))
 
 static struct _loaderparams {
     int ram_size;
@@ -57,7 +50,7 @@ typedef struct ResetData {
 
 static int64_t load_kernel(void)
 {
-    int64_t entry, kernel_low, kernel_high;
+    int64_t entry, kernel_high;
     long kernel_size;
     long initrd_size;
     ram_addr_t initrd_offset;
@@ -69,9 +62,10 @@ static int64_t load_kernel(void)
     big_endian = 0;
 #endif
 
-    kernel_size = load_elf(loaderparams.kernel_filename, VIRT_TO_PHYS_ADDEND,
-                           (uint64_t *)&entry, (uint64_t *)&kernel_low,
-                           (uint64_t *)&kernel_high, big_endian, ELF_MACHINE, 1);
+    kernel_size = load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys,
+                           NULL, (uint64_t *)&entry, NULL,
+                           (uint64_t *)&kernel_high, big_endian,
+                           ELF_MACHINE, 1);
     if (kernel_size >= 0) {
         if ((entry & ~0x7fffffffULL) == 0x80000000)
             entry = (int32_t)entry;
@@ -112,7 +106,10 @@ static void main_cpu_reset(void *opaque)
     CPUState *env = s->env;
 
     cpu_reset(env);
-    env->active_tc.PC = s->vector;
+    env->active_tc.PC = s->vector & ~(target_ulong)1;
+    if (s->vector & 1) {
+        env->hflags |= MIPS_HFLAG_M16;
+    }
 }
 
 static void
@@ -147,8 +144,8 @@ mips_mipssim_init (ram_addr_t ram_size,
     qemu_register_reset(main_cpu_reset, reset_info);
 
     /* Allocate RAM. */
-    ram_offset = qemu_ram_alloc(ram_size);
-    bios_offset = qemu_ram_alloc(BIOS_SIZE);
+    ram_offset = qemu_ram_alloc(NULL, "mips_mipssim.ram", ram_size);
+    bios_offset = qemu_ram_alloc(NULL, "mips_mipssim.bios", BIOS_SIZE);
 
     cpu_register_physical_memory(0, ram_size, ram_offset | IO_MEM_RAM);
 

@@ -21,6 +21,20 @@ typedef struct {
     int is_mouse;
 } pl050_state;
 
+static const VMStateDescription vmstate_pl050 = {
+    .name = "pl050",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINT32(cr, pl050_state),
+        VMSTATE_UINT32(clk, pl050_state),
+        VMSTATE_UINT32(last, pl050_state),
+        VMSTATE_INT32(pending, pl050_state),
+        VMSTATE_INT32(is_mouse, pl050_state),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 #define PL050_TXEMPTY         (1 << 6)
 #define PL050_TXBUSY          (1 << 5)
 #define PL050_RXFULL          (1 << 4)
@@ -128,7 +142,8 @@ static int pl050_init(SysBusDevice *dev, int is_mouse)
     int iomemtype;
 
     iomemtype = cpu_register_io_memory(pl050_readfn,
-                                       pl050_writefn, s);
+                                       pl050_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
     sysbus_init_irq(dev, &s->irq);
     s->is_mouse = is_mouse;
@@ -136,7 +151,6 @@ static int pl050_init(SysBusDevice *dev, int is_mouse)
         s->dev = ps2_mouse_init(pl050_update, s);
     else
         s->dev = ps2_kbd_init(pl050_update, s);
-    /* ??? Save/restore.  */
     return 0;
 }
 
@@ -150,12 +164,24 @@ static int pl050_init_mouse(SysBusDevice *dev)
     return pl050_init(dev, 1);
 }
 
+static SysBusDeviceInfo pl050_kbd_info = {
+    .init = pl050_init_keyboard,
+    .qdev.name  = "pl050_keyboard",
+    .qdev.size  = sizeof(pl050_state),
+    .qdev.vmsd = &vmstate_pl050,
+};
+
+static SysBusDeviceInfo pl050_mouse_info = {
+    .init = pl050_init_mouse,
+    .qdev.name  = "pl050_mouse",
+    .qdev.size  = sizeof(pl050_state),
+    .qdev.vmsd = &vmstate_pl050,
+};
+
 static void pl050_register_devices(void)
 {
-    sysbus_register_dev("pl050_keyboard", sizeof(pl050_state),
-                        pl050_init_keyboard);
-    sysbus_register_dev("pl050_mouse", sizeof(pl050_state),
-                        pl050_init_mouse);
+    sysbus_register_withprop(&pl050_kbd_info);
+    sysbus_register_withprop(&pl050_mouse_info);
 }
 
 device_init(pl050_register_devices)

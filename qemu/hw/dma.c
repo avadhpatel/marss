@@ -57,6 +57,7 @@ static struct dma_cont {
     uint8_t flip_flop;
     int dshift;
     struct dma_regs regs[4];
+    qemu_irq *cpu_request_exit;
 } dma_controllers[2];
 
 enum {
@@ -344,7 +345,6 @@ static void channel_run (int ncont, int ichan)
     }
 #endif
 
-    r = dma_controllers[ncont].regs + ichan;
     n = r->transfer_handler (r->opaque, ichan + (ncont << 2),
                              r->now[COUNT], (r->base[COUNT] + 1) << ncont);
     r->now[COUNT] = n;
@@ -445,9 +445,9 @@ int DMA_write_memory (int nchan, void *buf, int pos, int len)
 /* request the emulator to transfer a new DMA memory block ASAP */
 void DMA_schedule(int nchan)
 {
-    CPUState *env = cpu_single_env;
-    if (env)
-        cpu_exit(env);
+    struct dma_cont *d = &dma_controllers[nchan > 3];
+
+    qemu_irq_pulse(*d->cpu_request_exit);
 }
 
 static void dma_reset(void *opaque)
@@ -465,12 +465,14 @@ static int dma_phony_handler (void *opaque, int nchan, int dma_pos, int dma_len)
 
 /* dshift = 0: 8 bit DMA, 1 = 16 bit DMA */
 static void dma_init2(struct dma_cont *d, int base, int dshift,
-                      int page_base, int pageh_base)
+                      int page_base, int pageh_base,
+                      qemu_irq *cpu_request_exit)
 {
     static const int page_port_list[] = { 0x1, 0x2, 0x3, 0x7 };
     int i;
 
     d->dshift = dshift;
+    d->cpu_request_exit = cpu_request_exit;
     for (i = 0; i < 8; i++) {
         register_ioport_write (base + (i << dshift), 1, 1, write_chan, d);
         register_ioport_read (base + (i << dshift), 1, 1, read_chan, d);
@@ -540,14 +542,14 @@ static const VMStateDescription vmstate_dma = {
     }
 };
 
-void DMA_init (int high_page_enable)
+void DMA_init(int high_page_enable, qemu_irq *cpu_request_exit)
 {
     dma_init2(&dma_controllers[0], 0x00, 0, 0x80,
-              high_page_enable ? 0x480 : -1);
+              high_page_enable ? 0x480 : -1, cpu_request_exit);
     dma_init2(&dma_controllers[1], 0xc0, 1, 0x88,
-              high_page_enable ? 0x488 : -1);
-    vmstate_register (0, &vmstate_dma, &dma_controllers[0]);
-    vmstate_register (1, &vmstate_dma, &dma_controllers[1]);
+              high_page_enable ? 0x488 : -1, cpu_request_exit);
+    vmstate_register (NULL, 0, &vmstate_dma, &dma_controllers[0]);
+    vmstate_register (NULL, 1, &vmstate_dma, &dma_controllers[1]);
 
     dma_bh = qemu_bh_new(DMA_run_bh, NULL);
 }

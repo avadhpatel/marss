@@ -21,11 +21,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "qemu.h"
 #include "cpu.h"
 #include "exec-all.h"
 
-#if !defined (CONFIG_USER_ONLY)
 /* Shared handlers */
 static void pal_reset (CPUState *env);
 /* Console handlers */
@@ -81,9 +79,7 @@ static void pal_reset (CPUState *env)
 static void do_swappal (CPUState *env, uint64_t palid)
 {
     pal_handler_t *pal_handler;
-    int status;
 
-    status = 0;
     switch (palid) {
     case 0 ... 2:
         pal_handler = &pal_handlers[palid];
@@ -997,22 +993,22 @@ int cpu_ppc_handle_mmu_fault (CPUState *env, uint32_t address, int rw,
     uint64_t physical, page_size, end;
     int prot, zbits, ret;
 
-#if defined(CONFIG_USER_ONLY)
-        ret = 2;
-#else
-        ret = virtual_to_physical(env, &physical, &zbits, &prot,
-                                  address, mmu_idx, rw);
-#endif
+    ret = virtual_to_physical(env, &physical, &zbits, &prot,
+                              address, mmu_idx, rw);
+
     switch (ret) {
     case 0:
         /* No fault */
         page_size = 1ULL << zbits;
         address &= ~(page_size - 1);
+        /* FIXME: page_size should probably be passed to tlb_set_page,
+           and this loop removed.   */
         for (end = physical + page_size; physical < end; physical += 0x1000) {
-            ret = tlb_set_page(env, address, physical, prot,
-                               mmu_idx, is_softmmu);
+            tlb_set_page(env, address, physical, prot, mmu_idx,
+                         TARGET_PAGE_SIZE);
             address += 0x1000;
         }
+        ret = 0;
         break;
 #if 0
     case 1:
@@ -1048,48 +1044,5 @@ int cpu_ppc_handle_mmu_fault (CPUState *env, uint32_t address, int rw,
     }
 
     return ret;
-}
-#endif
-
-#else /* !defined (CONFIG_USER_ONLY) */
-void pal_init (CPUState *env)
-{
-}
-
-void call_pal (CPUState *env, int palcode)
-{
-    target_long ret;
-
-    qemu_log("%s: palcode %02x\n", __func__, palcode);
-    switch (palcode) {
-    case 0x83:
-        /* CALLSYS */
-        qemu_log("CALLSYS n " TARGET_FMT_ld "\n", env->ir[0]);
-        ret = do_syscall(env, env->ir[IR_V0], env->ir[IR_A0], env->ir[IR_A1],
-                         env->ir[IR_A2], env->ir[IR_A3], env->ir[IR_A4],
-                         env->ir[IR_A5]);
-        if (ret >= 0) {
-            env->ir[IR_A3] = 0;
-            env->ir[IR_V0] = ret;
-        } else {
-            env->ir[IR_A3] = 1;
-            env->ir[IR_V0] = -ret;
-        }
-        break;
-    case 0x9E:
-        /* RDUNIQUE */
-        env->ir[IR_V0] = env->unique;
-        qemu_log("RDUNIQUE: " TARGET_FMT_lx "\n", env->unique);
-        break;
-    case 0x9F:
-        /* WRUNIQUE */
-        env->unique = env->ir[IR_A0];
-        qemu_log("WRUNIQUE: " TARGET_FMT_lx "\n", env->unique);
-        break;
-    default:
-        qemu_log("%s: unhandled palcode %02x\n",
-                    __func__, palcode);
-        exit(1);
-    }
 }
 #endif

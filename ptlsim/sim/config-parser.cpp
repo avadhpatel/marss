@@ -164,16 +164,55 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
 }
 
 int ConfigurationParserBase::parse(void* baseptr, char* argstr) {
-  dynarray<char*> argv;
-  argv.tokenize(argstr, " ");
-  foreach (i, argv.length) {
-    // Skip comments
-    if (argv[i][0] == '#') {
-      argv.resize(i);
-      break;
-    }
-  }
-  return parse(baseptr, argv.length, argv);
+	dynarray<char*> argv;
+	argv.tokenize(argstr, " ");
+	foreach (i, argv.length) {
+		// Skip comments
+		if (argv[i][0] == '#') {
+			argv.resize(i);
+			break;
+		}
+		// add support for quoted strings such as -execute-after-kill "python blah.py"
+		if (argv[i][0] == '"') {
+			bool found_end_quoted_string = false;
+			stringbuf quoted_string;
+			int argv_idx;
+
+			for (argv_idx = i; argv_idx < argv.length; argv_idx++) {
+				quoted_string << argv[argv_idx] << " ";
+
+
+				if (argv[argv_idx][strlen(argv[argv_idx])-1] == '"') {
+
+					// copy the stringbuf removing the quotes and space at the end
+					// FIXME: this probably leaks a very tiny amount of memory
+					// since I'm not freeing argv[i]
+					argv[i] = strndup(quoted_string.buf+1, quoted_string.size()-3);
+
+					found_end_quoted_string = true;
+
+					if (!argv[i]) {
+						exit(-ENOMEM);
+					}
+					break;
+				}
+
+			}
+			if (!found_end_quoted_string)
+			{
+				cerr << "ERROR, could not find end of quoted string starting with " << argv[i] <<"\n", flush;
+				exit(-1);
+			}
+
+			// scan backwards and remove all nodes that are inside the quoted string (since they are already
+			// 	merged into argv[i] )
+			for ( ; argv_idx > i; argv_idx--)
+			{
+				argv.remove(argv[argv_idx]);
+			}
+		}
+	}
+	return parse(baseptr, argv.length, argv);
 }
 
 ostream& ConfigurationParserBase::print(const void* baseptr, ostream& os) const {

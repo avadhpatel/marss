@@ -1,14 +1,15 @@
 /*
- * QList data type header.
+ * QList Module
  *
  * Copyright (C) 2009 Red Hat Inc.
  *
  * Authors:
  *  Luiz Capitulino <lcapitulino@redhat.com>
  *
- * This work is licensed under the terms of the GNU GPL, version 2.  See
- * the COPYING file in the top-level directory.
+ * This work is licensed under the terms of the GNU LGPL, version 2.1 or later.
+ * See the COPYING.LIB file in the top-level directory.
  */
+
 #ifndef QLIST_H
 #define QLIST_H
 
@@ -28,6 +29,16 @@ typedef struct QList {
 
 #define qlist_append(qlist, obj) \
         qlist_append_obj(qlist, QOBJECT(obj))
+
+#define QLIST_FOREACH_ENTRY(qlist, var)             \
+        for ((var) = ((qlist)->head.tqh_first);     \
+            (var);                                  \
+            (var) = ((var)->next.tqe_next))
+
+static inline QObject *qlist_entry_obj(const QListEntry *entry)
+{
+    return entry->value;
+}
 
 QList *qlist_new(void);
 QList *qlist_copy(QList *src);

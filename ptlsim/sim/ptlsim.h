@@ -319,6 +319,9 @@ struct PTLsimConfig {
   // Test Framework
   bool run_tests;
 
+  //Utilities/Tools
+  stringbuf execute_after_kill;
+
   void reset();
 };
 

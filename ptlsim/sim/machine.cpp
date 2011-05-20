@@ -71,6 +71,12 @@ bool BaseMachine::init(PTLsimConfig& config)
     // At the end create a memory hierarchy
     memoryHierarchyPtr = new MemoryHierarchy(*this);
 
+    if(config.machine_config == "") {
+        ptl_logfile << "[ERROR] Please provide Machine name in config using -machine\n" << flush;
+        cerr << "[ERROR] Please provide Machine name in config using -machine\n" << flush;
+        assert(0);
+    }
+
     machineBuilder.setup_machine(*this, config.machine_config.buf);
 
     foreach(i, cores.count()) {

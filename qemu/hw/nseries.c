@@ -1016,7 +1016,6 @@ static void n8x0_boot_init(void *opaque)
     n800_dss_init(&s->blizzard);
 
     /* CPU setup */
-    s->cpu->env->regs[15] = s->cpu->env->boot_info->loader_start;
     s->cpu->env->GE = 0x5;
 
     /* If the machine has a slided keyboard, open it */
@@ -1317,11 +1316,6 @@ static void n8x0_init(ram_addr_t ram_size, const char *boot_device,
     if (usb_enabled)
         n8x0_usb_setup(s);
 
-    /* Setup initial (reset) machine state */
-
-    /* Start at the OneNAND bootloader.  */
-    s->cpu->env->regs[15] = 0;
-
     if (kernel_filename) {
         /* Or at the linux loader.  */
         binfo->kernel_filename = kernel_filename;
@@ -1330,10 +1324,9 @@ static void n8x0_init(ram_addr_t ram_size, const char *boot_device,
         arm_load_kernel(s->cpu->env, binfo);
 
         qemu_register_reset(n8x0_boot_init, s);
-        n8x0_boot_init(s);
     }
 
-    if (option_rom[0] && (boot_device[0] == 'n' || !kernel_filename)) {
+    if (option_rom[0].name && (boot_device[0] == 'n' || !kernel_filename)) {
         int rom_size;
         uint8_t nolo_tags[0x10000];
         /* No, wait, better start at the ROM.  */
@@ -1348,7 +1341,7 @@ static void n8x0_init(ram_addr_t ram_size, const char *boot_device,
          *
          * The code above is for loading the `zImage' file from Nokia
          * images.  */
-        rom_size = load_image_targphys(option_rom[0],
+        rom_size = load_image_targphys(option_rom[0].name,
                                        OMAP2_Q2_BASE + 0x400000,
                                        sdram_size - 0x400000);
         printf("%i bytes of image loaded\n", rom_size);

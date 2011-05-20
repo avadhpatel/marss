@@ -68,8 +68,9 @@ ram_addr_t ppc405_set_bootinfo (CPUState *env, ppc4xx_bd_info_t *bd,
     stl_phys(bdloc + 0x34, bd->bi_baudrate);
     for (i = 0; i < 4; i++)
         stb_phys(bdloc + 0x38 + i, bd->bi_s_version[i]);
-    for (i = 0; i < 32; i++)
-        stb_phys(bdloc + 0x3C + i, bd->bi_s_version[i]);
+    for (i = 0; i < 32; i++) {
+        stb_phys(bdloc + 0x3C + i, bd->bi_r_version[i]);
+    }
     stl_phys(bdloc + 0x5C, bd->bi_plb_busfreq);
     stl_phys(bdloc + 0x60, bd->bi_pci_busfreq);
     for (i = 0; i < 6; i++)
@@ -107,10 +108,10 @@ struct ppc4xx_plb_t {
     uint32_t besr;
 };
 
-static target_ulong dcr_read_plb (void *opaque, int dcrn)
+static uint32_t dcr_read_plb (void *opaque, int dcrn)
 {
     ppc4xx_plb_t *plb;
-    target_ulong ret;
+    uint32_t ret;
 
     plb = opaque;
     switch (dcrn) {
@@ -132,7 +133,7 @@ static target_ulong dcr_read_plb (void *opaque, int dcrn)
     return ret;
 }
 
-static void dcr_write_plb (void *opaque, int dcrn, target_ulong val)
+static void dcr_write_plb (void *opaque, int dcrn, uint32_t val)
 {
     ppc4xx_plb_t *plb;
 
@@ -189,10 +190,10 @@ struct ppc4xx_pob_t {
     uint32_t besr[2];
 };
 
-static target_ulong dcr_read_pob (void *opaque, int dcrn)
+static uint32_t dcr_read_pob (void *opaque, int dcrn)
 {
     ppc4xx_pob_t *pob;
-    target_ulong ret;
+    uint32_t ret;
 
     pob = opaque;
     switch (dcrn) {
@@ -212,7 +213,7 @@ static target_ulong dcr_read_pob (void *opaque, int dcrn)
     return ret;
 }
 
-static void dcr_write_pob (void *opaque, int dcrn, target_ulong val)
+static void dcr_write_pob (void *opaque, int dcrn, uint32_t val)
 {
     ppc4xx_pob_t *pob;
 
@@ -383,7 +384,8 @@ static void ppc4xx_opba_init(target_phys_addr_t base)
 #ifdef DEBUG_OPBA
     printf("%s: offset " TARGET_FMT_plx "\n", __func__, base);
 #endif
-    io = cpu_register_io_memory(opba_read, opba_write, opba);
+    io = cpu_register_io_memory(opba_read, opba_write, opba,
+                                DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x002, io);
     qemu_register_reset(ppc4xx_opba_reset, opba);
 }
@@ -410,10 +412,10 @@ enum {
     EBC0_CFGDATA = 0x013,
 };
 
-static target_ulong dcr_read_ebc (void *opaque, int dcrn)
+static uint32_t dcr_read_ebc (void *opaque, int dcrn)
 {
     ppc4xx_ebc_t *ebc;
-    target_ulong ret;
+    uint32_t ret;
 
     ebc = opaque;
     switch (dcrn) {
@@ -486,6 +488,7 @@ static target_ulong dcr_read_ebc (void *opaque, int dcrn)
             ret = 0x00000000;
             break;
         }
+        break;
     default:
         ret = 0x00000000;
         break;
@@ -494,7 +497,7 @@ static target_ulong dcr_read_ebc (void *opaque, int dcrn)
     return ret;
 }
 
-static void dcr_write_ebc (void *opaque, int dcrn, target_ulong val)
+static void dcr_write_ebc (void *opaque, int dcrn, uint32_t val)
 {
     ppc4xx_ebc_t *ebc;
 
@@ -627,20 +630,13 @@ struct ppc405_dma_t {
     uint32_t pol;
 };
 
-static target_ulong dcr_read_dma (void *opaque, int dcrn)
+static uint32_t dcr_read_dma (void *opaque, int dcrn)
 {
-    ppc405_dma_t *dma;
-
-    dma = opaque;
-
     return 0;
 }
 
-static void dcr_write_dma (void *opaque, int dcrn, target_ulong val)
+static void dcr_write_dma (void *opaque, int dcrn, uint32_t val)
 {
-    ppc405_dma_t *dma;
-
-    dma = opaque;
 }
 
 static void ppc405_dma_reset (void *opaque)
@@ -738,9 +734,6 @@ struct ppc405_gpio_t {
 
 static uint32_t ppc405_gpio_readb (void *opaque, target_phys_addr_t addr)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx "\n", __func__, addr);
 #endif
@@ -751,9 +744,6 @@ static uint32_t ppc405_gpio_readb (void *opaque, target_phys_addr_t addr)
 static void ppc405_gpio_writeb (void *opaque,
                                 target_phys_addr_t addr, uint32_t value)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx " val %08" PRIx32 "\n", __func__, addr,
            value);
@@ -762,9 +752,6 @@ static void ppc405_gpio_writeb (void *opaque,
 
 static uint32_t ppc405_gpio_readw (void *opaque, target_phys_addr_t addr)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx "\n", __func__, addr);
 #endif
@@ -775,9 +762,6 @@ static uint32_t ppc405_gpio_readw (void *opaque, target_phys_addr_t addr)
 static void ppc405_gpio_writew (void *opaque,
                                 target_phys_addr_t addr, uint32_t value)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx " val %08" PRIx32 "\n", __func__, addr,
            value);
@@ -786,9 +770,6 @@ static void ppc405_gpio_writew (void *opaque,
 
 static uint32_t ppc405_gpio_readl (void *opaque, target_phys_addr_t addr)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx "\n", __func__, addr);
 #endif
@@ -799,9 +780,6 @@ static uint32_t ppc405_gpio_readl (void *opaque, target_phys_addr_t addr)
 static void ppc405_gpio_writel (void *opaque,
                                 target_phys_addr_t addr, uint32_t value)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx " val %08" PRIx32 "\n", __func__, addr,
            value);
@@ -822,9 +800,6 @@ static CPUWriteMemoryFunc * const ppc405_gpio_write[] = {
 
 static void ppc405_gpio_reset (void *opaque)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 }
 
 static void ppc405_gpio_init(target_phys_addr_t base)
@@ -836,7 +811,8 @@ static void ppc405_gpio_init(target_phys_addr_t base)
 #ifdef DEBUG_GPIO
     printf("%s: offset " TARGET_FMT_plx "\n", __func__, base);
 #endif
-    io = cpu_register_io_memory(ppc405_gpio_read, ppc405_gpio_write, gpio);
+    io = cpu_register_io_memory(ppc405_gpio_read, ppc405_gpio_write, gpio,
+                                DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x038, io);
     qemu_register_reset(&ppc405_gpio_reset, gpio);
 }
@@ -914,10 +890,10 @@ static void ocm_update_mappings (ppc405_ocm_t *ocm,
     }
 }
 
-static target_ulong dcr_read_ocm (void *opaque, int dcrn)
+static uint32_t dcr_read_ocm (void *opaque, int dcrn)
 {
     ppc405_ocm_t *ocm;
-    target_ulong ret;
+    uint32_t ret;
 
     ocm = opaque;
     switch (dcrn) {
@@ -941,7 +917,7 @@ static target_ulong dcr_read_ocm (void *opaque, int dcrn)
     return ret;
 }
 
-static void dcr_write_ocm (void *opaque, int dcrn, target_ulong val)
+static void dcr_write_ocm (void *opaque, int dcrn, uint32_t val)
 {
     ppc405_ocm_t *ocm;
     uint32_t isarc, dsarc, isacntl, dsacntl;
@@ -994,7 +970,7 @@ static void ppc405_ocm_init(CPUState *env)
     ppc405_ocm_t *ocm;
 
     ocm = qemu_mallocz(sizeof(ppc405_ocm_t));
-    ocm->offset = qemu_ram_alloc(4096);
+    ocm->offset = qemu_ram_alloc(NULL, "ppc405.ocm", 4096);
     qemu_register_reset(&ocm_reset, ocm);
     ppc_dcr_register(env, OCM0_ISARC,
                      ocm, &dcr_read_ocm, &dcr_write_ocm);
@@ -1245,7 +1221,8 @@ static void ppc405_i2c_init(target_phys_addr_t base, qemu_irq irq)
 #ifdef DEBUG_I2C
     printf("%s: offset " TARGET_FMT_plx "\n", __func__, base);
 #endif
-    io = cpu_register_io_memory(i2c_read, i2c_write, i2c);
+    io = cpu_register_io_memory(i2c_read, i2c_write, i2c,
+                                DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x011, io);
     qemu_register_reset(ppc4xx_i2c_reset, i2c);
 }
@@ -1528,7 +1505,7 @@ static void ppc4xx_gpt_init(target_phys_addr_t base, qemu_irq irqs[5])
 #ifdef DEBUG_GPT
     printf("%s: offset " TARGET_FMT_plx "\n", __func__, base);
 #endif
-    io = cpu_register_io_memory(gpt_read, gpt_write, gpt);
+    io = cpu_register_io_memory(gpt_read, gpt_write, gpt, DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x0d4, io);
     qemu_register_reset(ppc4xx_gpt_reset, gpt);
 }
@@ -1578,10 +1555,10 @@ struct ppc40x_mal_t {
 
 static void ppc40x_mal_reset (void *opaque);
 
-static target_ulong dcr_read_mal (void *opaque, int dcrn)
+static uint32_t dcr_read_mal (void *opaque, int dcrn)
 {
     ppc40x_mal_t *mal;
-    target_ulong ret;
+    uint32_t ret;
 
     mal = opaque;
     switch (dcrn) {
@@ -1650,7 +1627,7 @@ static target_ulong dcr_read_mal (void *opaque, int dcrn)
     return ret;
 }
 
-static void dcr_write_mal (void *opaque, int dcrn, target_ulong val)
+static void dcr_write_mal (void *opaque, int dcrn, uint32_t val)
 {
     ppc40x_mal_t *mal;
     int idx;
@@ -1951,10 +1928,10 @@ static void ppc405cr_clk_setup (ppc405cr_cpc_t *cpc)
     clk_setup(&cpc->clk_setup[PPC405CR_UART_CLK], UART_clk);
 }
 
-static target_ulong dcr_read_crcpc (void *opaque, int dcrn)
+static uint32_t dcr_read_crcpc (void *opaque, int dcrn)
 {
     ppc405cr_cpc_t *cpc;
-    target_ulong ret;
+    uint32_t ret;
 
     cpc = opaque;
     switch (dcrn) {
@@ -1991,7 +1968,7 @@ static target_ulong dcr_read_crcpc (void *opaque, int dcrn)
     return ret;
 }
 
-static void dcr_write_crcpc (void *opaque, int dcrn, target_ulong val)
+static void dcr_write_crcpc (void *opaque, int dcrn, uint32_t val)
 {
     ppc405cr_cpc_t *cpc;
 
@@ -2182,11 +2159,11 @@ CPUState *ppc405cr_init (target_phys_addr_t ram_bases[4],
     /* Serial ports */
     if (serial_hds[0] != NULL) {
         serial_mm_init(0xef600300, 0, pic[0], PPC_SERIAL_MM_BAUDBASE,
-                       serial_hds[0], 1);
+                       serial_hds[0], 1, 1);
     }
     if (serial_hds[1] != NULL) {
         serial_mm_init(0xef600400, 0, pic[1], PPC_SERIAL_MM_BAUDBASE,
-                       serial_hds[1], 1);
+                       serial_hds[1], 1, 1);
     }
     /* IIC controller */
     ppc405_i2c_init(0xef600500, pic[2]);
@@ -2353,10 +2330,10 @@ static void ppc405ep_compute_clocks (ppc405ep_cpc_t *cpc)
     clk_setup(&cpc->clk_setup[PPC405EP_UART1_CLK], UART1_clk);
 }
 
-static target_ulong dcr_read_epcpc (void *opaque, int dcrn)
+static uint32_t dcr_read_epcpc (void *opaque, int dcrn)
 {
     ppc405ep_cpc_t *cpc;
-    target_ulong ret;
+    uint32_t ret;
 
     cpc = opaque;
     switch (dcrn) {
@@ -2393,7 +2370,7 @@ static target_ulong dcr_read_epcpc (void *opaque, int dcrn)
     return ret;
 }
 
-static void dcr_write_epcpc (void *opaque, int dcrn, target_ulong val)
+static void dcr_write_epcpc (void *opaque, int dcrn, uint32_t val)
 {
     ppc405ep_cpc_t *cpc;
 
@@ -2535,11 +2512,11 @@ CPUState *ppc405ep_init (target_phys_addr_t ram_bases[2],
     /* Serial ports */
     if (serial_hds[0] != NULL) {
         serial_mm_init(0xef600300, 0, pic[0], PPC_SERIAL_MM_BAUDBASE,
-                       serial_hds[0], 1);
+                       serial_hds[0], 1, 1);
     }
     if (serial_hds[1] != NULL) {
         serial_mm_init(0xef600400, 0, pic[1], PPC_SERIAL_MM_BAUDBASE,
-                       serial_hds[1], 1);
+                       serial_hds[1], 1, 1);
     }
     /* OCM */
     ppc405_ocm_init(env);

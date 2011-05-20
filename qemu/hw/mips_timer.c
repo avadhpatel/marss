@@ -1,5 +1,27 @@
+/*
+ * QEMU MIPS timer support
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include "hw.h"
-#include "mips.h"
+#include "mips_cpudevs.h"
 #include "qemu-timer.h"
 
 #define TIMER_FREQ	100 * 1000 * 1000
@@ -20,16 +42,6 @@ uint32_t cpu_mips_get_random (CPUState *env)
 }
 
 /* MIPS R4K timer */
-uint32_t cpu_mips_get_count (CPUState *env)
-{
-    if (env->CP0_Cause & (1 << CP0Ca_DC))
-        return env->CP0_Count;
-    else
-        return env->CP0_Count +
-            (uint32_t)muldiv64(qemu_get_clock(vm_clock),
-                               TIMER_FREQ, get_ticks_per_sec());
-}
-
 static void cpu_mips_timer_update(CPUState *env)
 {
     uint64_t now, next;
@@ -40,6 +52,35 @@ static void cpu_mips_timer_update(CPUState *env)
 	    (uint32_t)muldiv64(now, TIMER_FREQ, get_ticks_per_sec());
     next = now + muldiv64(wait, get_ticks_per_sec(), TIMER_FREQ);
     qemu_mod_timer(env->timer, next);
+}
+
+/* Expire the timer.  */
+static void cpu_mips_timer_expire(CPUState *env)
+{
+    cpu_mips_timer_update(env);
+    if (env->insn_flags & ISA_MIPS32R2) {
+        env->CP0_Cause |= 1 << CP0Ca_TI;
+    }
+    qemu_irq_raise(env->irq[(env->CP0_IntCtl >> CP0IntCtl_IPTI) & 0x7]);
+}
+
+uint32_t cpu_mips_get_count (CPUState *env)
+{
+    if (env->CP0_Cause & (1 << CP0Ca_DC)) {
+        return env->CP0_Count;
+    } else {
+        uint64_t now;
+
+        now = qemu_get_clock(vm_clock);
+        if (qemu_timer_pending(env->timer)
+            && qemu_timer_expired(env->timer, now)) {
+            /* The timer has already expired.  */
+            cpu_mips_timer_expire(env);
+        }
+
+        return env->CP0_Count +
+            (uint32_t)muldiv64(now, TIMER_FREQ, get_ticks_per_sec());
+    }
 }
 
 void cpu_mips_store_count (CPUState *env, uint32_t count)
@@ -94,11 +135,8 @@ static void mips_timer_cb (void *opaque)
        the comparator value.  Offset the count by one to avoid immediately
        retriggering the callback before any virtual time has passed.  */
     env->CP0_Count++;
-    cpu_mips_timer_update(env);
+    cpu_mips_timer_expire(env);
     env->CP0_Count--;
-    if (env->insn_flags & ISA_MIPS32R2)
-        env->CP0_Cause |= 1 << CP0Ca_TI;
-    qemu_irq_raise(env->irq[(env->CP0_IntCtl >> CP0IntCtl_IPTI) & 0x7]);
 }
 
 void cpu_mips_clock_init (CPUState *env)
