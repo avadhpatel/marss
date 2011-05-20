@@ -9,7 +9,7 @@ try:
     import yaml
 except (ImportError, NotImplementedError):
     import sys
-    sys.path.append("../ptlsim/lib/python")
+    sys.path.append("ptlsim/lib/python")
     import yaml
 
 try:
@@ -53,6 +53,8 @@ def parse_config(config_file="config/default.conf", debug=False):
 
 def save_config(config_filename, config):
     '''Save given configuration into dump_file as yaml format'''
+    if not os.path.exists(os.path.dirname(config_filename)):
+        os.mkdir(os.path.dirname(config_filename))
     with open(config_filename, 'w') as config_file:
         config_file.write(yaml.dump(config))
 

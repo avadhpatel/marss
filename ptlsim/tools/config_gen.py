@@ -8,8 +8,8 @@
 try:
     import yaml
 except (ImportError, NotImplementedError):
-    import sys
-    sys.path.append("../lib/python")
+    import os,sys
+    sys.path.append("./ptlsim/lib/python")
     import yaml
 
 try:
