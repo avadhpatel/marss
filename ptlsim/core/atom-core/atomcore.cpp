@@ -713,6 +713,22 @@ W8 AtomOp::execute_uop(W8 idx)
         return issue_result;
     }
 
+    /* Check if there was any exception or not */
+    if(uop.opcode != OP_ast && check_execute_exception(idx)) {
+        /*
+         * We allow this instruction to go to commit stage to properly handle
+         * the exception.
+         */
+        ATOMOPLOG3("Found exception in executing uop ", uop);
+
+        if(isclass(uop.opcode, OPCLASS_CHECK) &
+                (exception == EXCEPTION_SkipBlock)) {
+            thread->chk_recovery_rip = rip + uop.bytes;
+        }
+
+        return ISSUE_OK_BLOCK;
+    }
+
     /* Update 'rflags' to new flags and save dest reg data */
     if(!ld && !st && uop.setflags || uop.opcode == OP_ast) {
         W64 flagmask = setflags_to_x86_flags[uop.setflags];
@@ -738,16 +754,6 @@ W8 AtomOp::execute_uop(W8 idx)
     ATOMOPLOG2("state rddata:0x", hexstring(state.reg.rddata, 64));
     ATOMOPLOG2("rflags: ", hexstring(rflags[idx],16));
     dest_register_values[idx] = state.reg.rddata;
-
-    /* Check if there was any exception or not */
-    if(check_execute_exception(idx)) {
-        /*
-         * We allow this instruction to go to commit stage to properly handle
-         * the exception.
-         */
-        ATOMOPLOG3("Found exception in executing uop ", uop);
-        return ISSUE_OK_BLOCK;
-    }
 
     /* If branch, check branch misprediction */
     if(is_branch && isbranch(uop.opcode)) {
@@ -1085,7 +1091,7 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
 bool AtomOp::check_execute_exception(int idx)
 {
     /* First check 'rflags' for FLAG_INV */
-    if(!(rflags[idx] & FLAG_INV)) {
+    if(!(state.reg.rdflags & FLAG_INV)) {
         return false;
     }
 
@@ -2477,6 +2483,11 @@ bool AtomThread::handle_exception()
     flush_pipeline();
 
     // TODO : Handle EXCEPTION_SkipBlock
+    if(ctx.exception == EXCEPTION_SkipBlock) {
+        ctx.eip = chk_recovery_rip;
+        flush_pipeline();
+        return false;
+    }
 
     int write_exception = 0;
     

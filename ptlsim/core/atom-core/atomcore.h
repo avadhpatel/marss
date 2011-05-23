@@ -689,6 +689,7 @@ namespace ATOM_CORE_MODEL {
         AtomOp* register_owner[TRANSREG_COUNT];
         W16     register_flags[TRANSREG_COUNT];
         W64     temp_registers[11];
+        W64     chk_recovery_rip;
 
         AtomCore& core;
         Context&  ctx;
