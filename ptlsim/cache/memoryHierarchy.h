@@ -79,7 +79,6 @@
     *sg_n << name, name_postfix; \
     signal.set_name(sg_n->buf); \
     signal.connect(signal_mem_ptr(*this, cb)); \
-    delete sg_n; \
 }
 
 namespace OutOfOrderModel {
