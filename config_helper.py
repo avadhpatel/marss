@@ -27,7 +27,7 @@ _required_cache_params = [
 _required_mem_params = ['LATENCY']
 _required_keys = {
         'config': ['core', 'cache', 'machine', 'memory'],
-        'core': ['base', 'params'],
+        'core': ['base'],
         'cache': ['base', { 'params' : _required_cache_params } ],
         'memory': ['base'],
         'machine': ['description', 'min_contexts',
