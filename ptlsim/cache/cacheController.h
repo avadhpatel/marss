@@ -181,6 +181,7 @@ struct CacheQueueEntry : public FixStateListObject
 {
 	public:
 		int depends;
+		W64 dependsAddr;
 
 		bitvec<CACHE_NO_EVENTS> eventFlags;
 
@@ -196,6 +197,7 @@ struct CacheQueueEntry : public FixStateListObject
 			sender = null;
 			sendTo = null;
 			depends = -1;
+			dependsAddr = -1;
 			eventFlags.reset();
 			annuled = false;
 			prefetch = false;
@@ -210,6 +212,7 @@ struct CacheQueueEntry : public FixStateListObject
 
 			os << "Request{", *request, "} ";
 
+			os << "idx["<< this->idx <<"] ";
 			if(sender)
 				os << "sender[" << sender->get_name() << "] ";
 			else

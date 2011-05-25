@@ -191,6 +191,7 @@ namespace Memory {
         {
             public:
                 int depends;
+                W64 dependsAddr;
 
                 bitvec<CACHE_NO_EVENTS> eventFlags;
 
@@ -210,6 +211,7 @@ namespace Memory {
                     sendTo = null;
                     line = null;
                     depends = -1;
+                    dependsAddr = -1;
                     eventFlags.reset();
                     annuled = false;
                     evicting = false;
@@ -226,6 +228,7 @@ namespace Memory {
 
                     os << "Request{", *request, "} ";
 
+                    os << "idx["<< this->idx <<"] ";
                     if(sender)
                         os << "sender[" << sender->get_name() << "] ";
                     else

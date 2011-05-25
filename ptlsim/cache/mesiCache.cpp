@@ -1130,8 +1130,24 @@ bool CacheController::clear_entry_cb(void *arg)
 
         queueEntry->request->decRefCounter();
         ADD_HISTORY_REM(queueEntry->request);
-        if(!queueEntry->annuled)
+        if(!queueEntry->annuled) {
+			if(pendingRequests_.list().count == 0) {
+				memdebug("Removing from pending request queue ",
+								pendingRequests_, " \nQueueEntry: ",
+								queueEntry, endl);
+			}
+
+			// make sure that no pending entry will wake up the removed entry (in the case of annuled)
+			int removed_idx = queueEntry->idx;
+			CacheQueueEntry *tmpEntry;
+			foreach_list_mutable(pendingRequests_.list(), tmpEntry, entry, nextentry) {
+				if(tmpEntry->depends == removed_idx) {
+					tmpEntry->depends = -1;
+					tmpEntry->dependsAddr = -1;
+				}
+			}
             pendingRequests_.free(queueEntry);
+        }
 
         /*
          * Check if pendingRequests_ buffer is not full then
