@@ -610,7 +610,7 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif
 
-  if(config.run && !config.kill) {
+  if(config.run && !config.kill && !config.stop) {
 	  start_simulation = 1;
   }
 
@@ -620,7 +620,6 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
   }
 
   if((start_simulation || in_simulation) && config.stop) {
-	  in_simulation = 0;
       if(config.run)
           config.run = false;
   }
@@ -1237,6 +1236,8 @@ extern "C" uint8_t ptl_simulate() {
 
 	ptl_stable_state = 1;
 
+    setup_qemu_switch_all_ctx(*machine->ret_qemu_env);
+
 	if (!machine->stopped) {
         if(logable(1)) {
 			ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).exception_index,
@@ -1245,8 +1246,6 @@ extern "C" uint8_t ptl_simulate() {
             ptl_logfile << " sim_cycle: ", sim_cycle;
             ptl_logfile << endl, flush;
         }
-
-		setup_qemu_switch_all_ctx(*machine->ret_qemu_env);
 
 		/* Tell QEMU that we will come back to simulate */
 		return 1;
@@ -1291,6 +1290,12 @@ extern "C" uint8_t ptl_simulate() {
 
     if(config.stop) {
         config.stop = false;
+    }
+
+    foreach(ctx_no, contextcount) {
+        Context& ctx = contextof(ctx_no);
+        tb_flush((CPUX86State*)(&ctx));
+        ctx.old_eip = 0;
     }
 
 	return 0;
