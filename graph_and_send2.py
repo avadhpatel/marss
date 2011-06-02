@@ -8,9 +8,6 @@ from subprocess import *
 from make_graph2 import *
 from send_gmail import *
 
-regex = re.compile('(\d+): (\d+) requests, \(([0-9.]+) bw\), ([0-9.]+) avg lat');
-
-
 def chop_off_head_and_tail(filename, skip_head=3, skip_tail=1):
 	output_filename = tempfile.NamedTemporaryFile(delete=False).name
 	# grab the first line and return it
