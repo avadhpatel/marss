@@ -10,3 +10,49 @@ The graphing scripts rely heavily on numpy and matplotlib, which are excellent m
 libraries, respectively. 
 
 More details to come.
+
+1. Emailer Scripts
+
+The two gmail scripts here use a token-based authentication system which
+doesn't require a password. This means that you don't have to put your 
+gmail password in plaintext on your hard drive and the tokens can be revoked
+via your gmail account in case someone gets access to them. For more details, 
+see: http://code.google.com/apis/gmail/oauth/ 
+
+To use the scripts, you're going to need to use the xoauth.py file (which is 
+google's sample script, not mine) to generate an xoauth.txt file.
+
+First, run: 
+$ ./xoauth.py --generate_oauth_token --user=YOUR_USERNAME@gmail.com
+
+This will give you a URL to go to which will either use your logged in account or will
+ask you to login. After you enter in your verification code, the xoauth script will 
+generate an xoauth file for you. 
+
+Adjust the paths in your config.py so that they match your actual system. 
+
+After you have an xoauth.txt and the correct paths in config.py, you can test to see 
+that everything went fine by running 
+
+$ ./send_gmail.py 
+
+This will use your xoauth information to send an email to whatever address you have
+specified in your config.py file. 
+
+If you receieve the email successfully, then the xoauth is working. Now you can also 
+use the poll_gmail.py script which will login to gmail, get the unread messages from 
+a specific label, and send back a simulation status report. 
+
+For now the simulation status report is generated in sim_status.py and this file tends
+to be sort of specific to what I name my disk images/screen sessions/etc. So, please 
+change it how you see fit. 
+
+Running: 
+
+$ ./poll_gmail.py 
+
+Should either report that there are no messages in that label, or send a simulation status
+string to the email address given in your config.py.
+
+
+

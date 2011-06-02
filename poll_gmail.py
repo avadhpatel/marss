@@ -12,18 +12,19 @@ import config
 from send_gmail import *
 from sim_status import *
 
-user,dest_email,xoauth_string = generate_xoauth_string(config.xoauth_file, "IMAP");
+user,xoauth_imap_string = generate_xoauth_string(config.get_xoauth_filename(), "IMAP");
 
+# TODO: perhaps this should generate a reply to the sender of the message instead 
+dest_email = config.get_destination_email()
 imap_hostname = 'imap.googlemail.com'
-
+label_to_watch = 'marss'
 
 # Get unread/unseen list
 imap_conn = imaplib.IMAP4_SSL(imap_hostname)
 # imap_conn.debug = 4
-imap_conn.authenticate('XOAUTH', lambda x: xoauth_string)
-# Set readonly, so the message won't be set with seen flag
-# look for the label called 'marss'
-imap_conn.select('marss', readonly=False)
+imap_conn.authenticate('XOAUTH', lambda x: xoauth_imap_string)
+# look for the label called 'marss'; mark message as read (readonly=false)
+imap_conn.select(label_to_watch, readonly=False)
 typ, data = imap_conn.search(None, 'UNSEEN')
 unreads = data[0].split()
 
@@ -33,8 +34,12 @@ if (len(unreads) > 0):
 	if ids:
 		typ, data = imap_conn.fetch(ids, '(RFC822)')
 
-	# this string comes from sim_status.py
+	# this string comes from sim_status.py -- you will probably need to adjust this string to taste
 	status_string = get_status_string()
-	user,dest_email,smtp_xoauth_string = generate_xoauth_string(config.xoauth_file);
+
+	# Another token is needed for the SMTP request
+	user,xoauth_smtp_string = generate_xoauth_string(config.xoauth_file);
 	# send back an email called STATUS
-	send_email(user, dest_email, smtp_xoauth_string, None, [], "STATUS", status_string)
+	send_email(user, dest_email, xoauth_smtp_string, None, [], "Simulation status report", status_string)
+else:
+	print "No new messages in label '%s'"%(label_to_watch)
