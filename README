@@ -1,0 +1,12 @@
+This is a set of tools we use for dealing with simulation results that come out of marss. 
+
+I sincerely apologize for the code you're about to witness it was written in an evolutionary style 
+so it's not particularly clean or elegant, but some of it might be useful for people to look at to 
+design their own helper scripts.
+
+I'll eventually try to write up some stuff about what there are intended to do ...
+
+The graphing scripts rely heavily on numpy and matplotlib, which are excellent math and plotting 
+libraries, respectively. 
+
+More details to come.
