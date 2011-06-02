@@ -3,7 +3,6 @@
 import os; 
 import re;
 import tempfile; 
-from get_stats import *
 import matplotlib
 matplotlib.use("Agg");
 import numpy as np;

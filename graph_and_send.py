@@ -8,6 +8,7 @@ import time, datetime
 from subprocess import *
 from make_graph import *
 from send_gmail import *
+import config 
 
 def chop_off_head_and_tail(filename, skip_head=3, skip_tail=1):
 	output_filename = tempfile.NamedTemporaryFile(delete=False).name
@@ -29,7 +30,7 @@ def dump_semicolons(filename):
 def get_sim_desc_from_num(num):
 	prefix="#SIM_DESC="
 	bob_variant_prefix="#BOB_VARIANT="
-	f = open("simulate%d.sh"%num);
+	f = open(config.get_marss_dir_path("simulate%d.sh"%num));
 	sim_desc=""
 	bob_variant=""
 	for line in f:
@@ -69,20 +70,20 @@ if __name__ == "__main__":
 		exit();
 
 	run_num = int(sys.argv[1]);
-	log_file_base_name = "run%d.log"%(run_num)
+	log_file_base_name = config.get_marss_dir_path("run%d.log"%(run_num))
 	run_desc = get_sim_desc_from_num(run_num); 
 	if len(sys.argv) == 3:
 		run_desc = sys.argv[2];
 
 	memlog_file_name = "%s.memlog"%(log_file_base_name);
 	memhist_file_name = "%s.memhisto"%(log_file_base_name); 
-	logfile_path = "%s/marss.dramsim/run%d.log.memlog"%(os.getenv("HOME"), run_num)
 
-	bob_stats_file_name = "BOBstats%s.txt"%(run_desc)
-	bob_log_file_name = "bobsim%s.log"%(run_desc)
+	bob_stats_file_name = config.get_marss_dir_path("BOBstats%s.txt"%(run_desc))
+	bob_log_file_name = config.get_marss_dir_path("bobsim%s.log"%(run_desc))
+	stats_file = config.get_marss_dir_path("run%d.stats"%(run_num))
 	
-
-	ptlstats_cmd = ["./ptlstats", "-snapshot","final", "-subtree","/memory/total/L2/cpurequest", "run%d.stats"%(run_num)]
+	ptlstats_bin = config.get_marss_dir_path("ptlstats");
+	ptlstats_cmd = [ptlstats_bin, "-snapshot","final", "-subtree","/memory/total/L2/cpurequest", stats_file]
 	stats_str = Popen(ptlstats_cmd, stdout=PIPE).communicate()[0]
 	string_arr.append(stats_str)
 	stopped_str = Popen(["grep","Stopped",log_file_base_name],stdout=PIPE).communicate()[0]
@@ -93,11 +94,12 @@ if __name__ == "__main__":
 #TODO: save git diff output in the tgz
 	last_req_str = Popen(["tail","-1",memlog_file_name],stdout=PIPE).communicate()[0]
 
-	if len(stats_str) > 0:
-		Popen(["tar","czf","run%d_%s_%d.tgz"%(posix_time,run_desc,run_num),memlog_file_name,memhist_file_name,log_file_base_name,bob_stats_file_name,bob_log_file_name,"run%d.stats"%(run_num),"out.png"],stdout=PIPE).communicate()[0]
+#TODO: tar does not like the absolute file names ... 
+#	if len(stats_str) > 0:
+#		Popen(["tar","czf","run%d_%s_%d.tgz"%(posix_time,run_desc,run_num),memlog_file_name,memhist_file_name,log_file_base_name,bob_stats_file_name,bob_log_file_name,stats_file,"out.png"],stdout=PIPE).communicate()[0]
 
 
-	output_logfile, header_str = chop_off_head_and_tail(logfile_path)
+	output_logfile, header_str = chop_off_head_and_tail(memlog_file_name)
 	header_fields = header_str.rstrip().split(",");
 	header_map = {}
 	for i,f in enumerate(header_fields): 
@@ -105,7 +107,6 @@ if __name__ == "__main__":
 #		print f, "->", i+1
 		
 	
-	histo_path = "%s/marss.dramsim/memhisto.log"%(os.getenv("HOME"))
 	x_axis_desc = AxisDescription("Cycle Number")
 #	print "HEADERMAP:",header_map
 	g = [
@@ -144,4 +145,4 @@ if __name__ == "__main__":
 	outfile = CompositeGraph().draw(g, run_desc);
 	outfiles = [outfile]
 
-#	authorize_and_send(None,outfiles,strings_arr=string_arr);
+	authorize_and_send(None,outfiles,strings_arr=string_arr);
