@@ -36,7 +36,7 @@ class simulation:
 		self.isRunning = True;
 
 	def get_cycle_info(self,blksize=(16*1024)):
-		logfile_name = "%s/run%d.log"%(config.get_marss_directory(),self.num)
+		logfile_name = config.get_marss_dir_path("run%d.log" %self.num)
 		try:
 			f = open(logfile_name,"rb")
 		except IOError:
