@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python -W ignore::DeprecationWarning
 
 #this code is extremely loosely based off of: 
 # http://code.google.com/p/yjl/source/browse/Python/snippet/gmail-xoauth.py

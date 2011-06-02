@@ -36,7 +36,7 @@ class simulation:
 		self.isRunning = True;
 
 	def get_cycle_info(self,blksize=(16*1024)):
-		logfile_name = "%s/run%d.log"%(config.marss_directory,self.num)
+		logfile_name = "%s/run%d.log"%(config.get_marss_directory(),self.num)
 		try:
 			f = open(logfile_name,"rb")
 		except IOError:
@@ -96,7 +96,6 @@ def get_info_from_line(line):
 	#line_arr[2] = " ".join(line_arr[2:])
 	#del line_arr[3:]
 	sim_num = -1;
-	# TODO: replace this crap with regex
 
 	for p in line_arr:
 		m = re.search(sim_num_pattern, p)
