@@ -16,8 +16,9 @@ user,xoauth_imap_string = generate_xoauth_string(config.get_xoauth_filename(), "
 
 # TODO: perhaps this should generate a reply to the sender of the message instead 
 dest_email = config.get_destination_email()
-imap_hostname = 'imap.googlemail.com'
 label_to_watch = 'marss'
+
+imap_hostname = 'imap.googlemail.com'
 
 # Get unread/unseen list
 imap_conn = imaplib.IMAP4_SSL(imap_hostname)
@@ -38,8 +39,8 @@ if (len(unreads) > 0):
 	status_string = get_status_string()
 
 	# Another token is needed for the SMTP request
-	user,xoauth_smtp_string = generate_xoauth_string(config.xoauth_file);
-	# send back an email called STATUS
+	user,xoauth_smtp_string = generate_xoauth_string(config.get_xoauth_filename());
+	# send back an email 
 	send_email(user, dest_email, xoauth_smtp_string, None, [], "Simulation status report", status_string)
 else:
 	print "No new messages in label '%s'"%(label_to_watch)

@@ -4,5 +4,5 @@
 # so cron doesn't send you an email every time the script runs
 
 #python -W ignore::DeprecationWarning ./poll_gmail.py &> /dev/null
-export PATH=$PATH:$HOME/marss.utils
-poll_gmail.py 
+export PATH=$PATH:$HOME/marss.utils 
+poll_gmail.py &> /dev/null
