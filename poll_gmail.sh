@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash 
 
 # this file is intended to be used with cron -- it kills the output 
 # so cron doesn't send you an email every time the script runs
