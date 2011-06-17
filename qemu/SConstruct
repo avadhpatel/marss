@@ -354,6 +354,8 @@ hw_files += " fw_cfg.c watchdog.c wdt_i6300esb.c msix.c "
 if env['kvm']:
     obj_files += " kvm-all.c"
     obj_files += " %s/kvm.c" % target_path
+else:
+    obj_files += " kvm-stub.c"
 
 #if env['aio']:
 #    obj_files += " posix-aio-compat.c"
