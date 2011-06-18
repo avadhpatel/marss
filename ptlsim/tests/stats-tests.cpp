@@ -12,16 +12,72 @@ namespace {
         public:
             StatArray<W64, 10> arr1;
             StatObj<W64> ct1;
+            StatObj<W64> ct2;
+            StatObj<W64> ct3;
             StatString st1;
             StatString st2;
 
             TestStat() : Statable("test")
                          , arr1("arr1", this)
                          , ct1("ct1", this)
+                         , ct2("ct2", this)
+                         , ct3("ct3", this)
                          , st1("st1", this)
                          , st2("st2", this)
         {}
     };
+
+    /* FIXME: for now, this test must be first because of
+       the way StatBuilder keeps its state; the other
+       tests add fields which wouldn't be there in a
+       normal program so there are extra fields in the
+       output
+       */
+    TEST(Stats, TimeStats) {
+#include <sstream>
+#define reset_stream(os) { os.str(""); }
+        using std::ostringstream;
+
+        StatsBuilder &builder = StatsBuilder::get();
+
+        ostringstream os;
+        TestStat st;
+        Stats *time_stats = builder.get_new_stats();
+        st.ct1.set_default_stats(n_kernel_stats);
+        st.ct2.set_default_stats(n_global_stats);
+        st.ct3.set_default_stats(n_global_stats);
+        st.ct1.set_time_stats(time_stats);
+        st.ct2.set_time_stats(time_stats);
+        st.ct3.set_time_stats(time_stats);
+
+        builder.dump_header(os);
+        ASSERT_STREQ(os.str().c_str(), "sim_cycle,test.ct1,test.ct2,test.ct3\n");
+        reset_stream(os);
+
+        st.ct1++;
+        builder.dump_periodic(os,0);
+        ASSERT_STREQ(os.str().c_str(), "0,1,0,0\n");
+        reset_stream(os);
+
+        st.ct1.set_default_stats(n_user_stats);
+        st.ct1 += 30;
+        builder.dump_periodic(os,100);
+        ASSERT_STREQ(os.str().c_str(), "100,30,0,0\n");
+        reset_stream(os);
+
+        st.ct2 += 19;
+        st.ct2++;
+        builder.dump_periodic(os,200);
+        ASSERT_STREQ(os.str().c_str(), "200,0,20,0\n");
+        reset_stream(os);
+
+        st.ct1 += 1;
+        st.ct2++;
+        builder.dump_periodic(os,300);
+        ASSERT_STREQ(os.str().c_str(), "300,1,1,0\n");
+        reset_stream(os);
+
+    }
 
     TEST(Stats, StatArray) {
 
@@ -129,5 +185,8 @@ namespace {
             ASSERT_STREQ(out.c_str(), "---\nst2: [string, test, assignment]");
         }
     }
+
+
+
 
 };

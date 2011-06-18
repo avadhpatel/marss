@@ -70,6 +70,14 @@ Stats *n_kernel_stats;
 Stats *n_global_stats;
 SimStats sim_stats;
 
+/* XXX: do not use n_time_stats like the others (user,kernel,global) --
+   it should never be set as the default variable pointer;
+   instead it should only be used with set_time_stats() to
+   enable time-based logging for a stat
+   */
+Stats *n_time_stats;
+ostream *time_stats_file;
+
 #endif
 
 static void kill_simulation() __attribute__((noreturn));
@@ -101,6 +109,7 @@ void PTLsimConfig::reset() {
   enable_mm_validate = 0;
   screenshot_file = "";
   log_user_only = 0;
+  time_stats_logfile = "";
 
   event_log_enabled = 0;
   event_log_ring_buffer_size = 32768;
@@ -225,6 +234,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(enable_mm_validate,           "mm-validate",          "Validate every memory manager request against internal structures (slow)");
   add(screenshot_file,              "screenshot",           "Takes screenshot of VM window at the end of simulation");
   add(log_user_only,                "log-user-only",        "Only log the user mode activities");
+  add(time_stats_logfile,           "time-stats-logfile",   "File to write time-series statistics (new)");
 
   section("Event Ring Buffer Logging Control");
   add(event_log_enabled,            "ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
@@ -762,6 +772,16 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
         n_user_stats = builder.get_new_stats();
         n_kernel_stats = builder.get_new_stats();
         n_global_stats = builder.get_new_stats();
+
+        // time based stats
+        if (config.time_stats_logfile.length > 0)
+        {
+            time_stats_file = new ofstream(config.time_stats_logfile.buf);
+            n_time_stats = builder.get_new_stats();
+        } else {
+            n_time_stats = NULL;
+            time_stats_file = NULL;
+        }
     }
 
     qemu_free(config_str);

@@ -168,6 +168,17 @@ class Statable {
         bson_buffer* dump(bson_buffer *bb, Stats *stats);
 
         void add_stats(Stats& dest_stats, Stats& src_stats);
+
+        ostream& dump_periodic(ostream &os) const;
+
+        ostream& dump_header(ostream &os) const;
+
+        bool is_dump_periodic_disabled() const;
+
+        stringbuf *get_full_stat_string();
+
+
+
 };
 
 /**
@@ -209,7 +220,7 @@ class StatsBuilder {
         /**
          * @brief Add a Statble to the root of the Stats tree
          *
-         * @param statabl
+         * @param statable
          */
         void add_to_root(Statable *statable)
         {
@@ -281,6 +292,10 @@ class StatsBuilder {
         {
             rootNode->add_stats(dest_stats, src_stats);
         }
+
+        ostream& dump_header(ostream &os) const;
+        ostream& dump_periodic(ostream &os, W64 cycle) const;
+
 };
 
 /**
@@ -320,6 +335,7 @@ class Stats {
  */
 class StatObjBase {
     protected:
+        Stats *time_stats;
         Stats *default_stats;
         Statable *parent;
         stringbuf name;
@@ -328,6 +344,7 @@ class StatObjBase {
     public:
         StatObjBase(const char *name, Statable *parent)
             : parent(parent)
+              , time_stats(NULL)
               , dump_disabled(false)
         {
             this->name = name;
@@ -336,6 +353,8 @@ class StatObjBase {
         }
 
         virtual void set_default_stats(Stats *stats);
+        virtual void set_time_stats(Stats *stats);
+
 
         virtual ostream& dump(ostream& os, Stats *stats) const = 0;
         virtual YAML::Emitter& dump(YAML::Emitter& out,
@@ -343,7 +362,36 @@ class StatObjBase {
         virtual bson_buffer* dump(bson_buffer* out,
                 Stats *stats) const = 0;
 
+        virtual ostream& dump_periodic(ostream &os) const = 0;
+
+        inline bool is_dump_periodic_disabled() const { return time_stats == NULL; }
+
+        stringbuf *get_full_stat_string()
+        {
+            if (parent){
+                stringbuf *parent_name = parent->get_full_stat_string();
+                (*parent_name) << "." << name;
+                return parent_name;
+            } else {
+                return new stringbuf(name);
+            }
+        }
+
+        virtual ostream &dump_header(ostream &os) {
+            if (!is_dump_periodic_disabled()) {
+                stringbuf *full_string = get_full_stat_string();
+                os << ","<< (*full_string);
+                /* FIXME: this should be deleted, but for some reason libc
+                   does not like that one bit, need to figure out why ...
+                   */
+
+                //delete(full_string);
+            }
+        }
+
+
         virtual void add_stats(Stats& dest_stats, Stats& src_stats) = 0;
+
 
         void disable_dump() { dump_disabled = true; }
         void enable_dump() { dump_disabled = false; }
@@ -355,7 +403,7 @@ class StatObjBase {
  *
  * This class povides an easy interface to create basic statistics counters for
  * the simulator. It also provides easy way to generate YAML and BSON
- * prepresentation of the the object for final Stats dump.
+ * representation of the the object for final Stats dump.
  */
 template<typename T>
 class StatObj : public StatObjBase {
@@ -363,6 +411,7 @@ class StatObj : public StatObjBase {
         W64 offset;
 
         T *default_var;
+        T *time_var;
 
         inline void set_default_var_ptr()
         {
@@ -382,6 +431,7 @@ class StatObj : public StatObjBase {
          */
         StatObj(const char *name, Statable *parent)
             : StatObjBase(name, parent)
+            , time_var(NULL)
         {
             StatsBuilder &builder = StatsBuilder::get();
 
@@ -404,6 +454,12 @@ class StatObj : public StatObjBase {
             set_default_var_ptr();
         }
 
+        void set_time_stats(Stats *stats)
+        {
+            StatObjBase::set_time_stats(stats);
+            time_var = (T*)(time_stats->base() + offset);
+        }
+
         /**
          * @brief ++ operator - like a++
          *
@@ -414,6 +470,10 @@ class StatObj : public StatObjBase {
         inline T operator++(int dummy)
         {
             assert(default_var);
+            if (time_var)
+            {
+                (*time_var)++;
+            }
             T ret = (*default_var)++;
             return ret;
         }
@@ -427,6 +487,11 @@ class StatObj : public StatObjBase {
         {
             assert(default_var);
             (*default_var)++;
+            if (time_var)
+            {
+                (*time_var)++;
+            }
+
             return (*default_var);
         }
 
@@ -440,6 +505,10 @@ class StatObj : public StatObjBase {
         inline T operator--(int dummy) {
             assert(default_var);
             T ret = (*default_var)--;
+            if (time_var)
+            {
+                (*time_var)--;
+            }
             return ret;
         }
 
@@ -451,6 +520,10 @@ class StatObj : public StatObjBase {
         inline T operator--() {
             assert(default_var);
             (*default_var)--;
+            if (time_var)
+            {
+                (*time_var)--;
+            }
             return (*default_var);
         }
 
@@ -491,6 +564,10 @@ class StatObj : public StatObjBase {
         inline T operator +=(const T &b) const {
             assert(default_var);
             *default_var += b;
+            if (time_var)
+            {
+                (*time_var)+= b;
+            }
             return *default_var;;
         }
 
@@ -505,6 +582,15 @@ class StatObj : public StatObjBase {
             assert(default_var);
             assert(statObj.default_var);
             *default_var += (*statObj.default_var);
+            if (time_var && statObj.time_var)
+            {
+                /*XXX: if, for some reason, the dump_periodic is called at
+                  different intervals for the two statObj's, this value is
+                  meaningless, however, this is currently not that case
+                 */
+
+                (*time_var) += *statObj.time_var;
+            }
             return  *default_var;
         }
 
@@ -671,6 +757,17 @@ class StatObj : public StatObjBase {
         {
             T& dest_var = (*this)(&dest_stats);
             dest_var += (*this)(&src_stats);
+        }
+
+        ostream &dump_periodic(ostream &os) const
+        {
+            if (time_var)
+            {
+                os << "," << (*time_var);
+                // reset the time var for the next epoch
+                *time_var = 0;
+            }
+            return os;
         }
 };
 
@@ -865,6 +962,11 @@ class StatArray : public StatObjBase {
             foreach(i, size) {
                 dest_arr[i] += src_arr[i];
             }
+        }
+
+        ostream &dump_periodic(ostream &os) const
+        {
+            return os;
         }
 };
 
@@ -1115,6 +1217,12 @@ class StatString : public StatObjBase {
         {
             /* NOTE: We don't do auto addition os stats string */
         }
+
+        ostream &dump_periodic(ostream &os) const
+        {
+            return os;
+        }
+
 };
 
 #endif // STATS_BUILDER_H

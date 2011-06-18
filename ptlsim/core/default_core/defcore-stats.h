@@ -78,7 +78,9 @@ namespace OOO_CORE_MODEL {
                       , physregs_full("physregs_full", this)
                       , ldq_full("ldq_full", this)
                       , stq_full("stq_full", this)
-                {}
+                {
+//                    complete.set_time_stats(n_time_stats);
+                }
             } status;
 
             struct renamed : public Statable
