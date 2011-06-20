@@ -13,23 +13,27 @@ import matplotlib.axes as ax
 
 #from make_graph import *
 #from graph_and_send import *
+I_label = "I: 8/32, 4 controllers"
+G_label = "G: 8/12, 4 controllers"
+D_label = "D: 16/16, 2 controllers"
 
 bob_sim_descriptions = {"PARSEC fluidanimate (8 cores)" : 
- {'I':'shared_crazyBus3_parsec.fluidanimate_8q_4M_L2_I'
-	,'D':'shared_crazyBus3_parsec.fluidanimate_8q_4M_L2_D'
-	,'G':'shared_crazyBus3_parsec.fluidanimate_8q_4M_L2_G'
+ {I_label:'shared_crazyBus3_parsec.fluidanimate_8q_4M_L2_I'
+	,D_label:'shared_crazyBus3_parsec.fluidanimate_8q_4M_L2_D'
+	,G_label:'shared_crazyBus3_parsec.fluidanimate_8q_4M_L2_G'
 } 
 }
-output_filename="stream.pdf"
+outputFilename="fluidanimate.pdf"
 
 if len(sys.argv) > 1:
 	if sys.argv[1] == "stream":
 		bob_sim_descriptions = {"STREAM (8 cores, 10 iterations, array size=2M)" : 
-		 {'I':'_stream_8core_cbus_I'
-			,'D':'_stream_8core_cbus_D'
-			,'G':'_stream_8core_cbus_G'
-		} }
-	output_filename="fluidanimate.pdf"
+		 {I_label:'_stream_8core_cbus_I'
+			,D_label:'_stream_8core_cbus_D'
+			,G_label:'_stream_8core_cbus_G'
+		} 
+		}
+		outputFilename="stream.pdf"
 
 bob_sim_fields = {"Bandwidth":2, "Latency":3}
 
@@ -50,26 +54,7 @@ def dump_semicolons(filename):
 	os.system("sed 's/,;/,/g' %s > %s"%(filename, output_filename2))
 	os.system("sed 's/;/,/g' %s > %s"%(output_filename2, output_filename))
 	return output_filename
-dashes = [
-'-', '-',
-':', ':',
-'-', '-'
-           ]
-linewidths = [
-1.4,1.4
-,1.5,1.5
-,0.5,0.5
-
-]
-"""
-markers = [
-' ',' ',
-#'s','s',
-' ',' '
-]
-"""
-
-nump=0
+line_params = {I_label: ['-',1.5], G_label: ["-",0.5], D_label: [":",1.4]}
 
 
 class DataTable:
@@ -110,7 +95,6 @@ class DataTable:
 		return np.where(True)
 
 	def draw(self, ax, x_col, y_col, label, color="#ffffff", col_to_num_map=None):
-		global nump
 		print "X=",x_col,"Y=",y_col
 		x_data = self.get_x_data(x_col, col_to_num_map);
 		y_data = self.get_y_data(y_col, col_to_num_map);
@@ -122,9 +106,7 @@ class DataTable:
 
 		filtered_y_data = y_data[filtered_indices]
 		mean,std = np.mean(filtered_y_data ), np.std(filtered_y_data )
-		ax.plot(x_data[filtered_indices], y_data[filtered_indices],label="%s: $\mu=%.2f,\sigma=%.2f$"%(label,mean,std),c='k',linestyle=dashes[nump%len(dashes)], linewidth=linewidths[nump%len(linewidths)]);
-		nump = nump+1;
-		print "NUM=%d,mod=%d"%(nump, nump%len(dashes))
+		ax.plot(x_data[filtered_indices], y_data[filtered_indices],label="%s"%(label),c='k',linestyle=line_params[label][0], linewidth=line_params[label][1]);
 
 
 def get_layout(num_boxes):
@@ -150,18 +132,19 @@ def rect_for_graph(idx, num_rows, num_cols):
 	return l,b,w,h;
 
 def bob_file_to_data_table(sim_name):
-	bob_stats_filename = "../BOBstats%s.txt"%(sim_name)
+	bob_stats_filename = "tmp/BOBstats%s.txt"%(sim_name)
 	print "Loading %s"%bob_stats_filename, 
 	bob_stats_filename = dump_semicolons(bob_stats_filename)
 	bob_stats_filename,header_str2 = chop_off_head_and_tail(bob_stats_filename, 63,1)
 	print "-> %s"%bob_stats_filename
 	return DataTable(bob_stats_filename)
 
-def draw_graph(ax, which, label, data_table):
+def draw_graph(ax, which, label, data_table,show_legend=True):
 	data_table.draw(ax,1,bob_sim_fields[which],label)
-	leg=ax.legend(loc='best', title='BOB Configurations')
-#	leg.get_frame().set_alpha(0.5);
-	plt.setp(leg.get_texts(), fontsize='small')
+	if show_legend:
+		leg=ax.legend(loc='best', title='BOB Configurations\n(Req./Resp., \# controllers)')
+#		leg.get_frame().set_alpha(0.5);
+		plt.setp(leg.get_texts(), fontsize='small')
 
 		
 if __name__ == "__main__":
@@ -199,17 +182,20 @@ if __name__ == "__main__":
 				data_table = bob_file_to_data_table(sim_name)
 				col_str = "Bandwidth"
 				if counter %2 == 0:
-					draw_graph(ax_b,col_str,label,data_table)
+					draw_graph(ax_b,col_str,label,data_table,show_legend=True)
 				else:
 					col_str = "Latency"
-					draw_graph(ax_l,col_str,label,data_table)
+					draw_graph(ax_l,col_str,label,data_table,show_legend=False)
 				counter = counter + 1
 	 
 	#figure-wide settings
 	fig.suptitle(graph_name, fontsize=12, fontweight='bold', x=0.515)
-	outputFilename = "outl.eps"#tempfile.NamedTemporaryFile(suffix='.png',delete=False).name
-	print "figure is %dx%d in"%(fig_width,fig_height)
-	plt.savefig(outputFilename);#,bbox_inches='tight'); 
+	tmp_out = "outl.eps"#tempfile.NamedTemporaryFile(suffix='.png',delete=False).name
+	tmp_out2 = "outl.pdf";
+	print "figure is %dx%d in %s"%(fig_width,fig_height,outputFilename)
+	plt.savefig(tmp_out);#,bbox_inches='tight'); 
 	plt.clf();
-	os.system("ps2pdf14 -d-dPDFSETTINGS=/prepress %s"%(outputFilename));
+	os.system("ps2pdf14 -d-dPDFSETTINGS=/prepress %s"%(tmp_out));
+	os.system("mv %s %s"%(tmp_out2, outputFilename));
+
 
