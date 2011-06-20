@@ -17,13 +17,23 @@ I_label = "I: 8/32, 4 controllers"
 G_label = "G: 8/12, 4 controllers"
 D_label = "D: 16/16, 2 controllers"
 
-bob_sim_descriptions = {"PARSEC fluidanimate (8 cores)" : 
- {I_label:'shared_crazyBus3_parsec.fluidanimate_8q_4M_L2_I'
-	,D_label:'shared_crazyBus3_parsec.fluidanimate_8q_4M_L2_D'
-	,G_label:'shared_crazyBus3_parsec.fluidanimate_8q_4M_L2_G'
-} 
-}
-outputFilename="fluidanimate.pdf"
+
+#bob_sim_descriptions = {"facesim (8 cores)" : 
+# {'CH:RW:BK:RK:CL:BY':'_parsec.facesim_CH_RW_BK_RK_CL_BY',
+#  'RW:CH:BK:RK:CL:BY':'_parsec.facesim_RW_CH_BK_RK_CL_BY',
+#  'RW:BK:RK:CH:CL:BY':'_parsec.facesim_RW_BK_RK_CH_CL_BY',
+#  'RW:BK:RK:CLH:CH:CLL:BY':'_parsec.facesim_RW_BK_RK_CLH_CH_CLL_BY'
+#} 
+#}
+
+bob_sim_descriptions = {"fluid (8 cores)" :
+ {'64 Bytes':'_parsec.fluidanimate_W',
+  '128 Bytes':'_parsec.fluidanimate_X',
+  '256 Bytes':'_parsec.fluidanimate_Y',
+  '1024 Bytes':'_parsec.fluidanimate_Z'
+}                                                                                                                                                           
+}    
+output_filename="test.pdf"
 
 if len(sys.argv) > 1:
 	if sys.argv[1] == "stream":
@@ -54,8 +64,37 @@ def dump_semicolons(filename):
 	os.system("sed 's/,;/,/g' %s > %s"%(filename, output_filename2))
 	os.system("sed 's/;/,/g' %s > %s"%(output_filename2, output_filename))
 	return output_filename
-line_params = {I_label: ['-',1.5], G_label: ["-",0.5], D_label: [":",1.4]}
+colorarray = [
+'r','r',
+'b','b',
+'m','m',
+'g','g'
+]
+legpos = [
+'lower right','lower right'
+]
+dashes = [
+'-', '-',
+':', ':',
+'-', '-'
+           ]
+linewidths = [
+1.3,1.3
+,1.5,1.5
+,0.8,0.8,
+0.7,0.7
 
+]
+"""
+markers = [
+' ',' ',
+#'s','s',
+' ',' '
+]
+"""
+
+nump=0
+numl=0
 
 class DataTable:
 	def __init__(self, data_filename, data_delimiter=","):
@@ -102,11 +141,14 @@ class DataTable:
 		if False:
 			filtered_indices = self.filter_outliers(y_data)
 		else:
-			filtered_indices = range(0,len(y_data))
+			#filtered_indices = range(0,len(y_data))
+			filtered_indices = range(350,min(len(y_data),500))
 
 		filtered_y_data = y_data[filtered_indices]
 		mean,std = np.mean(filtered_y_data ), np.std(filtered_y_data )
-		ax.plot(x_data[filtered_indices], y_data[filtered_indices],label="%s"%(label),c='k',linestyle=line_params[label][0], linewidth=line_params[label][1]);
+		ax.plot(x_data[filtered_indices], y_data[filtered_indices],label="%s"%(label),c=colorarray[nump%len(colorarray)],linestyle=dashes[nump%len(dashes)], linewidth=linewidths[nump%len(linewidths)]);
+		nump = nump+1;
+		print "NUM=%d,mod=%d"%(nump, nump%len(dashes))
 
 
 def get_layout(num_boxes):
@@ -132,19 +174,20 @@ def rect_for_graph(idx, num_rows, num_cols):
 	return l,b,w,h;
 
 def bob_file_to_data_table(sim_name):
-	bob_stats_filename = "tmp/BOBstats%s.txt"%(sim_name)
+	bob_stats_filename = "results/BOBstats%s.txt"%(sim_name)
 	print "Loading %s"%bob_stats_filename, 
 	bob_stats_filename = dump_semicolons(bob_stats_filename)
 	bob_stats_filename,header_str2 = chop_off_head_and_tail(bob_stats_filename, 63,1)
 	print "-> %s"%bob_stats_filename
 	return DataTable(bob_stats_filename)
 
-def draw_graph(ax, which, label, data_table,show_legend=True):
+def draw_graph(ax, which, label, data_table):
+	global numl
 	data_table.draw(ax,1,bob_sim_fields[which],label)
-	if show_legend:
-		leg=ax.legend(loc='best', title='BOB Configurations\n(Req./Resp., \# controllers)')
-#		leg.get_frame().set_alpha(0.5);
-		plt.setp(leg.get_texts(), fontsize='small')
+	leg=ax.legend(loc=legpos[numl%len(legpos)], title='Return Queue Depth')
+	numl=numl+1
+#	leg.get_frame().set_alpha(0.5);
+	plt.setp(leg.get_texts(), fontsize='small')
 
 		
 if __name__ == "__main__":

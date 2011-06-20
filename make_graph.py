@@ -58,7 +58,7 @@ class CompositeGraph:
 			
 		fig.suptitle(graph_name, fontsize=12)
 
-		outputFilename = "out.png"#tempfile.NamedTemporaryFile(suffix='.png',delete=False).name
+		outputFilename = "%s.png"%graph_name#tempfile.NamedTemporaryFile(suffix='.png',delete=False).name
 
 #		plt.tick_params(axis='both', labelsize='small');
 		plt.savefig(outputFilename);#,bbox_inches='tight'); 
