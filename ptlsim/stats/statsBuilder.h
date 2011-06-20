@@ -385,7 +385,7 @@ class StatObjBase {
                    does not like that one bit, need to figure out why ...
                    */
 
-                //delete(full_string);
+                delete full_string;
             }
         }
 

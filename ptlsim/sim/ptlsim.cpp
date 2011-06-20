@@ -76,7 +76,7 @@ SimStats sim_stats;
    enable time-based logging for a stat
    */
 Stats *n_time_stats;
-ostream *time_stats_file;
+ofstream *time_stats_file;
 
 #endif
 
@@ -526,6 +526,10 @@ static void flush_stats()
 
     if(config.enable_mongo)
         write_mongo_stats();
+
+    if(time_stats_file) {
+        time_stats_file->close();
+    }
 }
 
 static void kill_simulation()
@@ -1256,7 +1260,8 @@ extern "C" uint8_t ptl_simulate() {
 
 	ptl_stable_state = 1;
 
-    setup_qemu_switch_all_ctx(*machine->ret_qemu_env);
+    if(machine->ret_qemu_env)
+        setup_qemu_switch_all_ctx(*machine->ret_qemu_env);
 
 	if (!machine->stopped) {
         if(logable(1)) {

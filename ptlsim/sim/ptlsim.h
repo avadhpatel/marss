@@ -43,7 +43,7 @@ extern Stats *n_user_stats;
 extern Stats *n_kernel_stats;
 extern Stats *n_global_stats;
 extern Stats *n_time_stats;
-extern ostream *time_stats_file;
+extern ofstream *time_stats_file;
 
 struct PTLsimCore{
   virtual PTLsimCore& getcore() const{ return (*((PTLsimCore*)NULL));}
