@@ -348,14 +348,11 @@ void print_banner(ostream& os, const PTLsimStats& stats, int argc, char** argv) 
   sys_uname(&hostinfo);
 
   os << "//  ", endl;
-#ifdef __x86_64__
-  os << "//  PTLsim: Cycle Accurate x86-64 Full System SMP/SMT Simulator", endl;
-#else
-  os << "//  PTLsim: Cycle Accurate x86 Simulator (32-bit version)", endl;
-#endif
+  os << "//  MARSS: Cycle Accurate Systems simulator for x86", endl;
   os << "//  Copyright 1999-2007 Matt T. Yourst <yourst@yourst.com>", endl;
+  os << "//  Copyright 2009-2011 Avadh Patel <avadh4all@gmail.com>", endl;
   os << "// ", endl;
-  os << "//  Revision ", stringify(SVNREV), " (", stringify(SVNDATE), ")", endl;
+  os << "//  Git branch '", stringify(GITBRANCH), "' on date ", stringify(GITDATE)," (HEAD: ", stringify(GITCOMMIT), ")", endl;
   os << "//  Built ", __DATE__, " ", __TIME__, " on ", stringify(BUILDHOST), " using gcc-",
     stringify(__GNUC__), ".", stringify(__GNUC_MINOR__), endl;
   os << "//  Running on ", hostinfo.nodename, ".", hostinfo.domainname, endl;

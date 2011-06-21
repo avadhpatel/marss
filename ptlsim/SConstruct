@@ -2,6 +2,7 @@
 
 import os
 import platform
+import subprocess
 import config_helper
 
 # List of subdirectories where we have source code
@@ -71,6 +72,26 @@ env.Append(CCFLAGS = '-DMARSS_QEMU')
 arch_type = platform.architecture()[0]
 if arch_type == '64bit':
     env.Append(CCFLAGS = '-D__x86_64__')
+
+# git information to bake into the binary
+output = subprocess.Popen("git branch".split(),
+        stdout=subprocess.PIPE).communicate()[0]
+for line in output.splitlines():
+    if line.startswith('*'):
+        branch_name = line[2:]
+        env.Append(CCFLAGS = "-DGITBRANCH=%s" % branch_name.strip("\n"))
+        break;
+
+output = subprocess.Popen("git log --abbrev-commit HEAD^..HEAD".split(),
+        stdout=subprocess.PIPE).communicate()[0]
+for line in output.splitlines():
+    if line.startswith('commit '):
+        commit_sha = line[8:]
+        env.Append(CCFLAGS = "-DGITCOMMIT=%s"%commit_sha.strip("\n"))
+    if line.startswith('Date:   '):
+        commit_date = line[8:-6]
+        env.Append(CCFLAGS = "-DGITDATE='%s'"%commit_date.strip("\n"))
+        break;
 
 Export('env')
 
