@@ -42,6 +42,8 @@ struct PTLsimStats;
 extern Stats *n_user_stats;
 extern Stats *n_kernel_stats;
 extern Stats *n_global_stats;
+extern Stats *n_time_stats;
+extern ofstream *time_stats_file;
 
 struct PTLsimCore{
   virtual PTLsimCore& getcore() const{ return (*((PTLsimCore*)NULL));}
@@ -223,6 +225,7 @@ struct PTLsimConfig {
   bool enable_mm_validate;
   stringbuf screenshot_file;
   bool log_user_only;
+  stringbuf time_stats_logfile;
 
   // Event Logging
   bool event_log_enabled;

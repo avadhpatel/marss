@@ -70,6 +70,14 @@ Stats *n_kernel_stats;
 Stats *n_global_stats;
 SimStats sim_stats;
 
+/* XXX: do not use n_time_stats like the others (user,kernel,global) --
+   it should never be set as the default variable pointer;
+   instead it should only be used with set_time_stats() to
+   enable time-based logging for a stat
+   */
+Stats *n_time_stats;
+ofstream *time_stats_file;
+
 #endif
 
 static void kill_simulation() __attribute__((noreturn));
@@ -101,6 +109,7 @@ void PTLsimConfig::reset() {
   enable_mm_validate = 0;
   screenshot_file = "";
   log_user_only = 0;
+  time_stats_logfile = "";
 
   event_log_enabled = 0;
   event_log_ring_buffer_size = 32768;
@@ -225,6 +234,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(enable_mm_validate,           "mm-validate",          "Validate every memory manager request against internal structures (slow)");
   add(screenshot_file,              "screenshot",           "Takes screenshot of VM window at the end of simulation");
   add(log_user_only,                "log-user-only",        "Only log the user mode activities");
+  add(time_stats_logfile,           "time-stats-logfile",   "File to write time-series statistics (new)");
 
   section("Event Ring Buffer Logging Control");
   add(event_log_enabled,            "ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
@@ -338,14 +348,11 @@ void print_banner(ostream& os, const PTLsimStats& stats, int argc, char** argv) 
   sys_uname(&hostinfo);
 
   os << "//  ", endl;
-#ifdef __x86_64__
-  os << "//  PTLsim: Cycle Accurate x86-64 Full System SMP/SMT Simulator", endl;
-#else
-  os << "//  PTLsim: Cycle Accurate x86 Simulator (32-bit version)", endl;
-#endif
+  os << "//  MARSS: Cycle Accurate Systems simulator for x86", endl;
   os << "//  Copyright 1999-2007 Matt T. Yourst <yourst@yourst.com>", endl;
+  os << "//  Copyright 2009-2011 Avadh Patel <avadh4all@gmail.com>", endl;
   os << "// ", endl;
-  os << "//  Revision ", stringify(SVNREV), " (", stringify(SVNDATE), ")", endl;
+  os << "//  Git branch '", stringify(GITBRANCH), "' on date ", stringify(GITDATE)," (HEAD: ", stringify(GITCOMMIT), ")", endl;
   os << "//  Built ", __DATE__, " ", __TIME__, " on ", stringify(BUILDHOST), " using gcc-",
     stringify(__GNUC__), ".", stringify(__GNUC_MINOR__), endl;
   os << "//  Running on ", hostinfo.nodename, ".", hostinfo.domainname, endl;
@@ -516,6 +523,10 @@ static void flush_stats()
 
     if(config.enable_mongo)
         write_mongo_stats();
+
+    if(time_stats_file) {
+        time_stats_file->close();
+    }
 }
 
 static void kill_simulation()
@@ -610,7 +621,7 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif
 
-  if(config.run && !config.kill) {
+  if(config.run && !config.kill && !config.stop) {
 	  start_simulation = 1;
   }
 
@@ -620,7 +631,6 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
   }
 
   if((start_simulation || in_simulation) && config.stop) {
-	  in_simulation = 0;
       if(config.run)
           config.run = false;
   }
@@ -763,6 +773,16 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
         n_user_stats = builder.get_new_stats();
         n_kernel_stats = builder.get_new_stats();
         n_global_stats = builder.get_new_stats();
+
+        // time based stats
+        if (config.time_stats_logfile.length > 0)
+        {
+            time_stats_file = new ofstream(config.time_stats_logfile.buf);
+            n_time_stats = builder.get_new_stats();
+        } else {
+            n_time_stats = NULL;
+            time_stats_file = NULL;
+        }
     }
 
     qemu_free(config_str);
@@ -1237,6 +1257,9 @@ extern "C" uint8_t ptl_simulate() {
 
 	ptl_stable_state = 1;
 
+    if(machine->ret_qemu_env)
+        setup_qemu_switch_all_ctx(*machine->ret_qemu_env);
+
 	if (!machine->stopped) {
         if(logable(1)) {
 			ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).exception_index,
@@ -1245,8 +1268,6 @@ extern "C" uint8_t ptl_simulate() {
             ptl_logfile << " sim_cycle: ", sim_cycle;
             ptl_logfile << endl, flush;
         }
-
-		setup_qemu_switch_all_ctx(*machine->ret_qemu_env);
 
 		/* Tell QEMU that we will come back to simulate */
 		return 1;
@@ -1291,6 +1312,12 @@ extern "C" uint8_t ptl_simulate() {
 
     if(config.stop) {
         config.stop = false;
+    }
+
+    foreach(ctx_no, contextcount) {
+        Context& ctx = contextof(ctx_no);
+        tb_flush((CPUX86State*)(&ctx));
+        ctx.old_eip = 0;
     }
 
 	return 0;

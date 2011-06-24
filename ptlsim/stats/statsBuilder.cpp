@@ -85,6 +85,39 @@ void Statable::set_default_stats(Stats *stats, bool recursive, bool force)
     }
 }
 
+ostream& Statable::dump_header(ostream &os) const
+{
+    if(dump_disabled) return os;
+
+    // First print all the leafs
+    foreach(i, leafs.count()) {
+        leafs[i]->dump_header(os);
+    }
+    // Now print all the child nodes
+    foreach(i, childNodes.count()) {
+        childNodes[i]->dump_header(os);
+    }
+
+    return os;
+}
+
+ostream& Statable::dump_periodic(ostream &os) const
+{
+    if(dump_disabled) return os;
+
+    // First print all the leafs
+    foreach(i, leafs.count()) {
+        leafs[i]->dump_periodic(os);
+    }
+
+    // Now print all the child nodes
+    foreach(i, childNodes.count()) {
+        childNodes[i]->dump_periodic(os);
+    }
+
+    return os;
+}
+
 ostream& Statable::dump(ostream &os, Stats *stats)
 {
     if(dump_disabled) return os;
@@ -171,6 +204,33 @@ void Statable::add_stats(Stats& dest_stats, Stats& src_stats)
     }
 }
 
+bool Statable::is_dump_periodic_disabled() const {
+    foreach (i, leafs.count())
+    {
+        if (!leafs[i]->is_dump_periodic_disabled())
+            return false;
+    }
+
+    foreach (i, childNodes.count())
+    {
+        if (!childNodes[i]->is_dump_periodic_disabled())
+            return false;
+    }
+    return true;
+}
+
+stringbuf *Statable::get_full_stat_string()
+{
+    if (parent)
+    {
+        stringbuf *parent_name = parent->get_full_stat_string();
+        (*parent_name) << "." << name;
+        return parent_name;
+    } else {
+        return new stringbuf(name);
+    }
+}
+
 StatsBuilder StatsBuilder::_builder;
 
 Stats* StatsBuilder::get_new_stats()
@@ -187,6 +247,28 @@ void StatsBuilder::destroy_stats(Stats *stats)
 {
     delete stats->mem;
     delete stats;
+}
+
+ostream& StatsBuilder::dump_header(ostream &os) const
+{
+    if (!rootNode->is_dump_periodic_disabled())
+    {
+        os << "sim_cycle";
+        rootNode->dump_header(os);
+        os << "\n";
+    }
+    return os;
+}
+
+ostream& StatsBuilder::dump_periodic(ostream &os, W64 cycle) const
+{
+
+    if (!rootNode->is_dump_periodic_disabled()) {
+        os << cycle;
+        rootNode->dump_periodic(os);
+        os << "\n";
+    }
+    return os;
 }
 
 ostream& StatsBuilder::dump(Stats *stats, ostream &os) const
@@ -219,4 +301,9 @@ bson_buffer* StatsBuilder::dump(Stats *stats, bson_buffer *bb) const
 void StatObjBase::set_default_stats(Stats *stats)
 {
     default_stats = stats;
+}
+
+void StatObjBase::set_time_stats(Stats *stats)
+{
+    time_stats = stats;
 }

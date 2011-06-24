@@ -5,6 +5,7 @@
 
 #include <basecore.h>
 #include <stats.h>
+#include <statsBuilder.h>
 #include <memoryHierarchy.h>
 
 #define INSIDE_DEFCORE
@@ -129,6 +130,14 @@ int BaseMachine::run(PTLsimConfig& config)
 
         if(sim_cycle % 1000 == 0)
             update_progress();
+
+        if unlikely(sim_cycle == 0 && time_stats_file)
+            StatsBuilder::get().dump_header(*time_stats_file);
+
+        // TODO: make this a config param?
+        if unlikely(sim_cycle % 10000 == 0 && time_stats_file)
+            StatsBuilder::get().dump_periodic(*time_stats_file, sim_cycle);
+
 
         // limit the ptl_logfile size
         if unlikely (ptl_logfile.is_open() &&

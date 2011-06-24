@@ -229,7 +229,11 @@ def get_param_string(key, val):
 
 def write_params_file(config, options):
     obj_conf = config[options.type][options.name]
-    params = obj_conf["params"]
+    if obj_conf.has_key("params"):
+        params = obj_conf["params"]
+    else:
+        params = {}
+
     with open(options.output, 'w') as out_file:
         out_file.write(auto_gen_header % obj_conf["_file"])
         out_file.write("/* Configuration Name: %s */\n\n" %
@@ -500,9 +504,8 @@ def gen_output_file(config, options):
         generate_cache_header(config, options)
     elif options.type == "cache" and options.name == "logic":
         generate_cache_logic(config, options)
-    elif config[options.type][options.name].has_key("params"):
+    elif options.type == "core":
         write_params_file(config, options)
-
 
 if __name__ == "__main__":
     _debug("Testing")

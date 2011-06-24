@@ -27,14 +27,14 @@ _required_cache_params = [
 _required_mem_params = ['LATENCY']
 _required_keys = {
         'config': ['core', 'cache', 'machine', 'memory'],
-        'core': ['base', 'params'],
+        'core': ['base'],
         'cache': ['base', { 'params' : _required_cache_params } ],
         'memory': ['base'],
         'machine': ['description', 'min_contexts',
             'cores', 'caches', 'interconnects'],
         }
 _debug_t = False
-_top_conf_file = "config/default.conf"
+_top_conf_file = ""
 
 def parse_config(config_file="config/default.conf", debug=False):
     '''Parse provided configuration file and return a dict with all
@@ -60,7 +60,8 @@ def save_config(config_filename, config):
 
     _debug("Written configuration in : %s" % config_filename)
 
-def _error(string, flname=_top_conf_file):
+def _error(string, flname=None):
+    if not flname: flname = _top_conf_file
     string = "[ERROR] [CONFIG_PARSER] [File:%s] %s" % (flname, string)
     print(string)
     sys.exit(-1)

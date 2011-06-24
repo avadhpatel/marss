@@ -7,8 +7,11 @@ Import('env')
 # Machine Builder function
 #########################################
 
+num_machines_build = 0
+
 def machine_builder_func(env, m_name):
     '''Build user defined machine configuration'''
+    global num_machines_build
     config = env['config']
 
     # First check if min/max number of cpus requirement
@@ -31,6 +34,7 @@ def machine_builder_func(env, m_name):
                 "machine '%s'." % (m_name, max_c, env['num_cpus'], m_name))
         return []
 
+    num_machines_build += 1
     m_objs = []
 
     m_file = "%s_gen.cpp" % m_name
@@ -57,6 +61,11 @@ objs = env.Object(src_files)
 # Generate machine configurations
 for machine in env['config']['machine'].keys():
     objs += env.machine_builder(machine)
+
+if num_machines_build == 0:
+    print("No machine built. Please provide a machine configuartion " \
+            "that matches the number of cores you are compiling.")
+    Exit(1)
 
 # dstbuild objects
 dst_objs = env.Object(Split("syscalls.cpp config-parser.cpp"))

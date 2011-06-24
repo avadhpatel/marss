@@ -100,6 +100,10 @@ namespace superstl {
       reset(length);
     }
 
+    stringbuf(const stringbuf& sb) {
+        *this << sb;
+    }
+
     void reset(int length = stringbuf_smallbufsize);
 
     ~stringbuf();

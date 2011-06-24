@@ -328,6 +328,20 @@ def CheckDup3(context):
     return res
 custom_tests['CheckDup3'] = CheckDup3
 
+def CheckKVM(context):
+    src = """
+    #include <linux/kvm.h>
+    #if !defined(KVM_API_VERSION) || KVM_API_VERSION < 12 || KVM_API_VERSION > 12
+    #error Invalid KVM Version
+    #endif
+    int main() { return 0;}
+    """
+    res = context.TryRun(src, '.cpp')[0]
+    context.Result(res)
+    return res
+custom_tests['CheckKVM'] = CheckKVM
+
+
 # Start testing
 conf = Configure(env, custom_tests = custom_tests)
 
@@ -721,6 +735,12 @@ try:
     env['curl'] = True
 except OSError:
     env['curl'] = False
+
+# KVM
+if conf.CheckKVM():
+    env['kvm'] = True
+else:
+    env['kvm'] = False
 
 # zero malloc
 env['zero_malloc'] = True
