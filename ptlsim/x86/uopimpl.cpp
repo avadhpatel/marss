@@ -1094,7 +1094,7 @@ void x86_op_fmadd(IssueState& state, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rb
   // fmadd  rd = (ra * rb) + rc       =>  fmul t0 = ra,rb  |  fadd t1 = t0,rc
   //
   x86_op_fmul<OP_fmul, datatype>(state, ra, rb, 0, 0, 0, 0);
-  x86_op_fadd<OP_fsub, datatype>(state, state.reg.rddata, rc, 0, 0, 0, 0);
+  x86_op_fadd<OP_fadd, datatype>(state, state.reg.rddata, rc, 0, 0, 0, 0);
 }
 
 uopimpl_func_t implmap_fmadd[4] = {&x86_op_fmadd<0>, &x86_op_fmadd<1>, &x86_op_fmadd<2>, &x86_op_fmadd<3>};

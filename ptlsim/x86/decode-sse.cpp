@@ -961,6 +961,7 @@ bool TraceDecoder::decode_sse() {
   case 0x57f: // movdqa store
   case 0x27f: // movdqu store
   case 0x5e7: // movntdq store
+  case 0x3e7: // movntq store
   case 0x52b: // movntpd store
   case 0x32b: { // movntps store
     DECODE(eform, rd, x_mode);
@@ -972,13 +973,17 @@ bool TraceDecoder::decode_sse() {
       // Store
       // This is still idempotent since if the second one was unaligned, the first one must be too
       result_store(rareg+0, REG_temp0, rd, datatype);
-      rd.mem.offset += 8;
-      result_store(rareg+1, REG_temp1, rd, datatype);
+      if(!use_mmx) {
+          rd.mem.offset += 8;
+          result_store(rareg+1, REG_temp1, rd, datatype);
+      }
     } else {
       // Move
       int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
       TransOp uoplo(OP_mov, rdreg+0, REG_zero, rareg+0, REG_zero, 3); uoplo.datatype = datatype; this << uoplo;
-      TransOp uophi(OP_mov, rdreg+1, REG_zero, rareg+1, REG_zero, 3); uophi.datatype = datatype; this << uophi;
+      if(!use_mmx) {
+          TransOp uophi(OP_mov, rdreg+1, REG_zero, rareg+1, REG_zero, 3); uophi.datatype = datatype; this << uophi;
+      }
     }
     break;
   };
