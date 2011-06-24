@@ -39,6 +39,8 @@
 
 #include <statsBuilder.h>
 
+#include <pthread.h>
+
 #define DEBUG_MEMORY
 //#define DEBUG_WITH_FILE_NAME
 #define ENABLE_CHECKS
@@ -284,6 +286,8 @@ namespace Memory {
 
     // Temp Stats
     Stats *stats;
+
+    pthread_mutex_t cache_mutex;
 
   };
 

@@ -14,6 +14,8 @@
 #include <atomcore.h>
 
 #include <cstdarg>
+#include <sched.h>
+#include <signal.h>
 
 using namespace Core;
 using namespace Memory;
@@ -36,6 +38,10 @@ BaseMachine::BaseMachine(const char *name)
 
 BaseMachine::~BaseMachine()
 {
+    foreach(i, pthreads.count()) {
+        pthread_kill(*pthreads[i], 9);
+    }
+
     removemachine(machine_name, this);
 }
 
@@ -84,7 +90,87 @@ bool BaseMachine::init(PTLsimConfig& config)
         cores[i]->update_memory_hierarchy_ptr();
     }
 
+    setup_threads();
+
     return 1;
+}
+
+void BaseMachine::setup_threads()
+{
+    int num_cores;
+    int num_threads;
+
+    if(!config.threaded_simulation)
+        return;
+
+    num_cores = cores.count();
+
+    if(num_cores <= config.cores_per_pthread ||
+            logable(1)) {
+        config.threaded_simulation = 0;
+        ptl_logfile << "Disabled Threaded simulation because ",
+                    "cores_per_pthread < number of simulated cores.\n";
+        return;
+    }
+
+    /* Count number of thread to create */
+    num_threads = ceil(num_cores / config.cores_per_pthread);
+    cerr << "Num threads " << num_threads << endl;
+    ptl_logfile << "Num threads " << num_threads << endl;
+
+    /* Setup barriers and mutex */
+    exit_mutex = new pthread_mutex_t();
+    pthread_mutex_init(exit_mutex, NULL);
+
+    access_mutex = new pthread_mutex_t();
+    pthread_mutex_init(access_mutex, NULL);
+
+    runcycle_barrier = new pthread_barrier_t();
+    pthread_barrier_init(runcycle_barrier, NULL, num_threads + 1);
+
+    exit_process_barrier = new pthread_barrier_t();
+    pthread_barrier_init(exit_process_barrier, NULL, num_threads + 1);
+
+    foreach(i, num_threads) {
+        int rc;
+        pthread_attr_t attr;
+        cpu_set_t cpu_set;
+
+        if(pthread_attr_init(&attr)) {
+            ptl_logfile << "[ERROR] [PTHREAD] Can't initialize attr\n";
+            cerr << "[ERROR] [PTHREAD] Can't initialize attr\n";
+            assert(0);
+        }
+
+        CPU_ZERO(&cpu_set);
+        CPU_SET(i, &cpu_set);
+
+        if(pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpu_set)) {
+            ptl_logfile << "[WARN] [PTHREAD] Can't set cpu affinity\n";
+            cerr << "[WARN] [PTHREAD] Can't set cpu affinity\n";
+        }
+
+        pthread_t *th = new pthread_t();
+        PthreadArg *th_arg = new PthreadArg(this, i * config.cores_per_pthread);
+
+        if((rc = pthread_create(th, &attr, &BaseMachine::start_thread,
+                        th_arg))) {
+            ptl_logfile << "[ERROR] [PTHREAD] Can't create a pthread\n";
+            cerr << "[ERROR] [PTHREAD] Can't create a pthread\n";
+            assert(0);
+        }
+
+        pthreads.push(th);
+
+        pthread_attr_destroy(&attr);
+    }
+}
+
+void *BaseMachine::start_thread(void *arg)
+{
+    PthreadArg *th_arg = (PthreadArg*)arg;
+    reinterpret_cast<BaseMachine*>(th_arg->obj)->run_cores_thread(
+            th_arg->start_id);
 }
 
 int BaseMachine::run(PTLsimConfig& config)
@@ -118,6 +204,10 @@ int BaseMachine::run(PTLsimConfig& config)
 
     // Run each core
     bool exiting = false;
+
+    if(config.threaded_simulation) {
+        return run_threaded();
+    }
 
     for (;;) {
         if unlikely ((!logenable) &&
@@ -155,6 +245,12 @@ int BaseMachine::run(PTLsimConfig& config)
             exiting |= core.runcycle();
         }
 
+        // Collect total number of instructions committed
+        total_user_insns_committed = 0;
+        foreach(i, cores.count()) {
+            total_user_insns_committed += cores[i]->get_insns_committed();
+        }
+
         global_stats.summary.cycles++;
         sim_cycle++;
         iterations++;
@@ -178,6 +274,127 @@ int BaseMachine::run(PTLsimConfig& config)
     config.dump_state_now = 0;
 
     return exiting;
+}
+
+bool BaseMachine::run_threaded()
+{
+    bool exiting = false;
+
+    for(;;) {
+
+        if(config.start_log_at_iteration &&
+                iterations >= config.start_log_at_iteration) {
+            config.threaded_simulation = 0;
+            return false;
+        }
+
+        if(sim_cycle % 10000 == 0) {
+            update_progress();
+        }
+
+        if unlikely(sim_cycle == 0 && time_stats_file)
+            StatsBuilder::get().dump_header(*time_stats_file);
+
+        // TODO: make this a config param?
+        if unlikely(sim_cycle % 10000 == 0 && time_stats_file)
+            StatsBuilder::get().dump_periodic(*time_stats_file, sim_cycle);
+
+        // limit the ptl_logfile size
+        if unlikely (ptl_logfile.is_open() &&
+                (ptl_logfile.tellp() > config.log_file_size))
+            backup_and_reopen_logfile();
+
+        memoryHierarchyPtr->clock();
+
+        // Now send signal to all threads to run one cycle
+        pthread_barrier_wait(runcycle_barrier);
+
+        // Wait for all threads to simulate one cycle
+        pthread_barrier_wait(exit_process_barrier);
+
+        // Check 'exit_requested' and exit if requested
+        pthread_mutex_lock(exit_mutex);
+        exiting = exit_requested;
+        exit_requested = 0;
+        pthread_mutex_unlock(exit_mutex);
+
+        // Collect total number of instructions committed
+        total_user_insns_committed = 0;
+        foreach(i, cores.count()) {
+            total_user_insns_committed += cores[i]->get_insns_committed();
+        }
+
+        global_stats.summary.cycles++;
+        sim_cycle++;
+        iterations++;
+
+        if unlikely (config.wait_all_finished ||
+                config.stop_at_user_insns <= total_user_insns_committed) {
+            ptl_logfile << "Stopping simulation loop at specified limits (",
+                        iterations, " iterations, ", total_user_insns_committed,
+                        " commits)", endl;
+            exiting = 1;
+            break;
+        }
+
+        if unlikely (exiting) {
+            if unlikely(ret_qemu_env == NULL)
+                ret_qemu_env = &contextof(0);
+            break;
+        }
+    }
+
+    if(logable(1))
+        ptl_logfile << "Exiting machine::run at ", total_user_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
+
+    config.dump_state_now = 0;
+
+    return exiting;
+}
+
+void BaseMachine::run_cores_thread(int start_id)
+{
+    int start_coreid = start_id;
+    int end_coreid = min(int(start_coreid + config.cores_per_pthread),
+            cores.count());
+    dynarray<BaseCore*> mycores;
+
+    cerr << "Start ", start_coreid, " End ", end_coreid, endl;
+
+    pthread_mutex_lock(access_mutex);
+    for(int i=start_coreid; i < end_coreid; i++) {
+        mycores.push(cores[i]);
+    }
+    pthread_mutex_unlock(access_mutex);
+
+    for(;;) {
+        bool exiting = 0;
+
+        /* Wait for main thread before simulate one cycle */
+        pthread_barrier_wait(runcycle_barrier);
+
+        // if(start_coreid == 0) {
+            // config.loglevel = 10;
+            // logenable = 1;
+        // }
+
+        /* Now run one simulation cycle for each assigned core */
+        // for(int i=start_coreid; i < end_coreid; i++) {
+        foreach(i, mycores.count()) {
+            BaseCore& core =* mycores[i];
+            exiting |= core.runcycle();
+        }
+
+        /* Check exit request and set global exit request if true */
+        if(exiting) {
+            pthread_mutex_lock(exit_mutex);
+            exit_requested = exiting;
+            pthread_mutex_unlock(exit_mutex);
+        }
+
+        /* Wait for main thread to handle exit requests */
+        pthread_barrier_wait(exit_process_barrier);
+    }
 }
 
 void BaseMachine::flush_tlb(Context& ctx)

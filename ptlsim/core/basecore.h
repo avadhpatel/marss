@@ -20,6 +20,7 @@ namespace Core {
         virtual void dump_state(ostream& os) = 0;
         virtual void update_stats(PTLsimStats* stats) = 0;
         virtual void flush_pipeline() = 0;
+        virtual W64  get_insns_committed() = 0;
         virtual W8 get_coreid() = 0;
 
         void update_memory_hierarchy_ptr();

@@ -1420,6 +1420,7 @@ void AtomOp::writeback_eom()
     ATOMOPLOG3("Commit EOM uop: ", last_uop);
     ATOMOPLOG3("ctx eip: ", hexstring(thread->ctx.eip,48));
 
+    pthread_mutex_lock(&qemu_access);
     if(last_uop.rd == REG_rip) {
         ATOMOPLOG3("Setting rip: ", arch_reg_names[last_uop.rd]);
 
@@ -1432,6 +1433,7 @@ void AtomOp::writeback_eom()
         ATOMOPLOG3("Adding bytes: ", last_uop.bytes);
         thread->ctx.eip += last_uop.bytes;
     }
+    pthread_mutex_unlock(&qemu_access);
 
     ATOMOPLOG2("Commited.. new eip:0x", hexstring(thread->ctx.eip, 48));
 
@@ -2440,7 +2442,8 @@ bool AtomThread::commit_queue()
         st_commit.uops += buf.op->num_uops_used;
 
         if(buf.op->eom || commit_result == COMMIT_BARRIER) {
-            total_user_insns_committed++;
+            //total_user_insns_committed++;
+            insns_commited++;
             st_commit.insns++;
             break;
         }
@@ -2512,9 +2515,9 @@ handle_page_fault:
                 ctx.handle_page_fault(ctx.page_fault_addr, write_exception);
 
                 flush_pipeline();
-                ctx.exception = 0;
-                ctx.exception_index = old_exception;
-                ctx.exception_is_int = 0;
+                //ctx.exception = 0;
+                //ctx.exception_index = old_exception;
+                //ctx.exception_is_int = 0;
                 return true;
             }
         case EXCEPTION_FloatingPoint:
@@ -2665,6 +2668,11 @@ W64 AtomThread::read_reg(W16 reg)
     ATOMTHLOG1("Reading register ", arch_reg_names[reg],
             " from RF");
     return ctx.get(reg);
+}
+
+W64 AtomThread::get_insns_committed()
+{
+    return insns_commited;
 }
 
 //---------------------------------------------//
@@ -3054,6 +3062,17 @@ void AtomCore::check_ctx_changes()
             threads[i]->ctx.handle_interrupt = 0;
         }
     }
+}
+
+W64 AtomCore::get_insns_committed()
+{
+    W64 ret = 0;
+
+    foreach(i, threadcount) {
+        ret += threads[i]->get_insns_committed();
+    }
+
+    return ret;
 }
 
 W8 AtomCore::get_coreid()

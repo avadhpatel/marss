@@ -129,10 +129,14 @@ RequestPool::RequestPool()
 	foreach(i, REQUEST_POOL_SIZE) {
 		freeRequestList_.enqueue((selfqueuelink*)&((*this)[i]));
 	}
+
+    pthread_mutex_init(&req_mutex, NULL);
 }
 
 MemoryRequest* RequestPool::get_free_request()
 {
+    pthread_mutex_lock(&req_mutex);
+
 	if (isPoolLow()){
 		garbage_collection();
         /* if asserted here please increase REQUEST_POOL_SIZE */
@@ -141,6 +145,9 @@ MemoryRequest* RequestPool::get_free_request()
 	MemoryRequest* memoryRequest = (MemoryRequest*)freeRequestList_.peek();
 	freeRequestList_.remove((selfqueuelink*)memoryRequest);
 	usedRequestsList_.enqueue((selfqueuelink*)memoryRequest);
+
+    pthread_mutex_unlock(&req_mutex);
+
 	return memoryRequest;
 }
 

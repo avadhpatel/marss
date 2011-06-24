@@ -836,6 +836,7 @@ struct Context: public CPUX86State {
   W64 exec_fault_addr;
   map<Waddr, Waddr> hvirt_gphys_map;
 
+  pthread_mutex_t ctx_lock;
 
   void change_runstate(int new_state) { running = new_state; }
 
@@ -867,7 +868,7 @@ struct Context: public CPUX86State {
 
   void setup_ptlsim_switch() {
 
-	  set_cpu_env((CPUX86State*)this);
+      set_cpu_env((CPUX86State*)this);
 	  // W64 flags = compute_eflags();
 
 	  // Clear the 2nd and 3rd bit as its used by PTLSim to indicate if

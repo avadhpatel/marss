@@ -235,9 +235,9 @@ W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	flags = current_flags;
 
 	// Update in QEMU's flags
-    ctx.setup_qemu_switch();
+	setup_qemu_switch_all_ctx(ctx);
     helper_sti();
-    ctx.setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(ctx);
 
 	if(logable(4)) ptl_logfile << "[cpu ", ctx.cpu_index, "]sti called rip ", (void*)ctx.eip, endl;
 
@@ -258,9 +258,9 @@ W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	flags = current_flags;
 
 	// Update in QEMU's flags
-    ctx.setup_qemu_switch();
+	setup_qemu_switch_all_ctx(ctx);
     helper_cli();
-    ctx.setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(ctx);
 
 	if(logable(4)) ptl_logfile << "[cpu ", ctx.cpu_index, "]cli called at rip ", (void*)ctx.eip, endl;
 
@@ -521,10 +521,9 @@ bool assist_rdtsc(Context& ctx) {
 }
 
 bool assist_pushf(Context& ctx) {
-	setup_qemu_switch_except_ctx(ctx);
-	ctx.setup_qemu_switch();
+	setup_qemu_switch_all_ctx(ctx);
 	W64 flags = helper_read_eflags();
-	ctx.setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(ctx);
 	// now push the flags on the stack
 	ctx.regs[R_ESP] -= 8;
 	ctx.storemask_virt(ctx.regs[R_ESP], flags, 0xff, 8);
@@ -536,9 +535,9 @@ W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
 	// RA contains the latest flags contains ZAPS, CF, OF and IF
-	ctx.setup_qemu_switch();
+    setup_qemu_switch_all_ctx(ctx);
 	W64 stable_flags = helper_read_eflags();
-	ctx.setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(ctx);
 
 	W64 flagmask = (setflags_to_x86_flags[7]);
         stable_flags &= ~(flagmask);
@@ -589,9 +588,9 @@ W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	W64 flagmask = (setflags_to_x86_flags[7]) | IF_MASK ;
 	flags = (W16)(ra & flagmask);
 
-    ctx.setup_qemu_switch();
+    setup_qemu_switch_all_ctx(ctx);
     helper_write_eflags(stable_flags, mask);
-    ctx.setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(ctx);
 
 	return stable_flags;
 }
@@ -735,8 +734,7 @@ bool assist_write_debug_reg(Context& ctx) {
   W64 value = ctx.reg_ar1;
   W64 regid = ctx.reg_ar2;
 
-  setup_qemu_switch_except_ctx(ctx);
-  ctx.setup_qemu_switch();
+  setup_qemu_switch_all_ctx(ctx);
 
   int i;
   if(regid < 4) {
@@ -842,8 +840,7 @@ bool assist_ioport_in(Context& ctx) {
   W64 port = ctx.reg_ar1;
   W64 sizeshift = ctx.reg_ar2;
 
-  setup_qemu_switch_except_ctx(ctx);
-  ctx.setup_qemu_switch();
+  setup_qemu_switch_all_ctx(ctx);
   W64 value;
   if(sizeshift == 0) {
 	  value = helper_inb(port);
@@ -852,7 +849,7 @@ bool assist_ioport_in(Context& ctx) {
   } else {
 	  value = helper_inl(port);
   }
-  ctx.setup_ptlsim_switch();
+  setup_ptlsim_switch_all_ctx(ctx);
 
   ctx.regs[R_EAX] = x86_merge(ctx.regs[R_EAX], value, sizeshift);
   ctx.eip = ctx.reg_nextrip;
@@ -866,8 +863,7 @@ W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	W64 sizeshift = rb;
 	W64 old_eax = rc;
 
-	setup_qemu_switch_except_ctx(ctx);
-	ctx.setup_qemu_switch();
+	setup_qemu_switch_all_ctx(ctx);
 	W64 value;
 	if(sizeshift == 0) {
 		value = helper_inb(port);
@@ -898,8 +894,7 @@ bool assist_ioport_out(Context& ctx) {
   W64 sizeshift = ctx.reg_ar2;
   W64 value = x86_merge(0, ctx.regs[R_EAX], sizeshift);
 
-  setup_qemu_switch_except_ctx(ctx);
-  ctx.setup_qemu_switch();
+  setup_qemu_switch_all_ctx(ctx);
   if(sizeshift == 0) {
 	  helper_outb(port, value);
   } else if(sizeshift == 1) {
@@ -907,7 +902,7 @@ bool assist_ioport_out(Context& ctx) {
   } else {
 	  helper_outl(port, value);
   }
-  ctx.setup_ptlsim_switch();
+  setup_ptlsim_switch_all_ctx(ctx);
   ctx.eip = ctx.reg_nextrip;
   return true;
 }
@@ -919,8 +914,7 @@ W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	W64 sizeshift = rb;
 	W64 value = x86_merge(0, rc, sizeshift);
 
-	setup_qemu_switch_except_ctx(ctx);
-	ctx.setup_qemu_switch();
+	setup_qemu_switch_all_ctx(ctx);
 	if(sizeshift == 0) {
 		helper_outb(port, value);
 	} else if(sizeshift == 1) {
@@ -948,8 +942,7 @@ W64 l_assist_pause(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 W64 l_assist_popcnt(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
         W16 rbflags, W16 rcflags, W16& flags) {
     W64 sizeshift = rb;
-    setup_qemu_switch_except_ctx(ctx);
-    ctx.setup_qemu_switch();
+    setup_qemu_switch_all_ctx(ctx);
     helper_popcnt(ra,sizeshift);
     setup_ptlsim_switch_all_ctx(ctx);
 

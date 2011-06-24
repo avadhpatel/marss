@@ -19,6 +19,8 @@
 #include <defcore-const.h>
 #include <defcore-stats.h>
 
+#include <pthread.h>
+
 // With these disabled, simulation is faster
 #define ENABLE_CHECKS
 #define ENABLE_LOGGING
@@ -859,6 +861,7 @@ namespace OOO_CORE_MODEL {
     struct MemoryInterlockBuffer: public LockableAssociativeArray<W64, MemoryInterlockEntry, 16, 4, 8> { };
 
     extern MemoryInterlockBuffer interlocks;
+    extern pthread_mutex_t interlock_mutex;
 
     //
     // Event Tracing
@@ -1418,6 +1421,10 @@ namespace OOO_CORE_MODEL {
 
         // Stats
         DefaultCoreThreadStats thread_stats;
+
+        W64 get_insns_committed() {
+            return total_insns_committed;
+        }
     };
 
     //  class MemoryHierarchy;
@@ -1613,6 +1620,16 @@ namespace OOO_CORE_MODEL {
         void check_ctx_changes();
 
         W8 get_coreid() { return coreid; }
+
+        W64 get_insns_committed() {
+            W64 ret = 0;
+
+            foreach(i, threadcount) {
+                ret += threads[i]->get_insns_committed();
+            }
+
+            return ret;
+        }
     };
 
 #define MAX_SMT_CORES 8

@@ -1745,7 +1745,9 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
     for (int i = start; i < queued_mem_lock_release_count; i++) {
         W64 lockaddr = queued_mem_lock_release_list[i];
 
+    pthread_mutex_lock(&interlock_mutex);
         MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
+    pthread_mutex_unlock(&interlock_mutex);
 
         if (!lock) {
             ptl_logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock was ", lock, endl;
@@ -1767,7 +1769,9 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
             event->loadstore.sfr.physaddr = lockaddr >> 3;
         }
 
+    pthread_mutex_lock(&interlock_mutex);
         interlocks.invalidate(lockaddr);
+    pthread_mutex_unlock(&interlock_mutex);
     }
 
     queued_mem_lock_release_count = start;
@@ -2084,7 +2088,9 @@ int ReorderBufferEntry::commit() {
 
     if unlikely (uop.opcode == OP_st) {
         W64 lockaddr = lsq->physaddr << 3;
+    pthread_mutex_lock(&interlock_mutex);
         MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
+    pthread_mutex_unlock(&interlock_mutex);
 
         if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
             if unlikely (config.event_log_enabled) core.eventlog.add_commit(EVENT_COMMIT_MEM_LOCKED, this);
@@ -2214,6 +2220,7 @@ int ReorderBufferEntry::commit() {
     }
 
     if likely (uop.eom) {
+        pthread_mutex_lock(&qemu_access);
         if unlikely (uop.rd == REG_rip) {
             assert(isbranch(uop.opcode));
 
@@ -2239,7 +2246,7 @@ int ReorderBufferEntry::commit() {
             assert(!isbranch(uop.opcode));
             ctx.eip += uop.bytes;
         }
-        if unlikely (config.event_log_enabled) event->commit.target_rip = ctx.eip;
+        pthread_mutex_unlock(&qemu_access);
     }
 
     if likely ((!ld) & (!st) & (!uop.nouserflags)) {
@@ -2406,12 +2413,12 @@ int ReorderBufferEntry::commit() {
     }
 
     if likely (uop.eom) {
-        total_user_insns_committed++;
+        //total_user_insns_committed++;
         per_context_ooocore_stats_update(threadid, commit.insns++);
         thread.thread_stats.commit.insns++;
         thread.total_insns_committed++;
 
-        stats->summary.insns++;
+        //stats->summary.insns++;
 
 #ifdef TRACE_RIP
             ptl_rip_trace << "commit_rip: ",
@@ -2427,8 +2434,8 @@ int ReorderBufferEntry::commit() {
         ptl_logfile << "ROB Commit Done...\n", flush;
     }
 
-    stats->summary.uops++;
-    total_uops_committed++;
+    // stats->summary.uops++;
+    // total_uops_committed++;
     per_context_ooocore_stats_update(threadid, commit.uops++);
     thread.thread_stats.commit.uops++;
     thread.total_uops_committed++;

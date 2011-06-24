@@ -683,6 +683,8 @@ namespace ATOM_CORE_MODEL {
         void write_temp_reg(W16 reg, W64 data);
         W64  read_reg(W16 reg);
 
+        W64  get_insns_committed();
+
         W8      threadid;
         W64     fetch_uuid;
         bool    register_invalid[TRANSREG_COUNT];
@@ -716,6 +718,7 @@ namespace ATOM_CORE_MODEL {
         bool    init_dtlb_walk;
         bool    mmio_pending;
         bool    inst_in_pipe;
+        W64     insns_commited;
 
         BranchPredictorInterface branchpred;
 
@@ -925,6 +928,7 @@ namespace ATOM_CORE_MODEL {
         void dump_state(ostream& os);
         void update_stats(PTLsimStats* stats);
         void flush_pipeline();
+        W64  get_insns_committed();
         W8   get_coreid();
 
         // Pipeline related functions

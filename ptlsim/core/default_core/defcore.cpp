@@ -230,6 +230,13 @@ DefaultCore::DefaultCore(BaseMachine& machine_, W8 num_threads,
     init();
 
     init_luts();
+
+    static bool mutex_init = false;
+
+    if(!mutex_init) {
+        pthread_mutex_init(&interlock_mutex, NULL);
+        mutex_init = true;
+    }
 }
 
 void DefaultCore::reset() {
@@ -449,6 +456,8 @@ bool DefaultCore::runcycle() {
             thread->stats_ = &user_stats;
             thread->thread_stats.set_default_stats(n_user_stats);
         }
+
+        pthread_mutex_lock(&thread->ctx.ctx_lock);
     }
 
     // Each core's thread-shared stats counter will be added to
@@ -833,6 +842,7 @@ bool DefaultCore::runcycle() {
 
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
+        pthread_mutex_unlock(&thread->ctx.ctx_lock);
         if unlikely (!thread->ctx.running) break;
 
         if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 4*4096*threadcount) {
@@ -1316,10 +1326,10 @@ handle_page_fault:
                 // witout causing any CPU faults so we can clear the pipeline
                 // and continue from current eip
                 flush_pipeline();
-                ctx.exception = 0;
-                ctx.exception_index = old_exception;
-                ctx.exception_is_int = 0;
-                return true;
+                // ctx.exception = 0;
+                // ctx.exception_index = old_exception;
+                // ctx.exception_is_int = 0;
+                return false;
             }
             break;
         case EXCEPTION_FloatingPointNotAvailable:
@@ -1343,7 +1353,7 @@ handle_page_fault:
     if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline again.",endl;
     flush_pipeline();
 
-    return true;
+    return false;
 }
 
 bool ThreadContext::handle_interrupt() {

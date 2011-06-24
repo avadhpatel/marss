@@ -33,6 +33,8 @@
 #include <statelist.h>
 #include <cacheConstants.h>
 
+#include <pthread.h>
+
 namespace Memory {
 
 enum OP_TYPE {
@@ -227,6 +229,8 @@ class RequestPool: public array<MemoryRequest,REQUEST_POOL_SIZE>
 		int size_;
 		StateList freeRequestList_;
 		StateList usedRequestsList_;
+
+        pthread_mutex_t req_mutex;
 
 		void freeRequest(MemoryRequest* request);
 

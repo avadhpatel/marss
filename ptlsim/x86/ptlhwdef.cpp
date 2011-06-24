@@ -432,6 +432,8 @@ stringbuf& operator <<(stringbuf& sb, const TransOpBase& op) {
   if (op.eom) { sb << " [eom]"; }
   if (op.som|op.eom) { sb << " [", op.bytes, " bytes]"; }
 
+  if (op.opcode == OP_ast) { sb << " [", light_assist_names[op.riptaken],"]"; }
+
   return sb;
 }
 

@@ -61,6 +61,8 @@ MemoryHierarchy::MemoryHierarchy(BaseMachine& machine) :
     coreNo_ = machine_.get_num_cores();
 
 	setup_topology();
+
+    pthread_mutex_init(&cache_mutex, NULL);
 }
 
 MemoryHierarchy::~MemoryHierarchy()
@@ -381,8 +383,14 @@ bool MemoryHierarchy::access_cache(MemoryRequest *request)
 	CPUController *cpuController = (CPUController*)cpuControllers_[coreid];
 	assert(cpuController != NULL);
 
+    if(config.threaded_simulation)
+        pthread_mutex_lock(&cache_mutex);
+
 	int ret_val;
 	ret_val = ((CPUController*)cpuController)->access(request);
+
+    if(config.threaded_simulation)
+        pthread_mutex_unlock(&cache_mutex);
 
 	if(ret_val == 0)
 		return true;

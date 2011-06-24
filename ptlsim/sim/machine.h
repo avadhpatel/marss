@@ -4,6 +4,7 @@
 
 #include <ptlsim.h>
 
+#include <pthread.h>
 
 namespace Core {
     struct BaseCore;
@@ -14,6 +15,8 @@ namespace Memory {
     struct Interconnect;
     struct MemoryHierarchy;
 };
+
+struct BaseMachine;
 
 typedef Hashtable<const char*, bool, 1> BoolOptions;
 typedef Hashtable<const char*, int, 1> IntOptions;
@@ -28,6 +31,15 @@ struct ConnectionDef {
     stringbuf interconnect;
     stringbuf name;
     dynarray<SingleConnection*> connections;
+};
+
+struct PthreadArg {
+    BaseMachine* obj;
+    int start_id;
+
+    PthreadArg(BaseMachine* obj_, int start_id_)
+        : obj(obj_), start_id(start_id_)
+    {}
 };
 
 struct BaseMachine: public PTLsimMachine {
@@ -58,6 +70,19 @@ struct BaseMachine: public PTLsimMachine {
     bitvec<NUM_SIM_CORES> context_used;
     W8 context_counter;
     W8 coreid_counter;
+
+    // Pthread related functions/variables
+    void setup_threads();
+    bool run_threaded();
+    static void *start_thread(void *arg);
+    void run_cores_thread(int start_id);
+
+    W8   exit_requested;
+    pthread_mutex_t   *exit_mutex;
+    pthread_mutex_t   *access_mutex;
+    pthread_barrier_t *runcycle_barrier;
+    pthread_barrier_t *exit_process_barrier;
+    dynarray<pthread_t*> pthreads;
 
     Context& get_next_context();
     W8 get_next_coreid();

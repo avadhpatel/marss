@@ -893,6 +893,7 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
 namespace OOO_CORE_MODEL {
     // One global interlock buffer for all VCPUs:
     MemoryInterlockBuffer interlocks;
+    pthread_mutex_t interlock_mutex;
 };
 
 //
@@ -904,9 +905,11 @@ namespace OOO_CORE_MODEL {
 bool ReorderBufferEntry::release_mem_lock(bool forced) {
     if likely (!lock_acquired) return false;
 
+    pthread_mutex_lock(&interlock_mutex);
     W64 physaddr = lsq->physaddr << 3;
     MemoryInterlockEntry* lock = interlocks.probe(physaddr);
     assert(lock);
+    pthread_mutex_unlock(&interlock_mutex);
 
     DefaultCore& core = getcore();
     ThreadContext& thread = getthread();
@@ -1211,7 +1214,9 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     //
     if unlikely ((contextcount > 1) && (!annul)) {
         W64 physaddr = state.physaddr << 3;
+    pthread_mutex_lock(&interlock_mutex);
         MemoryInterlockEntry* lock = interlocks.probe(physaddr);
+    pthread_mutex_unlock(&interlock_mutex);
 
         //
         // All store instructions check if a lock is held by another thread,
@@ -1649,7 +1654,9 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     // system doesn't work across multiple threads on the same core.
     //
     if unlikely ((contextcount > 1) && (!annul)) {
+    pthread_mutex_lock(&interlock_mutex);
         MemoryInterlockEntry* lock = interlocks.probe(physaddr);
+    pthread_mutex_unlock(&interlock_mutex);
 
         //
         // All load instructions check if a lock is held by another thread,
@@ -1710,7 +1717,9 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
             // these conditions represent an error in the microcode.
             //
 
+    pthread_mutex_lock(&interlock_mutex);
             lock = interlocks.select_and_lock(physaddr);
+    pthread_mutex_unlock(&interlock_mutex);
 
             if unlikely (!lock) {
                 //

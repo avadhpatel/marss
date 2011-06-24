@@ -475,7 +475,7 @@ W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
 
     assert(level > 0);
 
-    setup_qemu_switch();
+    setup_qemu_switch_all_ctx(*this);
 
     // First check if PAE bit is enabled or not
     if(cr[4] & CR4_PAE_MASK) {
@@ -591,7 +591,8 @@ dofault:
     ret_addr = -1;
 
 finish:
-    setup_ptlsim_switch();
+    // setup_ptlsim_switch();
+    setup_ptlsim_switch_all_ctx(*this);
     return ret_addr;
 }
 
@@ -603,6 +604,9 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 
     int n = 0 ;
     pfec = 0;
+    byte* target_b;
+    target_ulong source_b;
+    int bytes_frm_first_page;
 
     setup_qemu_switch_all_ctx(*this);
 
@@ -627,7 +631,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
             if(logable(10))
                 ptl_logfile << "Unable to read code from ",
                             hexstring(source, 64), endl;
-            setup_ptlsim_switch_all_ctx(*this);
+            // setup_ptlsim_switch_all_ctx(*this);
             /*
              * restore the exception index as it will be
              * restore when we try to commit this entry from ROB
@@ -637,13 +641,14 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
                 exec_fault_addr = source;
             faultaddr = source;
             pfec = 1;
-            return 0;
+            n = 0;
+            goto finish;
         }
     }
 
-    int bytes_frm_first_page = min(4096 - lowbits(source, 12), (Waddr)bytes);
-    target_ulong source_b = source;
-    byte* target_b = (byte*)(target);
+    bytes_frm_first_page = min(4096 - lowbits(source, 12), (Waddr)bytes);
+    source_b = source;
+    target_b = (byte*)(target);
     while(n < bytes_frm_first_page) {
         char data;
         if(forexec) data = ldub_code(source_b);
@@ -659,7 +664,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
         n++;
     }
 
-    if(n == bytes) return n;
+    if(n == bytes) goto finish;
 
     // If we need to access second page, check if its present in TLB or PTE
     exception = 0;
@@ -680,7 +685,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
             if(logable(10))
                 ptl_logfile << "Unable to read code from ",
                             hexstring(source + n, 64), endl;
-            setup_ptlsim_switch_all_ctx(*this);
+            // setup_ptlsim_switch_all_ctx(*this);
             /*
              * restore the exception index as it will be
              * restore when we try to commit this entry from ROB
@@ -690,7 +695,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
                 exec_fault_addr = source + n;
             faultaddr = source + n;
             pfec = 1;
-            return n;
+            goto finish;
         }
     }
 
@@ -711,11 +716,12 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 
     if(logable(109)) ptl_logfile << endl;
 
-    setup_ptlsim_switch_all_ctx(*this);
 
     if(logable(10))
         ptl_logfile << "Copy done..\n";
 
+finish:
+    setup_ptlsim_switch_all_ctx(*this);
     return n;
 }
 
@@ -951,16 +957,21 @@ void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virt
     if(logable(2))
         ptl_logfile << "Propagating exception from simulation at eip: ",
                     this->eip, " cycle: ", sim_cycle, endl;
-    setup_qemu_switch_all_ctx(*this);
+    //setup_qemu_switch_all_ctx(*this);
     ptl_stable_state = 1;
     handle_interrupt = 1;
-    if(errorcode) {
-        raise_exception_err((int)exception, (int)errorcode);
-    } else {
-        raise_exception((int)exception);
-    }
+
+    this->exception_index = exception;
+    this->error_code = errorcode;
+    this->exception_is_int = 0;
+    this->exception_next_eip = this->eip;
+    // if(errorcode) {
+        // raise_exception_err((int)exception, (int)errorcode);
+    // } else {
+        // raise_exception((int)exception);
+    // }
     ptl_stable_state = 0;
-    setup_ptlsim_switch_all_ctx(*this);
+    //setup_ptlsim_switch_all_ctx(*this);
 }
 
 W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
@@ -1109,6 +1120,7 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
             ptl_logfile << "MMIO WRITE addr: ", hexstring(virtaddr, 64),
                         " data: ", hexstring(data, 64), " size: ",
                         sizeshift, endl;
+        setup_ptlsim_switch_all_ctx(*this);
         return data;
     }
 
@@ -1164,6 +1176,7 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
     }
 
 #endif
+    setup_ptlsim_switch_all_ctx(*this);
     return data;
 }
 
@@ -1239,6 +1252,7 @@ W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
                         64), "]\n";
     assert(new_data == merged_data);
 #endif
+    setup_ptlsim_switch_all_ctx(*this);
     return data;
 }
 
@@ -1258,7 +1272,17 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
     ptl_stable_state = 1;
     handle_interrupt = 1;
     int mmu_index = cpu_mmu_index((CPUState*)this);
-    tlb_fill(virtaddr, is_write, mmu_index, NULL);
+    //tlb_fill(virtaddr, is_write, mmu_index, NULL);
+
+    int fault = cpu_x86_handle_mmu_fault((CPUState*)this, virtaddr, is_write, mmu_index, 1);
+    if(fault) {
+        exception_next_eip = eip;
+    } else {
+        exception = 0;
+        exception_index = -1;
+        exception_is_int = 0;
+    }
+
     ptl_stable_state = 0;
 
     if(kernel_mode) {

@@ -20,6 +20,8 @@
 
 #include <sysemu.h>
 
+#include <pthread.h>
+
 #define INVALID_MFN 0xffffffffffffffffULL
 #define INVALID_PHYSADDR 0xffffffffffffffffULL
 
@@ -29,6 +31,8 @@ extern W64 sim_cycle;
 extern W64 unhalted_cycle_count;
 extern W64 total_uops_committed;
 extern W64 total_user_insns_committed;
+
+extern pthread_mutex_t qemu_access;
 
 void user_process_terminated(int rc);
 
@@ -324,6 +328,10 @@ struct PTLsimConfig {
 
   //Utilities/Tools
   stringbuf execute_after_kill;
+
+  //Pthread
+  bool threaded_simulation;
+  W64 cores_per_pthread;
 
   void reset();
 };
