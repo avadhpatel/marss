@@ -43,7 +43,7 @@
 #endif
 
 #ifndef ATOM_MAX_BRANCH_IN_FLIGHT
-#define ATOM_MAX_BRANCH_IN_FLIGHT 3
+#define ATOM_MAX_BRANCH_IN_FLIGHT 6
 #endif
 
 #ifndef ATOM_FORWARD_BUF_SIZE
