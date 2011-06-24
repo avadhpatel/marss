@@ -503,6 +503,8 @@ namespace ATOM_CORE_MODEL {
         void writeback_eom();
         void update_checker();
 
+        void annul();
+
         // Variables
         AtomThread *thread;
 
@@ -611,6 +613,11 @@ namespace ATOM_CORE_MODEL {
         { return index_; }
 
         void validate() { }
+
+        void annul()
+        {
+            if(op) op->annul();
+        }
 
         AtomOp* op;
         W16s    index_;
@@ -817,6 +824,7 @@ namespace ATOM_CORE_MODEL {
 
             StatArray<W64, OPCLASS_COUNT> opclass;
             StatArray<W64, MAX_FETCH_WIDTH+1> width;
+            StatArray<W64, MAX_BRANCH_IN_FLIGHT+10> br_in_flight;
 
             st_fetch(Statable *parent)
                 : Statable("fetch", parent)
@@ -827,6 +835,7 @@ namespace ATOM_CORE_MODEL {
                   , bbs("bbs", this)
                   , opclass("opclass", this, opclass_names)
                   , width("width", this)
+                  , br_in_flight("br_in_flight", this)
            {}
         } st_fetch;
 
@@ -883,11 +892,13 @@ namespace ATOM_CORE_MODEL {
         struct st_branch_predictions : public Statable
         {
             StatObj<W64> predictions;
+            StatObj<W64> updates;
             StatObj<W64> fail;
 
             st_branch_predictions(Statable *parent)
                 : Statable("branch_predictions", parent)
                   , predictions("predictions", this)
+                  , updates("updates", this)
                   , fail("fail", this)
             {}
         } st_branch_predictions;

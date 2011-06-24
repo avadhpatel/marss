@@ -295,13 +295,13 @@ bool AtomOp::fetch()
             predinfo.uuid = thread->fetch_uuid;
             predinfo.bptype =
                 (isclass(op.opcode, OPCLASS_COND_BRANCH) <<
-                    log2(BRANCH_HINT_COND)) |
+                 log2(BRANCH_HINT_COND)) |
                 (isclass(op.opcode, OPCLASS_INDIR_BRANCH) <<
-                    log2(BRANCH_HINT_INDIRECT)) |
+                 log2(BRANCH_HINT_INDIRECT)) |
                 (bit(op.extshift, log2(BRANCH_HINT_PUSH_RAS)) <<
-                    log2(BRANCH_HINT_CALL)) |
+                 log2(BRANCH_HINT_CALL)) |
                 (bit(op.extshift, log2(BRANCH_HINT_POP_RAS)) <<
-                    log2(BRANCH_HINT_RET));
+                 log2(BRANCH_HINT_RET));
 
             // SMP/SMT: Fill in with target thread ID (if the predictor
             // supports this):
@@ -327,6 +327,7 @@ bool AtomOp::fetch()
             /* Increament branches_in_flight and if it exceeds
              * MAX_BRANCH_IN_FLIGHT then thread will stall the frontend */
             thread->branches_in_flight++;
+            thread->st_fetch.br_in_flight[thread->branches_in_flight]++;
             is_branch = true;
 
             if(thread->branches_in_flight > MAX_BRANCH_IN_FLIGHT) {
@@ -1292,15 +1293,6 @@ void AtomOp::forward()
         core.fu_available |= fu_mask;
         thread->issue_disabled = false;
     }
-
-    if(is_branch) {
-        thread->branches_in_flight--;
-        
-        if(thread->branches_in_flight <= MAX_BRANCH_IN_FLIGHT) {
-            ATOMOPLOG1("Frontend stall cleared because of branch");
-            thread->stall_frontend = false;
-        }
-    }
 }
 
 /**
@@ -1328,6 +1320,15 @@ int AtomOp::writeback()
 
         /* If checker is enabled, then this will be executed */
         update_checker();
+    }
+
+    if(is_branch) {
+        thread->branches_in_flight--;
+
+        if(thread->branches_in_flight <= MAX_BRANCH_IN_FLIGHT) {
+            ATOMOPLOG1("Frontend stall cleared because of branch");
+            thread->stall_frontend = false;
+        }
     }
 
     if(is_barrier) {
@@ -1435,6 +1436,14 @@ void AtomOp::writeback_eom()
     }
     pthread_mutex_unlock(&qemu_access);
 
+    if (isclass(last_uop.opcode, OPCLASS_BRANCH)) {
+        W64 seq_eip = rip + last_uop.bytes;
+
+        thread->branchpred.update(predinfo, seq_eip,
+                thread->ctx.eip);
+        thread->st_branch_predictions.updates++;
+    }
+
     ATOMOPLOG2("Commited.. new eip:0x", hexstring(thread->ctx.eip, 48));
 
 #ifdef TRACE_RIP
@@ -1484,6 +1493,28 @@ void AtomOp::update_checker()
         config.checker_enabled = true;
         enable_checker();
         reset_checker_stores();
+    }
+}
+
+/**
+ * @brief Annul an AtomOp entry
+ *
+ * Check if its a branch then update thread's branchpredictor
+ */
+void AtomOp::annul()
+{
+    TransOp& last_uop = uops[num_uops_used - 1];
+    if (isbranch(last_uop.opcode)) {
+
+        thread->branches_in_flight--;
+
+        if(thread->branches_in_flight <= MAX_BRANCH_IN_FLIGHT) {
+            thread->stall_frontend = false;
+        }
+
+        if(predinfo.bptype & (BRANCH_HINT_CALL|BRANCH_HINT_RET)) {
+            thread->branchpred.annulras(predinfo);
+        }
     }
 }
 
@@ -1727,7 +1758,7 @@ bool AtomThread::fetch_from_icache()
         assert(request != NULL);
 
         request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
-                true, 0, 0, Memory::MEMORY_OP_READ);
+                true, fetchrip.rip, 0, Memory::MEMORY_OP_READ);
         request->set_coreSignal(&icache_signal);
 
         hit = core.memoryHierarchy->access_cache(request);
@@ -1857,7 +1888,7 @@ itlb_walk_finish:
     assert(request != NULL);
 
     request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
-            true, 0, 0, Memory::MEMORY_OP_READ);
+            true, fetchrip.rip, 0, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&icache_signal);
 
     icache_miss_addr = floor(pteaddr, ICACHE_FETCH_GRANULARITY);
@@ -2109,6 +2140,17 @@ bool AtomThread::issue()
  */
 void AtomThread::redirect_fetch(W64 rip)
 {
+    ATOMTHLOG1("RIP redirected to ", (void*)rip);
+
+    // Before we clear fetchq, update branch predictor
+    foreach_backward(core.fetchq, i) {
+        core.fetchq[i].annul();
+    }
+
+    foreach_forward_after(dispatchq, (&dispatchq[dispatchq.head]), i) {
+        dispatchq[i].annul();
+    }
+
     // Clear the dispatch queue and fetch queue
     dispatchq.reset();
     core.fetchq.reset();
@@ -2689,8 +2731,6 @@ AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
     : BaseCore(machine), Statable(name, &machine)
       , threadcount(num_threads)
 {
-    stringbuf corename;
-
     int th_count;
     if(!machine.get_option(name, "threads", th_count)) {
         th_count = 1;
@@ -2698,8 +2738,6 @@ AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
     threadcount = th_count;
 
     coreid = machine.get_next_coreid();
-
-    update_name(corename.buf);
 
     threads = (AtomThread**)qemu_mallocz(threadcount*sizeof(AtomThread*));
 
@@ -2834,6 +2872,8 @@ bool AtomCore::runcycle()
     port_available = (W8)-1;
 
     assert(running_thread);
+
+    ATOMCORELOG("Cycle: ", sim_cycle);
 
     running_thread->handle_interrupt_at_next_eom =
         running_thread->ctx.check_events();
