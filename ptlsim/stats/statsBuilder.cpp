@@ -227,7 +227,9 @@ stringbuf *Statable::get_full_stat_string()
         (*parent_name) << "." << name;
         return parent_name;
     } else {
-        return new stringbuf(name);
+        stringbuf *s = new stringbuf();
+        *s << name;
+        return s;
     }
 }
 
