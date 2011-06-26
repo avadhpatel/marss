@@ -1,7 +1,29 @@
+"""
+	Graphs.py -- a set of classes to help graph data using matplotlib and numpy
+		see the main function at the bottom of this file for some examples 
+
+	Author: Paul Rosenfeld, University of Maryland <dramninjas (at) gmail>
+	
+	Wishlist of features: 
+		- Need better support for laying out graphs so they have proper margins
+			and spacing irrespective of the number and layout of graphs
+		- Need better layout support that somehow takes into account the width of labels since
+			matplotlib lays out the axis box where you tell it, but the left axis labels sometimes
+			push the label off the edge of the page which is obnoxious
+		- Right now the only layout functionality is row-major; i.e. left to right
+			then top to bottom. Might want to make a layout that allows column major
+			ordering of graphs. 
+		- Need to have the ability to add new columns to the DataTable that are output
+			of arbitrary functions (for example: add a column a4 whose value is a1 / a3). 
+			This should be straight forward with numpy.
+"""
+		
+
+
 import os; 
 import numpy as np;
 import matplotlib
-matplotlib.use("Agg");
+matplotlib.use("Agg"); #this gets reset later, but for now it prevents matplotlib from going into interactive mode
 import matplotlib.pyplot as plt
 import matplotlib.axes as ax
 import tempfile; 
@@ -38,6 +60,8 @@ class CompositeGraph:
 			setup_latex_mode()
 		else:
 			print "WARNING: Unknown output mode '%s'; using defaults"%output_mode
+		self.w = w; 
+		self.h = h; 
 		self.fig = plt.figure(1, figsize=(w,h));
 		self.title = title;
 		self.num_cols = num_cols;
@@ -45,14 +69,14 @@ class CompositeGraph:
 	def get_layout(self, num_boxes):
 		""" this returns the proper number of rows and columns in case the 
 				number of boxes isn't divisible by the number of columns"""
-		if num_boxes % 2 == 1:
-			num_boxes += self.num_cols-1;
 		num_rows = max(num_boxes/self.num_cols,1);
-		if num_boxes%self.num_cols != 0:
+		# add a row if we rounded down in the previous step
+		if num_boxes%self.num_cols != 0 and num_boxes > self.num_cols:
 			num_rows+=1;
-		return num_rows,self.num_cols
+		return num_rows
 
-	def rect_for_graph(self, idx, num_rows, num_cols):
+	def rect_for_graph(self, idx, num_rows):
+		num_cols = self.num_cols
 		y_margin = 0.05
 		x_margin = 0.05
 		row = idx/num_cols;
@@ -67,11 +91,11 @@ class CompositeGraph:
 
 	def draw(self,graph_arr,output_filename):
 		num_boxes = len(graph_arr)
-		num_rows, num_cols = self.get_layout(num_boxes);
+		num_rows = self.get_layout(num_boxes);
 				
 		for i,g in enumerate(graph_arr):
 #			print "boxes=%d, r=%d, c=%d, i=%d" % (num_boxes,num_rows, num_cols, i)
-			rect=self.rect_for_graph(i,num_rows,num_cols) 
+			rect=self.rect_for_graph(i,num_rows) 
 			ax = self.fig.add_axes(rect, title="test", xlabel="xtest", ylabel="y_test")
 			if (g.draw(ax)):
 				leg=ax.legend()
@@ -104,8 +128,16 @@ def col_map_from_header(header_str):
 		col_map[field] = i
 	return col_map
 
+# Some convenient type checking 
 def is_string(a):
 	return type(a).__name__ == 'str'
+
+def is_list(a):
+	return type(a).__name__ == 'list'
+
+def is_dict(a):
+	return type(a).__name__ == 'dict'
+
 
 class DataTable:
 	# read the data file, convert the header information into a column map,
@@ -207,14 +239,39 @@ class SingleGraph:
 		return True
 
 class LinePlot:
-	def __init__(self,data_table,x_col,y_col,label):
+	def __init__(self,data_table,x_col,y_col,label,line_params=None):
+		""" A line plot really just corresponds to a x,y pair from the
+			data table along with a label in the legend """ 
 		self.x_col = x_col
 		self.y_col = y_col 
 		self.label = label
 		self.data_table = data_table; 
+		if line_params == None:
+			line_params = []; #this will be the default line style 
+		self.set_line_style(line_params); 
+
+	def set_line_style_from_list(self, line_param_list=None):
+		""" This function takes an array of 3 or fewer elements [dash style, width, color]
+			and returns the corresponding dictionary that can be unpacked into the legend 
+			style for matplotlib """
+		params = ['-', 1.0, 'k']; # defaults that will be overwritten by the loop below (without me having to keep checking length)
+		if line_param_list == None: 
+			line_param_list = [];
+
+		for i,param in enumerate(line_param_list):
+			if i >= len(params):
+				break;
+			params[i] = param;
+		return {'linestyle': params[0], 'linewidth':params[1], 'c':params[2]}
+		
+	def set_line_style(self, line_params):
+		if is_list(line_params):
+			self.lineplot_kwargs = self.set_line_style_from_list(line_params); 
+		elif is_dict(line_params): 
+			self.lineplot_kwargs = line_params; 
 
 	def draw(self,ax):
-		self.data_table.draw(ax, self.x_col, self.y_col, self.label)
+		self.data_table.draw(ax, self.x_col, self.y_col, self.label, self.lineplot_kwargs)
 
 class AxisDescription:
 	def __init__(self,label,range_min=None,range_max=None):
@@ -223,26 +280,32 @@ class AxisDescription:
 		self.range_max = range_max
 
 if __name__ == "__main__":
+	""" A small test program to create a png and latex sample graph """
 	dt = DataTable("foo.csv");
 	default_x_axis = AxisDescription("Cycle Number"); 
 
 	graphs = [
 			SingleGraph([
-				LinePlot(dt,"sim_cycle","base_machine.decoder.alu_to_mem","ALU to Memory")
-			,	LinePlot(dt,0,"base_machine.decoder.total_fast_decode","Total decoded")
+				LinePlot(dt,"sim_cycle","base_machine.decoder.alu_to_mem","ALU to Memory",[':', 1.5, 'r'])
+			,	LinePlot(dt,0,"base_machine.decoder.total_fast_decode","Total decoded", ["--", 1.2,'g'])
 			], default_x_axis, AxisDescription("Ops"), "ALU Ops")
 		,	SingleGraph([
 				LinePlot(dt,0,3,"testline")
 			], default_x_axis, AxisDescription("test"), "test")
+		,	SingleGraph([
+				LinePlot(dt,0,3,"testline2")
+			], default_x_axis, AxisDescription("test"), "test")
+		,	SingleGraph([
+				LinePlot(dt,0,2,"testline3")
+			], default_x_axis, AxisDescription("test"), "test")
+
+
 	]	
 	composite_graph = CompositeGraph(); 
 	composite_graph.draw(graphs,"blah.png"); 
 	
 	graph_latex = CompositeGraph(output_mode="latex")
-	composite_graph.draw(graphs,"blah.pdf")
-	
-		
+	graph_latex.draw(graphs,"blah.pdf")
 
-
-
-
+	graph_latex2 = CompositeGraph(w=4, h=10, num_cols=1, output_mode="latex")
+	graph_latex2.draw(graphs,"blah_4_1col.pdf")
