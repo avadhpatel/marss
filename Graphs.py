@@ -46,7 +46,7 @@ class CompositeGraph:
 	""" A composite graph is made up of one or more SingleGraphs and is the 
 		object that lays out all of the SingleGraphs and saves them to a file
 	"""
-	def __init__(self, w=8.5, h=11, title=None, output_filename="out.png", output_mode="png", num_cols=2):
+	def __init__(self, w=8.5, h=11, title=None, output_mode="png", num_cols=2):
 		setup_common(); 
 		if output_mode == "png":	
 			self.output_mode = "png"
@@ -73,8 +73,8 @@ class CompositeGraph:
 
 	def rect_for_graph(self, idx, num_rows):
 		num_cols = self.num_cols
-		y_margin = 0.05
-		x_margin = 0.05
+		y_margin = 0.08
+		x_margin = 0.08
 		row = idx/num_cols;
 		col = idx%num_cols;
 		h = 1.0/float(num_rows)-(1.0+1.0/float(num_rows))*y_margin
