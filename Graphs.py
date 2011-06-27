@@ -29,8 +29,6 @@ import matplotlib.axes as ax
 import tempfile; 
 import pdb
 
-from DataTable import * 
-
 """ plot settings for different types of plots """
 def setup_common():
 	plt.rc('font', size=10)
@@ -183,15 +181,23 @@ class DataTable:
 		except IOError:
 			print "genfromtxt couldn't read the CSV data, file %s"%(data_filename)
 			exit()
+	def get_column_idx(self, col):
+		if is_string(col):
+			if col not in self.col_to_num_map:
+				print "ERROR: column name '%s' not found in data table"%(col)
+				exit(); 
+			return self.col_to_num_map[col];
+		else:
+			if col >= self.file_data.shape[1]:
+				print "ERROR: column number '%d' is out of bounds"%(col)
+				exit();
+			return int(col); 
 
 	def get_data(self, col):
 		""" get a column of data out of the table; column can be referenced by name (str)
 				or by number 
 		"""
-		if self.col_to_num_map != None and is_string(col):
-			return self.file_data[:,self.col_to_num_map[col]]
-		else:
-			return self.file_data[:,col]
+		return self.file_data[:,self.get_column_idx(col)]
 
 	def add_derived_column(self, compute_fn, col_idx_arr, col_name):
 		""" Use some functional python to add a new derived column -- just make sure
@@ -204,7 +210,7 @@ class DataTable:
 		last_column_idx = len(self.file_data[0,:]);
 		self.file_data = np.column_stack([self.file_data, np.zeros(column_height)])
 		for i in range(column_height):
-			values = map(lambda col_idx: self.file_data[i,col_idx], col_idx_arr)
+			values = map(lambda col_idx: self.file_data[i,self.get_column_idx(col_idx)], col_idx_arr)
 			self.file_data[i,last_column_idx] = compute_fn(*values)
 		self.col_to_num_map[col_name] = last_column_idx; 
 		
@@ -308,6 +314,7 @@ if __name__ == "__main__":
 	""" A small test program to create a png and latex sample graph """
 	dt = DataTable("foo.csv");
 	dt.add_derived_column(percent, [1,1],"test_col");
+	dt.add_derived_column(lambda x,y: x+y, ["base_machine.decoder.total_fast_decode","base_machine.decoder.alu_to_mem"],"test_col2");
 	default_x_axis = AxisDescription("Cycle Number"); 
 
 	graphs = [
@@ -319,7 +326,7 @@ if __name__ == "__main__":
 				LinePlot(dt,0,3,"testline")
 			], default_x_axis, AxisDescription("test"), "test")
 		,	SingleGraph([
-				LinePlot(dt,0,3,"testline2")
+				LinePlot(dt,0,"test_col2","derived1")
 			], default_x_axis, AxisDescription("test"), "test")
 		,	SingleGraph([
 				LinePlot(dt,0,"test_col","should be 100 always")
