@@ -63,24 +63,31 @@ if arch_type == '64bit':
     env.Append(CCFLAGS = '-D__x86_64__')
 
 # git information to bake into the binary
-output = subprocess.Popen("git branch".split(),
-        stdout=subprocess.PIPE).communicate()[0]
-for line in output.splitlines():
-    if line.startswith('*'):
-        branch_name = line[2:]
-        env.Append(CCFLAGS = "-DGITBRANCH=%s" % branch_name.strip("\n"))
-        break;
+git_branch = "UNKNOWN"
+git_comm = "0000000"
+git_date = "UNKNOWN"
 
-output = subprocess.Popen("git log --abbrev-commit HEAD^..HEAD".split(),
-        stdout=subprocess.PIPE).communicate()[0]
-for line in output.splitlines():
-    if line.startswith('commit '):
-        commit_sha = line[8:]
-        env.Append(CCFLAGS = "-DGITCOMMIT=%s"%commit_sha.strip("\n"))
-    if line.startswith('Date:   '):
-        commit_date = line[8:-6]
-        env.Append(CCFLAGS = "-DGITDATE='%s'"%commit_date.strip("\n"))
-        break;
+try:
+    output = subprocess.Popen("git branch".split(),
+            stdout=subprocess.PIPE).communicate()[0]
+    for line in output.splitlines():
+        if line.startswith('*'):
+            git_branch = line[2:]
+            break;
+
+    output = subprocess.Popen("git log --abbrev-commit HEAD^..HEAD".split(),
+            stdout=subprocess.PIPE).communicate()[0]
+    for line in output.splitlines():
+        if line.startswith('commit '):
+            git_comm = line[8:]
+        if line.startswith('Date:   '):
+            git_date = line[8:-6]
+            break;
+except:
+    pass
+
+env.Append(CCFLAGS = "-DGITBRANCH=%s -DGITCOMMIT=%s -DGITDATE='%s'" %
+        (git_branch, git_comm, git_date))
 
 Export('env')
 
