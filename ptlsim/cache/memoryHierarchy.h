@@ -84,16 +84,7 @@
     signal.connect(signal_mem_ptr(*this, cb)); \
 }
 
-namespace OutOfOrderModel {
-  class OutOfOrderMachine;
-  class OutOfOrderCore;
-  class LoadStoreQueueEntry;
-  struct OutOfOrderCoreCacheCallbacks;
-};
-
 namespace Memory {
-
-  using namespace OutOfOrderModel;
 
   class Event : public FixStateListObject
 	{
@@ -155,6 +146,21 @@ namespace Memory {
   ostream& operator <<(ostream& os, const Event& event);
   ostream& operator ,(ostream& os, const Event& event);
 
+
+  struct MemoryInterlockEntry {
+      W8 ctx_id;
+
+      void reset() {ctx_id = -1;}
+
+      ostream& print(ostream& os, W64 physaddr) const {
+          os << "phys " << (void*)physaddr << ": vcpu " << (int)ctx_id;
+          return os;
+      }
+  };
+
+  struct MemoryInterlockBuffer: public LockableAssociativeArray<W64, MemoryInterlockEntry, 16, 4, 8> { };
+
+  extern MemoryInterlockBuffer interlocks;
 
   //
   // MemoryHierarchy provides interface with core
@@ -245,6 +251,10 @@ namespace Memory {
         controllersFullFlags_.resize(allControllers_.count(), false);
         interconnectsFullFlags_.resize(allInterconnects_.count(), false);
     }
+
+    bool grab_lock(W64 lockaddr, W8 ctx_id);
+    bool probe_lock(W64 lockaddr, W8 ctx_id);
+    void invalidate_lock(W64 lockaddr, W8 ctx_id);
 
   private:
 

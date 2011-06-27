@@ -36,6 +36,7 @@
 #endif
 
 using namespace OOO_CORE_MODEL;
+using namespace Memory;
 
 bool DefaultCore::icache_wakeup(void *arg) {
     Memory::MemoryRequest *request = (Memory::MemoryRequest*)arg;
@@ -1745,15 +1746,11 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
     for (int i = start; i < queued_mem_lock_release_count; i++) {
         W64 lockaddr = queued_mem_lock_release_list[i];
 
-        MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
+        bool lock = core.memoryHierarchy->probe_lock(lockaddr,
+                ctx.cpu_index);
 
         if (!lock) {
             ptl_logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock was ", lock, endl;
-            assert(false);
-        }
-
-        if (lock->vcpuid != ctx.cpu_index) {
-            ptl_logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock vcpuid was ", lock->vcpuid, endl;
             assert(false);
         }
 
@@ -1767,7 +1764,7 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
             event->loadstore.sfr.physaddr = lockaddr >> 3;
         }
 
-        interlocks.invalidate(lockaddr);
+        core.memoryHierarchy->invalidate_lock(lockaddr, ctx.cpu_index);
     }
 
     queued_mem_lock_release_count = start;
@@ -2084,9 +2081,10 @@ int ReorderBufferEntry::commit() {
 
     if unlikely (uop.opcode == OP_st) {
         W64 lockaddr = lsq->physaddr << 3;
-        MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
+        bool lock = core.memoryHierarchy->probe_lock(lockaddr,
+                thread.ctx.cpu_index);
 
-        if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
+        if unlikely (!lock) {
             if unlikely (config.event_log_enabled) core.eventlog.add_commit(EVENT_COMMIT_MEM_LOCKED, this);
 
             per_context_ooocore_stats_update(threadid, commit.result.memlocked++);

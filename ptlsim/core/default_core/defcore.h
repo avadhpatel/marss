@@ -841,25 +841,6 @@ namespace OOO_CORE_MODEL {
         // virtual void icache_wakeup(Memory::MemoryRequest *request);
     // };
 
-    struct MemoryInterlockEntry {
-        W64 uuid;
-        W16 rob;
-        byte vcpuid;
-        W8 threadid;
-        W8 coreid;
-
-        void reset() { uuid = 0; rob = 0; vcpuid = 0; threadid = 0; coreid = 0;}
-
-        ostream& print(ostream& os, W64 physaddr) const {
-            os << "phys ", (void*)physaddr, ": vcpu ", vcpuid, ", coreid, ", coreid, ", threadid ", threadid, ", uuid ", uuid, ", rob ", rob;
-            return os;
-        }
-    };
-
-    struct MemoryInterlockBuffer: public LockableAssociativeArray<W64, MemoryInterlockEntry, 16, 4, 8> { };
-
-    extern MemoryInterlockBuffer interlocks;
-
     //
     // Event Tracing
     //

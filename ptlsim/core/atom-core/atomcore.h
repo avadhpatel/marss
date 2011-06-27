@@ -505,6 +505,11 @@ namespace ATOM_CORE_MODEL {
 
         void annul();
 
+        // Cache line lock
+        bool check_mem_lock(W64 addr);
+        bool grab_mem_lock(W64 addr);
+        void release_mem_lock();
+
         // Variables
         AtomThread *thread;
 
@@ -537,6 +542,9 @@ namespace ATOM_CORE_MODEL {
         W16            rflags[MAX_UOPS_PER_ATOMOP];
         W8             num_uops_used;
         W64            uuid;
+
+        bool lock_acquired;
+        W64  lock_addr;
 
         W8  src_registers[MAX_REG_ACCESS_PER_ATOMOP];
         W8  dest_registers[MAX_UOPS_PER_ATOMOP];

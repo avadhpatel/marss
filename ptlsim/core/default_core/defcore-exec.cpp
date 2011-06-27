@@ -37,6 +37,7 @@
 //#define DISABLE_SF
 
 using namespace OOO_CORE_MODEL;
+using namespace Memory;
 
 //
 // Issue Queue
@@ -890,11 +891,6 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
     return true;
 }
 
-namespace OOO_CORE_MODEL {
-    // One global interlock buffer for all VCPUs:
-    MemoryInterlockBuffer interlocks;
-};
-
 //
 // Release the lock on the cache block touched by this ld.acq uop.
 //
@@ -904,23 +900,13 @@ namespace OOO_CORE_MODEL {
 bool ReorderBufferEntry::release_mem_lock(bool forced) {
     if likely (!lock_acquired) return false;
 
-    W64 physaddr = lsq->physaddr << 3;
-    MemoryInterlockEntry* lock = interlocks.probe(physaddr);
-    assert(lock);
-
     DefaultCore& core = getcore();
     ThreadContext& thread = getthread();
 
-    if unlikely (config.event_log_enabled) {
-        OutOfOrderCoreEvent* event = core.eventlog.add_load_store((forced) ? EVENT_STORE_LOCK_ANNULLED : EVENT_STORE_LOCK_RELEASED, this, NULL, physaddr);
-        event->loadstore.locking_vcpuid = lock->vcpuid;
-        event->loadstore.locking_uuid = lock->uuid;
-        event->loadstore.locking_rob = lock->rob;
-    }
-
-    assert(lock->vcpuid == thread.ctx.cpu_index);
-    assert(lock->uuid == uop.uuid);
-    assert(lock->rob == index());
+    W64 physaddr = lsq->physaddr << 3;
+    bool lock = core.memoryHierarchy->probe_lock(physaddr,
+            thread.ctx.cpu_index);
+    assert(lock);
 
     //
     // Just add to the release list; do not invalidate until the macro-op commits
@@ -1211,7 +1197,8 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     //
     if unlikely ((contextcount > 1) && (!annul)) {
         W64 physaddr = state.physaddr << 3;
-        MemoryInterlockEntry* lock = interlocks.probe(physaddr);
+        bool lock = core.memoryHierarchy->probe_lock(physaddr,
+                thread.ctx.cpu_index);
 
         //
         // All store instructions check if a lock is held by another thread,
@@ -1223,25 +1210,13 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
         // *unlocked* ADD [mem],1 on the high 4 bytes of the chunk.
         //
 
-        if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
+        if unlikely (!lock) {
 
             if(logable(8)) {
                 cerr << "Memory addr ", hexstring(physaddr, 64),
                      " is locked by ", thread.ctx.cpu_index, endl;
                 ptl_logfile << "Memory addr ", hexstring(physaddr, 64),
                             " is locked by ", thread.ctx.cpu_index, endl;
-            }
-
-            //
-            // Non-interlocked store intersected with a previously
-            // locked block. We must replay the store until the block
-            // becomes unlocked.
-            //
-            if unlikely (config.event_log_enabled) {
-                event = core.eventlog.add_load_store(EVENT_STORE_LOCK_REPLAY, this, NULL, addr);
-                event->loadstore.locking_vcpuid = lock->vcpuid;
-                event->loadstore.locking_uuid = lock->uuid;
-                event->loadstore.threadid = lock->threadid;
             }
 
             per_context_ooocore_stats_update(threadid, dcache.store.issue.replay.interlocked++);
@@ -1648,98 +1623,23 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     // SMT cores must also use this, since the MESI cache coherence
     // system doesn't work across multiple threads on the same core.
     //
-    if unlikely ((contextcount > 1) && (!annul)) {
-        MemoryInterlockEntry* lock = interlocks.probe(physaddr);
-
-        //
-        // All load instructions check if a lock is held by another thread,
-        // even if the load lacks the LOCK prefix.
-        //
-        // This prevents mixing of threads in cases where e.g. thread 0 is
-        // acquiring a spinlock by a LOCK DEC of the low 4 bytes of the 8-byte
-        // cache chunk, while thread 1 is releasing a spinlock using an
-        // *unlocked* ADD [mem],1 on the high 4 bytes of the chunk.
-        //
-        if unlikely (lock && (lock->vcpuid != thread.ctx.cpu_index)) {
-            if(logable(8)) {
-                cerr << "Memory addr ", hexstring(physaddr, 64),
-                     " is locked by ", thread.ctx.cpu_index, endl;
-                ptl_logfile << "Memory addr ", hexstring(physaddr, 64),
-                            " is locked by ", thread.ctx.cpu_index, endl;
-            }
-            //
-            // Some other thread or core has locked up this word: replay
-            // the uop until it becomes unlocked.
-            //
-            if unlikely (config.event_log_enabled) {
-                event = core.eventlog.add_load_store(EVENT_LOAD_LOCK_REPLAY, this, NULL, addr);
-                event->loadstore.locking_vcpuid = lock->vcpuid;
-                event->loadstore.locking_uuid = lock->uuid;
-                event->loadstore.locking_rob = lock->rob;
-            }
-
-            // Double-locking within a thread is NOT allowed!
-            assert(lock->vcpuid != thread.ctx.cpu_index);
-            ///assert(lock->threadid != threadid); //now need to consider coreid too:
-            assert(!(lock->coreid == core.coreid && lock->threadid == threadid));
-
-            per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.interlocked++);
-            thread.thread_stats.dcache.load.issue.replay.interlocked++;
+    if (!annul) {
+        W64 lockaddr = state.physaddr << 3;
+        if(!core.memoryHierarchy->probe_lock(lockaddr, thread.ctx.cpu_index)) {
+            /* Lock is held by some other thread */
             replay_locked();
             return ISSUE_NEEDS_REPLAY;
         }
 
-        // Issuing more than one ld.acq on the same block is not allowed:
-        if (lock) {
-            ptl_logfile << "ERROR: thread ", thread.ctx.cpu_index, " uuid ", uop.uuid, " over physaddr ", (void*)physaddr, ": lock was already acquired by vcpuid ", lock->vcpuid, " uuid ", lock->uuid, " rob ", lock->rob, endl;
-            assert(false);
-        }
-
-        if unlikely (uop.locked) {
-            //
-            // Attempt to acquire an exclusive lock on the block via ld.acq,
-            // or replay if another core or thread already has the lock.
-            //
-            // Each block can only be locked once, i.e. locks are not recursive
-            // even within a single VCPU. Any violations of these conditions
-            // represent an error in the microcode.
-            //
-            // If we're attempting to release a lock on block X via st.rel,
-            // another ld.acq uop executed within the same macro-op running
-            // on the current core must have acquired it. Any violations of
-            // these conditions represent an error in the microcode.
-            //
-
-            lock = interlocks.select_and_lock(physaddr);
-
-            if unlikely (!lock) {
-                //
-                // We've overflowed the interlock buffer.
-                // Replay the load until some entries free up.
-                //
-                // The maximum number of blocks lockable by any macro-op
-                // is two. As long as the lock buffer associativity is
-                // bigger than this, we will eventually get an entry.
-                //
-                if unlikely (config.event_log_enabled) {
-                    core.eventlog.add_load_store(EVENT_LOAD_LOCK_OVERFLOW, this, NULL, addr);
-                }
-
+        if (uop.locked) {
+            if(!core.memoryHierarchy->grab_lock(lockaddr, thread.ctx.cpu_index)) {
+                /* Can't grab the lock, issue failed */
                 per_context_ooocore_stats_update(threadid, dcache.load.issue.replay.interlock_overflow++);
                 thread.thread_stats.dcache.load.issue.replay.interlock_overflow++;
                 replay();
                 return ISSUE_NEEDS_REPLAY;
-            }
-
-            lock->vcpuid = thread.ctx.cpu_index;
-            lock->uuid = uop.uuid;
-            lock->rob = index();
-            lock->threadid = threadid;
-            lock->coreid = core.coreid;
-            lock_acquired = 1;
-
-            if unlikely (config.event_log_enabled) {
-                core.eventlog.add_load_store(EVENT_LOAD_LOCK_ACQUIRED, this, NULL, addr);
+            } else {
+                lock_acquired = 1;
             }
         }
     }

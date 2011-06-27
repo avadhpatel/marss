@@ -671,6 +671,64 @@ int MemoryHierarchy::get_core_pending_offchip_miss(W8 coreid)
 		get_no_pending_request(coreid);
 }
 
+/**
+ * @brief Try to grab Cache line lock
+ *
+ * @param lockaddr Cache line address
+ * @param ctx_id CPU Context ID
+ *
+ * @return true if lock is successfuly acquired
+ */
+bool MemoryHierarchy::grab_lock(W64 lockaddr, W8 ctx_id)
+{
+    bool ret = false;
+    MemoryInterlockEntry* lock = interlocks.select_and_lock(lockaddr);
+
+    if(lock && lock->ctx_id == (W8)-1) {
+        lock->ctx_id = ctx_id;
+        ret = true;
+    }
+
+    return ret;
+}
+
+/**
+ * @brief Invalidate Cache Line lock
+ *
+ * @param lockaddr Cache line address
+ * @param ctx_id CPU Context ID that held the lock
+ */
+void MemoryHierarchy::invalidate_lock(W64 lockaddr, W8 ctx_id)
+{
+    MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
+
+    assert(lock);
+    assert(lock->ctx_id == ctx_id);
+    interlocks.invalidate(lockaddr);
+}
+
+/**
+ * @brief Proble Cache for Cache Line lock
+ *
+ * @param lockaddr Cache Line address
+ * @param ctx_id CPU Context ID
+ *
+ * @return True if lock is available and held by given ctx_id
+ */
+bool MemoryHierarchy::probe_lock(W64 lockaddr, W8 ctx_id)
+{
+    bool ret = false;
+    MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
+
+    if(!lock) { // If no one has grab the lock
+        ret = true;
+    } else if(lock && lock->ctx_id == ctx_id) {
+        ret = true;
+    }
+
+    return ret;
+}
+
 namespace Memory {
 
 ostream& operator <<(ostream& os, const Event& event)
@@ -682,5 +740,7 @@ ostream& operator ,(ostream& os, const Event& event)
 {
 	return event.print(os);
 }
+
+MemoryInterlockBuffer interlocks;
 
 };

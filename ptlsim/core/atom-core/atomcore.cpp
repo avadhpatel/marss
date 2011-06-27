@@ -158,6 +158,9 @@ void AtomOp::reset()
     }
 
     cycles_left = 0;
+
+    lock_acquired = false;
+    lock_addr = -1;
 }
 
 /**
@@ -877,6 +880,16 @@ W8 AtomOp::execute_load(TransOp& uop)
         return ISSUE_FAIL;
     }
 
+    if(!check_mem_lock(addr)) {
+        return ISSUE_FAIL;
+    }
+
+    if(uop.locked && !lock_acquired) {
+        if(!grab_mem_lock(addr)) {
+            return ISSUE_FAIL;
+        }
+    }
+
     bool cache_available = thread->core.memoryHierarchy->is_cache_available(
             thread->core.coreid, thread->threadid, false);
 
@@ -989,6 +1002,45 @@ W64 AtomOp::get_load_data(W64 addr, TransOp& uop)
 }
 
 /**
+ * @brief Check for Memory Lock
+ *
+ * @param addr Line address of requested memory access
+ *
+ * @return false if Lock is held by other Context
+ */
+bool AtomOp::check_mem_lock(W64 addr)
+{
+    return thread->core.memoryHierarchy->probe_lock(addr & ~(0x3),
+            thread->ctx.cpu_index);
+}
+
+/**
+ * @brief Try to grab lock for memory cache line
+ *
+ * @param addr Cache line address
+ *
+ * @return true if lock is successfully grabbed
+ */
+bool AtomOp::grab_mem_lock(W64 addr)
+{
+    lock_acquired = thread->core.memoryHierarchy->grab_lock(
+                addr & ~(0x3), thread->ctx.cpu_index);
+    lock_addr = addr;
+    return lock_acquired;
+}
+
+/**
+ * @brief Release Cache line lock
+ *
+ */
+void AtomOp::release_mem_lock()
+{
+    thread->core.memoryHierarchy->invalidate_lock(lock_addr & ~(0x3),
+            thread->ctx.cpu_index);
+    lock_acquired = false;
+}
+
+/**
 * @brief Execute 'store' uop
 *
 * @param uop A store uop
@@ -1023,6 +1075,10 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
      * Dispatch queue and will be re-issued once its handled.
      */
     if(addr == -1) {
+        return ISSUE_FAIL;
+    }
+
+    if(!check_mem_lock(addr)) {
         return ISSUE_FAIL;
     }
 
@@ -1315,6 +1371,10 @@ int AtomOp::writeback()
 
     update_reg_mem();
 
+    if(lock_acquired) {
+        release_mem_lock();
+    }
+
     if(eom) {
         writeback_eom();
 
@@ -1513,6 +1573,10 @@ void AtomOp::annul()
         if(predinfo.bptype & (BRANCH_HINT_CALL|BRANCH_HINT_RET)) {
             thread->branchpred.annulras(predinfo);
         }
+    }
+
+    if(lock_acquired) {
+        release_mem_lock();
     }
 }
 
@@ -2634,6 +2698,14 @@ bool AtomThread::handle_barrier()
 void AtomThread::flush_pipeline()
 {
     ATOMTHLOG1("flush_pipeline()");
+
+    foreach_backward(core.fetchq, i) {
+        core.fetchq[i].annul();
+    }
+
+    foreach_forward_after(dispatchq, (&dispatchq[dispatchq.head]), i) {
+        dispatchq[i].annul();
+    }
 
     // Check commitbuf to make sure we dont have partial commit
     if(!commitbuf.empty()) {
