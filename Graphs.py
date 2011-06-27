@@ -13,9 +13,6 @@
 		- Right now the only layout functionality is row-major; i.e. left to right
 			then top to bottom. Might want to make a layout that allows column major
 			ordering of graphs. 
-		- Need to have the ability to add new columns to the DataTable that are output
-			of arbitrary functions (for example: add a column a4 whose value is a1 / a3). 
-			This should be straight forward with numpy.
 """
 		
 
@@ -95,11 +92,8 @@ class CompositeGraph:
 		for i,g in enumerate(graph_arr):
 #			print "boxes=%d, r=%d, c=%d, i=%d" % (num_boxes,num_rows, num_cols, i)
 			rect=self.rect_for_graph(i,num_rows) 
-			ax = self.fig.add_axes(rect, title="test", xlabel="xtest", ylabel="y_test")
-			if (g.draw(ax)):
-				leg=ax.legend()
-				leg.get_frame().set_alpha(0.5);
-				plt.setp(leg.get_texts(), fontsize='small')
+			ax = self.fig.add_axes(rect, title=g.title, xlabel=g.x_axis_desc.label, ylabel=g.y_axis_desc.label)
+			g.draw(ax,self.output_mode); 
 			
 		if self.title != None:
 			self.fig.suptitle(self.title, fontsize=12, fontweight='bold', x=0.515)
@@ -252,19 +246,25 @@ class DataTable:
 		ax.plot(x_data[filtered_indices], y_data[filtered_indices],label="%s"%(label),**(line_param_kwargs) );
 
 class SingleGraph:
-	def __init__(self, plots, x_axis_desc, y_axis_desc, title):
+	def __init__(self, plots, x_axis_desc, y_axis_desc, title, show_legend=True):
 		self.plots = plots
 		self.x_axis_desc = x_axis_desc
 		self.y_axis_desc = y_axis_desc
 		self.title = title
+		self.show_legend = show_legend
 
-	def draw(self,ax):
+	def draw(self,ax,output_mode):
 		for p in self.plots:
 			p.draw(ax);
+		if self.show_legend:
+			leg=ax.legend()
+			if output_mode == "png": #latex output doesn't support alpha
+				leg.get_frame().set_alpha(0.5);
+			plt.setp(leg.get_texts(), fontsize='small')
+
 		ax.xaxis.set_label_text(self.x_axis_desc.label)
 		ax.yaxis.set_label_text(self.y_axis_desc.label)
 		ax.set_title(self.title)
-		return True
 
 class LinePlot:
 	def __init__(self,data_table,x_col,y_col,label,line_params=None):
@@ -324,20 +324,20 @@ if __name__ == "__main__":
 			], default_x_axis, AxisDescription("Ops"), "ALU Ops")
 		,	SingleGraph([
 				LinePlot(dt,0,3,"testline")
-			], default_x_axis, AxisDescription("test"), "test")
+			], default_x_axis, AxisDescription("test"), "testxxx1")
 		,	SingleGraph([
 				LinePlot(dt,0,"test_col2","derived1")
-			], default_x_axis, AxisDescription("test"), "test")
+			], default_x_axis, AxisDescription("test"), "A Derived Variable")
 		,	SingleGraph([
 				LinePlot(dt,0,"test_col","should be 100 always")
-			], default_x_axis, AxisDescription("test"), "test")
+			], default_x_axis, AxisDescription("test"), "test", show_legend=False)
 
 
 	]	
 	composite_graph = CompositeGraph(); 
 	composite_graph.draw(graphs,"blah.png"); 
 	
-	graph_latex = CompositeGraph(output_mode="latex")
+	graph_latex = CompositeGraph(output_mode="latex", title="two row graphs");
 	graph_latex.draw(graphs,"blah.pdf")
 
 	graph_latex2 = CompositeGraph(w=4, h=10, num_cols=1, output_mode="latex")

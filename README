@@ -89,14 +89,72 @@ An editor will come up with the cron file; add the line:
 
 2. Graphing Scripts
 ================================================================================
-These use matplotlib and numpy. The basic output file format is a csv file with
-the first line being headers and subsequent lines being data. So for example: 
+2.1 Requirements 
+
+The graphing scripts can generate line plots using matplotlib and numpy. Currently,
+a png output format (raster) and LaTeX output format (vector PDF) are supported. 
+
+The LaTeX output mode is convenient for producing vector graphs that can be imported
+into LaTeX and used directly with pdflatex. 
+
+The graphing scripts are based on the python libraries matplotlib and numpy.
+You'll need to obtain these libraries either through your distribution's
+package manager or some other means. 
+
+If you're on ubuntu, you can use apt-get: 
+
+$ sudo apt-get install python-numpy python-matplotlib
+
+For the LaTeX output mode, you'll also need: texlive-extra-utils texlive-latex-extra packages. 
+
+
+2.2 Data Format
+Currently, the default format that can be read by the scripts is a CSV file
+with header information such as: 
 
 cycle_number,bandwidth,latency
 1000,5.4,122
 2000,5.1,132
 3000,5.2,130
 
-the bottom of graph_and_send.py has a giant array of elements which construct
-the graphs. I'll write more about this later. 
+This format is consistent with the output format of the new time-based stats 
+support in marss. For more information about how to use the new time-based stats 
+please my post here: http://www.mail-archive.com/marss86-devel@cs.binghamton.edu/msg00433.html
+
+2.3 Specifying Graphs
+There are four main objects in Graphs.py: CompositeGraph, SingleGraph, LinePlot, and DataTable.
+
+A DataTable is essentially a numpy representation of a CSV file. 
+
+A LinePlot is a single line on a graph. The data source is a DataTable and an x column
+and y column of the DataTable. The columns can either be indexed by name or by number. 
+
+A SingleGraph is made up of one more more LinePlots, a title, and axes labels.
+
+A CompositeGraph is made up of multiple SingleGraphs that are laid out and saved to 
+a file. 
+
+2.4 Adding Derived Columns
+Sometimes purely graphing stats is not very useful and one would like to graph a 
+function of two or more variables (for example: 
+average latency = total latency / number of requests). The function add_derived_column
+allows for this type of functionality. It supports a function that takes an arbitrary
+number of parameters and an array of column indices (name or index). 
+
+So for example: 
+
+def percent(a,b):
+	return float(b)/float(a)*100.0
+dt = DataTable("foo.csv");
+dt.add_derived_column(percent, [1,2], "foo_percent");
+
+This will take columns 1 and 2 and call the function 'percent' on each pair of
+values in these columns. The data will go into the data table with the column
+name titled "foo_percent" which can be referenced when creating a LinePlot
+object. See the main function in Graphs.py for an example. 
+
+2.5 Examples
+For now, please see the bottom of Graphs.py for examples of how to generate
+graphs.
+
 
