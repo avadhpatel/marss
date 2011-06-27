@@ -157,8 +157,12 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 		}
 	}
 
-	if(fastPathLat == 0 && request->is_instruction())
+	// if(fastPathLat == 0 && request->is_instruction())
+    if(fastPathLat >= 0)
 		return 0;
+
+	request->incRefCounter();
+	ADD_HISTORY_ADD(request);
 
 	CPUControllerQueueEntry *dependentEntry = find_dependency(request);
 
@@ -179,8 +183,6 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 	}
 
 	queueEntry->request = request;
-	request->incRefCounter();
-	ADD_HISTORY_ADD(request);
 
 	if(dependentEntry &&
 			dependentEntry->request->get_type() == request->get_type()) {
@@ -310,7 +312,7 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 
 	request->decRefCounter();
 	ADD_HISTORY_REM(request);
-	if(!queueEntry->annuled)
+    if(!queueEntry->annuled)
 		pendingRequests_.free(queueEntry);
 
     /*
@@ -373,8 +375,6 @@ bool CPUController::queue_access_cb(void *arg)
 	}
 
 	queueEntry->request = request;
-	request->incRefCounter();
-	ADD_HISTORY_ADD(request);
 
 	CPUControllerQueueEntry *dependentEntry = find_dependency(request);
 
