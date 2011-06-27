@@ -65,7 +65,7 @@ const char *snapshot_names[] = {"user", "kernel", "global"};
 
 #endif
 
-static void kill_simulation() __attribute__((noreturn));
+static void kill_simulation();
 static void write_mongo_stats();
 
 void PTLsimConfig::reset() {
@@ -478,7 +478,7 @@ static void kill_simulation()
     ptl_logfile.flush();
     ptl_logfile.close();
 
-    exit(0);
+    ptl_quit();
 }
 
 bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
@@ -1247,6 +1247,5 @@ void shutdown_subsystems() {
   shutdown_uops();
   shutdown_decode();
 }
-
 
 #endif // CONFIG_ONLY
