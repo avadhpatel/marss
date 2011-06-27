@@ -27,6 +27,7 @@ matplotlib.use("Agg"); #this gets reset later, but for now it prevents matplotli
 import matplotlib.pyplot as plt
 import matplotlib.axes as ax
 import tempfile; 
+import pdb
 
 from DataTable import * 
 
@@ -150,15 +151,18 @@ class DataTable:
 		""" 
 
 
-		self.col_to_num_map = None;
 		if not os.path.exists(data_filename):
 			print "ERROR: Can't open data file %s" % data_filename
 			exit()
 
 		fp = open(data_filename,"r");
+
+		# skip the first skip_header lines -- the +1 makes it so that the loop 
+		# ends with the first line of interest in the buffer
 		for i in range(0,skip_header+1):
 			first_line = fp.readline();
 
+		self.col_to_num_map = None;
 		self.has_header = False;
 		print "Header Line: ",first_line 
 		if first_line[:1].isalpha():
@@ -189,6 +193,24 @@ class DataTable:
 		else:
 			return self.file_data[:,col]
 
+	def add_derived_column(self, compute_fn, col_idx_arr, col_name):
+		""" Use some functional python to add a new derived column -- just make sure
+				that the number of arguments compute_fn() expects matches the number of 
+				entries in col_idx_arr and that the entries in this array are not out of
+				bounds """
+
+		# first add a zero column to the array 
+		column_height = len(self.file_data[:,0]);
+		last_column_idx = len(self.file_data[0,:]);
+		self.file_data = np.column_stack([self.file_data, np.zeros(column_height)])
+		for i in range(column_height):
+			values = map(lambda col_idx: self.file_data[i,col_idx], col_idx_arr)
+			self.file_data[i,last_column_idx] = compute_fn(*values)
+		self.col_to_num_map[col_name] = last_column_idx; 
+		
+			
+
+		
 	#filter out outliers that are a certain number of std devs away from the mean
 	def filter_outliers(self, data, num_deviations=3):
 		""" filter a column's outliers based on the number of deviations from
@@ -279,9 +301,13 @@ class AxisDescription:
 		self.range_min = range_min
 		self.range_max = range_max
 
+def percent(a,b):
+	return float(b)/(float(a)+1E-20)*100.0
+
 if __name__ == "__main__":
 	""" A small test program to create a png and latex sample graph """
 	dt = DataTable("foo.csv");
+	dt.add_derived_column(percent, [1,1],"test_col");
 	default_x_axis = AxisDescription("Cycle Number"); 
 
 	graphs = [
@@ -296,7 +322,7 @@ if __name__ == "__main__":
 				LinePlot(dt,0,3,"testline2")
 			], default_x_axis, AxisDescription("test"), "test")
 		,	SingleGraph([
-				LinePlot(dt,0,2,"testline3")
+				LinePlot(dt,0,"test_col","should be 100 always")
 			], default_x_axis, AxisDescription("test"), "test")
 
 
