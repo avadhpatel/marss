@@ -6,50 +6,21 @@ import os
 import sys
 import time, datetime
 from subprocess import *
-from make_graph import *
 from send_gmail import *
+from Graphs import *
 import config 
 
-def chop_off_head_and_tail(filename, skip_head=3, skip_tail=1):
-	output_filename = tempfile.NamedTemporaryFile(delete=False).name
-	# grab the first line and return it
-	header_str = Popen(["head","--lines=1",filename],stdout=PIPE).communicate()[0]
+from graph_bob import *
 
-	# chop off the first and last data points since they tend to be outliers -- also remove NaN lines
-	chop_cmd = "tail --lines=+%d %s | head --lines=-%d  > %s"%(skip_head,filename,skip_tail,output_filename);
-	#print chop_cmd
-	os.system(chop_cmd)
-	return (output_filename,header_str)
-
-def dump_semicolons(filename):
-	output_filename2 = tempfile.NamedTemporaryFile(delete=False).name
-	output_filename = tempfile.NamedTemporaryFile(delete=False).name
-	os.system("sed 's/,;/,/g' %s > %s"%(filename, output_filename2))
-	os.system("sed 's/;/,/g' %s > %s"%(output_filename2, output_filename))
-	return output_filename
-def get_sim_desc_from_num(num):
-	prefix="#SIM_DESC="
-	bob_variant_prefix="#BOB_VARIANT="
-	f = open(config.get_marss_dir_path("simulate%d.sh"%num));
-	sim_desc=""
-	bob_variant=""
-	for line in f:
-		if line.startswith(prefix):
-			sim_desc = line[len(prefix)+1:].strip("\" \n")
-		if line.startswith(bob_variant_prefix):
-			bob_variant = "_"+line[len(bob_variant_prefix)+1:].strip("\" \n")
-	return sim_desc+bob_variant
-
-
-def per_core_line_plot_arr(header_fields, base_key, description=None):
+def per_core_line_plot_arr(data_table, base_key, description=None):
 	if description == None: 
 		description = base_key;
 
 	return_arr = []
-	if base_key in header_fields:
+	if base_key in data_table.col_to_num_map:
 		for i in range(16):
 			test_key = "%s[%d]"%(base_key,i)
-			if test_key in header_fields:
+			if test_key in data_table.col_to_num_map:
 				#print "Adding plot %s ..." % test_key
 				return_arr.append(LinePlot(1,test_key,"%s[%d]"%(description,i)))
 			else:
@@ -68,22 +39,65 @@ if __name__ == "__main__":
 	if len(sys.argv) < 2:
 		print "need at least run number"
 		exit();
-
+	
 	run_num = int(sys.argv[1]);
-	log_file_base_name = config.get_marss_dir_path("run%d.log"%(run_num))
 	run_desc = get_sim_desc_from_num(run_num); 
 	if len(sys.argv) == 3:
 		run_desc = sys.argv[2];
+	
+	graph_output_file = "out.png"
+	log_file_base_name = config.get_marss_dir_path("run%d.log"%(run_num))
 
-	memlog_file_name = "%s.memlog"%(log_file_base_name);
-	memhist_file_name = "%s.memhisto"%(log_file_base_name); 
+	x_axis_desc = AxisDescription("Cycle Number")
+	if not os.path.exists(log_file_base_name):
+		print "ERROR: Can't find log file '%s'" % log_file_base_name
+		exit();
 
+	# eventually the memlog thing is going away, but for now, decide which stats to use
+	memlog_file_name = "%s.memlog"%(log_file_base_name)
+	if not os.path.exists(memlog_file_name):
+		memlog_file_name = config.get_marss_dir_path("run%d.csv")%run_num
+
+		if not os.path.exists(memlog_file_name):
+			print "ERROR: Can't find a marss stats file"
+			exit();
+		else:
+			marss_dt = DataTable(memlog_file_name); 
+			g = [
+				SingleGraph([
+					LinePlot(marss_dt,"sim_cycle","base_machine.decoder.alu_to_mem","ALU to Memory",[':', 1.5, 'r'])
+				,	LinePlot(marss_dt,0,"base_machine.decoder.total_fast_decode","Total decoded", ["--", 1.2,'g'])
+				], x_axis_desc, AxisDescription("Ops"), "ALU Ops")
+			]
+	else:
+		marss_dt = DataTable(memlog_file_name); 
+		g = [
+				SingleGraph(marss_dt,  per_core_line_plot_arr(marss_dt, "l1dTotalIssued","L1D"), x_axis_desc, AxisDescription("Requests/cycle"), "Cache Request Rates")
+				,SingleGraph(marss_dt,per_core_line_plot_arr(marss_dt, "mcTotalIssued","mC"), x_axis_desc, AxisDescription("Requests/cycle"),  "Memory Controller Request Rates")
+				,SingleGraph(marss_dt, [LinePlot(1,"BusNumIssued","Bus Entries Issued Per cycle")],  x_axis_desc, AxisDescription("# of requests"), "Bus Throughput")
+				]
+	
 	bob_stats_file_name = config.get_marss_dir_path("BOBstats%s.txt"%(run_desc))
 	bob_log_file_name = config.get_marss_dir_path("bobsim%s.log"%(run_desc))
-	stats_file = config.get_marss_dir_path("run%d.stats"%(run_num))
+	stats_file_name = config.get_marss_dir_path("run%d.stats"%(run_num))
 	
 	ptlstats_bin = config.get_marss_dir_path("ptlstats");
-	ptlstats_cmd = [ptlstats_bin, "-snapshot","final", "-subtree","/memory/total/L2/cpurequest", stats_file]
+
+	# Files that should be saved by tar 
+	archive_files = [
+			os.path.basename(log_file_base_name)
+		,	os.path.basename(bob_stats_file_name)
+		,	os.path.basename(bob_log_file_name)
+		,	os.path.basename(memlog_file_name)
+		,	os.path.basename(stats_file_name)
+		,	graph_output_file
+	]
+	# where to save those files
+	archive_output_file_name = "run%d_%s_%d.tgz"%(posix_time,run_desc,run_num)
+
+	# string_arr is the array of lines that will go into the email body
+
+	ptlstats_cmd = [ptlstats_bin, "-snapshot","final", "-subtree","/memory/total/L2/cpurequest", stats_file_name]
 	stats_str = Popen(ptlstats_cmd, stdout=PIPE).communicate()[0]
 	string_arr.append(stats_str)
 	stopped_str = Popen(["grep","Stopped",log_file_base_name],stdout=PIPE).communicate()[0]
@@ -91,58 +105,34 @@ if __name__ == "__main__":
 	last_req_str = Popen(["tail","-1",memlog_file_name],stdout=PIPE).communicate()[0]
 	string_arr.append(last_req_str)
 	string_arr.insert(0, "RUN: %s"%(run_desc))
-#TODO: save git diff output in the tgz
 	last_req_str = Popen(["tail","-1",memlog_file_name],stdout=PIPE).communicate()[0]
 
-#TODO: tar does not like the absolute file names ... 
-#	if len(stats_str) > 0:
-#		Popen(["tar","czf","run%d_%s_%d.tgz"%(posix_time,run_desc,run_num),memlog_file_name,memhist_file_name,log_file_base_name,bob_stats_file_name,bob_log_file_name,stats_file,"out.png"],stdout=PIPE).communicate()[0]
+	#TODO: When the ptlstats go away, this logic will have to change
+	if len(stats_str) > 0:
+		# the rest of the script should use absolute paths so changing directory shouldn't matter
+		os.chdir(os.path.dirname(log_file_base_name))
 
+		archive_files = filter(os.path.exists, archive_files)
+		tar_cmd_list = ["tar","czf",archive_output_file_name]
+		tar_cmd_list.extend(archive_files);
 
-	output_logfile, header_str = chop_off_head_and_tail(memlog_file_name)
-	header_fields = header_str.rstrip().split(",");
-	header_map = {}
-	for i,f in enumerate(header_fields): 
-		header_map[f] = i+1;
-#		print f, "->", i+1
-		
+		Popen(tar_cmd_list,stdout=PIPE).communicate()[0]
+		print "archive command:", " ".join(tar_cmd_list);
 	
-	x_axis_desc = AxisDescription("Cycle Number")
-#	print "HEADERMAP:",header_map
-	g = [
-			SingleGraph(output_logfile,  "Cache Request Rates",per_core_line_plot_arr(header_fields, "l1dTotalIssued","L1D"), x_axis_desc, AxisDescription("Requests/cycle"), col_to_num_map=header_map)
-			,SingleGraph(output_logfile,  "Memory Controller Request Rates",per_core_line_plot_arr(header_fields, "mcTotalIssued","mC"), x_axis_desc, AxisDescription("Requests/cycle"), col_to_num_map=header_map)
-			# latencies
-#			,SingleGraph(output_logfile, "Full latency",[LinePlot(1,"RoundtripLatency","L2 to Bus")],  x_axis_desc, AxisDescription("Latency (cycles)"), col_to_num_map=header_map)
-	#		,SingleGraph(output_logfile, "Bus to MC",[LinePlot(1,"bus_mc_lat","Bus to MC")],  x_axis_desc, AxisDescription("Latency (cycles)"), col_to_num_map=header_map)
-#			,SingleGraph(output_logfile, "MC to Bus",[LinePlot(1,"mc_bus_lat","MC to Bus")],  x_axis_desc, AxisDescription("Latency (cycles)"), col_to_num_map=header_map)
-#			,SingleGraph(output_logfile, "Bus to L2",[LinePlot(1,"bus_L2_lat","Bus to L2")],  x_axis_desc, AxisDescription("Latency (cycles)"), col_to_num_map=header_map)
-			,SingleGraph(output_logfile, "Bus Throughput", [LinePlot(1,"BusNumIssued","Bus Entries Issued Per cycle")],  x_axis_desc, AxisDescription("# of requests"), col_to_num_map=header_map)
-# Signs of congestion
-#			,SingleGraph(output_logfile,  "Cache Failures",[LinePlot(1,"cacheToBusFail","cache to bus"),LinePlot(1,"cacheUpFail","cache up fail"), LinePlot(1,"cacheDownFail","cache down fail"), LinePlot(1,"cpuCacheAccessRetry", "Cache retries from CPU")], x_axis_desc, AxisDescription("Intercache send fail (per 100k)"), col_to_num_map=header_map)
-#			,SingleGraph(output_logfile,  "Cache Failures 2",[LinePlot(1,"l2_cache_full","L2 Cache Full"),LinePlot(1,"l1_cache_full","L1D full"),], x_axis_desc, AxisDescription("Intercache send fail (per 100k)"), col_to_num_map=header_map)
-			
-#			,SingleGraph(output_logfile,  "MC Factors",[LinePlot(1,"mcFull","MC Full")
-#			,LinePlot(1,"busReqUnbroadcastable","BusReqUnbroadcastable")
-#					,LinePlot(1,"busDataBroadcastFail","BusDataBroadcastFail")
-#					], x_axis_desc, AxisDescription("Bus Broadcast Fail (per 100k)"), col_to_num_map=header_map)
-#			,SingleGraph(output_logfile,  "Bus Factors",[LinePlot(1,"busQueueCount","Bus Queue Count")], x_axis_desc, AxisDescription("Queue Count (per 100k)"), col_to_num_map=header_map)
-#			,SingleGraph(output_logfile,  "Bus Factors 2",[LinePlot(1,"busNumArbitrations","Bus Arbitrations")], x_axis_desc, AxisDescription("Arbitration Count (per 100k)"), col_to_num_map=header_map)
-			]
-
 	if os.path.exists(bob_stats_file_name):
-		print "Found bob stats file = %s"%(bob_stats_file_name)
-		bob_stats_file_name = dump_semicolons(bob_stats_file_name)
-		bob_stats_file_name,header_str2 = chop_off_head_and_tail(bob_stats_file_name, 63,1)
-		x_axis_desc = AxisDescription("Time (ms)");
-		print "Reading file ",bob_stats_file_name;
-		g.append(SingleGraph(bob_stats_file_name, "BOB Bandwidth",[LinePlot(1,2,"Bandwidth")],  x_axis_desc, AxisDescription("Bandwidth (GB/s)")))
-		g.append(SingleGraph(bob_stats_file_name, "BOB Latency",[LinePlot(1,3,"Latency")],  x_axis_desc, AxisDescription("Latency (ns)")))
-		g.append(SingleGraph(bob_stats_file_name, "BOB RW ratio",[LinePlot(1,4,"RW ratio")],  x_axis_desc, AxisDescription("Ratio (R:W)")))
-		g.append(SingleGraph(bob_stats_file_name, "BOB pendingQueue Max",[LinePlot(1,5,"Num Entries")],  x_axis_desc, AxisDescription("# of Requests")))
+		bob_stats_filename = dump_semicolons(bob_stats_filename)
+		bob_dt = DataTable(bob_stats_filename,skip_header=62)
 	else:
-		print "Can't find a BOB stats file with name %s"%bob_stats_file_name
-	outfile = CompositeGraph().draw(g, run_desc);
-	outfiles = [outfile]
+		bob_dt = None; 
+
+	if bob_dt != None:
+		x_axis_desc = AxisDescription("Time (ms)");
+		g.append(SingleGraph(bob_dt,[LinePlot(0,1,"Bandwidth")],  x_axis_desc, AxisDescription("Bandwidth (GB/s)")), "BOB Bandwidth")
+		g.append(SingleGraph(bob_dt,[LinePlot(0,2,"Latency")],  x_axis_desc, AxisDescription("Latency (ns)")), "BOB Latency")
+		g.append(SingleGraph(bob_dt,[LinePlot(0,3,"RW ratio")],  x_axis_desc, AxisDescription("Ratio (R:W)")), "BOB RW ratio")
+		g.append(SingleGraph(bob_dt,[LinePlot(0,4,"Num Entries")],  x_axis_desc, AxisDescription("# of Requests")), "BOB pendingQueue Max")
+
+	CompositeGraph(title=run_desc,num_cols=2).draw(g, graph_output_file);
+	outfiles = [graph_output_file]
 
 	authorize_and_send(None,outfiles,strings_arr=string_arr);

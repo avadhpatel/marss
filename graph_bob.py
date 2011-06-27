@@ -6,6 +6,7 @@ import tempfile;
 from subprocess import *
 from Graphs import *
 from numpy import sqrt
+import config
 
 def dump_semicolons(filename):
 	output_filename2 = tempfile.NamedTemporaryFile(delete=False).name
@@ -20,6 +21,20 @@ def bob_file_to_data_table(sim_name):
 	bob_stats_filename = dump_semicolons(bob_stats_filename)
 	print "-> %s"%bob_stats_filename
 	return DataTable(bob_stats_filename,skip_header=62)
+
+# used by graph and send
+def get_sim_desc_from_num(num):
+	prefix="#SIM_DESC="
+	bob_variant_prefix="#BOB_VARIANT="
+	f = open(config.get_marss_dir_path("simulate%d.sh"%num));
+	sim_desc=""
+	bob_variant=""
+	for line in f:
+		if line.startswith(prefix):
+			sim_desc = line[len(prefix)+1:].strip("\" \n")
+		if line.startswith(bob_variant_prefix):
+			bob_variant = "_"+line[len(bob_variant_prefix)+1:].strip("\" \n")
+	return sim_desc+bob_variant
 
 		
 if __name__ == "__main__":
