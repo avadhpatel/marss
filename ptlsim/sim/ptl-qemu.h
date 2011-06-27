@@ -192,6 +192,11 @@ void ptl_add_phys_memory_mapping(int8_t cpu_index, uint64_t host_vaddr, uint64_t
  */
 void qemu_take_screenshot(char* filename);
 
+/**
+ * @brief Safe interface to exit the process
+ */
+void ptl_quit(void);
+
 /*
  * ptl_start_sim_rip
  * RIP location from where to switch to simulation

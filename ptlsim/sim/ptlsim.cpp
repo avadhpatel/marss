@@ -80,7 +80,7 @@ ofstream *time_stats_file;
 
 #endif
 
-static void kill_simulation() __attribute__((noreturn));
+static void kill_simulation();
 static void write_mongo_stats();
 static void setup_sim_stats();
 
@@ -550,7 +550,7 @@ static void kill_simulation()
     ptl_logfile.flush();
     ptl_logfile.close();
 
-    exit(0);
+    ptl_quit();
 }
 
 bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
@@ -1394,6 +1394,5 @@ void shutdown_subsystems() {
   shutdown_uops();
   shutdown_decode();
 }
-
 
 #endif // CONFIG_ONLY

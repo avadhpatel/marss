@@ -429,7 +429,7 @@ void ptl_check_ptlcall_queue() {
                     switch(pending_call_arg3) {
                         case PTLCALL_CHECKPOINT_AND_SHUTDOWN:
                             cout << "MARSSx86::Shutdown requested\n";
-                            exit(0);
+                            ptl_quit();
                             break;
                         default:
                             cout << "MARSSx86::Unkonw Action\n";
@@ -1301,4 +1301,11 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
 extern "C" void ptl_add_phys_memory_mapping(int8_t cpu_index, uint64_t host_vaddr, uint64_t guest_paddr)
 {
   contextof(cpu_index).hvirt_gphys_map[(Waddr)host_vaddr] = (Waddr)guest_paddr;
+}
+
+void ptl_quit()
+{
+    in_simulation = 0;
+    no_shutdown = 0;
+    qemu_system_shutdown_request();
 }
