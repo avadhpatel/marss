@@ -171,7 +171,10 @@ class DataTable:
 			#
 			# Also, please note, skiprows was renamed to skip_header in 1.5.0 
 			# TODO: put a version check for 1.5.0 and adjust skiprows accordingly 
-			self.file_data=np.genfromtxt(data_filename, delimiter=data_delimiter, names=self.has_header, skiprows=skip_header)
+
+			if self.has_header:
+				skip_header = skip_header + 1
+			self.file_data=np.genfromtxt(data_filename, delimiter=data_delimiter, skiprows=skip_header)
 		except IOError:
 			print "genfromtxt couldn't read the CSV data, file %s"%(data_filename)
 			exit()
@@ -200,7 +203,6 @@ class DataTable:
 				bounds """
 
 		# first add a zero column to the array 
-		
 		column_height,last_column_idx = self.file_data.shape
 		self.file_data = np.column_stack([self.file_data, np.zeros(column_height)])
 		for i in range(column_height):
