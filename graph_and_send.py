@@ -22,7 +22,7 @@ def per_core_line_plot_arr(data_table, base_key, description=None):
 			test_key = "%s[%d]"%(base_key,i)
 			if test_key in data_table.col_to_num_map:
 				#print "Adding plot %s ..." % test_key
-				return_arr.append(LinePlot(1,test_key,"%s[%d]"%(description,i)))
+				return_arr.append(LinePlot(data_table,0,test_key,"%s[%d]"%(description,i)))
 			else:
 				break;
 	#	return_arr.append(LinePlot(1,base_key,"%s[Total]"%description))
@@ -52,7 +52,7 @@ if __name__ == "__main__":
 	if not os.path.exists(log_file_base_name):
 		print "ERROR: Can't find log file '%s'" % log_file_base_name
 		exit();
-
+	g = []
 	# eventually the memlog thing is going away, but for now, decide which stats to use
 	memlog_file_name = "%s.memlog"%(log_file_base_name)
 	if not os.path.exists(memlog_file_name):
@@ -72,9 +72,9 @@ if __name__ == "__main__":
 	else:
 		marss_dt = DataTable(memlog_file_name); 
 		g = [
-				SingleGraph(marss_dt,  per_core_line_plot_arr(marss_dt, "l1dTotalIssued","L1D"), x_axis_desc, AxisDescription("Requests/cycle"), "Cache Request Rates")
-				,SingleGraph(marss_dt,per_core_line_plot_arr(marss_dt, "mcTotalIssued","mC"), x_axis_desc, AxisDescription("Requests/cycle"),  "Memory Controller Request Rates")
-				,SingleGraph(marss_dt, [LinePlot(1,"BusNumIssued","Bus Entries Issued Per cycle")],  x_axis_desc, AxisDescription("# of requests"), "Bus Throughput")
+				SingleGraph(per_core_line_plot_arr(marss_dt, "l1dTotalIssued","L1D"), x_axis_desc, AxisDescription("Requests/cycle"), "Cache Request Rates")
+				,SingleGraph(per_core_line_plot_arr(marss_dt, "mcTotalIssued","mC"), x_axis_desc, AxisDescription("Requests/cycle"),  "Memory Controller Request Rates")
+				,SingleGraph([LinePlot(marss_dt,0,"BusNumIssued","Bus Entries Issued Per cycle")],  x_axis_desc, AxisDescription("# of requests"), "Bus Throughput")
 				]
 	
 	bob_stats_file_name = config.get_marss_dir_path("BOBstats%s.txt"%(run_desc))
@@ -120,17 +120,17 @@ if __name__ == "__main__":
 		print "archive command:", " ".join(tar_cmd_list);
 	
 	if os.path.exists(bob_stats_file_name):
-		bob_stats_filename = dump_semicolons(bob_stats_filename)
-		bob_dt = DataTable(bob_stats_filename,skip_header=62)
+		bob_stats_file_name = dump_semicolons(bob_stats_file_name)
+		bob_dt = DataTable(bob_stats_file_name,skip_header=62)
 	else:
 		bob_dt = None; 
 
 	if bob_dt != None:
 		x_axis_desc = AxisDescription("Time (ms)");
-		g.append(SingleGraph(bob_dt,[LinePlot(0,1,"Bandwidth")],  x_axis_desc, AxisDescription("Bandwidth (GB/s)")), "BOB Bandwidth")
-		g.append(SingleGraph(bob_dt,[LinePlot(0,2,"Latency")],  x_axis_desc, AxisDescription("Latency (ns)")), "BOB Latency")
-		g.append(SingleGraph(bob_dt,[LinePlot(0,3,"RW ratio")],  x_axis_desc, AxisDescription("Ratio (R:W)")), "BOB RW ratio")
-		g.append(SingleGraph(bob_dt,[LinePlot(0,4,"Num Entries")],  x_axis_desc, AxisDescription("# of Requests")), "BOB pendingQueue Max")
+		g.append(SingleGraph([LinePlot(bob_dt,0,1,"Bandwidth")],  x_axis_desc, AxisDescription("Bandwidth (GB/s)"), "BOB Bandwidth"))
+		g.append(SingleGraph([LinePlot(bob_dt,0,2,"Latency")],  x_axis_desc, AxisDescription("Latency (ns)"), "BOB Latency"))
+		g.append(SingleGraph([LinePlot(bob_dt,0,3,"RW ratio")],  x_axis_desc, AxisDescription("Ratio (R:W)"), "BOB RW ratio"))
+		g.append(SingleGraph([LinePlot(bob_dt,0,4,"Num Entries")],  x_axis_desc, AxisDescription("# of Requests"), "BOB pendingQueue Max"))
 
 	CompositeGraph(title=run_desc,num_cols=2).draw(g, graph_output_file);
 	outfiles = [graph_output_file]

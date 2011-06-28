@@ -92,7 +92,7 @@ class CompositeGraph:
 		for i,g in enumerate(graph_arr):
 #			print "boxes=%d, r=%d, c=%d, i=%d" % (num_boxes,num_rows, num_cols, i)
 			rect=self.rect_for_graph(i,num_rows) 
-			ax = self.fig.add_axes(rect, title=g.title, xlabel=g.x_axis_desc.label, ylabel=g.y_axis_desc.label)
+			ax = self.fig.add_axes(rect, title=g.title, xlabel="test", ylabel="ytest")
 			g.draw(ax,self.output_mode); 
 			
 		if self.title != None:
