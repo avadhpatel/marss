@@ -200,8 +200,8 @@ class DataTable:
 				bounds """
 
 		# first add a zero column to the array 
-		column_height = len(self.file_data[:,0]);
-		last_column_idx = len(self.file_data[0,:]);
+		
+		column_height,last_column_idx = self.file_data.shape
 		self.file_data = np.column_stack([self.file_data, np.zeros(column_height)])
 		for i in range(column_height):
 			values = map(lambda col_idx: self.file_data[i,self.get_column_idx(col_idx)], col_idx_arr)
