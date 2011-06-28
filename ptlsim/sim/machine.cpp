@@ -134,9 +134,11 @@ int BaseMachine::run(PTLsimConfig& config)
         if unlikely(sim_cycle == 0 && time_stats_file)
             StatsBuilder::get().dump_header(*time_stats_file);
 
-        // TODO: make this a config param?
-        if unlikely(sim_cycle % 10000 == 0 && time_stats_file)
+        if unlikely (time_stats_file && sim_cycle > 0 &&
+                sim_cycle % config.time_stats_period == 0) {
+            update_stats(&global_stats);
             StatsBuilder::get().dump_periodic(*time_stats_file, sim_cycle);
+        }
 
 
         // limit the ptl_logfile size

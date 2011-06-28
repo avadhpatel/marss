@@ -225,7 +225,6 @@ struct PTLsimConfig {
   bool enable_mm_validate;
   stringbuf screenshot_file;
   bool log_user_only;
-  stringbuf time_stats_logfile;
 
   // Event Logging
   bool event_log_enabled;
@@ -256,6 +255,8 @@ struct PTLsimConfig {
   stringbuf yaml_stats_filename;
   W64 snapshot_cycles;
   stringbuf snapshot_now;
+  stringbuf time_stats_logfile;
+  W64 time_stats_period;
 
   // prefetcher
   bool wait_all_finished;

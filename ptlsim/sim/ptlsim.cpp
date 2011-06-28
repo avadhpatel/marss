@@ -109,7 +109,6 @@ void PTLsimConfig::reset() {
   enable_mm_validate = 0;
   screenshot_file = "";
   log_user_only = 0;
-  time_stats_logfile = "";
 
   event_log_enabled = 0;
   event_log_ring_buffer_size = 32768;
@@ -133,6 +132,8 @@ void PTLsimConfig::reset() {
   yaml_stats_filename="";
   snapshot_cycles = infinity;
   snapshot_now.reset();
+  time_stats_logfile = "";
+  time_stats_period = 10000;
 
   start_at_rip = INVALIDRIP;
 
@@ -234,7 +235,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(enable_mm_validate,           "mm-validate",          "Validate every memory manager request against internal structures (slow)");
   add(screenshot_file,              "screenshot",           "Takes screenshot of VM window at the end of simulation");
   add(log_user_only,                "log-user-only",        "Only log the user mode activities");
-  add(time_stats_logfile,           "time-stats-logfile",   "File to write time-series statistics (new)");
 
   section("Event Ring Buffer Logging Control");
   add(event_log_enabled,            "ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
@@ -249,6 +249,8 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(yaml_stats_filename,          "yamlstats",                "Statistics data stores in YAML format");
   add(snapshot_cycles,              "snapshot-cycles",      "Take statistical snapshot and reset every <snapshot> cycles");
   add(snapshot_now,                 "snapshot-now",         "Take statistical snapshot immediately, using specified name");
+  add(time_stats_logfile,           "time-stats-logfile",   "File to write time-series statistics (new)");
+  add(time_stats_period,            "time-stats-period",    "Frequency of capturing time-stats (in cycles)");
   section("Trace Start/Stop Point");
   add(start_at_rip,                 "startrip",             "Start at rip <startrip>");
   add(stop_at_user_insns,           "stopinsns",            "Stop after executing <stopinsns> user instructions");
