@@ -157,8 +157,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 		}
 	}
 
-	// if(fastPathLat == 0 && request->is_instruction())
-    if(fastPathLat >= 0)
+    if(fastPathLat == 0 && request->is_instruction())
 		return 0;
 
 	request->incRefCounter();
