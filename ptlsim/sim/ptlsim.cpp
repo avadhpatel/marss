@@ -70,12 +70,6 @@ Stats *n_kernel_stats;
 Stats *n_global_stats;
 SimStats sim_stats;
 
-/* XXX: do not use n_time_stats like the others (user,kernel,global) --
-   it should never be set as the default variable pointer;
-   instead it should only be used with set_time_stats() to
-   enable time-based logging for a stat
-   */
-Stats *n_time_stats;
 ofstream *time_stats_file;
 
 #endif
@@ -780,9 +774,8 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
         if (config.time_stats_logfile.length > 0)
         {
             time_stats_file = new ofstream(config.time_stats_logfile.buf);
-            n_time_stats = builder.get_new_stats();
+            builder.init_timer_stats();
         } else {
-            n_time_stats = NULL;
             time_stats_file = NULL;
         }
     }

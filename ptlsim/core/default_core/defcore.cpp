@@ -99,6 +99,7 @@ ThreadContext::ThreadContext(DefaultCore& core_, W8 threadid_, Context& ctx_)
 
     thread_stats.commit.ipc.add_elem(&thread_stats.commit.insns);
     thread_stats.commit.ipc.add_elem(&core_.core_stats.cycles);
+    // thread_stats.commit.ipc.enable_periodic_dump();
 
     thread_stats.set_default_stats(n_user_stats);
     reset();

@@ -1,12 +1,19 @@
 
 #include "statsBuilder.h"
 
+#include <ptlsim.h>
+
+static Stats *periodic_stats = NULL;
+static Stats *temp_stats  = NULL;
+static Stats *temp2_stats  = NULL;
+
 Statable::Statable(const char *name)
 {
     this->name = name;
     parent = NULL;
     default_stats = NULL;
     dump_disabled = false;
+    periodic_enabled = false;
 
     StatsBuilder &builder = StatsBuilder::get();
     builder.add_to_root(this);
@@ -18,6 +25,7 @@ Statable::Statable(const char *name, bool is_root)
     parent = NULL;
     default_stats = NULL;
     dump_disabled = false;
+    periodic_enabled = false;
 
     StatsBuilder &builder = StatsBuilder::get();
 
@@ -31,6 +39,7 @@ Statable::Statable(stringbuf &str, bool is_root)
     parent = NULL;
     default_stats = NULL;
     dump_disabled = false;
+    periodic_enabled = false;
 
     StatsBuilder &builder = StatsBuilder::get();
 
@@ -43,6 +52,7 @@ Statable::Statable(const char *name, Statable *parent)
 {
     this->name = name;
     dump_disabled = false;
+    periodic_enabled = false;
 
     if(parent) {
         parent->add_child_node(this);
@@ -56,6 +66,8 @@ Statable::Statable(stringbuf &str, Statable *parent)
     : parent(parent), name(str)
 {
     dump_disabled = false;
+    periodic_enabled = false;
+
     if(parent) {
         parent->add_child_node(this);
         default_stats = parent->default_stats;
@@ -87,7 +99,7 @@ void Statable::set_default_stats(Stats *stats, bool recursive, bool force)
 
 ostream& Statable::dump_header(ostream &os) const
 {
-    if(dump_disabled) return os;
+    if(dump_disabled || !periodic_enabled) return os;
 
     // First print all the leafs
     foreach(i, leafs.count()) {
@@ -101,18 +113,18 @@ ostream& Statable::dump_header(ostream &os) const
     return os;
 }
 
-ostream& Statable::dump_periodic(ostream &os) const
+ostream& Statable::dump_periodic(ostream &os, Stats *stats) const
 {
-    if(dump_disabled) return os;
+    if(dump_disabled || !periodic_enabled) return os;
 
     // First print all the leafs
     foreach(i, leafs.count()) {
-        leafs[i]->dump_periodic(os);
+        leafs[i]->dump_periodic(os, stats);
     }
 
     // Now print all the child nodes
     foreach(i, childNodes.count()) {
-        childNodes[i]->dump_periodic(os);
+        childNodes[i]->dump_periodic(os, stats);
     }
 
     return os;
@@ -204,19 +216,29 @@ void Statable::add_stats(Stats& dest_stats, Stats& src_stats)
     }
 }
 
-bool Statable::is_dump_periodic_disabled() const {
-    foreach (i, leafs.count())
-    {
-        if (!leafs[i]->is_dump_periodic_disabled())
-            return false;
+void Statable::sub_stats(Stats& dest_stats, Stats& src_stats)
+{
+    // First add all the leafs
+    foreach(i, leafs.count()) {
+        leafs[i]->sub_stats(dest_stats, src_stats);
     }
 
-    foreach (i, childNodes.count())
-    {
-        if (!childNodes[i]->is_dump_periodic_disabled())
-            return false;
+    // Now add all the child nodes
+    foreach(i, childNodes.count()) {
+        childNodes[i]->sub_stats(dest_stats, src_stats);
     }
-    return true;
+}
+
+void Statable::add_periodic_stats(Stats& dest_stats, Stats& src_stats)
+{
+    if(periodic_enabled)
+        add_stats(dest_stats, src_stats);
+}
+
+void Statable::sub_periodic_stats(Stats& dest_stats, Stats& src_stats)
+{
+    if(periodic_enabled)
+        sub_stats(dest_stats, src_stats);
 }
 
 stringbuf *Statable::get_full_stat_string()
@@ -224,7 +246,10 @@ stringbuf *Statable::get_full_stat_string()
     if (parent)
     {
         stringbuf *parent_name = parent->get_full_stat_string();
-        (*parent_name) << "." << name;
+        if(parent_name->empty())
+            (*parent_name) << name;
+        else
+            (*parent_name) << "." << name;
         return parent_name;
     } else {
         stringbuf *s = new stringbuf();
@@ -239,9 +264,6 @@ Stats* StatsBuilder::get_new_stats()
 {
     Stats *stats = new Stats();
 
-    stats->mem = new W8[STATS_SIZE];
-    memset(stats->mem, 0, sizeof(W8) * STATS_SIZE);
-
     return stats;
 }
 
@@ -253,7 +275,7 @@ void StatsBuilder::destroy_stats(Stats *stats)
 
 ostream& StatsBuilder::dump_header(ostream &os) const
 {
-    if (!rootNode->is_dump_periodic_disabled())
+    if (rootNode->is_dump_periodic())
     {
         os << "sim_cycle";
         rootNode->dump_header(os);
@@ -262,14 +284,40 @@ ostream& StatsBuilder::dump_header(ostream &os) const
     return os;
 }
 
-ostream& StatsBuilder::dump_periodic(ostream &os, W64 cycle) const
+void StatsBuilder::init_timer_stats()
 {
+    if(!periodic_stats) {
+        periodic_stats = get_new_stats();
+    }
 
-    if (!rootNode->is_dump_periodic_disabled()) {
+    if(!temp_stats) {
+        temp_stats = get_new_stats();
+    }
+
+    if(!temp2_stats) {
+        temp2_stats = get_new_stats();
+    }
+}
+
+ostream& StatsBuilder::dump_periodic(ostream& os, W64 cycle) const
+{
+    /* Here we perform diff of last saved stats and updated user/kernel stats.
+     * Addition/Subtraction is done on the operand1 so we keep two temporary
+     * stats as copying is faster than addition/subtraction. */
+    *temp_stats = *n_user_stats;
+    add_periodic_stats(*temp_stats, *n_kernel_stats);
+
+    *temp2_stats = *periodic_stats;
+    *periodic_stats = *temp_stats;
+
+    sub_periodic_stats(*temp_stats, *temp2_stats);
+
+    if(rootNode->is_dump_periodic()) {
         os << cycle;
-        rootNode->dump_periodic(os);
+        rootNode->dump_periodic(os, temp_stats);
         os << "\n";
     }
+
     return os;
 }
 
@@ -305,7 +353,3 @@ void StatObjBase::set_default_stats(Stats *stats)
     default_stats = stats;
 }
 
-void StatObjBase::set_time_stats(Stats *stats)
-{
-    time_stats = stats;
-}

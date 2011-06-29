@@ -79,7 +79,7 @@ namespace OOO_CORE_MODEL {
                       , ldq_full("ldq_full", this)
                       , stq_full("stq_full", this)
                 {
-//                    complete.set_time_stats(n_time_stats);
+                   // complete.enable_periodic_dump();
                 }
             } status;
 
