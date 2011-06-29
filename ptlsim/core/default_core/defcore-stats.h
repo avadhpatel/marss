@@ -180,7 +180,7 @@ namespace OOO_CORE_MODEL {
             } result;
 
             StatObj<W64> uops;
-            StatObj<double> uipc;
+            StatEquation<W64, double, StatObjFormulaDiv> uipc;
             StatArray<W64, OPCLASS_COUNT> opclass;
 
             issue(Statable *parent)
@@ -206,8 +206,8 @@ namespace OOO_CORE_MODEL {
         {
             StatObj<W64> uops;
             StatObj<W64> insns;
-            StatObj<double> uipc;
-            StatObj<double> ipc;
+            StatEquation<W64, double, StatObjFormulaDiv> uipc;
+            StatEquation<W64, double, StatObjFormulaDiv> ipc;
 
             struct result : public Statable
             {

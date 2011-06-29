@@ -1637,6 +1637,16 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
     current_bb = NULL;
 
     reset();
+
+    // Set Stat Equations
+    st_commit.ipc.add_elem(&st_commit.insns);
+    st_commit.ipc.add_elem(&st_cycles);
+
+    st_commit.atomop_pc.add_elem(&st_commit.atomops);
+    st_commit.atomop_pc.add_elem(&st_cycles);
+
+    st_commit.uipc.add_elem(&st_commit.uops);
+    st_commit.uipc.add_elem(&st_cycles);
 }
 
 /**

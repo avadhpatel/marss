@@ -90,6 +90,16 @@ ThreadContext::ThreadContext(DefaultCore& core_, W8 threadid_, Context& ctx_)
     stats_name << "thread" << threadid;
     thread_stats.update_name(stats_name.buf);
 
+    // Connect stats equations
+    thread_stats.issue.uipc.add_elem(&thread_stats.issue.uops);
+    thread_stats.issue.uipc.add_elem(&core_.core_stats.cycles);
+
+    thread_stats.commit.uipc.add_elem(&thread_stats.commit.uops);
+    thread_stats.commit.uipc.add_elem(&core_.core_stats.cycles);
+
+    thread_stats.commit.ipc.add_elem(&thread_stats.commit.insns);
+    thread_stats.commit.ipc.add_elem(&core_.core_stats.cycles);
+
     thread_stats.set_default_stats(n_user_stats);
     reset();
 }
@@ -2035,23 +2045,6 @@ void DefaultCore::check_ctx_changes()
 
 void DefaultCore::update_stats(PTLsimStats* stats)
 {
-    Stats* n_stats;
-    foreach(i, 3) {
-        n_stats = (i == 0) ? n_user_stats : ((i ==1) ? n_kernel_stats : n_global_stats);
-
-        foreach(i, threadcount) {
-            DefaultCoreThreadStats& st = threads[i]->thread_stats;
-
-            W64 cycles = core_stats.cycles(n_stats);
-            st.issue.uipc(n_stats) = st.issue.uops(n_stats) /
-                (double)(cycles);
-            st.commit.uipc(n_stats) = (double)st.commit.uops(n_stats) /
-                (double)(cycles);
-            st.commit.ipc(n_stats) = (double)st.commit.insns(n_stats) /
-                (double)(cycles);
-        }
-    }
-
     // this ipc is in fact for threads average, so if using smt, you might need to get per core ipc first.
     global_stats.ooocore_context_total.issue.uipc = (double)global_stats.ooocore_context_total.issue.uops / (double)global_stats.ooocore_total.cycles;
     global_stats.ooocore_context_total.commit.uipc = (double)global_stats.ooocore_context_total.commit.uops / (double)global_stats.ooocore_total.cycles;

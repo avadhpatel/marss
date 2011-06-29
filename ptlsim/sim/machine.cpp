@@ -136,7 +136,6 @@ int BaseMachine::run(PTLsimConfig& config)
 
         if unlikely (time_stats_file && sim_cycle > 0 &&
                 sim_cycle % config.time_stats_period == 0) {
-            update_stats(&global_stats);
             StatsBuilder::get().dump_periodic(*time_stats_file, sim_cycle);
         }
 

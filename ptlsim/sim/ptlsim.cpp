@@ -790,6 +790,10 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
     qemu_free(config_str);
 
     ptl_machine.disable_dump();
+
+    if(config.run_tests) {
+        in_simulation = 1;
+    }
 }
 
 extern "C"

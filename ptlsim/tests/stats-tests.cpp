@@ -16,6 +16,8 @@ namespace {
             StatObj<W64> ct3;
             StatString st1;
             StatString st2;
+            StatEquation<W64, W64, StatObjFormulaAdd> sum;
+            StatEquation<W64, double, StatObjFormulaDiv> div;
 
             TestStat() : Statable("test")
                          , arr1("arr1", this)
@@ -24,7 +26,15 @@ namespace {
                          , ct3("ct3", this)
                          , st1("st1", this)
                          , st2("st2", this)
-        {}
+                         , sum("sum", this)
+                         , div("div", this)
+            {
+                sum.add_elem(&ct1);
+                sum.add_elem(&ct2);
+
+                div.add_elem(&ct1);
+                div.add_elem(&ct2);
+            }
     };
 
     /* FIXME: for now, this test must be first because of
@@ -186,7 +196,58 @@ namespace {
         }
     }
 
+    TEST(Stats, ObjFormulaAdd) {
 
+        TestStat st;
 
+        st.ct1.set_default_stats(n_user_stats);
+        st.ct2.set_default_stats(n_user_stats);
+        st.ct3.set_default_stats(n_user_stats);
+
+        /* Test Add */
+        foreach(i, 100) {
+            st.ct1++;
+            st.ct2++;
+        }
+
+        YAML::Emitter out;
+        out << YAML::BeginMap;
+        out = st.sum.dump(out, n_user_stats);
+        out << YAML::EndMap;
+
+        W64 res = st.sum(n_user_stats);
+        ASSERT_EQ(res, 200);
+
+        ASSERT_TRUE(out.good());
+        ASSERT_STREQ(out.c_str(), "---\nsum: 200");
+    }
+
+    TEST(Stats, ObjFormulaDiv) {
+
+        TestStat st;
+
+        st.ct1.set_default_stats(n_user_stats);
+        st.ct2.set_default_stats(n_user_stats);
+
+        /* Test Add */
+        foreach(i, 100) {
+            st.ct1++;
+        }
+
+        foreach(i, 3) {
+            st.ct2++;
+        }
+
+        YAML::Emitter out;
+        out << YAML::BeginMap;
+        out = st.div.dump(out, n_user_stats);
+        out << YAML::EndMap;
+
+        double res = st.div(n_user_stats);
+        ASSERT_EQ(res, float(100)/float(3));
+
+        ASSERT_TRUE(out.good());
+        ASSERT_STREQ(out.c_str(), "---\ndiv: 33.3333");
+    }
 
 };

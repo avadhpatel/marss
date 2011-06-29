@@ -529,6 +529,12 @@ class StatObj : public StatObjBase {
             return (*default_var);
         }
 
+        inline T& operator=(T& val) {
+            assert(default_var);
+            (*default_var) = val;
+            return (*default_var);
+        }
+
         /**
          * @brief + operator
          *
@@ -1225,6 +1231,160 @@ class StatString : public StatObjBase {
             return os;
         }
 
+};
+
+/**
+ * @brief Add given stats counters
+ *
+ * This struct provides computation function to Add stats elements.
+ */
+struct StatObjFormulaAdd {
+    typedef dynarray<StatObj<W64>* > elems_t;
+
+    static W64 compute(Stats* stats, const elems_t& elems)
+    {
+        W64 ret = 0;
+
+        foreach(i, elems.count()) {
+            StatObj<W64>& e = *elems[i];
+            ret += e(stats);
+        }
+
+        return ret;
+    }
+};
+
+/**
+ * @brief Perform Division of given Stats counters
+ */
+struct StatObjFormulaDiv {
+    typedef dynarray<StatObj<W64>* > elems_t;
+
+    static double compute(Stats* stats, const elems_t& elems)
+    {
+        double ret = 0;
+
+        assert(elems.count() == 2);
+        double val1 = double((*elems[0])(stats));
+        double val2 = double((*elems[1])(stats));
+
+        if(val2 == 0)
+            return ret;
+
+        ret = val1/val2;
+
+        return ret;
+    }
+};
+
+/**
+ * @brief Statistics Class that supports User specific Formula's
+ *
+ * @tparam T Type of Stats Objects to perform computation
+ * @tparam K Type of result to store
+ * @tparam F Formula to compute result
+ *
+ * The computation is done when any of the 'dump' function is called. This
+ * class only supports computation over StatObj<T> type objects.
+ */
+template<typename T, typename K, typename F>
+class StatEquation : public StatObj<K> {
+    private:
+        typedef StatObj<K> base_t;
+        typedef dynarray<StatObj<T>* > elems_t;
+        elems_t elems;
+        F formula;
+
+        /**
+         * @brief Perform computation and store result
+         *
+         * @param stats Stats Database used for computation
+         */
+        void compute(Stats* stats) const
+        {
+            K& val = (*this)(stats);
+            val = formula.compute(stats, elems);
+        }
+
+    public:
+
+        /**
+         * @brief Default Constructor
+         *
+         * @param name Name of this object
+         * @param parent Parent Stat object
+         */
+        StatEquation(const char *name, Statable *parent)
+            : StatObj<K>(name, parent)
+        { }
+
+        /**
+         * @brief Add StatObj<T> object for computation
+         *
+         * @param obj element to add to the computation
+         */
+        void add_elem(StatObj<T>* obj)
+        {
+            elems.push(obj);
+        }
+
+        /**
+         * @brief Print value of this Stats object
+         *
+         * @param os stream to dump into
+         * @param stats Stats Database that holds the value
+         *
+         * @return Updated stream
+         */
+        ostream& dump(ostream& os, Stats *stats) const
+        {
+            compute(stats);
+            return base_t::dump(os, stats);
+        }
+
+        /**
+         * @brief Dump YAML value of this Stats Object
+         *
+         * @param out YAML stream to dump into
+         * @param stats Stats Database that holds the value
+         *
+         * @return Updated YAML stream
+         */
+        YAML::Emitter& dump(YAML::Emitter& out,
+                Stats *stats) const
+        {
+            compute(stats);
+            return base_t::dump(out, stats);
+        }
+
+        /**
+         * @brief Dump BSON value of this Stats Object
+         *
+         * @param out BSON stream to dump into
+         * @param stats Stats Database that holds the value
+         *
+         * @return Update BSON stream
+         */
+        bson_buffer* dump(bson_buffer* out,
+                Stats *stats) const
+        {
+            compute(stats);
+            return base_t::dump(out, stats);
+        }
+
+        /**
+         * @brief Dump Periodic value of this Stats Object
+         *
+         * @param os output stream
+         *
+         * @return Updated output stream
+         */
+        ostream& dump_periodic(ostream &os)
+        {
+            // compute(n_time_stats);
+            // base_t::dump_periodic(out);
+            return os;
+        }
 };
 
 #endif // STATS_BUILDER_H

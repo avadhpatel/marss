@@ -879,9 +879,9 @@ namespace ATOM_CORE_MODEL {
             StatObj<W64> atomops;
             StatObj<W64> uops;
 
-            StatObj<float> ipc;
-            StatObj<float> atomop_pc;
-            StatObj<float> uipc;
+            StatEquation<W64, double, StatObjFormulaDiv> ipc;
+            StatEquation<W64, double, StatObjFormulaDiv> atomop_pc;
+            StatEquation<W64, double, StatObjFormulaDiv> uipc;
 
             st_commit(Statable *parent)
                 : Statable("commit", parent)
