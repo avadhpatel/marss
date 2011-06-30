@@ -836,6 +836,7 @@ class StatArray : public StatObjBase {
         W64 offset;
         T* default_var;
         const char** labels;
+        bitvec<size> periodic_flag;
 
         inline void set_default_var_ptr()
         {
@@ -1040,8 +1041,56 @@ class StatArray : public StatObjBase {
             }
         }
 
+        /**
+         * @brief Enable periodic dump of this StatsArray
+         *
+         * @param id If given, enables only selected element from array
+         */
+        void enable_periodic_dump(int id = -1)
+        {
+            StatObjBase::enable_periodic_dump();
+            if(id == -1) {
+                periodic_flag.setall();
+            } else {
+                assert(id < size);
+                periodic_flag[id] = 1;
+            }
+        }
+
+        ostream &dump_header(ostream &os)
+        {
+            if (!is_dump_periodic()) return os;
+
+            stringbuf *full_string = get_full_stat_string();
+
+            foreach(i, size) {
+                if(periodic_flag[i]) {
+                    os << "," << *full_string;
+
+                    if(labels) {
+                        os << "." << labels[i];
+                    } else {
+                        os << "." << i;
+                    }
+                }
+            }
+
+            delete full_string;
+            return os;
+        }
+
         ostream &dump_periodic(ostream &os, Stats *stats) const
         {
+            if (!is_dump_periodic()) return os;
+
+            BaseArr& arr = (*this)(stats);
+
+            foreach(i, size) {
+                if(periodic_flag[i]) {
+                    os << "," << arr[i];
+                }
+            }
+
             return os;
         }
 };

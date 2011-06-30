@@ -189,7 +189,11 @@ namespace OOO_CORE_MODEL {
                   , uops("uops", this)
                   , uipc("uipc", this)
                   , opclass("opclass", this, opclass_names)
-            {}
+            {
+                // Periodic Dump Sample: Uncomment following line to dump the
+                // periodic stats of issued uop-types.
+                // opclass.enable_periodic_dump();
+            }
         } issue;
 
         struct writeback : public Statable
