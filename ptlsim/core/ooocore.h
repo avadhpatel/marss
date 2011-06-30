@@ -1449,6 +1449,7 @@ namespace OutOfOrderModel {
         ITLB itlb;
         void setupTLB();
         W64 itlb_miss_init_cycle;
+        bool in_tlb_walk;
 
         // Fetch-related structures
         RIPVirtPhys fetchrip;

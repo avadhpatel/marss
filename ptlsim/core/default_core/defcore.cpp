@@ -145,6 +145,8 @@ void ThreadContext::reset() {
 #endif
     queued_mem_lock_release_count = 0;
     branchpred.init(coreid, threadid);
+
+    in_tlb_walk = 0;
 }
 
 void ThreadContext::setupTLB() {
