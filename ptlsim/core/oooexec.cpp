@@ -1737,11 +1737,17 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
       //
       // TLB miss:
       //
+      if(thread.in_tlb_walk) {
+          replay();
+          return ISSUE_NEEDS_REPLAY;
+      }
+
       if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_LOAD_TLB_MISS, this, sfra, addr);
       cycles_left = 0;
       tlb_walk_level = thread.ctx.page_table_level_count();
       changestate(thread.rob_tlb_miss_list);
       per_context_dcache_stats_update(core.coreid, threadid, load.dtlb.misses++);
+      thread.in_tlb_walk = 1;
 
       return ISSUE_COMPLETED;
   }
@@ -2048,6 +2054,7 @@ rob_cont:
 
     if unlikely (config.event_log_enabled) event = core.eventlog.add_load_store(EVENT_TLBWALK_COMPLETE, this, null, virtaddr);
     thread.dtlb.insert(origvirt, threadid);
+    thread.in_tlb_walk = 0;
 
     if(logable(10)) {
         ptl_logfile << "tlb miss completed for rob ", *this, " now issuing cache access\n";

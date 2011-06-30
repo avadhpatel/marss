@@ -264,6 +264,7 @@ void ThreadContext::flush_pipeline() {
       per_context_ooocore_stats_update(threadid,
               cycles_in_pause -= pause_counter);
   pause_counter = 0;
+  in_tlb_walk = 0;
 }
 
 //
