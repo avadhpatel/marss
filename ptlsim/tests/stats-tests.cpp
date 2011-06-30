@@ -18,6 +18,7 @@ namespace {
             StatString st2;
             StatEquation<W64, W64, StatObjFormulaAdd> sum;
             StatEquation<W64, double, StatObjFormulaDiv> div;
+            StatArray<W64, 3> time_arr;
 
             TestStat() : Statable("test")
                          , arr1("arr1", this)
@@ -28,6 +29,7 @@ namespace {
                          , st2("st2", this)
                          , sum("sum", this)
                          , div("div", this)
+                         , time_arr("time_arr", this)
             {
                 sum.add_elem(&ct1);
                 sum.add_elem(&ct2);
@@ -57,42 +59,48 @@ namespace {
         st.ct1.set_default_stats(n_kernel_stats);
         st.ct2.set_default_stats(n_user_stats);
         st.ct3.set_default_stats(n_user_stats);
+        st.time_arr.set_default_stats(n_user_stats);
         st.ct3.enable_periodic_dump();
         st.sum.enable_periodic_dump();
+        st.time_arr.enable_periodic_dump();
 
         ASSERT_TRUE(st.ct1.is_dump_periodic());
         ASSERT_TRUE(st.ct2.is_dump_periodic());
         ASSERT_TRUE(st.ct3.is_dump_periodic());
+        ASSERT_TRUE(st.time_arr.is_dump_periodic());
         ASSERT_TRUE(st.is_dump_periodic());
         ASSERT_TRUE(builder.is_dump_periodic());
         ASSERT_TRUE(st.sum.is_dump_periodic());
         ASSERT_FALSE(st.div.is_dump_periodic());
 
         builder.dump_header(os);
-        ASSERT_STREQ(os.str().c_str(), "sim_cycle,test.ct1,test.ct2,test.ct3,test.sum\n");
+        ASSERT_STREQ(os.str().c_str(), "sim_cycle,test.ct1,test.ct2,test.ct3,test.sum,test.time_arr.0,test.time_arr.1,test.time_arr.2\n");
         reset_stream(os);
 
         st.ct1++;
         builder.dump_periodic(os,0);
-        ASSERT_STREQ(os.str().c_str(), "0,1,0,0,1\n");
+        ASSERT_STREQ(os.str().c_str(), "0,1,0,0,1,0,0,0\n");
         reset_stream(os);
 
         st.ct1.set_default_stats(n_user_stats);
         st.ct1 += 30;
         builder.dump_periodic(os,100);
-        ASSERT_STREQ(os.str().c_str(), "100,30,0,0,30\n");
+        ASSERT_STREQ(os.str().c_str(), "100,30,0,0,30,0,0,0\n");
         reset_stream(os);
 
         st.ct2 += 19;
         st.ct2++;
+        st.time_arr[1] += 5;
         builder.dump_periodic(os,200);
-        ASSERT_STREQ(os.str().c_str(), "200,0,20,0,20\n");
+        ASSERT_STREQ(os.str().c_str(), "200,0,20,0,20,0,5,0\n");
         reset_stream(os);
 
         st.ct1 += 1;
         st.ct2++;
+        st.time_arr[0] += 10;
+        st.time_arr[1]++;
         builder.dump_periodic(os,300);
-        ASSERT_STREQ(os.str().c_str(), "300,1,1,0,2\n");
+        ASSERT_STREQ(os.str().c_str(), "300,1,1,0,2,10,1,0\n");
         reset_stream(os);
 
     }
