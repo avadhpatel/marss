@@ -337,6 +337,9 @@ namespace Memory {
                 void send_evict_message(CacheQueueEntry *queueEntry,
                         W64 oldTag =-1);
 
+                void send_update_message(CacheQueueEntry *queueEntry,
+                        W64 tag =-1);
+
 
             public:
                 CacheController(W8 coreid, char *name,

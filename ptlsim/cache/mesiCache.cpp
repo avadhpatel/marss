@@ -525,6 +525,7 @@ void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
             break;
         case MESI_MODIFIED:
             if(type == MEMORY_OP_READ) {
+                send_update_message(queueEntry);
                 queueEntry->line->state = MESI_SHARED;
                 queueEntry->isShared = true;
                 newState = MESI_SHARED;
@@ -674,6 +675,38 @@ void CacheController::send_evict_message(CacheQueueEntry *queueEntry,
 
 }
 
+void CacheController::send_update_message(CacheQueueEntry *queueEntry,
+        W64 tag)
+{
+    MemoryRequest *request = memoryHierarchy_->get_free_request();
+    assert(request);
+
+    if(tag == InvalidTag<W64>::INVALID || tag == -1)
+        tag = queueEntry->request->get_physical_address();
+
+    request->init(queueEntry->request);
+    request->set_physical_address(tag);
+    request->set_op_type(MEMORY_OP_UPDATE);
+
+    CacheQueueEntry *newEntry = pendingRequests_.alloc();
+    assert(newEntry);
+
+    /* set full flag if buffer is full */
+    if(pendingRequests_.isFull()) {
+        memoryHierarchy_->set_controller_full(this, true);
+    }
+
+    newEntry->request = request;
+    newEntry->request->incRefCounter();
+    newEntry->sender = NULL;
+    newEntry->sendTo = lowerInterconnect_;
+    ADD_HISTORY_ADD(newEntry->request);
+
+    newEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
+    memoryHierarchy_->add_event(&waitInterconnect_,
+            0, (void*)newEntry);
+}
+
 void CacheController::handle_cache_insert(CacheQueueEntry *queueEntry,
         W64 oldTag)
 {
@@ -684,30 +717,7 @@ void CacheController::handle_cache_insert(CacheQueueEntry *queueEntry,
      * lower cache/memory
      */
     if(oldState == MESI_MODIFIED && isLowestPrivate_) {
-        MemoryRequest *request = memoryHierarchy_->get_free_request();
-        assert(request);
-
-        request->init(queueEntry->request);
-        request->set_physical_address(oldTag);
-        request->set_op_type(MEMORY_OP_UPDATE);
-
-        CacheQueueEntry *newEntry = pendingRequests_.alloc();
-        assert(newEntry);
-
-        /* set full flag if buffer is full */
-        if(pendingRequests_.isFull()) {
-            memoryHierarchy_->set_controller_full(this, true);
-        }
-
-        newEntry->request = request;
-        newEntry->request->incRefCounter();
-        newEntry->sender = null;
-        newEntry->sendTo = lowerInterconnect_;
-        ADD_HISTORY_ADD(newEntry->request);
-
-        queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
-        memoryHierarchy_->add_event(&waitInterconnect_,
-                0, (void*)newEntry);
+        send_update_message(queueEntry, oldTag);
     }
 
     if(oldState != MESI_INVALID && isLowestPrivate_) {
