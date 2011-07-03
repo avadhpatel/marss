@@ -322,7 +322,8 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
 
     /* now create an entry into pendingRequests_ */
     PendingQueueEntry *pendingEntry = NULL;
-    if(queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
+    if(queueEntry->request->get_type() != MEMORY_OP_UPDATE &&
+			queueEntry->request->get_type() != MEMORY_OP_EVICT) {
         pendingEntry = pendingRequests_.alloc();
         assert(pendingEntry);
         pendingEntry->request = queueEntry->request;

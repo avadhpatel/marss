@@ -44,7 +44,7 @@
 
 #include <cpuController.h>
 #include <cacheController.h>
-#include <mesiCache.h>
+#include <coherentCache.h>
 #include <p2p.h>
 #include <bus.h>
 #include <mesiBus.h>
@@ -129,6 +129,7 @@ void MemoryHierarchy::shared_L2_configuration()
 
 	//using namespace Memory::SimpleWTCache;
 	using namespace Memory::MESICache;
+    using namespace Memory::CoherentCache;
 
 	GET_STRINGBUF_PTR(bus_name, "Bus");
 	MESICache::BusInterconnect *bus = new
@@ -229,6 +230,7 @@ void MemoryHierarchy::private_L2_configuration()
 	using namespace Memory::SimpleWTCache;
 #else
 	using namespace Memory::MESICache;
+	using namespace Memory::CoherentCache;
 #endif
 
 #ifdef SINGLE_CORE_MEM_CONFIG

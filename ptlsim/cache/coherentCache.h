@@ -25,8 +25,8 @@
  *
  */
 
-#ifndef MESI_CACHE_H
-#define MESI_CACHE_H
+#ifndef COHERENT_CACHE_H
+#define COHERENT_CACHE_H
 
 #include <logic.h>
 
@@ -37,40 +37,11 @@
 #include <statsBuilder.h>
 #include <cacheLines.h>
 
-#define UPDATE_MESI_TRANS_STATS(old_state, new_state, mode) \
-    if(mode) { /* kernel mode */ \
-        new_stats.state_transition(n_kernel_stats)[(old_state << 2) | new_state]++; \
-    } else { \
-        new_stats.state_transition(n_user_stats)[(old_state << 2) | new_state]++; \
-    }
-
 namespace Memory {
 
-    namespace MESICache {
+    namespace CoherentCache {
 
-        // CacheLine : a single cache line for MESI coherenent cache
-
-        enum MESICacheLineState {
-            MESI_INVALID = 0, // 0 has to be invalid as its default
-            MESI_MODIFIED,
-            MESI_EXCLUSIVE,
-            MESI_SHARED,
-            NO_MESI_STATES
-        };
-
-        enum MESITransations {
-            II=0, IM, IE, IS,
-            MI, MM, ME, MS,
-            EI, EM, EE, ES,
-            SI, SM, SE, SS,
-        };
-
-        static const char* MESIStateNames[NO_MESI_STATES] = {
-            "Invalid",
-            "Exclusive",
-            "Shared",
-            "Modified"
-        };
+        class CoherenceLogic;
 
         // Cache Events enum used for Queue entry flags
         enum {
@@ -101,6 +72,7 @@ namespace Memory {
                 Interconnect *sendTo;
                 MemoryRequest *request;
                 CacheLine *line;
+                void *m_arg;
                 bool annuled;
                 bool evicting;
                 bool isSnoop;
@@ -108,18 +80,19 @@ namespace Memory {
                 bool responseData;
 
                 void init() {
-                    request = NULL;
-                    sender = NULL;
-                    sendTo = NULL;
-                    line = NULL;
-                    depends = -1;
-                    dependsAddr = -1;
+                    request             = NULL;
+                    sender              = NULL;
+                    sendTo              = NULL;
+                    line                = NULL;
+                    m_arg               = NULL;
+                    depends             = -1;
+                    dependsAddr         = -1;
+                    annuled             = false;
+                    evicting            = false;
+                    isSnoop             = false;
+                    isShared            = false;
+                    responseData        = false;
                     eventFlags.reset();
-                    annuled = false;
-                    evicting = false;
-                    isSnoop = false;
-                    isShared = false;
-                    responseData = false;
                 }
 
                 ostream& print(ostream& os) const {
@@ -169,12 +142,12 @@ namespace Memory {
         {
             private:
 
-                CacheType type_;
+                CacheType       type_;
                 CacheLinesBase *cacheLines_;
-                CacheStats *userStats_;
-                CacheStats *totalUserStats_;
-                CacheStats *kernelStats_;
-                CacheStats *totalKernelStats_;
+                CacheStats     *userStats_;
+                CacheStats     *totalUserStats_;
+                CacheStats     *kernelStats_;
+                CacheStats     *totalKernelStats_;
 
                 // No of bits needed to find Cache Line address
                 int cacheLineBits_;
@@ -211,6 +184,8 @@ namespace Memory {
                 // Stats Objects
                 MESIStats new_stats;
 
+                CoherenceLogic *coherence_logic_;
+
                 CacheQueueEntry* find_dependency(MemoryRequest *request);
 
                 // This function is used to find pending request with either
@@ -225,9 +200,6 @@ namespace Memory {
 
                 bool handle_lower_interconnect(Message &message);
 
-                // MESI Protocol related functions
-                MESICacheLineState get_new_state(CacheQueueEntry *queueEntry,
-                        bool isShared);
                 void handle_snoop_hit(CacheQueueEntry *queueEntry);
                 void handle_local_hit(CacheQueueEntry *queueEntry);
                 void handle_cache_insert(CacheQueueEntry *queueEntry,
@@ -239,11 +211,8 @@ namespace Memory {
 
                 // This function is used to maintain the inclusive
                 // property between L1 and L2/L3
-                void send_evict_message(CacheQueueEntry *queueEntry,
-                        W64 oldTag =-1);
-
-                void send_update_message(CacheQueueEntry *queueEntry,
-                        W64 tag =-1);
+                void send_message(CacheQueueEntry *queueEntry,
+                        Interconnect *interconn, OP_TYPE type, W64 tag =-1);
 
 
             public:
@@ -292,14 +261,25 @@ namespace Memory {
                 void annul_request(MemoryRequest *request);
 
                 // Callback functions for signals of cache
-                bool cache_hit_cb(void *arg);
-                bool cache_miss_cb(void *arg);
-                bool cache_access_cb(void *arg);
-                bool cache_insert_cb(void *arg);
-                bool cache_update_cb(void *arg);
-                bool cache_insert_complete_cb(void *arg);
-                bool wait_interconnect_cb(void *arg);
-                bool clear_entry_cb(void *arg);
+                virtual bool cache_hit_cb(void *arg);
+                virtual bool cache_miss_cb(void *arg);
+                virtual bool cache_access_cb(void *arg);
+                virtual bool cache_insert_cb(void *arg);
+                virtual bool cache_update_cb(void *arg);
+                virtual bool cache_insert_complete_cb(void *arg);
+                virtual bool wait_interconnect_cb(void *arg);
+                virtual bool clear_entry_cb(void *arg);
+
+                void set_coherence_logic(CoherenceLogic *cl) {
+                    coherence_logic_ = cl;
+                }
+
+                Statable* get_stats() { return &new_stats; }
+
+                virtual void send_evict_to_upper(CacheQueueEntry *entry, W64 tag=-1);
+                virtual void send_evict_to_lower(CacheQueueEntry *entry, W64 tag=-1);
+                virtual void send_update_to_upper(CacheQueueEntry *entry, W64 tag=-1);
+                virtual void send_update_to_lower(CacheQueueEntry *entry, W64 tag=-1);
 
         };
 
@@ -307,4 +287,5 @@ namespace Memory {
 
 };
 
-#endif // MESI_CACHE_H
+#endif // COHERENT_CACHE_H
+
