@@ -214,6 +214,9 @@ namespace Memory {
                 void send_message(CacheQueueEntry *queueEntry,
                         Interconnect *interconn, OP_TYPE type, W64 tag =-1);
 
+                void send_update_message(CacheQueueEntry *queueEntry,
+                        W64 tag =-1);
+
 
             public:
                 CacheController(W8 coreid, const char *name,
