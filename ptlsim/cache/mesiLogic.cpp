@@ -427,10 +427,10 @@ void MESILogic::invalidate_line(CacheLine *line)
 bool MESILogic::is_line_valid(CacheLine *line)
 {
     if(line->state == MESI_INVALID) {
-        return true;
+        return false;
     }
 
-    return false;
+    return true;
 }
 
 /* MESI Controller Builder */
