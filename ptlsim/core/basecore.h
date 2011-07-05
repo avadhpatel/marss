@@ -11,6 +11,7 @@ namespace Core {
 
     struct BaseCore {
         BaseCore(BaseMachine& machine);
+        virtual ~BaseCore() {}
 
         virtual void reset() = 0;
         virtual bool runcycle() = 0;

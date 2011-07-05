@@ -53,7 +53,7 @@ struct BaseMachine: public PTLsimMachine {
     virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);
     void flush_all_pipelines();
     virtual void reset();
-    ~BaseMachine();
+    virtual ~BaseMachine();
 
     bitvec<NUM_SIM_CORES> context_used;
     W8 context_counter;

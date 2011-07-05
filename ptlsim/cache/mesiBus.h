@@ -138,13 +138,15 @@ class BusInterconnect : public Interconnect
 		Signal broadcastCompleted_;
 		Signal dataBroadcastCompleted_;
         BusStats *stats_;
-        NewBusStats new_stats;
+        NewBusStats *new_stats;
 
 		BusQueueEntry *arbitrate_round_robin();
 		bool can_broadcast(BusControllerQueue *queue);
 
 	public:
 		BusInterconnect(const char *name, MemoryHierarchy *memoryHierarchy);
+        ~BusInterconnect();
+
 		bool is_busy(){ return busBusy_; }
 		void set_bus_busy(bool flag){
 			busBusy_ = flag;

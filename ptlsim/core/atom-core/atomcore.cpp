@@ -1580,6 +1580,59 @@ void AtomOp::annul()
     }
 }
 
+/**
+ * @brief Print AtomOp's details
+ *
+ * @param os stream to print info
+ *
+ * @return updated stream
+ */
+ostream& AtomOp::print(ostream& os) const
+{
+    stringbuf name;
+
+    if(!current_state_list) {
+        os << " a-op is not valid.";
+        return os;
+    }
+
+    os << " a-op ",
+       " th ", (int)thread->threadid,
+       " uuid ", intstring(uuid, 16),
+       " rip 0x", hexstring(rip, 48), " ",
+       padstring(current_state_list->name, -24), " ";
+
+    os << "[";
+    if(is_branch) os << "br|";
+    if(is_ldst) os << "ldst|";
+    if(is_fp) os << "fp|";
+    if(is_sse) os << "sse|";
+    if(is_nonpipe) os << "nonpipe|";
+    if(is_barrier) os << "barrier|";
+    if(is_ast) os << "ast";
+    os << "] ";
+
+    if(som) os << "SOM ";
+    if(eom) os << "EOM ";
+
+    os << "(", execution_cycles, " cyc)";
+
+    foreach(i, num_uops_used) {
+        const TransOp &op = uops[i];
+        nameof(name, op);
+        os << "\n     ";
+        os << padstring(name, -12), " ";
+        os << padstring(arch_reg_names[dest_registers[i]], -6), " = ";
+
+        os << padstring(arch_reg_names[op.ra], -6) , " ";
+        os << padstring(arch_reg_names[op.rb], -6) , " ";
+        os << padstring(arch_reg_names[op.rc], -6) , " ";
+        name.reset();
+    }
+
+    return os;
+}
+
 //---------------------------------------------//
 //   AtomThread
 //---------------------------------------------//
@@ -2447,6 +2500,14 @@ bool AtomThread::writeback()
     int ins_commited = 0;
     bool ret_value = false;
 
+    if(sim_cycle > (last_commit_cycle + 1024*1024)) {
+        ptl_logfile << "Core has not progressed since cycle ",
+                    last_commit_cycle, " dumping all information\n";
+        core.machine.dump_state(ptl_logfile);
+        ptl_logfile << flush;
+        assert(0);
+    }
+
     /* If commit-buffer is empty and we have itlb_exception or interrupt
      * pending then handle them first. */
     if(commitbuf.empty() || pause_counter > 0) {
@@ -2503,6 +2564,8 @@ bool AtomThread::writeback()
             if(!ret_value && handle_interrupt_at_next_eom) {
                 ret_value = handle_interrupt();
             }
+
+            last_commit_cycle = sim_cycle;
 
             break;
         }
@@ -2791,6 +2854,42 @@ W64 AtomThread::read_reg(W16 reg)
     return ctx.get(reg);
 }
 
+ostream& AtomThread::print(ostream& os) const
+{
+    os << "Thread: ", (int)threadid;
+    os << " stats: ";
+
+    if(waiting_for_icache_miss) os << "icache_miss|";
+    if(itlb_exception) os << "itlb_miss(", itlb_walk_level, ")|";
+    if(dtlb_walk_level) os << "dtlb_miss(", dtlb_walk_level, ")|";
+    if(stall_frontend) os << "frontend_stall|";
+    if(pause_counter) os << "pause(", pause_counter, ")|";
+
+    os << "\n";
+
+    os << " Atom-Ops:\n";
+    foreach(i, NUM_ATOM_OPS_PER_THREAD) {
+        os << "[", intstring(i,2), "]", atomOps[i], "\n";
+    }
+
+    os << " Dispatch Queue:\n";
+    foreach_forward(dispatchq, i) {
+        os << "  ", dispatchq[i], endl;
+    }
+
+    os << " Store Buffer:\n";
+    foreach_forward(storebuf, i) {
+        os << "  ", storebuf[i], endl;
+    }
+
+    os << " Commit Buffer:\n";
+    foreach_forward(commitbuf, i) {
+        os << "  ", commitbuf[i], endl;
+    }
+
+    return os;
+}
+
 //---------------------------------------------//
 //   AtomCore
 //---------------------------------------------//
@@ -2823,6 +2922,10 @@ AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
     }
 
     reset();
+}
+
+AtomCore::~AtomCore()
+{
 }
 
 /* Pipeline Functions of AtomCore */
@@ -3096,8 +3199,7 @@ void AtomCore::flush_tlb_virt(Context& ctx, Waddr virtaddr)
 
 void AtomCore::dump_state(ostream& os)
 {
-    os << "AtomCore " << coreid << " ";
-    os << " [num-threads " << threadcount << "]\n";
+    os << *this;
 }
 
 void AtomCore::update_stats(PTLsimStats* stats)
@@ -3181,6 +3283,22 @@ void AtomCore::check_ctx_changes()
 W8 AtomCore::get_coreid()
 {
     return coreid;
+}
+
+ostream& AtomCore::print(ostream& os) const
+{
+    os << "Atom-Core: ", int(coreid), endl;
+
+    os << " Fetch Queue:\n";
+    foreach_forward(fetchq, i) {
+        os << "  ", fetchq[i], endl;
+    }
+
+    foreach(i, threadcount) {
+        os << *threads[i], endl;
+    }
+
+    return os;
 }
 
 AtomCoreBuilder::AtomCoreBuilder(const char* name)

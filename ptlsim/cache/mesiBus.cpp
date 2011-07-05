@@ -46,10 +46,10 @@ BusInterconnect::BusInterconnect(const char *name,
     Interconnect(name,memoryHierarchy),
     busBusy_(false),
     dataBusBusy_(false),
-    lastAccessQueue(NULL),
-    new_stats(name, &memoryHierarchy->get_machine())
+    lastAccessQueue(NULL)
 {
     memoryHierarchy_->add_interconnect(this);
+    new_stats = new NewBusStats(name, &memoryHierarchy->get_machine());
 
     SET_SIGNAL_CB(name, "_Broadcast", broadcast_, &BusInterconnect::broadcast_cb);
 
@@ -63,7 +63,12 @@ BusInterconnect::BusInterconnect(const char *name,
 
     // FIXME : Currenlty all bus stats are going to global stats
     stats_ = &global_stats.memory.bus;
-    new_stats.set_default_stats(n_global_stats);
+    new_stats->set_default_stats(n_global_stats);
+}
+
+BusInterconnect::~BusInterconnect()
+{
+    delete new_stats;
 }
 
 void BusInterconnect::register_controller(Controller *controller)
@@ -175,7 +180,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
                             pendingEntry);
                 }
             } else {
-                new_stats.bus_not_ready++;
+                new_stats->bus_not_ready++;
             }
 
             return true;
@@ -193,7 +198,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
     }
 
     if (busControllerQueue->queue.isFull()) {
-        new_stats.bus_not_ready++;
+        new_stats->bus_not_ready++;
         memdebug("Bus queue is full\n");
         return false;
     }
@@ -213,7 +218,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
         memoryHierarchy_->add_event(&broadcast_, 1, NULL);
         set_bus_busy(true);
     } else {
-        new_stats.bus_not_ready++;
+        new_stats->bus_not_ready++;
         memdebug("Bus is busy\n");
     }
 
@@ -368,22 +373,22 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
 
     /* Update bus stats */
     stats_->addr_bus_cycles += BUS_BROADCASTS_DELAY;
-    new_stats.addr_bus_cycles += BUS_BROADCASTS_DELAY;
+    new_stats->addr_bus_cycles += BUS_BROADCASTS_DELAY;
     if(pendingEntry) {
         switch(pendingEntry->request->get_type()) {
             case MEMORY_OP_READ: stats_->broadcasts.read++;
-                                 new_stats.broadcasts.read++;
+                                 new_stats->broadcasts.read++;
                                  break;
             case MEMORY_OP_WRITE: stats_->broadcasts.write++;
-                                  new_stats.broadcasts.write++;
+                                  new_stats->broadcasts.write++;
                                   break;
             default: assert(0);
         }
     } else { // On memory update we don't use any pending entry
         stats_->broadcasts.update++;
         stats_->broadcast_cycles.update += BUS_BROADCASTS_DELAY;
-        new_stats.broadcasts.update++;
-        new_stats.broadcast_cycles.update++;
+        new_stats->broadcasts.update++;
+        new_stats->broadcast_cycles.update++;
     }
 
     /* Free the message */
@@ -482,15 +487,15 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
 
     /* Update bus stats */
     stats_->data_bus_cycles += BUS_BROADCASTS_DELAY;
-    new_stats.data_bus_cycles += BUS_BROADCASTS_DELAY;
+    new_stats->data_bus_cycles += BUS_BROADCASTS_DELAY;
     W64 delay = sim_cycle - pendingEntry->initCycle;
     assert(delay > BUS_BROADCASTS_DELAY);
     switch(pendingEntry->request->get_type()) {
         case MEMORY_OP_READ: stats_->broadcast_cycles.read += delay;
-                             new_stats.broadcast_cycles.read += delay;
+                             new_stats->broadcast_cycles.read += delay;
                              break;
         case MEMORY_OP_WRITE: stats_->broadcast_cycles.write += delay;
-                              new_stats.broadcast_cycles.write += delay;
+                              new_stats->broadcast_cycles.write += delay;
                               break;
         default: assert(0);
     }

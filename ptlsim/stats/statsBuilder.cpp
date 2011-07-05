@@ -76,6 +76,13 @@ Statable::Statable(stringbuf &str, Statable *parent)
     }
 }
 
+Statable::~Statable()
+{
+    if(parent) {
+        parent->remove_child_node(this);
+    }
+}
+
 void Statable::set_default_stats(Stats *stats, bool recursive, bool force)
 {
     if(default_stats == stats && !force)

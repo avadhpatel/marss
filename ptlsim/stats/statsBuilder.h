@@ -8,7 +8,11 @@
 #include <yaml/yaml.h>
 #include <bson/bson.h>
 
-#define STATS_SIZE 1024*1024
+#ifdef ENABLE_TESTS
+#  define STATS_SIZE 1024*1024*10
+#else
+#  define STATS_SIZE 1024*1024
+#endif
 
 class StatObjBase;
 class Stats;
@@ -81,6 +85,14 @@ class Statable {
         Statable(stringbuf &str, Statable *parent);
 
         /**
+         * @brief Default destructor for Statable
+         *
+         * This makes sure that if 'parent' is present then it removes self
+         * from parent's list
+         */
+        virtual ~Statable();
+
+        /**
          * @brief Add a child Statable node into this object
          *
          * @param child Child Statable object to add
@@ -88,6 +100,16 @@ class Statable {
         void add_child_node(Statable *child)
         {
             childNodes.push(child);
+        }
+
+        /**
+         * @brief Remove given child node from tree
+         *
+         * @param child Child node to be removed
+         */
+        void remove_child_node(Statable *child)
+        {
+            childNodes.remove(child);
         }
 
         void set_parent(Statable* p)
@@ -334,6 +356,13 @@ class StatsBuilder {
         ostream& dump_header(ostream &os) const;
         ostream& dump_periodic(ostream &os, W64 cycle) const;
 
+        void delete_nodes()
+        {
+            delete rootNode;
+
+            rootNode = new Statable("", true);
+            stat_offset = 0;
+        }
 };
 
 /**

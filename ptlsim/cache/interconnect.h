@@ -56,6 +56,12 @@ class Interconnect
 			controller_request_.connect(signal_mem_ptr(*this,
 						&Interconnect::controller_request_cb));
 		}
+
+        virtual ~Interconnect()
+        {
+            memoryHierarchy_ = NULL;
+        }
+
 		virtual bool controller_request_cb(void *arg)=0;
 		virtual void register_controller(Controller *controller)=0;
 		virtual int access_fast_path(Controller *controller,

@@ -510,6 +510,8 @@ namespace ATOM_CORE_MODEL {
         bool grab_mem_lock(W64 addr);
         void release_mem_lock();
 
+        ostream& print(ostream& os) const;
+
         // Variables
         AtomThread *thread;
 
@@ -557,6 +559,11 @@ namespace ATOM_CORE_MODEL {
         W8 cycles_left;
     };
 
+    static inline ostream& operator <<(ostream& os, const AtomOp& op)
+    {
+        return op.print(os);
+    }
+
     /**
      * @brief Entry for Store Buffer
      */
@@ -592,6 +599,15 @@ namespace ATOM_CORE_MODEL {
             ctx.storemask_virt(virtaddr, data, bytemask, size);
         }
 
+        ostream& print(ostream& os) const
+        {
+            os << "  [", index_, "] ";
+            os << "a-op uuid: ", op->uuid, " ";
+            os << bytemaskstring((const byte*)&data, bytemask, 8);
+            os << " @ ", hexstring(addr, 48);
+            return os;
+        }
+
         AtomOp* op;
         W16s    index_;
         W64     addr;
@@ -601,6 +617,11 @@ namespace ATOM_CORE_MODEL {
         W8      size;
         bool    mmio;
     };
+
+    static inline ostream& operator <<(ostream& os, const StoreBufferEntry& e)
+    {
+        return e.print(os);
+    }
 
     /**
      * @brief Entry of Fetch-Queue/Dispatch-Queue
@@ -627,9 +648,20 @@ namespace ATOM_CORE_MODEL {
             if(op) op->annul();
         }
 
+        ostream& print(ostream& os) const
+        {
+            os << "a-op uuid: ", op->uuid;
+            return os;
+        }
+
         AtomOp* op;
         W16s    index_;
     };
+
+    static inline ostream& operator <<(ostream& os, const BufferEntry& e)
+    {
+        return e.print(os);
+    }
 
     struct ForwardEntry {
 
@@ -698,6 +730,8 @@ namespace ATOM_CORE_MODEL {
         void write_temp_reg(W16 reg, W64 data);
         W64  read_reg(W16 reg);
 
+        ostream& print(ostream& os) const;
+
         W8      threadid;
         W64     fetch_uuid;
         bool    register_invalid[TRANSREG_COUNT];
@@ -731,6 +765,7 @@ namespace ATOM_CORE_MODEL {
         bool    init_dtlb_walk;
         bool    mmio_pending;
         bool    inst_in_pipe;
+        W64     last_commit_cycle;
 
         BranchPredictorInterface branchpred;
 
@@ -925,6 +960,11 @@ namespace ATOM_CORE_MODEL {
         StatObj<W64> st_cycles;
     };
 
+    static inline ostream& operator <<(ostream& os, const AtomThread& th)
+    {
+        return th.print(os);
+    }
+
     /**
      * @brief In-Order Core modeled based on Intel Atom
      *
@@ -935,6 +975,7 @@ namespace ATOM_CORE_MODEL {
     struct AtomCore : public BaseCore , Statable {
 
         AtomCore(BaseMachine& machine, int num_threads, const char* name=NULL);
+        ~AtomCore();
         
         void reset();
         bool runcycle();
@@ -966,6 +1007,8 @@ namespace ATOM_CORE_MODEL {
         void flush_shared_structs(W8 threadid);
 
         void try_thread_switch();
+
+        ostream& print(ostream& os) const;
 
         W8   coreid;
         W8   threadcount;
@@ -1004,6 +1047,11 @@ namespace ATOM_CORE_MODEL {
         W64 fu_available:32, fu_used:32;
         W8  port_available;
     };
+
+    static inline ostream& operator <<(ostream& os, const AtomCore& core)
+    {
+        return core.print(os);
+    }
 
     struct AtomCoreBuilder : public CoreBuilder {
         AtomCoreBuilder(const char* name);

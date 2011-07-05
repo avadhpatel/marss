@@ -182,7 +182,7 @@ namespace Memory {
                 Signal waitInterconnect_;
 
                 // Stats Objects
-                MESIStats new_stats;
+                MESIStats *new_stats;
 
                 CoherenceLogic *coherence_logic_;
 
@@ -221,6 +221,7 @@ namespace Memory {
             public:
                 CacheController(W8 coreid, const char *name,
                         MemoryHierarchy *memoryHierarchy, CacheType type);
+                ~CacheController();
                 bool handle_request_cb(void *arg);
                 bool handle_interconnect_cb(void *arg);
                 int access_fast_path(Interconnect *interconnect,
@@ -277,7 +278,7 @@ namespace Memory {
                     coherence_logic_ = cl;
                 }
 
-                Statable* get_stats() { return &new_stats; }
+                Statable* get_stats() { return new_stats; }
 
                 virtual void send_evict_to_upper(CacheQueueEntry *entry, W64 tag=-1);
                 virtual void send_evict_to_lower(CacheQueueEntry *entry, W64 tag=-1);

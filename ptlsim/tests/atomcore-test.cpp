@@ -625,6 +625,7 @@ namespace {
             ASSERT_EQ(op.src_registers[2], (W8)-1);
             ASSERT_EQ(op.dest_registers[0], REG_temp0);
             ASSERT_EQ(op.dest_registers[1], (W8)-1);
+
         }
 
         {

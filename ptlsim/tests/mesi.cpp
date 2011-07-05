@@ -374,7 +374,7 @@ namespace {
 
 #define creq(type, state, shared) { \
     req->set_op_type(type); \
-    Message m; m.isShared = shared; \
+    Message m; m.isShared = shared; m.hasData = 1; \
     MESICacheLineState t_state = state; \
     m.arg = &t_state; \
     cont->mesi->complete_request(qe, m); }

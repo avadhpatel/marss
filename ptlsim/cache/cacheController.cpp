@@ -96,6 +96,11 @@ CacheController::CacheController(W8 coreid, const char *name,
 	lowerInterconnect_= NULL;
 }
 
+CacheController::~CacheController()
+{
+    delete &new_stats;
+}
+
 CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
 {
 	W64 requestLineAddress = get_line_address(request);

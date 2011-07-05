@@ -99,7 +99,7 @@ class Controller
 					(*this, &Controller::handle_interconnect_cb));
 		}
 
-        ~Controller()
+        virtual ~Controller()
         {
             memoryHierarchy_ = NULL;
         }
