@@ -2776,7 +2776,7 @@ void AtomThread::flush_pipeline()
         core.fetchq[i].annul();
     }
 
-    foreach_forward_after(dispatchq, (&dispatchq[dispatchq.head]), i) {
+    foreach_forward(dispatchq, i) {
         dispatchq[i].annul();
     }
 
@@ -2784,6 +2784,10 @@ void AtomThread::flush_pipeline()
     if(!commitbuf.empty()) {
         BufferEntry& buf = *commitbuf.peek();
         assert(buf.op->som);
+    }
+
+    foreach_forward(commitbuf, i) {
+        commitbuf[i].annul();
     }
 
     // First reset this thread
