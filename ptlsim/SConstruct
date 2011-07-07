@@ -39,6 +39,7 @@ if int(debug):
     dirs.append('tests')
     # Add gtest directory in CPPPATH
     env['CPPPATH'].append(os.getcwd() + "/lib/gtest/include")
+    env['CPPPATH'].append(os.getcwd() + "/lib/gtest")
     env['tests'] = True
 
 else:
