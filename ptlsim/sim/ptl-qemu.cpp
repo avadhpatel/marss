@@ -115,16 +115,13 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                 }
                 command_str[i] = '\0';
 
-                cout << "MARSSx86::Command received : ", command_str, endl;
                 /*
                  * Stop the QEMU vm and change ptlsim configuration
                  * QEMU will be automatically started in simulation mode
                  */
-                vm_stop(0);
-                ptl_machine_configure(command_str);
                 cpu_exit(cpu);
-                if(in_simulation)
-                    vm_start();
+                pending_command_str = command_str;
+                pending_call_type = PTLCALL_ENQUEUE;
                 simulation_configured = 1;
                 break;
             }
@@ -413,6 +410,13 @@ void ptl_check_ptlcall_queue() {
 
         cout << "Pending call type: ", pending_call_type, endl;
         switch(pending_call_type) {
+            case PTLCALL_ENQUEUE:
+                {
+                    cout << "MARSSx86::Command received : ",
+                         pending_command_str, endl;
+                    ptl_machine_configure(pending_command_str);
+                    break;
+                }
             case PTLCALL_CHECKPOINT:
                 {
                     cout << "MARSSx86::Creating checkpoint ",
@@ -435,6 +439,7 @@ void ptl_check_ptlcall_queue() {
                             cout << "MARSSx86::Unkonw Action\n";
                             break;
                     }
+                    break;
                 }
         }
 
