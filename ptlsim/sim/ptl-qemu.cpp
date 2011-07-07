@@ -67,6 +67,42 @@ static char *pending_command_str = NULL;
 static int pending_call_type = -1;
 static int pending_call_arg3 = -1;
 
+static void save_core_dump(char* dump, W64 dump_size,
+        char* app_name, W64 app_name_size, W64 signum)
+{
+    stringbuf  filename;
+    ofstream   df;
+    char      *_addr;
+    char      *dmp;
+    char      *app;
+
+    dmp = (char*)qemu_malloc(sizeof(char) * dump_size);
+    app = (char*)qemu_malloc((sizeof(char) * app_name_size) + 1);
+
+    _addr = dump;
+    foreach(i, dump_size) {
+        dmp[i] = (char)ldub_kernel((target_ulong)(_addr));
+        _addr++;
+    }
+
+    _addr = app_name;
+    foreach(i, app_name_size) {
+        app[i] = (char)ldub_kernel((target_ulong)(_addr));
+        _addr++;
+    }
+    app[app_name_size] = '\0';
+
+    filename << app << "-core";
+    df.open(filename, std::ios_base::binary | std::ios_base::out);
+
+    df.write(dmp, dump_size);
+    df.flush();
+    df.close();
+
+    ptl_logfile << "Core dump received from VM is saved in ",
+                filename, " with signal ", signum, endl;
+}
+
 static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
         int length) {
     int calltype = (int)(cpu->regs[REG_rax]);
@@ -174,6 +210,14 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                         break;
                 }
 
+                break;
+            }
+        case PTLCALL_CORE_DUMP:
+            {
+                /* User space application has crashed so save its core-dump
+                 * into file '%appname-core-dump' */
+                save_core_dump((char*)arg1, arg2, (char*)arg3, arg4,
+                        arg5);
                 break;
             }
         default :
