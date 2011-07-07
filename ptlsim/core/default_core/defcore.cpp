@@ -938,7 +938,7 @@ StateList& ReorderBufferEntry::get_ready_to_issue_list() {
 //
 // Reorder Buffer
 //
-stringbuf& ReorderBufferEntry::get_operand_info(stringbuf& sb, int operand) {
+stringbuf& ReorderBufferEntry::get_operand_info(stringbuf& sb, int operand) const {
     PhysicalRegister& physreg = *operands[operand];
     ReorderBufferEntry& sourcerob = *physreg.rob;
 
@@ -984,7 +984,7 @@ ostream& ReorderBufferEntry::print_operand_info(ostream& os, int operand) {
     return os;
 }
 
-ostream& ReorderBufferEntry::print(ostream& os) {
+ostream& ReorderBufferEntry::print(ostream& os) const {
     stringbuf name, rainfo, rbinfo, rcinfo;
     nameof(name, uop);
     get_operand_info(rainfo, 0);

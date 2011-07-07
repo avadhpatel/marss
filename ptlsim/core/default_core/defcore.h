@@ -551,11 +551,11 @@ namespace OOO_CORE_MODEL {
         LoadStoreQueueEntry* find_nearest_memory_fence();
         bool release_mem_lock(bool forced = false);
         bool recheck_page_fault();
-        ostream& print(ostream& os);
-        stringbuf& get_operand_info(stringbuf& sb, int operand);
+        ostream& print(ostream& os) const;
+        stringbuf& get_operand_info(stringbuf& sb, int operand) const;
         ostream& print_operand_info(ostream& os, int operand);
 
-        DefaultCore& getcore() { return *core; }
+        DefaultCore& getcore() const { return *core; }
 
         ThreadContext& getthread() const;
         issueq_tag_t get_tag();
@@ -567,7 +567,7 @@ namespace OOO_CORE_MODEL {
         idx = tag & mask;
     }
 
-    static inline ostream& operator <<(ostream& os, ReorderBufferEntry& rob) {
+    static inline ostream& operator <<(ostream& os, const ReorderBufferEntry& rob) {
         return rob.print(os);
     }
 
