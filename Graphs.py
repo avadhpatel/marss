@@ -266,6 +266,9 @@ class SingleGraph:
 
 		ax.xaxis.set_label_text(self.x_axis_desc.label)
 		ax.yaxis.set_label_text(self.y_axis_desc.label)
+		ax.set_ybound(self.y_axis_desc.range_min,self.y_axis_desc.range_max)
+		ax.set_xbound(self.x_axis_desc.range_min,self.x_axis_desc.range_max)
+
 		ax.set_title(self.title)
 
 class LinePlot:
