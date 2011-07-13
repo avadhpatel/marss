@@ -248,18 +248,19 @@ class DataTable:
 		ax.plot(x_data[filtered_indices], y_data[filtered_indices],label="%s"%(label),**(line_param_kwargs) );
 
 class SingleGraph:
-	def __init__(self, plots, x_axis_desc, y_axis_desc, title, show_legend=True):
+	def __init__(self, plots, x_axis_desc, y_axis_desc, title, show_legend=True, legend_kwargs={}):
 		self.plots = plots
 		self.x_axis_desc = x_axis_desc
 		self.y_axis_desc = y_axis_desc
 		self.title = title
 		self.show_legend = show_legend
+		self.legend_kwargs = legend_kwargs;
 
 	def draw(self,ax,output_mode):
 		for p in self.plots:
 			p.draw(ax);
 		if self.show_legend:
-			leg=ax.legend()
+			leg=ax.legend(**self.legend_kwargs)
 			if output_mode == "png": #latex output doesn't support alpha
 				leg.get_frame().set_alpha(0.5);
 			plt.setp(leg.get_texts(), fontsize='small')
@@ -332,7 +333,7 @@ if __name__ == "__main__":
 			], default_x_axis, AxisDescription("test"), "testxxx1")
 		,	SingleGraph([
 				LinePlot(dt,0,"test_col2","derived1")
-			], default_x_axis, AxisDescription("test"), "A Derived Variable")
+			], default_x_axis, AxisDescription("test"), "A Derived Variable", legend_kwargs={"loc":"upper left", "title":"LEGEND TITLE"} )
 		,	SingleGraph([
 				LinePlot(dt,0,"test_col","should be 100 always")
 			], default_x_axis, AxisDescription("test"), "test", show_legend=False)
