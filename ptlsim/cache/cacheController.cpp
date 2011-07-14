@@ -551,7 +551,7 @@ bool CacheController::cache_access_cb(void *arg)
         //			hit = true;
 
 		OP_TYPE type = queueEntry->request->get_type();
-		Signal *signal;
+		Signal *signal = NULL;
 		int delay;
 		if(hit) {
 			if(type == MEMORY_OP_READ ||
@@ -588,7 +588,18 @@ bool CacheController::cache_access_cb(void *arg)
                         goto retry_cache_access;
                     }
                 }
-			}
+			} else if(type == MEMORY_OP_EVICT) {
+                if(is_private()) {
+                    line->state = LINE_NOT_VALID;
+                }
+                /* Else its an evict message from any coherent cache
+                 * so ignore that. */
+                signal = &clearEntry_;
+                delay = cacheAccessLatency_;
+                queueEntry->eventFlags[CACHE_CLEAR_ENTRY_EVENT]++;
+            } else {
+                assert(0);
+            }
 		} else { // Cache Miss
 			if(type == MEMORY_OP_READ ||
 					type == MEMORY_OP_WRITE) {
