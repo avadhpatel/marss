@@ -143,9 +143,9 @@ namespace Memory {
 			}
 	};
 
-  ostream& operator <<(ostream& os, const Event& event);
-  ostream& operator ,(ostream& os, const Event& event);
-
+  static inline ostream& operator <<(ostream& os, const Event& event) {
+      return event.print(os);
+  }
 
   struct MemoryInterlockEntry {
       W8 ctx_id;

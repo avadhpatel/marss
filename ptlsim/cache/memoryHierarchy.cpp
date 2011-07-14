@@ -733,16 +733,6 @@ bool MemoryHierarchy::probe_lock(W64 lockaddr, W8 ctx_id)
 
 namespace Memory {
 
-ostream& operator <<(ostream& os, const Event& event)
-{
-	return event.print(os);
-}
-
-ostream& operator ,(ostream& os, const Event& event)
-{
-	return event.print(os);
-}
-
 MemoryInterlockBuffer interlocks;
 
 };
