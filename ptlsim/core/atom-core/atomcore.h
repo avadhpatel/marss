@@ -137,11 +137,12 @@ namespace ATOM_CORE_MODEL {
         COMMIT_BARRIER,     // Commit reached a barrier instruction
         COMMIT_INTERRUPT,   // Commit done, but handle pending interrupt
         COMMIT_SMC,         // Commit detected Self Modifying Code
+        COMMIT_FAILED,      // Can't commit
         NUM_COMMIT_RESULTS
     };
 
     static const char* commit_res_names[NUM_COMMIT_RESULTS] = {
-        "ok", "barrier", "interrupt", "smc",
+        "ok", "barrier", "interrupt", "smc", "failed",
     };
 
     extern W8 first_set_fu_map[1 << FU_COUNT];
@@ -499,16 +500,18 @@ namespace ATOM_CORE_MODEL {
         
         // Writeback/Commit
         int  writeback();
+        bool can_commit();
         void update_reg_mem();
         void writeback_eom();
         void update_checker();
+        void check_commit_exception();
 
         void annul();
 
         // Cache line lock
         bool check_mem_lock(W64 addr);
         bool grab_mem_lock(W64 addr);
-        void release_mem_lock();
+        void release_mem_lock(bool immediately=false);
 
         ostream& print(ostream& os) const;
 
@@ -729,6 +732,7 @@ namespace ATOM_CORE_MODEL {
 
         void write_temp_reg(W16 reg, W64 data);
         W64  read_reg(W16 reg);
+        void flush_mem_locks();
 
         ostream& print(ostream& os) const;
 
@@ -805,6 +809,8 @@ namespace ATOM_CORE_MODEL {
         bool    running;
         bool    ready;
 
+        W8  queued_mem_lock_count;
+        W64 queued_mem_lock_list[4];
 
         AtomOp atomOps[NUM_ATOM_OPS_PER_THREAD];
 

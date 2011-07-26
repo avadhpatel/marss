@@ -725,7 +725,7 @@ W8 AtomOp::execute_uop(W8 idx)
          */
         ATOMOPLOG3("Found exception in executing uop ", uop);
 
-        if(isclass(uop.opcode, OPCLASS_CHECK) &
+        if(isclass(uop.opcode, OPCLASS_CHECK) &&
                 (exception == EXCEPTION_SkipBlock)) {
             thread->chk_recovery_rip = rip + uop.bytes;
         }
@@ -1032,12 +1032,22 @@ bool AtomOp::grab_mem_lock(W64 addr)
 /**
  * @brief Release Cache line lock
  *
+ * @param immediately To release lock immediately instead of queing
+ *
+ * By default this function will put the memory lock address into
+ * thread's queue and it will be released when OP_mf uop is committed.
+ * If this AtomOp contains OP_mf opcode then it will flush the locks.
  */
-void AtomOp::release_mem_lock()
+void AtomOp::release_mem_lock(bool immediately)
 {
-    thread->core.memoryHierarchy->invalidate_lock(lock_addr & ~(0x3),
-            thread->ctx.cpu_index);
-    lock_acquired = false;
+    if (immediately) {
+        thread->core.memoryHierarchy->invalidate_lock(lock_addr & ~(0x3),
+                thread->ctx.cpu_index);
+        lock_acquired = false;
+    } else {
+        thread->queued_mem_lock_list[
+            thread->queued_mem_lock_count++] = lock_addr;
+    }
 }
 
 /**
@@ -1351,6 +1361,20 @@ void AtomOp::forward()
     }
 }
 
+bool AtomOp::can_commit()
+{
+    foreach (i, num_uops_used) {
+        if (stores[i] != NULL) {
+            StoreBufferEntry* buf = stores[i];
+            if (!check_mem_lock(buf->addr)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 /**
  * @brief Commit/writeback this AtomOp
  *
@@ -1369,10 +1393,21 @@ int AtomOp::writeback()
         reset_checker_stores();
     }
 
+    if (!can_commit()) {
+        return COMMIT_FAILED;
+    }
+
     update_reg_mem();
 
     if(lock_acquired) {
         release_mem_lock();
+    }
+
+    foreach (i, num_uops_used) {
+        if (uops[i].opcode == OP_mf && uops[i].eom) {
+            thread->flush_mem_locks();
+            break;
+        }
     }
 
     if(eom) {
@@ -1396,6 +1431,25 @@ int AtomOp::writeback()
     }
 
     return COMMIT_OK;
+}
+
+/**
+ * @brief Before 'writeback' check if this AtomOp had any exception or not
+ */
+void AtomOp::check_commit_exception()
+{
+    foreach (i, num_uops_used) {
+        TransOp& uop = uops[i];
+        if unlikely ((uop.is_sse|uop.is_x87) &&
+                ((thread->ctx.cr[0] & CR0_TS_MASK) |
+                 (uop.is_x87 & (thread->ctx.cr[0] & CR0_EM_MASK)))) {
+            had_exception = true;
+            exception = EXCEPTION_FloatingPointNotAvailable;
+            error_code = 0;
+            page_fault_addr = -1;
+            break;
+        }
+    }
 }
 
 /**
@@ -1576,7 +1630,7 @@ void AtomOp::annul()
     }
 
     if(lock_acquired) {
-        release_mem_lock();
+        release_mem_lock(true);
     }
 }
 
@@ -1718,6 +1772,7 @@ void AtomThread::reset()
     internal_flags = forwarded_flags;
 
     waiting_for_icache_miss = 0;
+    queued_mem_lock_count = 0;
     current_icache_block = 0;
     icache_miss_addr = 0;
     itlb_walk_level = 0;
@@ -2544,7 +2599,9 @@ bool AtomThread::writeback()
 
             if((buf.op->current_state_list == 
                     &op_ready_to_writeback_list)) {
-                if(buf.op->had_exception) {
+                buf.op->check_commit_exception();
+
+                if(buf.op->had_exception && !exception_op) {
                     exception_op = buf.op;
                 }
 
@@ -2611,6 +2668,12 @@ bool AtomThread::commit_queue()
         assert(buf.op->current_state_list == &op_ready_to_writeback_list);
 
         commit_result = buf.op->writeback();
+
+        if (commit_result == COMMIT_FAILED) {
+            handle_interrupt_at_next_eom = 0;
+            break;
+        }
+
         buf.op->change_state(op_free_list);
 
         commitbuf.commit(&buf);
@@ -2856,6 +2919,22 @@ W64 AtomThread::read_reg(W16 reg)
     ATOMTHLOG1("Reading register ", arch_reg_names[reg],
             " from RF");
     return ctx.get(reg);
+}
+
+/**
+ * @brief Release all Memory cache address locks
+ *
+ * This function is called on commit of OP_mf uops.
+ */
+void AtomThread::flush_mem_locks()
+{
+    foreach (i, queued_mem_lock_count) {
+        W64 lock_addr = queued_mem_lock_list[i];
+        core.memoryHierarchy->invalidate_lock(lock_addr & ~(0x3),
+                ctx.cpu_index);
+    }
+
+    queued_mem_lock_count = 0;
 }
 
 ostream& AtomThread::print(ostream& os) const
