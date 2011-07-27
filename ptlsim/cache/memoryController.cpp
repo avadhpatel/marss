@@ -104,6 +104,11 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 			MEMORY_OP_UPDATE)
 		return true;
 
+    if (message->request->get_type() == MEMORY_OP_EVICT) {
+        /* We ignore all the evict messages */
+        return true;
+    }
+
 	/*
 	 * if this request is a memory update request then
 	 * first check the pending queue and see if we have a
