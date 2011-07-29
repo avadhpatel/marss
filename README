@@ -11,7 +11,16 @@ I'll eventually try to write up some stuff about what there are intended to do
 The graphing scripts rely heavily on numpy and matplotlib, which are excellent
 math and plotting libraries, respectively. 
 
-More details to come.
+0. Prerequisites 
+To use the graphing scripts, you'll need matplotlib and numpy. On ubuntu, these
+are in packages: python-matplotlib python-numpy
+
+To use mstats.py, you'll need the yaml bindings for python. On ubuntu, these are
+in package: python-yaml
+
+For the lazy: 
+$ sudo apt-get install python-yaml python-matplotlib python-numpy
+
 
 1. Emailer Scripts
 
