@@ -1108,7 +1108,7 @@ stringbuf get_date()
 
     time(&rawtime);
     timeinfo = localtime(&rawtime);
-    strftime(buf, 80, "%F-%H:%M", timeinfo);
+    strftime(buf, 80, "%F", timeinfo);
     date << buf;
 
     return date;
