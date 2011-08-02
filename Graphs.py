@@ -179,14 +179,16 @@ class DataTable:
 			print "genfromtxt couldn't read the CSV data, file %s"%(data_filename)
 			exit()
 	def get_column_idx(self, col):
+		""" Get a column number from a name (or number), returns 0 on error (usually the first column)"""
 		if is_string(col):
 			if col not in self.col_to_num_map:
 				print "ERROR: column name '%s' not found in data table"%(col)
-				exit(); 
+				return 0;
 			return self.col_to_num_map[col];
 		else:
 			if col >= self.file_data.shape[1]:
 				print "ERROR: column number '%d' is out of bounds"%(col)
+				return 0; 
 				exit();
 			return int(col); 
 
