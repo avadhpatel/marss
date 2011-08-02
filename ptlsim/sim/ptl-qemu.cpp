@@ -1307,6 +1307,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
     ptl_stable_state = 1;
     handle_interrupt = 1;
     int mmu_index = cpu_mmu_index((CPUState*)this);
+    W64 cr2 = cr[2];
     tlb_fill(virtaddr, is_write, mmu_index, NULL);
     ptl_stable_state = 0;
 
@@ -1317,6 +1318,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
     }
 
     setup_ptlsim_switch_all_ctx(*this);
+    cr[2] = cr2;
     return;
 }
 
@@ -1327,6 +1329,7 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
     if(logable(10))
         ptl_logfile << "Trying to fill tlb for addr: ", (void*)virtaddr, endl;
 
+    W64 cr2 = cr[2];
     int mmu_index = cpu_mmu_index((CPUState*)this);
     int fault = cpu_x86_handle_mmu_fault((CPUState*)this, virtaddr, store, mmu_index, 1);
 
@@ -1337,6 +1340,7 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
 
         error_code = 0;
         exception_index = -1;
+        cr[2] = cr2;
 
         return false;
     }
@@ -1344,6 +1348,7 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
     if(logable(10))
         ptl_logfile << "Tlb fill for addr: ", (void*)virtaddr, endl, flush;
 
+    cr[2] = cr2;
     return true;
 }
 
