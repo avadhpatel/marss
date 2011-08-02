@@ -13,6 +13,7 @@
 import os
 import sys
 import re
+import operator
 
 from optparse import OptionParser,OptionGroup
 
@@ -29,6 +30,20 @@ try:
 except:
     from yaml import Loader
 
+# Some helper functions
+def is_leaf_node(node):
+    """Check if this node is leaf node or not."""
+    check = lambda x,y: (type(x[y]) != list and type(x[y]) != dict)
+
+    if type(node) == list: indexes = range(len(node))
+    elif type(node) == dict: indexes = node.keys()
+    else: return True
+
+    for idx in indexes:
+        if not check(node, idx):
+            return False
+
+    return True
 
 # Base plugin Metaclass
 class PluginBase(type):
@@ -320,6 +335,104 @@ class FlattenWriter(Writers):
         if options.flatten == True:
             for stat in stats:
                 self.flatten_dict(stat)
+
+# Histogram Writter
+class HistogramWriter(Writers):
+    """
+    Dump Histogram information of given node. A node must contain a list.
+    """
+
+    def set_options(self, parser):
+        parser.add_option("--hist", action="store_true", default="False",
+                help="Print Histogram of given node")
+
+    def get_hist_of_node(self, node, pad):
+        avg = 0.0
+        total = 0
+        maxval = 0
+        minval = 0
+        maxwidth = 0
+        maxvwidth = 0
+        weightedsum = 0
+
+        is_dict = True if type(node) == dict else False
+        if is_dict:
+            sorted_t = sorted(node.iteritems(), key=operator.itemgetter(1),
+                    reverse=True)
+            indexes = [ x for x,v in sorted_t]
+        else:
+            indexes = range(len(node))
+
+        for idx in indexes:
+            value = node[idx]
+            total += value
+            minval = min(value, minval)
+            maxval = max(value, maxval)
+            maxwidth = max(len(str(idx)), maxwidth)
+            maxvwidth = max(len(str(value)), maxvwidth)
+
+            if not is_dict:
+                weightedsum += (value * idx)
+
+        if is_dict:
+            avg = float(total)/float(len(node))
+        else:
+            avg = float(weightedsum)/float(total)
+
+
+        output =  pad + "Minimum:         %d\n" % minval
+        output += pad + "Maximum:         %d\n" % maxval
+        output += pad + "Average:         %.2f\n" % avg
+        output += pad + "Total Sum:       %d\n" % total
+        if not is_dict:
+            output += pad + "Weighted Sum:    %d\n" % weightedsum
+
+        output += "\n"
+
+        accum = 0
+
+        for idx in indexes:
+            value = node[idx]
+            accum += value
+            percent = float(value)/float(total) * 100.0;
+            cumulative_p = float(accum)/float(total) * 100.0;
+
+            n_stars = int((percent / 100.0) * 50);
+            stars = ""
+            for i in range(n_stars):
+                stars += "*"
+
+            if is_dict:
+                output += pad + "%-*s [%5.1f] [%5.1f]: %*d %s\n" % (
+                        maxwidth, idx, percent, cumulative_p, maxvwidth,
+                        value, stars)
+            else:
+                output += pad + "%-*d [%5.1f] [%5.1f]: %*d %s\n" % (
+                        maxwidth, idx, percent, cumulative_p, maxvwidth,
+                        value, stars)
+        return output
+
+    def histogram_of_node(self, node, pad):
+        for key,val in node.items():
+
+            if type(val) not in [dict, len]:
+                continue
+
+            print("%s%s {" % (pad, key))
+            pad += "  "
+
+            if is_leaf_node(val) and len(val) > 1:
+                print(self.get_hist_of_node(val, pad))
+            else:
+                self.histogram_of_node(val, pad)
+
+            print("%s}" % pad[:-2])
+
+
+    def write(self, stats, options):
+        if options.hist == True:
+            for stat in stats:
+                self.histogram_of_node(stat,"")
 
 def setup_options():
     opt = OptionParser("usage: %prog [options] args")
