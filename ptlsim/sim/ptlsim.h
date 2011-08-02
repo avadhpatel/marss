@@ -196,15 +196,12 @@ extern ofstream ptl_rip_trace;
 //
 struct PTLsimConfig {
   bool help;
-  W64 domain;
   bool run;
   bool stop;
   bool kill;
   bool flush_command_queue;
-  bool simswitch;
 
   stringbuf core_name;
-  stringbuf domain_name;
 
   // Starting Point
   W64 start_at_rip;
@@ -216,13 +213,8 @@ struct PTLsimConfig {
   W64 start_log_at_iteration;
   W64 start_log_at_rip;
   bool log_on_console;
-  bool log_ptlsim_boot;
   W64 log_buffer_size;
   W64 log_file_size;
-  stringbuf mm_logfile;
-  W64 mm_log_buffer_size;
-  bool enable_inline_mm_logging;
-  bool enable_mm_validate;
   stringbuf screenshot_file;
   bool log_user_only;
 
@@ -243,12 +235,8 @@ struct PTLsimConfig {
   bool mem_flush_event_log_every_cycle;
 
   bool verify_cache;
-  bool comparing_cache;
   bool trace_memory_updates;
   stringbuf trace_memory_updates_logfile;
-
-  // bus configration
-  bool atomic_bus_enabled;
 
   // Statistics Database
   stringbuf stats_filename;
@@ -258,8 +246,6 @@ struct PTLsimConfig {
   stringbuf time_stats_logfile;
   W64 time_stats_period;
 
-  // prefetcher
-  bool wait_all_finished;
   // memory model:
   bool use_memory_model;
 
@@ -282,15 +268,6 @@ struct PTLsimConfig {
 
   // Core features
   W64 core_freq_hz;
-  W64 timer_interrupt_freq_hz;
-  bool pseudo_real_time_clock;
-  bool realtime;
-  bool mask_interrupts;
-  W64 console_mfn;
-  stringbuf perfctr_name;
-  bool force_native;
-  bool kill_after_finish;
-  bool exit_after_finish;
 
   // Out of order core features
   bool perfect_cache;
@@ -298,7 +275,6 @@ struct PTLsimConfig {
   // Other info
   stringbuf dumpcode_filename;
   bool dump_at_end;
-  bool overshoot_and_dump;
   stringbuf bbcache_dump_filename;
 
   // Machine configurations
@@ -308,7 +284,6 @@ struct PTLsimConfig {
   /// for memory hierarchy implementaion
   ///
   //  bool memory_log;
-  stringbuf cache_config_type;
 
   bool checker_enabled;
   W64 checker_start_rip;

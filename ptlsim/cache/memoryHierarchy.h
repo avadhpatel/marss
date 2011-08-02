@@ -258,10 +258,6 @@ namespace Memory {
 
   private:
 
-    void setup_topology();
-    void shared_L2_configuration();
-    void private_L2_configuration();
-
     // machine
     BaseMachine &machine_;
 

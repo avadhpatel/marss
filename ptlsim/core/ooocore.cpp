@@ -2080,8 +2080,7 @@ int OutOfOrderMachine::run(PTLsimConfig& config) {
     if unlikely (stopping) {
       exiting |= (stopped.integer() == bitmask(contextcount));
     }
-   if unlikely (config.wait_all_finished && !running_thread ||
-		   config.stop_at_user_insns <= total_user_insns_committed){
+   if unlikely (config.stop_at_user_insns <= total_user_insns_committed){
       ptl_logfile << "Stopping simulation loop at specified limits (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl;
       exiting = 1;
 	  stopping = 1;

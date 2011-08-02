@@ -67,8 +67,6 @@ bool BaseMachine::init(PTLsimConfig& config)
 {
     int context_idx = 0;
 
-    config.cache_config_type = "auto";
-
     // At the end create a memory hierarchy
     memoryHierarchyPtr = new MemoryHierarchy(*this);
 
@@ -160,8 +158,7 @@ int BaseMachine::run(PTLsimConfig& config)
         sim_cycle++;
         iterations++;
 
-        if unlikely (config.wait_all_finished ||
-                config.stop_at_user_insns <= total_user_insns_committed){
+        if unlikely (config.stop_at_user_insns <= total_user_insns_committed){
             ptl_logfile << "Stopping simulation loop at specified limits (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl;
             exiting = 1;
             break;

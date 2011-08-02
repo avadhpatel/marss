@@ -27,6 +27,13 @@
 #include <ptl-qemu.h>
 
 #include <test.h>
+/*
+ * DEPRECATED CONFIG OPTIONS:
+ perfect_cache
+ verify_cache (this one implements 'data' in caches, it might be helpful to find bugs)
+ trace_memory_updates
+ trace_memory_updates_logfile
+ */
 
 #ifndef CONFIG_ONLY
 //
@@ -80,27 +87,21 @@ static void setup_sim_stats();
 
 void PTLsimConfig::reset() {
   help=0;
-  domain = (W64)(-1);
   run = 0;
   stop = 0;
   kill = 0;
   flush_command_queue = 0;
-  simswitch = 0;
 
   quiet = 0;
-  core_name = "base";
+  core_name = "base"; /* core_name no longer user setable, the machine builder
+                         will handle setting this */
   log_filename = "ptlsim.log";
   loglevel = 0;
   start_log_at_iteration = 0;
   start_log_at_rip = INVALIDRIP;
   log_on_console = 0;
-  log_ptlsim_boot = 0;
   log_buffer_size = 524288;
   log_file_size = 1<<26;
-  mm_logfile.reset();
-  mm_log_buffer_size = 16384;
-  enable_inline_mm_logging = 0;
-  enable_mm_validate = 0;
   screenshot_file = "";
   log_user_only = 0;
 
@@ -109,7 +110,6 @@ void PTLsimConfig::reset() {
   flush_event_log_every_cycle = 0;
   log_backwards_from_trigger_rip = INVALIDRIP;
   dump_state_now = 0;
-  abort_at_end = 0;
   log_trigger_virt_addr_start = 0;
   log_trigger_virt_addr_end = 0;
 
@@ -117,9 +117,7 @@ void PTLsimConfig::reset() {
   mem_event_log_ring_buffer_size = 262144;
   mem_flush_event_log_every_cycle = 0;
 
-  atomic_bus_enabled = 0;
   verify_cache = 0;
-  comparing_cache = 0;
   trace_memory_updates = 0;
   trace_memory_updates_logfile = "ptlsim.mem.log";
   stats_filename.reset();
@@ -131,8 +129,6 @@ void PTLsimConfig::reset() {
 
   start_at_rip = INVALIDRIP;
 
-  //prefetcher
-  wait_all_finished = 0;
   // memory model
   use_memory_model = 0;
   kill_after_run = 0;
@@ -151,21 +147,11 @@ void PTLsimConfig::reset() {
 
   core_freq_hz = 0;
   // default timer frequency is 100 hz in time-xen.c:
-  timer_interrupt_freq_hz = 100;
-  pseudo_real_time_clock = 0;
-  realtime = 0;
-  mask_interrupts = 0;
-  console_mfn = 0;
-  perfctr_name.reset();
-  force_native = 0;
-  kill_after_finish = 0;
-  exit_after_finish = 0;
 
   perfect_cache = 0;
 
   dumpcode_filename = "test.dat";
   dump_at_end = 0;
-  overshoot_and_dump = 0;
   bbcache_dump_filename.reset();
 
   machine_config = "";
@@ -173,8 +159,6 @@ void PTLsimConfig::reset() {
   ///
   /// memory hierarchy implementation
   ///
-
-  cache_config_type = "private_L2";
 
   checker_enabled = 0;
   checker_start_rip = INVALIDRIP;
@@ -198,18 +182,12 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   // Full system only
   section("PTLmon Control");
   add(help,                       "help",               "Print this message");
-  add(domain,                       "domain",               "Domain to access");
 
   section("Action (specify only one)");
   add(run,                          "run",                  "Run under simulation");
   add(stop,                         "stop",                 "Stop current simulation run and wait for command");
   add(kill,                         "kill",                 "Kill PTLsim inside domain (and ptlmon), then shutdown domain");
   add(flush_command_queue,          "flush",                "Flush all queued commands, stop the current simulation run and wait");
-  add(simswitch,                    "switch",               "Switch back to PTLsim while in native mode");
-
-  section("Simulation Control");
-
-  add(core_name,                    "core",                 "Run using specified core (-core <corename>)");
 
   section("General Logging Control");
   add(quiet,                        "quiet",                "Do not print PTLsim system information banner");
@@ -218,15 +196,9 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(start_log_at_iteration,       "startlog",             "Start logging after iteration <startlog>");
   add(start_log_at_rip,             "startlogrip",          "Start logging after first translation of basic block starting at rip");
   add(log_on_console,               "consolelog",           "Replicate log file messages to console");
-  add(log_ptlsim_boot,              "bootlog",              "Log PTLsim early boot and injection process (for debugging)");
   add(log_buffer_size,              "logbufsize",           "Size of PTLsim ptl_logfile buffer (not related to -ringbuf)");
   add(log_file_size,                "logfilesize",           "Size of PTLsim ptl_logfile");
   add(dump_state_now,               "dump-state-now",       "Dump the event log ring buffer and internal state of the active core");
-  add(abort_at_end,                 "abort-at-end",         "Abort current simulation after next command (don't wait for next x86 boundary)");
-  add(mm_logfile,                   "mm-ptl_logfile",           "Log PTLsim memory manager requests (alloc, free) to this file (use with ptlmmlog)");
-  add(mm_log_buffer_size,           "mm-logbuf-size",       "Size of PTLsim memory manager log buffer (in events, not bytes)");
-  add(enable_inline_mm_logging,     "mm-log-inline",        "Print every memory manager request in the main log file");
-  add(enable_mm_validate,           "mm-validate",          "Validate every memory manager request against internal structures (slow)");
   add(screenshot_file,              "screenshot",           "Takes screenshot of VM window at the end of simulation");
   add(log_user_only,                "log-user-only",        "Only log the user mode activities");
 
@@ -264,15 +236,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
 
   section("Timers and Interrupts");
   add(core_freq_hz,                 "corefreq",             "Core clock frequency in Hz (default uses host system frequency)");
-  add(timer_interrupt_freq_hz,      "timerfreq",            "Timer interrupt frequency in Hz");
-  add(pseudo_real_time_clock,       "pseudo-rtc",           "Real time clock always starts at time saved in checkpoint");
-  add(realtime,                     "realtime",             "Operate in real time: no time dilation (not accurate for I/O intensive workloads!)");
-  add(mask_interrupts,              "maskints",             "Mask all interrupts (required for guaranteed deterministic behavior)");
-  add(console_mfn,                  "console-mfn",          "Track the specified Xen console MFN");
-  add(perfctr_name,                 "perfctr",              "Performance counter generic name for hardware profiling during native mode");
-  add(force_native,                 "force-native",         "Force native mode: ignore attempts to switch to simulation");
-  add(kill_after_finish,            "kill-after-finish",     "kill both simulator and domainU after finish simulation");
-  add(exit_after_finish,            "exit-after-finish",     "exit simulator keep domainU after finish simulation");
 
   section("Validation");
   add(checker_enabled, 		"enable-checker", 		"Enable emulation based checker");
@@ -284,13 +247,9 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   section("Miscellaneous");
   add(dumpcode_filename,            "dumpcode",             "Save page of user code at final rip to file <dumpcode>");
   add(dump_at_end,                  "dump-at-end",          "Set breakpoint and dump core before first instruction executed on return to native mode");
-  add(overshoot_and_dump,           "overshoot-and-dump",   "Set breakpoint and dump core after first instruction executed on return to native mode");
   add(bbcache_dump_filename,        "bbdump",               "Basic block cache dump filename");
-  // for prefetcher
- add(wait_all_finished,             "wait-all-finished",              "wait all threads reach total number of insn before exit");
 
  add(verify_cache,               "verify-cache",                   "run simulation with storing actual data in cache");
- add(comparing_cache,               "comparing-cache",                   "run simulation with storing actual data in cache");
  add(trace_memory_updates,               "trace-memory-updates",                   "log memory updates");
  add(trace_memory_updates_logfile,        "trace-memory-updates-ptl_logfile",                   "ptl_logfile for memory updates");
 
@@ -299,10 +258,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
  add(mem_event_log_ring_buffer_size,   "mem-ringbuf-size",         "Core event log ring buffer size: only save last <ringbuf> entries");
  add(mem_flush_event_log_every_cycle,  "mem-flush-events",         "Flush event log ring buffer to ptl_logfile after every cycle");
 
- section("bus configuration");
-  add(atomic_bus_enabled,               "atomic_bus",               "Using single atomic bus instead of split bus");
-
-  section("core configuration");
+  section("Core Configuration");
   stringbuf* m_names = new stringbuf();
   *m_names << "Available Machine: ";
   MachineBuilder::get_all_machine_names(*m_names);
@@ -314,7 +270,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
 
   section("Memory Hierarchy Configuration");
   //  add(memory_log,               "memory-log",               "log memory debugging info");
-  add(cache_config_type,               "cache-config-type",               "possible config are shared_L2, private_L2");
 
   // MongoDB
   section("bus configuration");
