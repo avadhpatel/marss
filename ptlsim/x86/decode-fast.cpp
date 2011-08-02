@@ -146,7 +146,7 @@ bool TraceDecoder::decode_fast() {
 
   case 0x1b6 ... 0x1b7: {
     // zero extensions: movzx rd,byte / movzx rd,word
-    int bytemode = (op == 0x1b6) ? b_mode : v_mode;
+    int bytemode = (op == 0x1b6) ? b_mode : w_mode;
     DECODE(gform, rd, v_mode);
     DECODE(eform, ra, bytemode);
     EndOfDecode();
@@ -159,12 +159,18 @@ bool TraceDecoder::decode_fast() {
   case 0x63:
   case 0x1be ... 0x1bf: {
     // sign extensions: movsx movsxd
-    int bytemode = (op == 0x1be) ? b_mode : v_mode;
+    int bytemode, rasizeshift;
+    switch(op) {
+        case 0x1be: bytemode = b_mode; rasizeshift = 0; break;
+        case 0x1bf: bytemode = w_mode; rasizeshift = 1; break;
+        case 0x63:  bytemode = d_mode; rasizeshift = 2; break;
+        default:    assert(0);
+    }
+
     DECODE(gform, rd, v_mode);
     DECODE(eform, ra, bytemode);
     EndOfDecode();
 
-    int rasizeshift = (op == 0x63) ? 2 : (op == 0x1be) ? 0 : (op == 0x1bf) ? 1 : 3;
     signext_reg_or_mem(rd, ra, rasizeshift);
     break;
   }
