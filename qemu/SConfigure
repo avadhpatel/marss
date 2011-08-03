@@ -200,7 +200,6 @@ custom_tests['CheckInotify'] = CheckInotify
 def CheckUtimensat(context):
     src = """
     #define _ATFILE_SOURCE
-    #define _GNU_SOURCE
     #include <stddef.h>
     #include <fcntl.h>
 
@@ -341,6 +340,89 @@ def CheckKVM(context):
     return res
 custom_tests['CheckKVM'] = CheckKVM
 
+def CheckSyncFileRange(context):
+    src = """
+    #include <fcntl.h>
+
+    int main(void)
+    {
+        sync_file_range(0, 0, 0, 0);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckSyncFileRange'] = CheckSyncFileRange
+
+def CheckFiemap(context):
+    src = """
+    #include <sys/ioctl.h>
+    #include <linux/fs.h>
+    #include <linux/fiemap.h>
+
+    int main(void)
+    {
+        ioctl(0, FS_IOC_FIEMAP, 0);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckFiemap'] = CheckFiemap
+
+def CheckInotify1(context):
+    src = """
+    #include <sys/inotify.h>
+
+    int
+    main(void)
+    {
+        /* try to start inotify */
+        return inotify_init1(0);
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckInotify1'] = CheckInotify1
+
+def CheckSignalfd(context):
+    src = """
+    #define _GNU_SOURCE
+    #include <unistd.h>
+    #include <sys/syscall.h>
+    #include <signal.h>
+    int main(void) { return syscall(SYS_signalfd, -1, NULL, _NSIG / 8); }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckSignalfd'] = CheckSignalfd
+
+def CheckMadvise(context):
+    src = """
+    #include <sys/types.h>
+    #include <sys/mman.h>
+    #include <stddef.h>
+    int main(void) { return madvise(NULL, 0, MADV_DONTNEED); }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckMadvise'] = CheckMadvise
+
+def CheckPosixMadvise(context):
+    src = """
+    #include <sys/mman.h>
+    #include <stddef.h>
+    int main(void) { return posix_madvise(NULL, 0, POSIX_MADV_DONTNEED); }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckPosixMadvise'] = CheckPosixMadvise
 
 # Start testing
 conf = Configure(env, custom_tests = custom_tests)
@@ -742,6 +824,25 @@ if conf.CheckKVM():
 else:
     env['kvm'] = False
 
+# Sync File Range
+env['sync_file_range'] = True if conf.CheckSyncFileRange() else False
+# if conf.CheckSyncFileRange():
+    # env['sync_file_range'] = True
+# else:
+    # env['sync_file_range'] = False
+
+env['fiemap'] = True if conf.CheckFiemap() else False
+
+env['inotify1'] = True if conf.CheckInotify1() else False
+
+env['attr'] = True if conf.CheckLibWithHeader('attr', 'attr/xattr.h', 'c') \
+        else False
+
+env['signalfd'] = True if conf.CheckSignalfd() else False
+
+env['madvise'] = True if conf.CheckMadvise() else False
+env['posix_madvise'] = True if conf.CheckPosixMadvise() else False
+
 # zero malloc
 env['zero_malloc'] = True
 
@@ -777,7 +878,7 @@ config_mak.write("CONFIG_QEMU_SHAREDIR=\"%s\"\n" % env['bios_dir'])
 
 config_mak.write("ARCH=%s\n" % env['cpu'])
 if env['strip_opt'] == True:
-    config_mak.write("STRIP_OPT=-s\n")
+    config_mak.write("STRIP=strip\n")
 
 if bigendian == True:
     config_mak.write("HOST_WORDS_BIGENDIAN=y\n")
@@ -790,7 +891,9 @@ write_config_y_list = ['linux', 'profiler', 'slirp', 'vde', 'mixemu',
         'vnc_tls', 'vnc_sasl', 'fnmatch', 'uuid', 'sdl', 'curses', 'atfile',
         'utimensat', 'pipe2', 'accept4', 'splice', 'eventfd', 'fallocate',
         'dup3', 'inotify', 'curl', 'brlapi', 'bluez', 'xen', 'iothread',
-        'linux_aio', 'iovec', 'preadv', 'fdt', 'fdatasync', 'zero_malloc']
+        'linux_aio', 'iovec', 'preadv', 'fdt', 'fdatasync', 'zero_malloc',
+        'sync_file_range', 'fiemap', 'inotify1', 'attr', 'signalfd',
+        'madvise', 'posix_madvise']
 for conf_opt in write_config_y_list:
     if env[conf_opt] == True:
         config_mak.write("CONFIG_%s=y\n" % conf_opt.upper())
@@ -821,7 +924,7 @@ for card in audio_card_list.split():
 
 config_mak.write("CONFIG_AUDIO_DRIVERS=%s\n" % env['audio_drv'])
 for drv in env['audio_drv'].split():
-    config_mak.write("CONFIG_%s=y\n" % drv)
+    config_mak.write("CONFIG_%s=y\n" % drv.upper())
     env[drv] = True
 
 qemu_version = open("%s/VERSION" % (env['source_path']), 'r').readline()

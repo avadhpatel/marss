@@ -35,9 +35,10 @@ else:
 
 google_perftools = ARGUMENTS.get('gperf', None)
 if google_perftools != None:
-    env.Append(LIBS = 'tcmalloc_minimal')
+    env.Append(LIBS = 'tcmalloc')
     env.Append(LIBPATH = google_perftools)
-    env.Append(LINKFLAGS = '-Wl,-L%s' % google_perftools)
+    env.Append(LINKFLAGS = '-Wl,-rpath')
+    env.Append(LINKFLAGS = '-Wl,%s' % google_perftools)
 
 
 error_str = "failure"
