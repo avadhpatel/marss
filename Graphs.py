@@ -46,7 +46,7 @@ class CompositeGraph:
 	""" A composite graph is made up of one or more SingleGraphs and is the 
 		object that lays out all of the SingleGraphs and saves them to a file
 	"""
-	def __init__(self, w=8.5, h=11, title=None, output_mode="png", num_cols=2):
+	def __init__(self, w=8.5, h=11, title=None, output_mode="png", num_cols=2, num_boxes=-1):
 		setup_common(); 
 		if output_mode == "png":	
 			self.output_mode = "png"
@@ -60,6 +60,10 @@ class CompositeGraph:
 		self.h = h; 
 		self.fig = plt.figure(1, figsize=(w,h));
 		self.title = title;
+		if num_boxes > 0:	
+			self.num_rows = self.get_layout(num_boxes);
+		else: 
+			self.num_rows = 0;
 		self.num_cols = num_cols;
 
 	def get_layout(self, num_boxes):
@@ -71,27 +75,29 @@ class CompositeGraph:
 			num_rows+=1;
 		return num_rows
 
-	def rect_for_graph(self, idx, num_rows):
-		num_cols = self.num_cols
+	def rect_for_graph(self, idx):
 		y_margin = 0.08
 		x_margin = 0.08
-		row = idx/num_cols;
-		col = idx%num_cols;
-		h = 1.0/float(num_rows)-(1.0+1.0/float(num_rows))*y_margin
-		w = 1.0/float(num_cols)-(1.0+1.0/float(num_cols+1))*x_margin
+		row = idx/self.num_cols;
+		col = idx%self.num_cols;
+		h = 1.0/float(self.num_rows)-(1.0+1.0/float(self.num_rows))*y_margin
+		w = 1.0/float(self.num_cols)-(1.0+1.0/float(self.num_cols+1))*x_margin
 		b = (1.0 - (row+1)*(h + y_margin))
 		l = w * col + x_margin*(col+1)
 
 	#	print "Box for idx=%d [b=%f,l=%f,w=%f,h=%f]"%(idx,b,l,w,h)
 		return l,b,w,h;
+	def get_num_rows(self):
+		return self.num_rows
+	def get_num_cols(self):
+		return self.num_cols
 
 	def draw(self,graph_arr,output_filename):
 		num_boxes = len(graph_arr)
-		num_rows = self.get_layout(num_boxes);
+		self.num_rows = self.get_layout(num_boxes);
 				
 		for i,g in enumerate(graph_arr):
-#			print "boxes=%d, r=%d, c=%d, i=%d" % (num_boxes,num_rows, num_cols, i)
-			rect=self.rect_for_graph(i,num_rows) 
+			rect=self.rect_for_graph(i) 
 			ax = self.fig.add_axes(rect, title=g.title, xlabel="test", ylabel="ytest")
 			g.draw(ax,self.output_mode); 
 			
@@ -257,8 +263,20 @@ class SingleGraph:
 		self.title = title
 		self.show_legend = show_legend
 		self.legend_kwargs = legend_kwargs;
+		self.default_line_colors = ['k','r','b','g','y','m']
+
+	def colorize_default_lines(self): 
+		for i,p in enumerate(self.plots):
+			if len(p.line_params) == 0:
+				idx = i%len(self.default_line_colors)
+				line_color = self.default_line_colors[idx]
+				print "idx=%d, color=%s"%(idx, line_color)
+			#	p.set_line_style({"c":line_color})
+				p.set_line_style(['-',1.0,line_color])
 
 	def draw(self,ax,output_mode):
+
+		self.colorize_default_lines()
 		for p in self.plots:
 			p.draw(ax);
 		if self.show_legend:
@@ -282,8 +300,7 @@ class LinePlot:
 		self.y_col = y_col 
 		self.label = label
 		self.data_table = data_table; 
-		if line_params == None:
-			line_params = []; #this will be the default line style 
+		self.lineplot_kwargs = {};
 		self.set_line_style(line_params); 
 
 	def set_line_style_from_list(self, line_param_list=None):
@@ -301,6 +318,9 @@ class LinePlot:
 		return {'linestyle': params[0], 'linewidth':params[1], 'c':params[2]}
 		
 	def set_line_style(self, line_params):
+		if line_params == None:
+			line_params = []
+		self.line_params = line_params; 
 		if is_list(line_params):
 			self.lineplot_kwargs = self.set_line_style_from_list(line_params); 
 		elif is_dict(line_params): 
