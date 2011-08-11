@@ -58,13 +58,12 @@ class CompositeGraph:
 			print "WARNING: Unknown output mode '%s'; using defaults"%output_mode
 		self.w = w; 
 		self.h = h; 
-		self.fig = plt.figure(1, figsize=(w,h));
 		self.title = title;
+		self.num_cols = num_cols;
 		if num_boxes > 0:	
 			self.num_rows = self.get_layout(num_boxes);
 		else: 
 			self.num_rows = 0;
-		self.num_cols = num_cols;
 
 	def get_layout(self, num_boxes):
 		""" this returns the proper number of rows and columns in case the 
@@ -96,6 +95,7 @@ class CompositeGraph:
 		num_boxes = len(graph_arr)
 		self.num_rows = self.get_layout(num_boxes);
 				
+		self.fig = plt.figure(1, figsize=(self.w,self.h));
 		for i,g in enumerate(graph_arr):
 			rect=self.rect_for_graph(i) 
 			ax = self.fig.add_axes(rect, title=g.title, xlabel="test", ylabel="ytest")
