@@ -59,6 +59,7 @@ class CompositeGraph:
 		self.w = w; 
 		self.h = h; 
 		self.title = title;
+		self.fig = None;
 		self.num_cols = num_cols;
 		if num_boxes > 0:	
 			self.num_rows = self.get_layout(num_boxes);
@@ -73,10 +74,26 @@ class CompositeGraph:
 		if num_boxes%self.num_cols != 0 and num_boxes > self.num_cols:
 			num_rows+=1;
 		return num_rows
+	def get_height_px(self, px):
+		""" returns a percentage for a certain height in pixels -- useful to make
+				fixed-size regions in the layout which must be specified in pixels"""
+		if self.fig == None:
+			return 0.0
+		h_pixels = self.fig.get_figheight()*self.fig.get_dpi()
+		return px/h_pixels;
+
+	def get_width_px(self, px):
+		""" returns a percentage for a certain width in pixels -- useful to make
+				fixed-size regions in the layout which must be specified in pixels"""
+		if self.fig == None:
+			return 0.0
+		w_pixels = self.fig.get_figwidth()*self.fig.get_dpi()
+		return px/w_pixels;
+
 
 	def rect_for_graph(self, idx):
-		y_margin = 0.08
-		x_margin = 0.08
+		y_margin = self.get_height_px(80)
+		x_margin = self.get_width_px(100)
 		row = idx/self.num_cols;
 		col = idx%self.num_cols;
 		h = 1.0/float(self.num_rows)-(1.0+1.0/float(self.num_rows))*y_margin
