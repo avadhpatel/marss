@@ -119,7 +119,7 @@ class CompositeGraph:
 			g.draw(ax,self.output_mode); 
 			
 		if self.title != None:
-			self.fig.suptitle(self.title, fontsize=12, fontweight='bold', x=0.515)
+			self.fig.suptitle(self.title, fontsize=12, fontweight='bold', x=0.515, y=1.0-self.get_height_px(20))
 
 		if self.output_mode == "png":
 			plt.savefig(output_filename);#,bbox_inches='tight'); 
