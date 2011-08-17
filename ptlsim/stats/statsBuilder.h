@@ -230,7 +230,7 @@ class Statable {
  */
 class StatsBuilder {
     private:
-        static StatsBuilder _builder;
+        static StatsBuilder *_builder;
         Statable *rootNode;
         W64 stat_offset;
 
@@ -253,7 +253,9 @@ class StatsBuilder {
          */
         static StatsBuilder& get()
         {
-            return _builder;
+            if (!_builder)
+                _builder = new StatsBuilder();
+            return *_builder;
         }
 
         /**

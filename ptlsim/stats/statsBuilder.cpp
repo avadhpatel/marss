@@ -27,10 +27,10 @@ Statable::Statable(const char *name, bool is_root)
     dump_disabled = false;
     periodic_enabled = false;
 
-    StatsBuilder &builder = StatsBuilder::get();
-
-    if(!is_root)
+    if(!is_root) {
+        StatsBuilder &builder = StatsBuilder::get();
         builder.add_to_root(this);
+    }
 }
 
 Statable::Statable(stringbuf &str, bool is_root)
@@ -265,7 +265,7 @@ stringbuf *Statable::get_full_stat_string()
     }
 }
 
-StatsBuilder StatsBuilder::_builder;
+StatsBuilder *StatsBuilder::_builder = NULL;
 
 Stats* StatsBuilder::get_new_stats()
 {
