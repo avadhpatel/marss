@@ -81,8 +81,6 @@ namespace ATOM_CORE_MODEL {
 
     const W8 COMMIT_BUF_SIZE = ATOM_COMMIT_BUF_SIZE;
 
-    const W8 THREAD_PAUSE_CYCLES = 20;
-
     enum {
         FU_ALU0     = (1 << 0),
         FU_ALU1     = (1 << 1),

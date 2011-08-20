@@ -1402,8 +1402,6 @@ namespace OutOfOrderModel {
     // Size of unaligned predictor Bloom filter
     static const int UNALIGNED_PREDICTOR_SIZE = 4096;
 
-    static const int THREAD_PAUSE_CYCLES = 100000;
-
     struct ThreadContext {
         OutOfOrderCore& core;
         OutOfOrderCore& getcore() const { return core; }

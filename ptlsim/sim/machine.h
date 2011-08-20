@@ -4,6 +4,7 @@
 
 #include <ptlsim.h>
 
+#define THREAD_PAUSE_CYCLES 10000
 
 namespace Core {
     struct BaseCore;
