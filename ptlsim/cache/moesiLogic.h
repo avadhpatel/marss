@@ -24,53 +24,61 @@
  *
  */
 
-#ifndef MESI_COHERENCE_LOGIC_H
-#define MESI_COHERENCE_LOGIC_H
+#ifndef MOESI_COHERENCE_LOGIC_H
+#define MOESI_COHERENCE_LOGIC_H
 
 #include <coherenceLogic.h>
 
-#define UPDATE_MESI_TRANS_STATS(old_state, new_state, mode) \
+#define UPDATE_MOESI_TRANS_STATS(old_state, new_state, mode) \
     if(mode) { /* kernel mode */ \
-        state_transition(n_kernel_stats)[(old_state << 2) | new_state]++; \
+        state_transition(n_kernel_stats)[MOESITransTable[old_state][new_state]]++; \
     } else { \
-        state_transition(n_user_stats)[(old_state << 2) | new_state]++; \
+        state_transition(n_user_stats)[MOESITransTable[old_state][new_state]]++; \
     }
 
 namespace Memory {
 
 namespace CoherentCache {
 
-    enum MESICacheLineState {
-        MESI_INVALID = 0, // 0 has to be invalid as its default
-        MESI_MODIFIED,
-        MESI_EXCLUSIVE,
-        MESI_SHARED,
-        NO_MESI_STATES
+    enum MOESICacheLineState {
+        MOESI_INVALID = 0, // 0 has to be invalid as its default
+        MOESI_MODIFIED,
+        MOESI_OWNER,
+        MOESI_EXCLUSIVE,
+        MOESI_SHARED,
+        NUM_MOESI_STATES
     };
 
-    enum MESITransations {
-        II=0, IM, IE, IS,
-        MI, MM, ME, MS,
-        EI, EM, EE, ES,
-        SI, SM, SE, SS,
+    enum MOESITransations {
+        II=0, IM, IO, IE, IS,
+        MI, MM, MO, ME, MS,
+        EI, EM, EO, EE, ES,
+        SI, SM, SO, SE, SS,
+        NUM_MOESI_STATE_TRANS,
     };
 
-    static const char* MESIStateNames[NO_MESI_STATES] = {
+    static int MOESITransTable[NUM_MOESI_STATES][NUM_MOESI_STATES] = {
+        {II, IM, IO, IE, IS},
+        {MI, MM, MO, ME, MS},
+        {EI, EM, EO, EE, ES},
+        {SI, SM, SO, SE, SS},
+    };
+
+    static const char* MOESIStateNames[NUM_MOESI_STATES] = {
         "Invalid",
         "Modified",
+        "Owner",
         "Exclusive",
         "Shared",
     };
 
-    class MESILogic : public CoherenceLogic
+    class MOESILogic : public CoherenceLogic
     {
         public:
-            MESILogic(CacheController *cont, Statable *parent,
+            MOESILogic(CacheController *cont, Statable *parent,
                     MemoryHierarchy *mem_hierarchy)
-                : CoherenceLogic("mesi", cont, parent, mem_hierarchy)
-                  , miss_state("miss_state", this)
-                  , hit_state("hit_state", this)
-                  , state_transition("state_transition", this)
+                : CoherenceLogic("moesi", cont, parent, mem_hierarchy)
+                  , state_transition("state_trans", this)
             {}
 
             void handle_local_hit(CacheQueueEntry *queueEntry);
@@ -86,33 +94,20 @@ namespace CoherentCache {
             bool is_line_valid(CacheLine *line);
             void invalidate_line(CacheLine *line);
 
-            MESICacheLineState get_new_state(CacheQueueEntry *queueEntry, bool isShared);
+            void send_response(CacheQueueEntry *queueEntry,
+                    Interconnect *sendTo);
+            void send_to_cont(CacheQueueEntry *queueEntry,
+                    Interconnect *sendTo, Controller *dest);
+            void send_evict(CacheQueueEntry *queueEntry, W64 oldTag=-1,
+                    bool with_directory=0);
+            void send_update(CacheQueueEntry *queueEntry, W64 oldTag=-1);
 
             /* Statistics */
-
-            struct miss_state : public Statable {
-                StatArray<W64, 4> cpu;
-                miss_state(const char *name, Statable *parent)
-                    : Statable(name, parent)
-                      , cpu("cpu", this)
-                {}
-            } miss_state;
-
-            struct hit_state : public Statable{
-                StatArray<W64,4> snoop;
-                StatArray<W64,4> cpu;
-                hit_state (const char *name,Statable *parent)
-                    :Statable(name, parent)
-                     ,snoop("snoop",this, MESIStateNames)
-                     ,cpu("cpu",this, MESIStateNames)
-                { }
-            } hit_state;
-
-            StatArray<W64,16> state_transition;
+            StatArray<W64,NUM_MOESI_STATE_TRANS> state_transition;
     };
+
 };
 
 };
 
 #endif
-

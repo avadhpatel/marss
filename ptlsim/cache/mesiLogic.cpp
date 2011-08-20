@@ -123,7 +123,9 @@ void MESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
 
 void MESILogic::handle_local_miss(CacheQueueEntry *queueEntry)
 {
-    return;
+    queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
+    queueEntry->sendTo = controller->get_lower_intrconn();
+    controller->wait_interconnect_cb(queueEntry);
 }
 
 void MESILogic::handle_interconn_hit(CacheQueueEntry *queueEntry)
@@ -223,7 +225,14 @@ void MESILogic::handle_interconn_hit(CacheQueueEntry *queueEntry)
 void MESILogic::handle_interconn_miss(CacheQueueEntry *queueEntry)
 {
     /* On cache miss we dont perform anything */
-    return;
+    if (queueEntry->request->get_type() != MEMORY_OP_EVICT &&
+            queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
+        queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
+        queueEntry->sendTo = controller->get_lower_intrconn();
+        controller->wait_interconnect_cb(queueEntry);
+    } else {
+        controller->clear_entry_cb(queueEntry);
+    }
 }
 
 void MESILogic::handle_cache_evict(CacheQueueEntry *queueEntry)
@@ -433,6 +442,10 @@ bool MESILogic::is_line_valid(CacheLine *line)
     return true;
 }
 
+void MESILogic::handle_response(CacheQueueEntry *entry, Message &msg)
+{
+}
+
 /* MESI Controller Builder */
 struct MESICacheControllerBuilder : public ControllerBuilder
 {
@@ -447,6 +460,19 @@ struct MESICacheControllerBuilder : public ControllerBuilder
         MESILogic *mesi = new MESILogic(cont, cont->get_stats(), &mem);
 
         cont->set_coherence_logic(mesi);
+
+        bool is_private = false;
+        if (!mem.get_machine().get_option(name, "private", is_private)) {
+            is_private = false;
+        }
+        cont->set_private(is_private);
+
+        bool is_lowest_private = false;
+        if (!mem.get_machine().get_option(name, "last_private",
+                    is_lowest_private)) {
+            is_lowest_private = false;
+        }
+        cont->set_lowest_private(is_lowest_private);
 
         return cont;
     }

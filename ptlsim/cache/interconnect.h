@@ -38,6 +38,7 @@ enum {
     INTERCONN_TYPE_LOWER,
     INTERCONN_TYPE_I,
     INTERCONN_TYPE_D,
+    INTERCONN_TYPE_DIRECTORY,
 };
 
 class Interconnect

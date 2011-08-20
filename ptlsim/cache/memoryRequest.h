@@ -40,10 +40,10 @@ enum OP_TYPE {
 	MEMORY_OP_WRITE,
 	MEMORY_OP_UPDATE,
 	MEMORY_OP_EVICT,
-	NO_MEMORY_OP
+	NUM_MEMORY_OP
 };
 
-static const char* memory_op_names[NO_MEMORY_OP] = {
+static const char* memory_op_names[NUM_MEMORY_OP] = {
 	"memory_op_read",
 	"memory_op_write",
 	"memory_op_update",

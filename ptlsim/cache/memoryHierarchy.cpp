@@ -317,7 +317,7 @@ void MemoryHierarchy::add_event(Signal *signal, int delay, void *arg)
 
 Message* MemoryHierarchy::get_message()
 {
-	return messageQueue_.alloc();
+    return messageQueue_.alloc();
 }
 
 void MemoryHierarchy::free_message(Message* msg)

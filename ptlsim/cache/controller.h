@@ -38,6 +38,8 @@ class Interconnect;
 
 struct Message : public FixStateListObject {
 	void *sender;
+    void *origin;
+    void *dest;
 	MemoryRequest *request;
 	bool hasData;
 	bool isShared;
@@ -48,8 +50,10 @@ struct Message : public FixStateListObject {
 			os << "Free Message\n";
 			return os;
 		}
-		os << "arg:[", arg, "] ";
 		os << "Message: sender[" , sender, "] ";
+        os << "origin[", origin, "] ";
+        os << "dest[", dest, "] ";
+		os << "arg:[", arg, "] ";
 		os << "request[", *request, "] ";
 		os << "isShared[", isShared, "] ";
 		os << "hasData[", hasData, "]\n";
@@ -58,9 +62,12 @@ struct Message : public FixStateListObject {
 
 	void init() {
 		sender = NULL;
+        dest = NULL;
+        origin = NULL;
 		request = NULL;
 		hasData = false;
 		arg = NULL;
+        isShared = 0;
 	}
 };
 
@@ -81,12 +88,12 @@ class Controller
 
 	public:
 		MemoryHierarchy *memoryHierarchy_;
-		W8 coreid_;
+		W8 idx;
 
 		Controller(W8 coreid, const char *name,
 				MemoryHierarchy *memoryHierarchy) :
 			memoryHierarchy_(memoryHierarchy)
-			, coreid_(coreid)
+			, idx(coreid)
 			, handle_request_("handle_request")
 			, handle_interconnect_("handle_interconnect")
 		{

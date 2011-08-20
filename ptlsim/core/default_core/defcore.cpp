@@ -855,7 +855,7 @@ bool DefaultCore::runcycle() {
                (sim_cycle - thread->last_commit_at_cycle), " cycles; the pipeline could be deadlocked", endl;
             ptl_logfile << sb, flush;
             cerr << sb, flush;
-            dump_state(ptl_logfile);
+            machine.dump_state(ptl_logfile);
             ptl_logfile.flush();
             exiting = 1;
             assert(0);

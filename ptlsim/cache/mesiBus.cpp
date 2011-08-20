@@ -344,6 +344,7 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
     message.sender = this;
     message.request = queueEntry->request;
     message.hasData = queueEntry->hasData;
+    message.origin = NULL;
 
     Controller *controller = queueEntry->controllerQueue->controller;
 
@@ -473,6 +474,7 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
     message.request = pendingEntry->request;
     message.hasData = true;
     message.isShared = pendingEntry->shared;
+    message.origin = NULL;
 
     foreach(i, controllers.count()) {
         if(pendingEntry->controllerWithData == controllers[i]->controller) {

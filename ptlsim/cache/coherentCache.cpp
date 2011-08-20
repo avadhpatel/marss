@@ -50,6 +50,8 @@ CacheController::CacheController(W8 coreid, const char *name,
     , type_(type)
     , isLowestPrivate_(false)
     , coherence_logic_(NULL)
+    , directory_(NULL)
+    , lowerCont_(NULL)
 {
     memoryHierarchy_->add_cache_mem_controller(this);
     new_stats = new MESIStats(name, &memoryHierarchy->get_machine());
@@ -173,6 +175,8 @@ bool CacheController::handle_upper_interconnect(Message &message)
     queueEntry->sender  = (Interconnect*)message.sender;
     queueEntry->isSnoop = false;
     queueEntry->m_arg   = message.arg;
+    queueEntry->source  = (Controller*)message.origin;
+    queueEntry->dest    = (Controller*)message.dest;
     queueEntry->request->incRefCounter();
 
     queueEntry->eventFlags[CACHE_ACCESS_EVENT]++;
@@ -213,6 +217,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
     if(queueEntry) queueEntry->m_arg = message.arg;
 
     bool snoop_request = true;
+    bool is_response = false;
 
     if(queueEntry != NULL && !queueEntry->isSnoop &&
             queueEntry->line != NULL &&
@@ -220,16 +225,22 @@ bool CacheController::handle_lower_interconnect(Message &message)
         if(message.hasData) {
             complete_request(message, queueEntry);
             snoop_request = false;
+        } else {
+            is_response = true;
         }
     }
 
     if(isLowestPrivate_) {
-        if(snoop_request && !message.hasData) {
+        if (is_response) {
+            coherence_logic_->handle_response(queueEntry, message);
+        } else if(snoop_request && !message.hasData) {
             CacheQueueEntry *newEntry = pendingRequests_.alloc();
             assert(newEntry);
             newEntry->request = message.request;
             newEntry->isSnoop = true;
             newEntry->sender  = (Interconnect*)message.sender;
+            newEntry->source  = (Controller*)message.origin;
+            newEntry->dest    = (Controller*)message.dest;
             newEntry->request->incRefCounter();
 
             newEntry->eventFlags[CACHE_ACCESS_EVENT]++;
@@ -247,6 +258,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
 
                 evictEntry->request = message.request;
                 evictEntry->request->incRefCounter();
+                evictEntry->isSnoop = true;
                 evictEntry->eventFlags[CACHE_ACCESS_EVENT]++;
                 memoryHierarchy_->add_event(&cacheAccess_, 1,
                         evictEntry);
@@ -256,16 +268,6 @@ bool CacheController::handle_lower_interconnect(Message &message)
     }
     return true;
 
-}
-
-void CacheController::handle_snoop_hit(CacheQueueEntry *queueEntry)
-{
-    coherence_logic_->handle_interconn_hit(queueEntry);
-}
-
-void CacheController::handle_local_hit(CacheQueueEntry *queueEntry)
-{
-    coherence_logic_->handle_local_hit(queueEntry);
 }
 
 bool CacheController::is_line_valid(CacheLine *line)
@@ -297,6 +299,7 @@ void CacheController::send_message(CacheQueueEntry *queueEntry,
     evictEntry->request = request;
     evictEntry->sender  = NULL;
     evictEntry->sendTo  = interconn;
+    evictEntry->dest    = queueEntry->dest;
     evictEntry->request->incRefCounter();
 
     //memdebug("Created Evict message: ", *evictEntry, endl);
@@ -329,39 +332,8 @@ void CacheController::send_update_to_upper(CacheQueueEntry *entry, W64 tag)
 
 void CacheController::send_update_to_lower(CacheQueueEntry *entry, W64 tag)
 {
+    entry->dest = lowerCont_;
     send_message(entry, lowerInterconnect_, MEMORY_OP_UPDATE, tag);
-}
-
-void CacheController::send_update_message(CacheQueueEntry *queueEntry,
-        W64 tag)
-{
-    MemoryRequest *request = memoryHierarchy_->get_free_request();
-    assert(request);
-
-    if(tag == InvalidTag<W64>::INVALID || tag == -1)
-        tag = queueEntry->request->get_physical_address();
-
-    request->init(queueEntry->request);
-    request->set_physical_address(tag);
-    request->set_op_type(MEMORY_OP_UPDATE);
-
-    CacheQueueEntry *newEntry = pendingRequests_.alloc();
-    assert(newEntry);
-
-    /* set full flag if buffer is full */
-    if(pendingRequests_.isFull()) {
-        memoryHierarchy_->set_controller_full(this, true);
-    }
-
-    newEntry->request = request;
-    newEntry->request->incRefCounter();
-    newEntry->sender = NULL;
-    newEntry->sendTo = lowerInterconnect_;
-    ADD_HISTORY_ADD(newEntry->request);
-
-    newEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
-    memoryHierarchy_->add_event(&waitInterconnect_,
-            0, (void*)newEntry);
 }
 
 void CacheController::handle_cache_insert(CacheQueueEntry *queueEntry,
@@ -393,6 +365,8 @@ void CacheController::complete_request(Message &message,
     /* send back the response */
     queueEntry->sendTo = queueEntry->sender;
     memoryHierarchy_->add_event(&waitInterconnect_, 1, queueEntry);
+
+    memdebug("Cache Request completed: " << *queueEntry << endl);
 }
 
 bool CacheController::handle_interconnect_cb(void *arg)
@@ -466,9 +440,42 @@ void CacheController::register_interconnect(Interconnect *interconnect,
             break;
         case INTERCONN_TYPE_LOWER:
             lowerInterconnect_ = interconnect;
+            get_directory(interconnect);
             break;
         default:
             assert(0);
+    }
+}
+
+void CacheController::get_directory(Interconnect *interconn)
+{
+    BaseMachine &machine = memoryHierarchy_->get_machine();
+    foreach (i, machine.connections.count()) {
+        ConnectionDef *conn_def = machine.connections[i];
+
+        if (strcmp(conn_def->name.buf, interconn->get_name()) == 0) {
+            foreach (j, conn_def->connections.count()) {
+                SingleConnection *sg = conn_def->connections[j];
+                Controller **cont = NULL;
+
+                switch (sg->type) {
+                    case INTERCONN_TYPE_DIRECTORY:
+                        cont = machine.controller_hash.get(
+                                sg->controller);
+                        assert(cont);
+                        directory_ = *cont;
+                        break;
+                    case INTERCONN_TYPE_UPPER:
+                        cont = machine.controller_hash.get(
+                                sg->controller);
+                        assert(cont);
+                        lowerCont_ = *cont;
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
     }
 }
 
@@ -498,10 +505,10 @@ bool CacheController::cache_hit_cb(void *arg)
     bool kernel_req = queueEntry->request->is_kernel();
 
     if(queueEntry->isSnoop) {
-        handle_snoop_hit(queueEntry);
+        coherence_logic_->handle_interconn_hit(queueEntry);
         STAT_UPDATE(snooprequest.hit++, kernel_req);
     } else {
-        handle_local_hit(queueEntry);
+        coherence_logic_->handle_local_hit(queueEntry);
         OP_TYPE type = queueEntry->request->get_type();
         if(type == MEMORY_OP_READ) {
             STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, kernel_req);
@@ -525,12 +532,15 @@ bool CacheController::cache_miss_cb(void *arg)
 
     queueEntry->eventFlags[CACHE_MISS_EVENT]--;
 
-    if(queueEntry->request->get_type() == MEMORY_OP_EVICT) {
+    if(queueEntry->request->get_type() == MEMORY_OP_EVICT &&
+            !is_lowest_private()) {
         if(queueEntry->line)
             coherence_logic_->invalidate_line(queueEntry->line);
         clear_entry_cb(queueEntry);
         return true;
     }
+
+    memdebug("Cache Miss: " << *queueEntry << endl);
 
     if(queueEntry->isSnoop) {
         /*
@@ -542,18 +552,18 @@ bool CacheController::cache_miss_cb(void *arg)
         queueEntry->isShared     = false;
         queueEntry->responseData = false;
         STAT_UPDATE(snooprequest.miss++, queueEntry->request->is_kernel());
+        coherence_logic_->handle_interconn_miss(queueEntry);
     } else {
         if(queueEntry->line == NULL) {
             W64 oldTag = InvalidTag<W64>::INVALID;
             CacheLine *line = cacheLines_->insert(queueEntry->request,
                     oldTag);
             queueEntry->line = line;
-            if(oldTag != InvalidTag<W64>::INVALID || oldTag != -1) {
-                handle_cache_insert(queueEntry, oldTag);
-            }
+            handle_cache_insert(queueEntry, oldTag);
             queueEntry->line->init(cacheLines_->tagOf(queueEntry->
                         request->get_physical_address()));
         }
+
         OP_TYPE type = queueEntry->request->get_type();
         bool kernel_req = queueEntry->request->is_kernel();
         if(type == MEMORY_OP_READ) {
@@ -563,13 +573,9 @@ bool CacheController::cache_miss_cb(void *arg)
             N_STAT_UPDATE(new_stats->cpurequest.count.miss.write, ++, kernel_req);
             STAT_UPDATE(cpurequest.count.miss.write++, kernel_req);
         }
-    }
 
-    bool kernel_req = queueEntry->request->is_kernel();
-    queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
-    queueEntry->sendTo = lowerInterconnect_;
-    memoryHierarchy_->add_event(&waitInterconnect_, 0,
-            (void*)queueEntry);
+        coherence_logic_->handle_local_miss(queueEntry);
+    }
 
     return true;
 }
@@ -693,6 +699,7 @@ bool CacheController::wait_interconnect_cb(void *arg)
     message.sender   = this;
     message.request  = queueEntry->request;
     message.arg      = &(queueEntry->line->state);
+    message.dest     = queueEntry->dest;
     bool success     = false;
 
     if(queueEntry->sendTo == upperInterconnect_ ||
@@ -828,3 +835,10 @@ void CacheController::annul_request(MemoryRequest *request)
     }
 }
 
+CacheQueueEntry* CacheController::get_new_queue_entry()
+{
+    CacheQueueEntry *queueEntry = pendingRequests_.alloc();
+    assert(queueEntry);
+
+    return queueEntry;
+}

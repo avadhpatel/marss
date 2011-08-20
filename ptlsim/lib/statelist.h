@@ -175,6 +175,10 @@ struct FixStateList
 		return usedList_.count;
 	}
 
+    int remaining() const {
+        return freeList_.count;
+    }
+
 	int size() const {
 		return size_;
 	}

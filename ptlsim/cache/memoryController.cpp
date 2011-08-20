@@ -158,6 +158,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 	}
 
 	queueEntry->request = message->request;
+	queueEntry->source = (Controller*)message->origin;
 
 	queueEntry->request->incRefCounter();
 	ADD_HISTORY_ADD(queueEntry->request);
@@ -170,7 +171,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 	if(banksUsed_[bank_no] == 0) {
 		banksUsed_[bank_no] = 1;
 		queueEntry->inUse = true;
-		memoryHierarchy_->add_event(&accessCompleted_, MEM_LATENCY,
+		memoryHierarchy_->add_event(&accessCompleted_, latency_,
 				queueEntry);
 	}
 
@@ -228,7 +229,7 @@ bool MemoryController::access_completed_cb(void *arg)
         if(bank_no == bank_no_2 && entry->inUse == false) {
             entry->inUse = true;
             memoryHierarchy_->add_event(&accessCompleted_,
-                    MEM_LATENCY, entry);
+                    latency_, entry);
             banksUsed_[bank_no] = 1;
             break;
         }
@@ -267,6 +268,7 @@ bool MemoryController::wait_interconnect_cb(void *arg)
 	/* First send response of the current request */
 	Message& message = *memoryHierarchy_->get_message();
 	message.sender = this;
+	message.dest = queueEntry->source;
 	message.request = queueEntry->request;
 	message.hasData = true;
 

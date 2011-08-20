@@ -424,6 +424,10 @@ struct FullyAssociativeTags {
       tags[way] = target;
     }
     use(way);
+    if (evictmap.allset()) {
+        evictmap = 0;
+        use(way);
+    }
     return way;
   }
 

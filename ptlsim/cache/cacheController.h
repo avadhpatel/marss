@@ -74,9 +74,11 @@ struct CacheQueueEntry : public FixStateListObject
 
 		bitvec<CACHE_NO_EVENTS> eventFlags;
 
-		Interconnect *sender;
-		Interconnect *sendTo;
+		Interconnect  *sender;
+		Interconnect  *sendTo;
 		MemoryRequest *request;
+		Controller    *source;
+		Controller    *dest;
 		bool annuled;
 		bool prefetch;
 		bool prefetchCompleted;
@@ -85,6 +87,8 @@ struct CacheQueueEntry : public FixStateListObject
 			request = NULL;
 			sender = NULL;
 			sendTo = NULL;
+			source = NULL;
+			dest = NULL;
 			depends = -1;
             dependsAddr = -1;
 			eventFlags.reset();

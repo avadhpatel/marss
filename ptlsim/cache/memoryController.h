@@ -38,6 +38,7 @@ namespace Memory {
 struct MemoryQueueEntry : public FixStateListObject
 {
 	MemoryRequest *request;
+	Controller *source;
 	int depends;
 	bool annuled;
 	bool inUse;
@@ -52,6 +53,8 @@ struct MemoryQueueEntry : public FixStateListObject
 	ostream& print(ostream &os) const {
 		if(request)
 			os << "Request{", *request, "} ";
+        if (source)
+            os << "source[", source->get_name(), "] ";
 		os << "depends[", depends, "] ";
 		os << "annuled[", annuled, "] ";
 		os << "inUse[", inUse, "] ";

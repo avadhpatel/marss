@@ -196,6 +196,8 @@ bool CacheController::handle_interconnect_cb(void *arg)
 
 		queueEntry->request = msg->request;
 		queueEntry->sender = sender;
+		queueEntry->source = (Controller*)msg->origin;
+		queueEntry->dest = (Controller*)msg->dest;
 		queueEntry->request->incRefCounter();
 		ADD_HISTORY_ADD(queueEntry->request);
 
@@ -306,6 +308,8 @@ bool CacheController::handle_interconnect_cb(void *arg)
 
 					newEntry->request = msg->request;
 					newEntry->sender = sender;
+					newEntry->source = (Controller*)msg->origin;
+					newEntry->dest = (Controller*)msg->dest;
 					newEntry->request->incRefCounter();
 					ADD_HISTORY_ADD(newEntry->request);
 
@@ -669,6 +673,7 @@ bool CacheController::wait_interconnect_cb(void *arg)
          * previous request, so mark 'hasData' to true in message
          */
 		message.hasData = true;
+		message.dest = queueEntry->source;
 		memdebug("Sending message: ", message, endl);
 		success = queueEntry->sendTo->get_controller_request_signal()->
 			emit(&message);
@@ -687,6 +692,8 @@ bool CacheController::wait_interconnect_cb(void *arg)
 	} else {
 		if(queueEntry->request->get_type() == MEMORY_OP_UPDATE)
 			message.hasData = true;
+
+		message.dest = queueEntry->dest;
 
 		success = lowerInterconnect_->
 			get_controller_request_signal()->emit(&message);

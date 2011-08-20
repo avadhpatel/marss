@@ -64,6 +64,8 @@ namespace Memory {
                         Message &message)                                  = 0;
                 virtual bool is_line_valid(CacheLine *line)                = 0;
                 virtual void invalidate_line(CacheLine *line)              = 0;
+                virtual void handle_response(CacheQueueEntry *entry,
+                        Message &message) = 0;
 
                 CacheController* controller;
                 MemoryHierarchy* memoryHierarchy;
