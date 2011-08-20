@@ -224,10 +224,15 @@ bool CacheController::handle_lower_interconnect(Message &message)
             queueEntry->request == message.request) {
         if(message.hasData) {
             complete_request(message, queueEntry);
-            snoop_request = false;
+            return true;
         } else {
             is_response = true;
         }
+    }
+
+    /* Check if we have any free entry pending or not */
+    if (is_full(true)) {
+        return false;
     }
 
     if(isLowestPrivate_) {
@@ -376,20 +381,10 @@ bool CacheController::handle_interconnect_cb(void *arg)
 
     memdebug("Message received is: ", *msg);
 
-    /*
-     * if pendingRequests_ queue is full then simply
-     * return false to indicate that this controller
-     * can't accept new request at now
-     */
-    if(is_full(true)) {
-        memdebug(get_name(), "Controller queue is full\n");
-        return false;
-    }
-
     if(sender == upperInterconnect_ || sender == upperInterconnect2_) {
-        handle_upper_interconnect(*msg);
+        return handle_upper_interconnect(*msg);
     } else {
-        handle_lower_interconnect(*msg);
+        return handle_lower_interconnect(*msg);
     }
 
     return true;
