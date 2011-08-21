@@ -786,7 +786,7 @@ void CacheController::annul_request(MemoryRequest *request)
 	CacheQueueEntry *queueEntry;
 	foreach_list_mutable(pendingRequests_.list(), queueEntry,
 			entry, nextentry) {
-		if(queueEntry->request == request) {
+		if(queueEntry->request->is_same(request)) {
             queueEntry->eventFlags.reset();
             clear_entry_cb(queueEntry);
 			queueEntry->annuled = true;

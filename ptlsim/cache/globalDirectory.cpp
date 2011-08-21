@@ -902,7 +902,7 @@ void DirectoryController::annul_request(MemoryRequest *request)
     DirContBufferEntry *entry;
     foreach_list_mutable (pendingRequests_->list(), entry,
             entry_t, nextentry_t) {
-        if (entry->request == request) {
+        if (entry->request->is_same(request)) {
             entry->annuled = true;
             ADD_HISTORY_REM(entry->request);
             entry->request->decRefCounter();

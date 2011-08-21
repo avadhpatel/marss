@@ -298,7 +298,7 @@ void MemoryController::annul_request(MemoryRequest *request)
     MemoryQueueEntry *queueEntry;
     foreach_list_mutable(pendingRequests_.list(), queueEntry,
             entry, nextentry) {
-        if(queueEntry->request == request) {
+        if(queueEntry->request->is_same(request)) {
             queueEntry->annuled = true;
             if(!queueEntry->inUse) {
                 queueEntry->request->decRefCounter();

@@ -50,7 +50,7 @@ void Switch::annul_request(MemoryRequest *request)
         foreach_list_mutable (controllers[i]->queue.list(),
                 entry, entry_t, nextentry_t) {
 
-            if (entry->request == request) {
+            if (entry->request->is_same(request)) {
                 entry->annuled = true;
                 entry->request->decRefCounter();
                 controllers[i]->queue.free(entry);

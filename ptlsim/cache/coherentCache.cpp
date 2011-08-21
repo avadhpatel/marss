@@ -160,7 +160,7 @@ bool CacheController::handle_upper_interconnect(Message &message)
             " Received message from upper interconnect\n");
 
     /* set full flag if buffer is full */
-    if(pendingRequests_.isFull()) {
+    if(is_full()) {
         memoryHierarchy_->set_controller_full(this, true);
         return false;
     }
@@ -816,7 +816,7 @@ void CacheController::annul_request(MemoryRequest *request)
     CacheQueueEntry *queueEntry;
     foreach_list_mutable(pendingRequests_.list(), queueEntry,
             entry, nextentry) {
-        if(queueEntry->request == request) {
+        if (queueEntry->request->is_same(request)) {
             queueEntry->annuled = true;
             /* Wakeup the dependent entry if any */
             if(queueEntry->depends >= 0) {
