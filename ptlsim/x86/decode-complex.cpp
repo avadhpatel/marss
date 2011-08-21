@@ -2084,7 +2084,10 @@ bool TraceDecoder::decode_complex() {
 				microcode_assist(ASSIST_VERR, ripstart, rip);
 			else
 				microcode_assist(ASSIST_VERW, ripstart, rip);
+            break;
 		}
+        default:
+            goto invalid_opcode;
 	}
 	end_of_block = 1;
 	break;
