@@ -1479,7 +1479,7 @@ bool TraceDecoder::decode_complex() {
       }
       case 0xaa: case 0xab: {
         // stos
-        if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
+        //if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
         this << TransOp(OP_st,   REG_mem,   REG_rdi,    REG_imm,  REG_rax, sizeshift, 0);
         this << TransOp(OP_add,  REG_rdi,   REG_rdi,    REG_imm,   REG_zero, addrsizeshift, increment);
         if (rep) {
@@ -1497,7 +1497,7 @@ bool TraceDecoder::decode_complex() {
       }
       case 0xac ... 0xad: {
         // lods
-        if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
+        //if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
 
         if (sizeshift >= 2) {
           this << TransOp(OP_ld,   REG_rax,   REG_rsi,    REG_imm,  REG_zero, sizeshift, 0);
