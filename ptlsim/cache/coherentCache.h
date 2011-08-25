@@ -64,6 +64,7 @@ namespace Memory {
         {
             public:
                 int depends;
+                int waitFor;
                 W64 dependsAddr;
 
                 bitvec<CACHE_NO_EVENTS> eventFlags;
@@ -88,6 +89,7 @@ namespace Memory {
                     line         = NULL;
                     m_arg        = NULL;
                     depends      = -1;
+                    waitFor      = -1;
                     dependsAddr  = -1;
                     annuled      = false;
                     evicting     = false;
@@ -139,6 +141,7 @@ namespace Memory {
                         os << "line[none]";
 
                     os << "depends[" << depends;
+                    os << "] waitFor[" << waitFor;
                     os << "] eventFlags[" << eventFlags;
                     os << "] annuled[" << annuled;
                     os << "] evicting[" << evicting;

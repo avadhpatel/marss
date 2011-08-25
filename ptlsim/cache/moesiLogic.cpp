@@ -96,6 +96,8 @@ void MOESILogic::handle_local_miss(CacheQueueEntry *queueEntry)
 {
     memdebug("MOESI Local Cache Miss");
 
+    queueEntry->line->state = MOESI_INVALID;
+
     /* Go to directory if its lowest private */
     if (controller->is_lowest_private()) {
         queueEntry->dest = controller->get_directory();
@@ -236,6 +238,7 @@ void MOESILogic::handle_interconn_miss(CacheQueueEntry *queueEntry)
     if (queueEntry->request->get_type() == MEMORY_OP_EVICT) {
         queueEntry->dest = controller->get_directory();
     } else {
+        send_evict(queueEntry, -1, 1);
         /* In other request types we send response without data */
         queueEntry->dest = queueEntry->source;
     }
@@ -306,18 +309,20 @@ void MOESILogic::complete_request(CacheQueueEntry *queueEntry,
                 break;
 
             case MOESI_MODIFIED:
-                /* We should not have initiated any memory request
-                 * as our cache line is in Modified state. */
-                assert(0);
-                break;
+            //    memoryHierarchy->get_machine().dump_state(ptl_logfile);
+            //    assert(0);
 
             case MOESI_OWNER:
             case MOESI_EXCLUSIVE:
             case MOESI_SHARED:
                 /* On read access we dont need to treat it as cache miss
                  * so this request must be write access.*/
-                assert(type == MEMORY_OP_WRITE);
-                *state = MOESI_MODIFIED;
+                if (type == MEMORY_OP_WRITE)
+                    *state = MOESI_MODIFIED;
+                else  {
+                    memoryHierarchy->get_machine().dump_state(ptl_logfile);
+                    assert(0);
+                }
                 break;
 
             default:

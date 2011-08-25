@@ -133,8 +133,8 @@ CacheQueueEntry* CacheController::find_match(MemoryRequest *request)
         if(request == queueEntry->request)
             return queueEntry;
 
-        if(get_line_address(queueEntry->request) == requestLineAddress)
-            return queueEntry;
+//        if(get_line_address(queueEntry->request) == requestLineAddress)
+//            return queueEntry;
     }
 
     return NULL;
@@ -188,6 +188,7 @@ bool CacheController::handle_upper_interconnect(Message &message)
         /* Found an dependency */
         memdebug("dependent entry: ", *dependsOn, endl);
         dependsOn->depends = queueEntry->idx;
+        queueEntry->waitFor = dependsOn->idx;
         OP_TYPE type       = queueEntry->request->get_type();
         bool kernel_req    = queueEntry->request->is_kernel();
         if(type == MEMORY_OP_READ) {
@@ -220,7 +221,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
     bool is_response = false;
 
     if(queueEntry != NULL && !queueEntry->isSnoop &&
-            queueEntry->line != NULL &&
+           // queueEntry->line != NULL &&
             queueEntry->request == message.request) {
         if(message.hasData) {
             complete_request(message, queueEntry);
@@ -775,6 +776,7 @@ bool CacheController::clear_entry_cb(void *arg)
         if(queueEntry->depends >= 0) {
             CacheQueueEntry* depEntry = &pendingRequests_[
                 queueEntry->depends];
+            depEntry->waitFor = -1;
             memoryHierarchy_->add_event(&cacheAccess_, 1, depEntry);
         }
 
@@ -818,11 +820,18 @@ void CacheController::annul_request(MemoryRequest *request)
             entry, nextentry) {
         if (queueEntry->request->is_same(request)) {
             queueEntry->annuled = true;
-            /* Wakeup the dependent entry if any */
+            /* Fix dependency chain if this entry was waiting for
+             * some other entry, else wakeup that entry.*/
             if(queueEntry->depends >= 0) {
                 CacheQueueEntry* depEntry = &pendingRequests_[
                     queueEntry->depends];
-                memoryHierarchy_->add_event(&cacheAccess_, 1, depEntry);
+                if (queueEntry->waitFor >= 0) {
+                    depEntry->waitFor = queueEntry->waitFor;
+                    pendingRequests_[queueEntry->waitFor].depends =
+                        depEntry->idx;
+                } else {
+                    memoryHierarchy_->add_event(&cacheAccess_, 1, depEntry);
+                }
             }
             pendingRequests_.free(queueEntry);
             queueEntry->request->decRefCounter();

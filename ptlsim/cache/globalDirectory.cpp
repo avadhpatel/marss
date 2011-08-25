@@ -308,7 +308,7 @@ bool DirectoryController::read_miss_cb(void *arg)
          * level cache and then complete this request. */
         sig_dir = dir_controllers[dir_entry->owner];
 
-        if (sig_dir == this) {
+        if (sig_dir == this && dir_entry->owner != queueEntry->cont->idx) {
             queueEntry->responder = controllers[dir_entry->owner];
             memoryHierarchy_->add_event(&send_response, DIR_ACCESS_DELAY,
                     queueEntry);
