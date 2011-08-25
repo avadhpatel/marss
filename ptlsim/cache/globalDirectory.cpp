@@ -269,6 +269,9 @@ bool DirectoryController::handle_update(Message *msg)
         queueEntry = add_entry(msg);
     }
 
+    if (!queueEntry)
+        return false;
+
     return update_cb(queueEntry);
 }
 
@@ -279,6 +282,9 @@ bool DirectoryController::handle_evict(Message *msg)
     if (!queueEntry) {
         queueEntry = add_entry(msg);
     }
+
+    if (!queueEntry)
+        return false;
 
     return evict_cb(queueEntry);
 }
