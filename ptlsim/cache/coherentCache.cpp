@@ -232,7 +232,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
     }
 
     /* Check if we have any free entry pending or not */
-    if (is_full(true)) {
+    if (is_full()) {
         return false;
     }
 
