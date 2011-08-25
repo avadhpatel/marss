@@ -12,6 +12,7 @@
 extern "C" {
 #include <helper.h>
 #include <cpu.h>
+#include <ioport.h>
 }
 
 template <typename T> bool assist_div(Context& ctx) {
@@ -862,7 +863,7 @@ bool assist_ioport_in(Context& ctx) {
 W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
-	W64 port = ra;
+	W32 port = ra & IOPORTS_MASK;
 	W64 sizeshift = rb;
 	W64 old_eax = rc;
 
@@ -915,12 +916,13 @@ bool assist_ioport_out(Context& ctx) {
 W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
-	W64 port = ra;
+	W32 port = ra & IOPORTS_MASK;
 	W64 sizeshift = rb;
 	W64 value = x86_merge(0, rc, sizeshift);
 
 	setup_qemu_switch_except_ctx(ctx);
 	ctx.setup_qemu_switch();
+    assert(port < MAX_IOPORTS);
 	if(sizeshift == 0) {
 		helper_outb(port, value);
 	} else if(sizeshift == 1) {
