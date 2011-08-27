@@ -161,8 +161,9 @@ int BaseMachine::run(PTLsimConfig& config)
         sim_cycle++;
         iterations++;
 
-        if unlikely (config.stop_at_user_insns <= total_user_insns_committed){
-            ptl_logfile << "Stopping simulation loop at specified limits (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl;
+        if unlikely (config.stop_at_user_insns <= total_user_insns_committed ||
+                config.stop_at_cycle <= sim_cycle) {
+            ptl_logfile << "Stopping simulation loop at specified limits (", sim_cycle, " cycles, ", total_user_insns_committed, " commits)", endl;
             exiting = 1;
             break;
         }
