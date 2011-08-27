@@ -1748,7 +1748,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
     assert(request != NULL);
 
-    request->init(core.coreid, threadid, physaddr, idx, sim_cycle,
+    request->init(core.coreid, threadid, state.physaddr << 3, idx, sim_cycle,
             false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&core.dcache_signal);
 
@@ -2236,7 +2236,7 @@ bool DefaultCore::dcache_wakeup(void *arg) {
     ReorderBufferEntry& rob = thread->ROB[idx];
     if(logable(6)) ptl_logfile << " dcache_wakeup ", rob, " request ", *request, endl;
     if(rob.lsq && request->get_owner_uuid() == rob.uop.uuid &&
-            rob.lsq->physaddr == physaddr >> 3 &&
+            rob.lsq->physaddr == (physaddr >> 3) &&
             rob.current_state_list == &thread->rob_cache_miss_list){
         if(logable(6)) ptl_logfile << " rob ", rob, endl;
 
@@ -2833,7 +2833,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_anNULLed_
             core.memoryHierarchy->annul_request(core.coreid,
                     threadid,
                     annulrob.idx/*robid*/,
-                    annulrob.lsq->physaddr,
+                    annulrob.lsq->physaddr << 3,
                     false/* icache */,
                     is_store);
         }
