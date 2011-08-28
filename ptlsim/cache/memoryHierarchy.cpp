@@ -344,6 +344,9 @@ void MemoryHierarchy::annul_request(W8 coreid,
 	foreach(i, allControllers_.count()) {
 		allControllers_[i]->annul_request(memRequest);
 	}
+    foreach(i, allInterconnects_.count()) {
+        allInterconnects_[i]->annul_request(memRequest);
+    }
 	memRequest->set_ref_counter(0);
  *     foreach_list_mutable(requestPool_.used_list(), memRequest,
  *             entry, nextentry) {
