@@ -104,7 +104,22 @@ void CPUController::annul_request(MemoryRequest *request)
 		if(entry->request->is_same(request)) {
 			entry->annuled = true;
 			entry->request->decRefCounter();
+
+            if (entry->depends >= 0) {
+                CPUControllerQueueEntry *depEntry = &pendingRequests_[entry->depends];
+                if (entry->waitFor >= 0) {
+                    pendingRequests_[entry->waitFor].depends = depEntry->idx;
+                    depEntry->waitFor = entry->waitFor;
+                } else {
+                    depEntry->waitFor = -1;
+                    cache_access_cb(depEntry);
+                }
+            } else if (entry->waitFor >= 0) {
+                pendingRequests_[entry->waitFor].depends = -1;
+            }
+
 			pendingRequests_.free(entry);
+            ADD_HISTORY_REM(entry->request);
 		}
 	}
 }
@@ -198,6 +213,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
          */
 		memdebug("Dependent entry is: ", *dependentEntry, endl);
 		dependentEntry->depends = queueEntry->idx;
+        queueEntry->waitFor = dependentEntry->idx;
 		queueEntry->cycles = -1;
         bool kernel_req = queueEntry->request->is_kernel();
 		if unlikely(queueEntry->request->is_instruction()) {
@@ -275,6 +291,7 @@ void CPUController::wakeup_dependents(CPUControllerQueueEntry *queueEntry)
 		assert(nextEntry->request);
 		memdebug("Setting cycles left to 1 for dependent\n");
 		nextEntry->cycles = 1;
+        nextEntry->waitFor = -1;
 	}
 }
 
@@ -393,6 +410,7 @@ bool CPUController::queue_access_cb(void *arg)
          */
 		memdebug("Dependent entry is: ", *dependentEntry, endl);
 		dependentEntry->depends = queueEntry->idx;
+        queueEntry->waitFor = dependentEntry->idx;
 		queueEntry->cycles = -1;
         bool kernel_req = queueEntry->request->is_kernel();
 		if unlikely(queueEntry->request->is_instruction()) {

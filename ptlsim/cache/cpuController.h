@@ -41,12 +41,14 @@ struct CPUControllerQueueEntry : public FixStateListObject
 	MemoryRequest *request;
 	int cycles;
 	int depends;
+    int waitFor;
 	bool annuled;
 
 	void init() {
 		request = NULL;
 		cycles = -1;
 		depends = -1;
+        waitFor = -1;
 		annuled = false;
 	}
 
@@ -56,8 +58,10 @@ struct CPUControllerQueueEntry : public FixStateListObject
 			return os;
 		}
 		os << "Request{", *request, "} ";
+        os << "idx[", idx, "] ";
 		os << "cycles[", cycles, "] ";
 		os << "depends[", depends, "] ";
+        os << "waitFor[", waitFor, "] ";
 		os << "annuled[", annuled, "] ";
 		os << endl;
 		return os;
@@ -84,7 +88,7 @@ struct CPUControllerBufferEntry : public FixStateListObject
 	void init() {}
 
 	ostream& print(ostream& os) const {
-		os << "lineAddress[", lineAddress, "] ";
+		os << "lineAddress[", (void*)lineAddress, "] ";
 		return os;
 	}
 };
