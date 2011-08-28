@@ -112,7 +112,6 @@ namespace Memory {
                     dest = ent->dest;
                     source = ent->source;
                     m_arg = ent->m_arg;
-                    line = ent->line;
                     request->incRefCounter();
                 }
 
@@ -271,7 +270,7 @@ namespace Memory {
                     // or some internal requests (for example, memory update
                     // requests are created internally)
                     if(pendingRequests_.count() >= (
-                                pendingRequests_.size() - 10)) {
+                                pendingRequests_.size() - 20)) {
                         return true;
                     }
                     return false;

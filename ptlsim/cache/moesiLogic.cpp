@@ -96,7 +96,7 @@ void MOESILogic::handle_local_miss(CacheQueueEntry *queueEntry)
 {
     memdebug("MOESI Local Cache Miss");
 
-    queueEntry->line->state = MOESI_INVALID;
+    if (queueEntry->line) queueEntry->line->state = MOESI_INVALID;
 
     /* Go to directory if its lowest private */
     if (controller->is_lowest_private()) {
@@ -134,6 +134,7 @@ void MOESILogic::handle_interconn_hit(CacheQueueEntry *queueEntry)
             *state = MOESI_INVALID;
             queueEntry->line = NULL;
             queueEntry->responseData = false;
+            send_evict(queueEntry, -1, 1);
             break;
 
         case MOESI_MODIFIED:
@@ -239,7 +240,6 @@ void MOESILogic::handle_interconn_miss(CacheQueueEntry *queueEntry)
         queueEntry->dest = controller->get_directory();
     } else {
         send_evict(queueEntry, -1, 1);
-        /* In other request types we send response without data */
         queueEntry->dest = queueEntry->source;
     }
     queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
@@ -333,9 +333,6 @@ void MOESILogic::complete_request(CacheQueueEntry *queueEntry,
         if (oldState != *state)
             UPDATE_MOESI_TRANS_STATS(oldState, *state, k_req);
 
-        Interconnect *lower = controller->get_lower_intrconn();
-        send_to_cont(queueEntry, lower, controller->get_directory());
-
     } else {
         if (message.request->get_type() == MEMORY_OP_EVICT) {
             queueEntry->line->state = MOESI_INVALID;
@@ -384,10 +381,6 @@ void MOESILogic::handle_response(CacheQueueEntry *queueEntry,
         queueEntry->sendTo = controller->get_lower_intrconn();
         queueEntry->isSnoop = 0;
         controller->wait_interconnect_cb(queueEntry);
-
-        /* This is a rare case when we can't get cache line after
-         * directory response. So we restart our cache access. */
-        controller->cache_access_cb(queueEntry);
     }
 }
 

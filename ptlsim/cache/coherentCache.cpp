@@ -104,7 +104,7 @@ CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
     foreach_list_mutable(pendingRequests_.list(), queueEntry, entry,
             prevEntry) {
 
-        if(request == queueEntry->request)
+        if(request == queueEntry->request || queueEntry->annuled)
             continue;
 
         if(get_line_address(queueEntry->request) == requestLineAddress) {
@@ -217,11 +217,13 @@ bool CacheController::handle_lower_interconnect(Message &message)
     CacheQueueEntry *queueEntry = find_match(message.request);
     if(queueEntry) queueEntry->m_arg = message.arg;
 
+    if (queueEntry && queueEntry->annuled)
+        return true;
+
     bool snoop_request = true;
     bool is_response = false;
 
     if(queueEntry != NULL && !queueEntry->isSnoop &&
-           // queueEntry->line != NULL &&
             queueEntry->request == message.request) {
         if(message.hasData) {
             complete_request(message, queueEntry);
@@ -356,7 +358,13 @@ void CacheController::complete_request(Message &message,
      * and then check that message has data flag set
      */
     if(queueEntry->line == NULL) {
-        ptl_logfile << "Completing entry without line: ",*queueEntry, endl;
+        W64 oldTag = InvalidTag<W64>::INVALID;
+        CacheLine *line = cacheLines_->insert(queueEntry->request,
+                oldTag);
+        queueEntry->line = line;
+        handle_cache_insert(queueEntry, oldTag);
+        queueEntry->line->init(cacheLines_->tagOf(queueEntry->
+                    request->get_physical_address()));
     }
     assert(queueEntry->line);
     assert(message.hasData);
@@ -550,16 +558,6 @@ bool CacheController::cache_miss_cb(void *arg)
         STAT_UPDATE(snooprequest.miss++, queueEntry->request->is_kernel());
         coherence_logic_->handle_interconn_miss(queueEntry);
     } else {
-        if(queueEntry->line == NULL) {
-            W64 oldTag = InvalidTag<W64>::INVALID;
-            CacheLine *line = cacheLines_->insert(queueEntry->request,
-                    oldTag);
-            queueEntry->line = line;
-            handle_cache_insert(queueEntry, oldTag);
-            queueEntry->line->init(cacheLines_->tagOf(queueEntry->
-                        request->get_physical_address()));
-        }
-
         OP_TYPE type = queueEntry->request->get_type();
         bool kernel_req = queueEntry->request->is_kernel();
         if(type == MEMORY_OP_READ) {
@@ -694,9 +692,11 @@ bool CacheController::wait_interconnect_cb(void *arg)
     Message& message = *memoryHierarchy_->get_message();
     message.sender   = this;
     message.request  = queueEntry->request;
-    message.arg      = &(queueEntry->line->state);
     message.dest     = queueEntry->dest;
     bool success     = false;
+
+    if (queueEntry->line) message.arg = &(queueEntry->line->state);
+    else message.arg = NULL;
 
     if(queueEntry->sendTo == upperInterconnect_ ||
             queueEntry->sendTo == upperInterconnect2_) {
@@ -789,15 +789,6 @@ bool CacheController::clear_entry_cb(void *arg)
                         queueEntry, endl);
             }
 
-            // make sure that no pending entry will wake up the removed entry (in the case of annuled)
-            int removed_idx = queueEntry->idx;
-            CacheQueueEntry *tmpEntry;
-            foreach_list_mutable(pendingRequests_.list(), tmpEntry, entry, nextentry) {
-                if(tmpEntry->depends == removed_idx) {
-                    tmpEntry->depends     = -1;
-                    tmpEntry->dependsAddr = -1;
-                }
-            }
             pendingRequests_.free(queueEntry);
         }
 
@@ -830,10 +821,16 @@ void CacheController::annul_request(MemoryRequest *request)
                     pendingRequests_[queueEntry->waitFor].depends =
                         depEntry->idx;
                 } else {
+                    depEntry->waitFor = -1;
                     memoryHierarchy_->add_event(&cacheAccess_, 1, depEntry);
                 }
+            } else if (queueEntry->waitFor >= 0) {
+                pendingRequests_[queueEntry->waitFor].depends = -1;
             }
+
             pendingRequests_.free(queueEntry);
+            ADD_HISTORY_REM(queueEntry->request);
+
             queueEntry->request->decRefCounter();
         }
     }
