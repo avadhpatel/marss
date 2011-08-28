@@ -209,6 +209,12 @@ bool DirectoryController::handle_read_miss(Message *msg)
         memdebug("Dir  request has completed, waking up dependents " <<
                 *queueEntry << endl);
         /* This request has completed.. So finalize it */
+        queueEntry->entry->present.set(queueEntry->cont->idx);
+        if (!queueEntry->shared) {
+            queueEntry->entry->owner = queueEntry->cont->idx;
+            queueEntry->entry->dirty = 0;
+        }
+
         wakeup_dependent(queueEntry);
         ADD_HISTORY_REM(queueEntry->request);
         queueEntry->request->decRefCounter();
@@ -239,6 +245,10 @@ bool DirectoryController::handle_write_miss(Message *msg)
         memdebug("Dir  request has completed, waking up dependents " <<
                 *queueEntry << endl);
         /* This request has completed.. So finalize it */
+        queueEntry->entry->present.set(queueEntry->cont->idx);
+        queueEntry->entry->owner = queueEntry->cont->idx;
+        queueEntry->entry->dirty = 1;
+
         wakeup_dependent(queueEntry);
         ADD_HISTORY_REM(queueEntry->request);
         queueEntry->request->decRefCounter();
@@ -431,10 +441,13 @@ bool DirectoryController::update_cb(void *arg)
      * send response to original request
      */
     if (queueEntry->origin != -1) {
-        DirectoryController *sig_dir = dir_controllers[
-            get_entry(queueEntry->origin)->cont->idx];
-        memoryHierarchy_->add_event(&sig_dir->send_response, 1,
-                get_entry(queueEntry->origin));
+        DirContBufferEntry *origEntry = get_entry(queueEntry->origin);
+        if (origEntry) {
+            DirectoryController *sig_dir = dir_controllers[
+                origEntry->cont->idx];
+            memoryHierarchy_->add_event(&sig_dir->send_response, 1,
+                    origEntry);
+        }
     }
 
     /* Remove the queue entry */
@@ -490,10 +503,13 @@ bool DirectoryController::evict_cb(void *arg)
     if (dir_entry->present.iszero() && queueEntry->origin != -1) {
         // All cached lines are evicted.
         // If origin is present means, this was a cache_miss request
-        DirectoryController *sig_dir = dir_controllers[
-            get_entry(queueEntry->origin)->cont->idx];
-        memoryHierarchy_->add_event(&sig_dir->send_response, 1,
-                get_entry(queueEntry->origin));
+        DirContBufferEntry *origEntry = get_entry(queueEntry->origin);
+        if (origEntry) {
+            DirectoryController *sig_dir = dir_controllers[
+                origEntry->cont->idx];
+            memoryHierarchy_->add_event(&sig_dir->send_response, 1,
+                    origEntry);
+        }
     }
 
     // Remove this queue entry
@@ -622,7 +638,7 @@ bool DirectoryController::send_response_cb(void *arg)
         queueEntry->entry->dirty = 0;
     }
 
-    queueEntry->free_on_success = 0;
+    queueEntry->free_on_success = 1;
 
     /* This is called when we have evicted other caches or
      * updated lower cache for read access. Now all we
@@ -661,20 +677,22 @@ bool DirectoryController::send_msg_cb(void *arg)
 
     bool success = interconn_->get_controller_request_signal()->emit(&message);
 
+    /* Free the message */
+    memoryHierarchy_->free_message(&message);
+
     if (!success) {
         int delay = interconn_->get_delay();
         if (delay == 0) delay = AVG_WAIT_DELAY;
         memoryHierarchy_->add_event(&send_msg, delay, queueEntry);
+        return true;
     }
 
     if (queueEntry->free_on_success) {
         ADD_HISTORY_REM(queueEntry->request);
         queueEntry->request->decRefCounter();
+        wakeup_dependent(queueEntry);
         pendingRequests_->free(queueEntry);
     }
-
-    /* Free the message */
-    memoryHierarchy_->free_message(&message);
 
     return true;
 }
@@ -847,6 +865,9 @@ void DirectoryController::wakeup_dependent(DirContBufferEntry *queueEntry)
         DirContBufferEntry *depEntry = &(*pendingRequests_)[
             queueEntry->depends];
 
+        /* If dependent entry is annuled then dont process it */
+        if (depEntry->free) return;
+
         Signal *sig = depEntry->wakeup_sig;
 
         if (!sig) {
@@ -912,6 +933,9 @@ void DirectoryController::annul_request(MemoryRequest *request)
             entry->annuled = true;
             ADD_HISTORY_REM(entry->request);
             entry->request->decRefCounter();
+
+            wakeup_dependent(entry);
+
             pendingRequests_->free(entry);
         }
     }

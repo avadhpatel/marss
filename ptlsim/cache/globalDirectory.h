@@ -42,7 +42,7 @@ struct DirectoryEntry {
     void init(W64 tag_);
 
     ostream& print(ostream &os) const {
-        os << "tag:" << tag << " dirty:" << dirty << " owner:" << owner;
+        os << "tag:" << (void*)tag << " dirty:" << dirty << " owner:" << owner;
         os << " present:" << present;
         return os;
     }
