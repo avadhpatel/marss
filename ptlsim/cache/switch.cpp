@@ -53,6 +53,7 @@ void Switch::annul_request(MemoryRequest *request)
             if (entry->request->is_same(request)) {
                 entry->annuled = true;
                 entry->request->decRefCounter();
+                ADD_HISTORY_REM(entry->request);
                 controllers[i]->queue.free(entry);
 
                 if (entry->in_use) {
@@ -103,7 +104,7 @@ bool Switch::send_cb(void *arg)
     ControllerQueue *dest_cq = get_queue(queueEntry->dest);
 
     if (queueEntry->annuled || dest_cq->recv_busy) {
-        memoryHierarchy_->add_event(&send, 1, cq);
+        memoryHierarchy_->add_event(&send, 2, cq);
         return true;
     }
 
@@ -122,6 +123,12 @@ bool Switch::send_complete_cb(void *arg)
 
     if (queueEntry == NULL) {
         cq->queue_in_use = 0;
+        return true;
+    }
+
+    if (queueEntry->annuled) {
+        /* Try to send new packet arrived in queue */
+        memoryHierarchy_->add_event(&send, SWITCH_DELAY, cq);
         return true;
     }
 
@@ -145,7 +152,7 @@ bool Switch::send_complete_cb(void *arg)
         cq->queue.free(queueEntry);
 
         /* Try to send new packet arrived in queue */
-        memoryHierarchy_->add_event(&send, 1, cq);
+        memoryHierarchy_->add_event(&send, SWITCH_DELAY, cq);
         return true;
     }
 
