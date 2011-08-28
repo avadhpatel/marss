@@ -1205,7 +1205,7 @@ extern "C" uint8_t ptl_simulate() {
 	machine->run(config);
 
 	if (config.stop_at_user_insns <= total_user_insns_committed || config.kill == true
-			|| config.stop == true) {
+			|| config.stop == true || config.stop_at_cycle < sim_cycle) {
 		machine->stopped = 1;
 	}
 
