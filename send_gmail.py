@@ -101,7 +101,19 @@ def authorize_and_send(simulation_num=None,image_files=[],strings_arr=[]):
 	send_simulation_finished(user,config.get_destination_email() ,xoauth_string,simulation_num,image_files,msg_body=msg); 
 	print "Simulation finished message sent";
 
+def read_options():
+	"""Read command line options"""
+	parser = OptionParser()
+	parser.add_option("-m", "--message", dest="message", type="string",
+			default="", help="Email body message")
+
+	(options, args) = parser.parse_args()
+	return (options, args)
 
 
 if __name__ == "__main__":
-	authorize_and_send(None, [], ["This is a simple test -- if you're getting this message, the xoauth is working properly"])
+	(options, args) = read_options()
+	if options.message == "":
+		options.message = "This is a simple test -- if you're getting this message, the xoauth is working properly"
+
+	authorize_and_send(None, [], [options.message])
