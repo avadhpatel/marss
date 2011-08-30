@@ -1,0 +1,7 @@
+[marss]
+marss_dir = /path/to/your/marss/dir
+util_dir = /path/to/your/marss/utils/dir
+
+[email]
+xoauth = xoauth.txt
+to = youremail@domain.com
