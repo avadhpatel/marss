@@ -197,6 +197,10 @@ void qemu_take_screenshot(char* filename);
  */
 void ptl_quit(void);
 
+typedef void (*QemuIOCB)(void*);
+
+void add_qemu_io_event(QemuIOCB fn, void* arg, int delay);
+
 /*
  * ptl_start_sim_rip
  * RIP location from where to switch to simulation

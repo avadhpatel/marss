@@ -326,4 +326,7 @@ extern bool logenable;
 
 void force_logging_enabled();
 
+void init_qemu_io_events();
+void clock_qemu_io_events();
+
 #endif // _PTLSIM_H_

@@ -82,6 +82,8 @@ bool BaseMachine::init(PTLsimConfig& config)
         cores[i]->update_memory_hierarchy_ptr();
     }
 
+    init_qemu_io_events();
+
     return 1;
 }
 
@@ -144,6 +146,7 @@ int BaseMachine::run(PTLsimConfig& config)
             backup_and_reopen_logfile();
 
         memoryHierarchyPtr->clock();
+        clock_qemu_io_events();
 
         foreach (cur_core, cores.count()){
             BaseCore& core =* cores[cur_core];
