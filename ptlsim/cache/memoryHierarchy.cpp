@@ -340,11 +340,11 @@ void MemoryHierarchy::annul_request(W8 coreid,
 	memRequest->init(coreid, threadid, physaddr, robid, sim_cycle, is_icache,
 			-1, -1, (is_write ? MEMORY_OP_WRITE : MEMORY_OP_READ));
 	cpuControllers_[coreid]->annul_request(memRequest);
+/*
 	foreach(i, allControllers_.count()) {
 		allControllers_[i]->annul_request(memRequest);
 	}
 	memRequest->set_ref_counter(0);
-/*
  *     foreach_list_mutable(requestPool_.used_list(), memRequest,
  *             entry, nextentry) {
  *         if likely (!memRequest->get_ref_counter()) continue;
