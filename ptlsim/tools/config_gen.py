@@ -239,7 +239,7 @@ def write_params_file(config, options):
         out_file.write("/* Configuration Name: %s */\n\n" %
                 options.name)
         for key,val in params.items():
-            key = '%s_%s' % (options.name, key)
+            key = '%s_%s' % (obj_conf["base"], key)
             out_file.write("%s\n" % get_param_string(key.upper(), val))
 
         # Write core name
