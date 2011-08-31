@@ -65,10 +65,12 @@ if __name__ == "__main__":
 			marss_dt = DataTable(memlog_file_name); 
 			g = [
 				SingleGraph([
-					LinePlot(marss_dt,"sim_cycle","base_machine.decoder.alu_to_mem","ALU to Memory",[':', 1.5, 'r'])
-				,	LinePlot(marss_dt,0,"base_machine.decoder.total_fast_decode","Total decoded", ["--", 1.2,'g'])
+					LinePlot(marss_dt,"sim_cycle","base_machine.decoder.alu_to_mem","ALU to Memory")]
+				, x_axis_desc, AxisDescription("Ops"), "ALU Ops"),
+
+				SingleGraph([LinePlot(marss_dt,0,"base_machine.decoder.total_fast_decode","Total decoded") #, [':',2.0,'y'])
 				], x_axis_desc, AxisDescription("Ops"), "ALU Ops")
-			]
+]
 	else:
 		marss_dt = DataTable(memlog_file_name); 
 		g = [
@@ -132,7 +134,11 @@ if __name__ == "__main__":
 		g.append(SingleGraph([LinePlot(bob_dt,0,3,"RW ratio")],  x_axis_desc, AxisDescription("Ratio (R:W)"), "BOB RW ratio"))
 		g.append(SingleGraph([LinePlot(bob_dt,0,4,"Num Entries")],  x_axis_desc, AxisDescription("# of Requests"), "BOB pendingQueue Max"))
 
-	CompositeGraph(title=run_desc,num_cols=2).draw(g, graph_output_file);
+	cg = CompositeGraph(title=run_desc,num_cols=1,num_boxes=len(g))
+	cg.w = 14.0/cg.get_num_cols()
+	cg.h = 5*cg.get_num_rows()
+	print "C=%d, R=%d"%(cg.get_num_cols(), cg.get_num_rows())
+	cg.draw(g, graph_output_file);
 	outfiles = [graph_output_file]
 
 	authorize_and_send(None,outfiles,strings_arr=string_arr);
