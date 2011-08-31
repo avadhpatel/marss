@@ -98,6 +98,9 @@ try:
 except:
     pass
 
+if git_branch == "(no branch)":
+    git_branch = "UNKNOWN"
+
 env.Append(CCFLAGS = "-DGITBRANCH=%s -DGITCOMMIT=%s -DGITDATE='%s'" %
         (git_branch, git_comm, git_date))
 
