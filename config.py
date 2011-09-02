@@ -61,4 +61,11 @@ def get_destination_email():
 	if not config:
 		read_config()
 	check_config_param(config, 'email', 'to')
-	return config.get('email', 'to')
+	dest_email = config.get('email', 'to')
+	if dest_email == "youremail@domain.com":
+		print "Please change the default destination email before using this script"
+		exit()
+	else:
+		return dest_email 
+
+	
