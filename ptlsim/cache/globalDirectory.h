@@ -191,7 +191,7 @@ class DirectoryController : public Controller {
                 int type);
         void print_map(ostream &os);
         void print(ostream &os) const;
-        bool is_full(bool flag) const;
+        bool is_full(bool flag=false) const;
         void annul_request(MemoryRequest *request);
 
         bool handle_read_miss(Message *message);

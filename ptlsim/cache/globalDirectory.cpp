@@ -134,6 +134,10 @@ bool DirectoryController::handle_interconnect_cb(void *arg)
     Message *message = (Message*)arg;
     MemoryRequest *request = message->request;
 
+    if (is_full()) {
+        return false;
+    }
+
     memdebug("DirCont["<< get_name() << "] received message: " <<
             *message << endl);
 
@@ -921,6 +925,10 @@ void DirectoryController::print(ostream &os) const
 
 bool DirectoryController::is_full(bool flag) const
 {
+    if (pendingRequests_->count() >= (
+                pendingRequests_->size() - 10)) {
+        return true;
+    }
     return false;
 }
 
