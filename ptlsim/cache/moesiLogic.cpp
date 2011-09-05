@@ -129,6 +129,12 @@ void MOESILogic::handle_interconn_hit(CacheQueueEntry *queueEntry)
         return;
     }
 
+    if (!controller->is_lowest_private() && type == MEMORY_OP_UPDATE) {
+        *state = *(MOESICacheLineState*)(queueEntry->m_arg);
+        controller->clear_entry_cb(queueEntry);
+        return;
+    }
+
     switch (oldState) {
         case MOESI_INVALID:
             *state = MOESI_INVALID;
@@ -234,6 +240,12 @@ void MOESILogic::handle_interconn_miss(CacheQueueEntry *queueEntry)
 {
     memdebug("MOESI Interconnect Cache Miss");
 
+    /* Ignore requests if its not lowest private cache. */
+    if (!controller->is_lowest_private()) {
+        controller->clear_entry_cb(queueEntry);
+        return;
+    }
+
     /* If we get 'EVICT' message and our cache line is in invalid
      * state then we can ignore this request without an error*/
     if (queueEntry->request->get_type() == MEMORY_OP_EVICT) {
@@ -309,8 +321,8 @@ void MOESILogic::complete_request(CacheQueueEntry *queueEntry,
                 break;
 
             case MOESI_MODIFIED:
-            //    memoryHierarchy->get_machine().dump_state(ptl_logfile);
-            //    assert(0);
+                memoryHierarchy->get_machine().dump_state(ptl_logfile);
+                assert(0);
 
             case MOESI_OWNER:
             case MOESI_EXCLUSIVE:
@@ -394,14 +406,10 @@ void MOESILogic::send_response(CacheQueueEntry *queueEntry,
 void MOESILogic::send_to_cont(CacheQueueEntry *queueEntry,
         Interconnect *sendTo, Controller *dest)
 {
-    CacheQueueEntry *newEntry = controller->get_new_queue_entry();
-    newEntry->copy(queueEntry);
-    newEntry->dest = dest;
-    newEntry->request->get_history() << "{MOESI} ";
-    newEntry->isSnoop = 1; /* This flag makes sure that entry will
-                              be evicted once its send successfully. */
+    queueEntry->dest = dest;
+    queueEntry->request->get_history() << "{MOESI} ";
 
-    send_response(newEntry, sendTo);
+    send_response(queueEntry, sendTo);
 }
 
 void MOESILogic::send_evict(CacheQueueEntry *queueEntry, W64 oldTag,

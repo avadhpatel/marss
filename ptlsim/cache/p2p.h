@@ -63,9 +63,8 @@ class P2PInterconnect : public Interconnect
 			os << "--P2P Interconnect: ", get_name(), endl;
 		}
 
-		// P2P has 0 delay in sending message
 		int get_delay() {
-			return 0;
+			return 1;
 		}
 
 		void annul_request(MemoryRequest *request) {
