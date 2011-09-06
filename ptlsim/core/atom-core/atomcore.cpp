@@ -3351,14 +3351,14 @@ void AtomCore::flush_shared_structs(W8 threadid)
 void AtomCore::check_ctx_changes()
 {
     foreach(i, threadcount) {
+        threads[i]->ctx.handle_interrupt = 0;
+
         if(threads[i]->ctx.eip != threads[i]->ctx.old_eip) {
             // IP Address has changed, so flush the pipeline
             ATOMCORELOG("Thread flush old_eip: ",
                     HEXADDR(threads[i]->ctx.old_eip), " new-eip: ",
                     HEXADDR(threads[i]->ctx.eip));
             threads[i]->flush_pipeline();
-
-            threads[i]->ctx.handle_interrupt = 0;
         }
     }
 }

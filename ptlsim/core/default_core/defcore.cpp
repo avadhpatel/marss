@@ -2031,6 +2031,7 @@ void DefaultCore::check_ctx_changes()
 {
     foreach(i, threadcount) {
         Context& ctx = threads[i]->ctx;
+        ctx.handle_interrupt = 0;
 
         if(logable(4))
             ptl_logfile << " Ctx[", ctx.cpu_index, "] eflags: ", (void*)ctx.eflags, endl;
@@ -2038,7 +2039,6 @@ void DefaultCore::check_ctx_changes()
             if(logable(5))
                 ptl_logfile << "Old_eip: ", (void*)(ctx.old_eip), " New_eip: " ,
                             (void*)(ctx.eip), endl;
-            ctx.handle_interrupt = 0;
 
             // IP address is changed, so flush the pipeline
             threads[i]->flush_pipeline();
