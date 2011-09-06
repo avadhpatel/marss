@@ -147,6 +147,13 @@ void MESILogic::handle_interconn_hit(CacheQueueEntry *queueEntry)
         return;
     }
 
+    if (type == MEMORY_OP_UPDATE && !controller->is_lowest_private()) {
+        queueEntry->line->state = *(MESICacheLineState*)(queueEntry->m_arg);
+        UPDATE_MESI_TRANS_STATS(oldState, queueEntry->line->state, kernel_req);
+        controller->clear_entry_cb(queueEntry);
+        return;
+    }
+
     // By default we mark the queueEntry's shared flat to false
     queueEntry->isShared     = false;
     queueEntry->responseData = true;

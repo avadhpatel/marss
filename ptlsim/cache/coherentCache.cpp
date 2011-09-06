@@ -238,8 +238,6 @@ bool CacheController::handle_lower_interconnect(Message &message)
     if (queueEntry && queueEntry->annuled)
         return true;
 
-    bool snoop_request = true;
-
     if(queueEntry != NULL && !queueEntry->isSnoop &&
             queueEntry->request == message.request) {
         if(message.hasData) {
@@ -256,6 +254,11 @@ bool CacheController::handle_lower_interconnect(Message &message)
     }
 
     if(isLowestPrivate_) {
+
+        /* Ignore response that is not for this controller */
+        if (message.hasData)
+            return true;
+
         CacheQueueEntry *newEntry = pendingRequests_.alloc();
         assert(newEntry);
         newEntry->request = message.request;

@@ -125,12 +125,14 @@ void MOESILogic::handle_interconn_hit(CacheQueueEntry *queueEntry)
 
     if (!controller->is_lowest_private() && type == MEMORY_OP_EVICT) {
         *state = MOESI_INVALID;
+        UPDATE_MOESI_TRANS_STATS(oldState, *state, k_req);
         controller->clear_entry_cb(queueEntry);
         return;
     }
 
     if (!controller->is_lowest_private() && type == MEMORY_OP_UPDATE) {
         *state = *(MOESICacheLineState*)(queueEntry->m_arg);
+        UPDATE_MOESI_TRANS_STATS(oldState, *state, k_req);
         controller->clear_entry_cb(queueEntry);
         return;
     }
