@@ -665,7 +665,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
             mmio, pfec, forexec);
     if (exception) {
         int old_exception = exception_index;
-        bool fail = try_handle_fault(source, 2);
+        bool fail = !try_handle_fault(source, 2);
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source),
@@ -716,7 +716,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
             mmio, pfec, forexec);
     if (exception) {
         int old_exception = exception_index;
-        bool fail = try_handle_fault(source, 2);
+        bool fail = !try_handle_fault(source + n, 2);
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source + n),
