@@ -141,6 +141,12 @@ namespace Memory {
 					return true;
 				return false;
 			}
+
+            bool operator >=(Event &event) {
+                if (clock_ >= event.clock_)
+                    return true;
+                return false;
+            }
 	};
 
   static inline ostream& operator <<(ostream& os, const Event& event) {
@@ -287,6 +293,7 @@ namespace Memory {
 	FixStateList<Event, 2048> eventQueue_;
 
 	void sort_event_queue(Event *event);
+	void sort_event_queue_tail(Event *event);
 
     // Temp Stats
     Stats *stats;
