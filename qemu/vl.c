@@ -1449,6 +1449,7 @@ static void main_loop(void)
             if(in_simulation && !qemu_alarm_pending()) {
                 /* cur_cpu = first_cpu; */
                 sim_cpu_exec();
+                nonblocking = true;
             } else {
 #endif
             nonblocking = cpu_exec_all();
