@@ -665,9 +665,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
             mmio, pfec, forexec);
     if (exception) {
         int old_exception = exception_index;
-        int mmu_index = cpu_mmu_index((CPUState*)this);
-        int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
-                source, 2, mmu_index, 1);
+        bool fail = try_handle_fault(source, 2);
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source),
@@ -718,9 +716,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
             mmio, pfec, forexec);
     if (exception) {
         int old_exception = exception_index;
-        int mmu_index = cpu_mmu_index((CPUState*)this);
-        int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
-                source + n, 2, mmu_index, 1);
+        bool fail = try_handle_fault(source, 2);
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source + n),
@@ -1333,6 +1329,8 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
     int mmu_index = cpu_mmu_index((CPUState*)this);
     int fault = cpu_x86_handle_mmu_fault((CPUState*)this, virtaddr, store, mmu_index, 1);
 
+    cr[2] = cr2;
+
     setup_ptlsim_switch_all_ctx(*this);
     if(fault) {
         if(logable(10))
@@ -1340,7 +1338,6 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
 
         error_code = 0;
         exception_index = -1;
-        cr[2] = cr2;
 
         return false;
     }
@@ -1348,7 +1345,6 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
     if(logable(10))
         ptl_logfile << "Tlb fill for addr: ", (void*)virtaddr, endl, flush;
 
-    cr[2] = cr2;
     return true;
 }
 
