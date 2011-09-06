@@ -123,6 +123,24 @@ CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
     return NULL;
 }
 
+bool CacheController::is_line_in_use(W64 tag)
+{
+    if (tag == InvalidTag<W64>::INVALID || tag == -1) {
+        return false;
+    }
+
+    /* Check each local cache request for same line tag */
+    CacheQueueEntry* queueEntry;
+    foreach_list_mutable(pendingRequests_.list(), queueEntry, entry,
+            prevEntry) {
+        if (get_line_address(queueEntry->request) == tag) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 CacheQueueEntry* CacheController::find_match(MemoryRequest *request)
 {
     W64 requestLineAddress = get_line_address(request);
@@ -221,45 +239,41 @@ bool CacheController::handle_lower_interconnect(Message &message)
         return true;
 
     bool snoop_request = true;
-    bool is_response = false;
 
     if(queueEntry != NULL && !queueEntry->isSnoop &&
             queueEntry->request == message.request) {
         if(message.hasData) {
-            complete_request(message, queueEntry);
+            return complete_request(message, queueEntry);
+        } else if (isLowestPrivate_){
+            coherence_logic_->handle_response(queueEntry, message);
             return true;
-        } else {
-            is_response = true;
         }
     }
 
     /* Check if we have any free entry pending or not */
-    if (is_full()) {
+    if (is_full(true)) {
         return false;
     }
 
     if(isLowestPrivate_) {
-        if (is_response) {
-            coherence_logic_->handle_response(queueEntry, message);
-        } else if(snoop_request && !message.hasData) {
-            CacheQueueEntry *newEntry = pendingRequests_.alloc();
-            assert(newEntry);
-            newEntry->request = message.request;
-            newEntry->isSnoop = true;
-            newEntry->sender  = (Interconnect*)message.sender;
-            newEntry->source  = (Controller*)message.origin;
-            newEntry->dest    = (Controller*)message.dest;
-            newEntry->request->incRefCounter();
+        CacheQueueEntry *newEntry = pendingRequests_.alloc();
+        assert(newEntry);
+        newEntry->request = message.request;
+        newEntry->isSnoop = true;
+        newEntry->sender  = (Interconnect*)message.sender;
+        newEntry->source  = (Controller*)message.origin;
+        newEntry->dest    = (Controller*)message.dest;
+        newEntry->request->incRefCounter();
 
-            newEntry->eventFlags[CACHE_ACCESS_EVENT]++;
-            memoryHierarchy_->add_event(&cacheAccess_, 0,
-                    newEntry);
-            ADD_HISTORY_ADD(newEntry->request);
-        }
+        newEntry->eventFlags[CACHE_ACCESS_EVENT]++;
+        memoryHierarchy_->add_event(&cacheAccess_, 0,
+                newEntry);
+        ADD_HISTORY_ADD(newEntry->request);
     } else { // not lowestPrivate cache
         if(queueEntry == NULL) {
             /* check if request is cache eviction */
-            if(message.request->get_type() == MEMORY_OP_EVICT) {
+            if(message.request->get_type() == MEMORY_OP_EVICT ||
+                    message.request->get_type() == MEMORY_OP_UPDATE) {
                 /* alloc new queueentry and evict the cache line if present */
                 CacheQueueEntry *evictEntry = pendingRequests_.alloc();
                 assert(evictEntry);
@@ -267,6 +281,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
                 evictEntry->request = message.request;
                 evictEntry->request->incRefCounter();
                 evictEntry->isSnoop = true;
+                evictEntry->m_arg   = message.arg;
                 evictEntry->eventFlags[CACHE_ACCESS_EVENT]++;
                 memoryHierarchy_->add_event(&cacheAccess_, 1,
                         evictEntry);
@@ -308,6 +323,7 @@ void CacheController::send_message(CacheQueueEntry *queueEntry,
     evictEntry->sender  = NULL;
     evictEntry->sendTo  = interconn;
     evictEntry->dest    = queueEntry->dest;
+    evictEntry->line    = queueEntry->line;
     evictEntry->request->incRefCounter();
 
     //memdebug("Created Evict message: ", *evictEntry, endl);
@@ -350,22 +366,34 @@ void CacheController::handle_cache_insert(CacheQueueEntry *queueEntry,
     coherence_logic_->handle_cache_insert(queueEntry, oldTag);
 }
 
-void CacheController::complete_request(Message &message,
+bool CacheController::complete_request(Message &message,
         CacheQueueEntry *queueEntry)
 {
+    if (is_full(true)) {
+        return false;
+    }
+
     /*
      * first check that we have a valid line pointer in queue entry
      * and then check that message has data flag set
      */
-    if(queueEntry->line == NULL) {
+    if(queueEntry->line == NULL || queueEntry->line->tag !=
+            cacheLines_->tagOf(queueEntry->request->get_physical_address())) {
         W64 oldTag = InvalidTag<W64>::INVALID;
         CacheLine *line = cacheLines_->insert(queueEntry->request,
                 oldTag);
+
+        /* If line is in use then don't evict it, it will be inserted later. */
+        if (is_line_in_use(oldTag)) {
+            oldTag = -1;
+        }
+
         queueEntry->line = line;
         handle_cache_insert(queueEntry, oldTag);
         queueEntry->line->init(cacheLines_->tagOf(queueEntry->
                     request->get_physical_address()));
     }
+
     assert(queueEntry->line);
     assert(message.hasData);
 
@@ -381,6 +409,8 @@ void CacheController::complete_request(Message &message,
     memoryHierarchy_->add_event(&waitInterconnect_, 1, queueEntry);
 
     memdebug("Cache Request completed: " << *queueEntry << endl);
+
+    return true;
 }
 
 bool CacheController::handle_interconnect_cb(void *arg)

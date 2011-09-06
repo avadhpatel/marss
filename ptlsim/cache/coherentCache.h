@@ -226,8 +226,9 @@ namespace Memory {
                 void handle_cache_insert(CacheQueueEntry *queueEntry,
                         W64 oldTag);
                 bool is_line_valid(CacheLine *line);
+                bool is_line_in_use(W64 tag);
 
-                void complete_request(Message &message, CacheQueueEntry
+                bool complete_request(Message &message, CacheQueueEntry
                         *queueEntry);
 
                 void get_directory(Interconnect *interconn);
@@ -263,8 +264,8 @@ namespace Memory {
                         // We keep some free entries for interconnect
                         // so if the queue is 100% full then only
                         // return false else return true
-                        assert(!pendingRequests_.isFull());
-                        return pendingRequests_.isFull();
+                        return (pendingRequests_.count() >= (
+                                    pendingRequests_.size() - 4));
                     }
                     // Otherwise we keep 10 entries free for interconnect
                     // or some internal requests (for example, memory update
