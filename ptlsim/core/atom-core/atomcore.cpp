@@ -1404,7 +1404,7 @@ int AtomOp::writeback()
     }
 
     foreach (i, num_uops_used) {
-        if (uops[i].opcode == OP_mf && uops[i].eom) {
+        if (uops[i].opcode == OP_mf && (uops[i].eom || !uops[i].som)) {
             thread->flush_mem_locks();
             break;
         }
