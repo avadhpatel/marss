@@ -7,6 +7,22 @@
 
 #include <config-parser.h>
 
+/* Use to remove escape char passed into configuration string */
+static void unescape_string(stringbuf& str)
+{
+    stringbuf tmp(str.size());
+    int j = 0;
+
+    foreach(i, str.size()) {
+        if (str.buf[i] == '\\') continue;
+        tmp.buf[j] = str.buf[i];
+        j++;
+    }
+    tmp.buf[j] = '\0';
+
+    str = tmp;
+}
+
 ostream& ConfigurationParserBase::printusage(const void* baseptr, ostream& os) const {
   os << "Options are:", endl;
   ConfigurationOption* option = options;
@@ -181,8 +197,10 @@ int ConfigurationParserBase::parse(void* baseptr, char* argstr) {
 			for (argv_idx = i; argv_idx < argv.length; argv_idx++) {
 				quoted_string << argv[argv_idx] << " ";
 
+				if (argv[argv_idx][strlen(argv[argv_idx])-1] == '"' &&
+                        argv[argv_idx][strlen(argv[argv_idx])-2] != '\\') {
 
-				if (argv[argv_idx][strlen(argv[argv_idx])-1] == '"') {
+                    unescape_string(quoted_string);
 
 					// copy the stringbuf removing the quotes and space at the end
 					// FIXME: this probably leaks a very tiny amount of memory
