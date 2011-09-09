@@ -1080,6 +1080,8 @@ static void setup_sim_stats()
     sys_uname(&hostinfo);
     date = get_date();
 
+    base_tags << config.machine_config << ",";
+
     if(config.bench_name.size() > 0)
         base_tags << config.bench_name << ",";
     base_tags << hostinfo.nodename << "." << hostinfo.domainname << ",";
@@ -1230,7 +1232,6 @@ extern "C" uint8_t ptl_simulate() {
 
     stats = &global_stats;
 	W64 tsc_at_end = rdtsc();
-	machine->update_stats(stats);
 	curr_ptl_machine = NULL;
 
 	W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
