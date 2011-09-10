@@ -113,25 +113,22 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
     W64 arg5 = cpu->regs[REG_r8];
     W64 arg6 = cpu->regs[REG_r9];
 
-    cout << "ptlcall_mmio_write: calltype ", calltype, " at rip ", cpu->eip,
-         " (inside_ptlsim = ", in_simulation, " )", endl;
-
     switch(calltype) {
         case PTLCALL_VERSION:
             {
-                cout << "PTLCALL type PTLCALL_VERSION\n";
+                if (!config.quiet) cout << "PTLCALL type PTLCALL_VERSION\n";
                 cpu->regs[REG_rax] = 1;
                 break;
             }
         case PTLCALL_MARKER:
             {
-                cout << "PTLCALL type PTLCALL_MARKER\n";
+                if (!config.quiet) cout << "PTLCALL type PTLCALL_MARKER\n";
                 cpu->regs[REG_rax] = 0;
                 break;
             }
         case PTLCALL_ENQUEUE:
             {
-                cout << "PTLCALL type PTLCALL_ENQUEUE\n";
+                if (!config.quiet) cout << "PTLCALL type PTLCALL_ENQUEUE\n";
 
                 /*
                  * Address of the command is stored in arg1 and
@@ -163,7 +160,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
             }
         case PTLCALL_CHECKPOINT:
             {
-                cout << "PTLCALL type PTLCALL_CHECKPOINT\n";
+                if (!config.quiet) cout << "PTLCALL type PTLCALL_CHECKPOINT\n";
 
                 char *checkpoint_name = (char*)qemu_malloc(arg2 + 1);
                 char *name_addr = (char*)(arg1);
@@ -227,8 +224,6 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 }
 
 static uint32_t ptlcall_mmio_read(CPUX86State* cpu, W64 offset, int length) {
-    cout << "PTLcall MMIO read on cpu: ", cpu->cpu_index, " (rip: ", cpu->eip,
-         " from page offset ", offset, " ,length ", length, endl;
     return 0;
 }
 
@@ -287,49 +282,57 @@ void ptlsim_init() {
     cpu_register_physical_memory(PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR, 4096,
             ptlcall_mmio_pd);
 
-    cout << "ptlcall_mmio_init : Registered PTLcall MMIO page at physaddr ",
-         PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR, " descriptor ", ptlcall_mmio_pd,
-         " io_mem_index ", ptlcall_mmio_pd >> IO_MEM_SHIFT, endl;
-
     /* Register ptlsim assert callback functions */
     register_assert_cb(&dump_all_info);
     register_assert_cb(&dump_bbcache_to_logfile);
 }
 
-void ptl_config_from_file(const char *filename) {
-    int const MAX_CMD_SIZE = 1024;
-    char * line = NULL;
-    size_t len = 0;
-    char *cmd_line;
-    int cmd_size=0;
-    ssize_t read;
-    FILE * fp;
+static const char COMMENT_CHAR = '#';
+static bool is_commented(stringbuf& line)
+{
+    stringbuf opt;
 
-    cmd_line = (char*)malloc(MAX_CMD_SIZE);
-    memset(cmd_line,'\0',MAX_CMD_SIZE);
-    fp = fopen(filename, "r");
-    if (fp == NULL){
-        fprintf(stderr, "qemu: file not found\n");
+    opt = line.strip();
+
+    if (opt.buf[0] == COMMENT_CHAR) {
+        return true;
+    }
+
+    return false;
+}
+
+void ptl_config_from_file(const char *filename) {
+    stringbuf line;
+    stringbuf cmd_line;
+
+    ifstream cmd_file(filename);
+    if (!cmd_file) {
+        fprintf(stderr, "qemu: simconfig file '%s' not found\n",
+                filename);
         exit(1);
     }
 
-    while ((read = getline(&line, &len, fp)) != -1) {
-        if(line[0] != '#'){
-            cmd_size+=read;
-            assert(cmd_size<MAX_CMD_SIZE);
-            if (line[read-1] = '\n')
-                line[read-1] = ' ';
-            strncat(cmd_line,line,read);
-        }
+    for (;;) {
+        line.reset();
+        cmd_file.getline(line.buf, line.length);
+
+        if (!cmd_file)
+            break;
+
+        if (is_commented(line))
+            continue;
+
+        dynarray<stringbuf*> cmds;
+        char split_char = COMMENT_CHAR;
+        line.split(cmds, &split_char);
+
+        stringbuf *cmd = cmds[0];
+
+        cmd_line << *cmd << " ";
     }
 
-    if (line)
-        free(line);
-
-    printf("%s\n",cmd_line);
     ptl_machine_configure(cmd_line);
     simulation_configured = 1;
-    free(cmd_line);
 }
 
 int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
@@ -452,35 +455,37 @@ void ptl_check_ptlcall_queue() {
 
     if(pending_call_type != -1) {
 
-        cout << "Pending call type: ", pending_call_type, endl;
         switch(pending_call_type) {
             case PTLCALL_ENQUEUE:
                 {
-                    cout << "MARSSx86::Command received : ",
+                    if (!config.quiet) cout << "MARSSx86::Command received : ",
                          pending_command_str, endl;
                     ptl_machine_configure(pending_command_str);
                     break;
                 }
             case PTLCALL_CHECKPOINT:
                 {
-                    cout << "MARSSx86::Creating checkpoint ",
-                         pending_command_str, endl;
+                    if (!config.quiet)
+                        cout << "MARSSx86::Creating checkpoint ",
+                             pending_command_str, endl;
 
                     QDict *checkpoint_dict = qdict_new();
                     qdict_put_obj(checkpoint_dict, "name", QOBJECT(
                                 qstring_from_str(pending_command_str)));
                     Monitor *mon = cur_mon;
                     do_savevm(cur_mon, checkpoint_dict);
-                    cout << "MARSSx86::Checkpoint ", pending_command_str,
-                         " created\n";
+
+                    if (!config.quiet)
+                        cout << "MARSSx86::Checkpoint ", pending_command_str,
+                             " created\n";
 
                     switch(pending_call_arg3) {
                         case PTLCALL_CHECKPOINT_AND_SHUTDOWN:
-                            cout << "MARSSx86::Shutdown requested\n";
+                            if (!config.quiet) cout << "MARSSx86::Shutdown requested\n";
                             ptl_quit();
                             break;
                         default:
-                            cout << "MARSSx86::Unkonw Action\n";
+                            if (!config.quiet) cout << "MARSSx86::Unkonw Action\n";
                             break;
                     }
                     break;

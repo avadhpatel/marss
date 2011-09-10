@@ -1900,7 +1900,6 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
 
 OutOfOrderMachine::OutOfOrderMachine(const char* name) {
   // Add to the list of available core types
-  cerr << "initing the ooomachine", endl;
   machine_name = name;
   addmachine(machine_name, this);
 
