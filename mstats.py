@@ -244,11 +244,63 @@ class NodeFilter(Filters):
                 help="Select only given node, format: nodeA::nodeB::nodeC. \
                 You can also use Regular expressions to select multiple nodes at same level.")
 
-    def search_node(self, nr, nd):
+    def get_pattern(self, node):
+        ret = []
+        for n in node.split('::'):
+            try:
+                ret.append(re.compile("^" + n + "$"))
+            except Exception as e:
+                print("Invalid Node Search Pattern: %s" % str(n))
+                print("In Node option: %s" % str(node))
+                exit(-1)
+        return ret
+
+    def search_nodes(self, nr, nd):
+        ret = []
         for key in nd.keys():
             if nr.match(key):
-                return key, nd[key]
-        return None, None
+                ret.append(key)
+        return ret
+
+    def find_node(self, tree, node_re):
+        """
+        Find the node of a tree that matches the requested pattern and search
+        recursively untill we run out of search patterns.
+        """
+        if len(node_re) == 0:
+            return dict()
+
+        ret = dict()
+        keys_found = self.search_nodes(node_re[0], tree)
+
+        for key in keys_found:
+            node = None
+
+            if len(node_re) == 1:
+                # This node is last in search list so return full subnode
+                node = tree[key]
+            elif type(tree[key]) == dict:
+                node = self.find_node(tree[key], node_re[1:])
+
+            if node:
+                ret[key] = node
+        return ret
+
+    def merge_tree(self, tree_a, tree_b):
+        dst = tree_a.copy()
+        stack = [(dst, tree_b)]
+
+        while stack:
+            c_dst, c_src = stack.pop()
+            for key in c_src:
+                if key not in c_dst:
+                    c_dst[key] = c_src[key]
+                else:
+                    if type(c_src) == dict and type(c_dst) == dict:
+                        stack.append((c_dst[key], c_src[key]))
+                    else:
+                        c_dst[key] = c_src[key]
+        return dst
 
     def filter(self, stats, options):
         if not options.node:
@@ -265,30 +317,12 @@ class NodeFilter(Filters):
         for stat in stats:
             filter_stat = {}
             for node in options.node:
-                # First convert node name to list
-                node = node.split('::')
-                node_re = [re.compile("^" + n + "$") for n in node]
+                node_re = self.get_pattern(node)
+                found = self.find_node(stat, node_re)
+                filter_stat = self.merge_tree(filter_stat, found)
 
-                # We start with top node
-                st_keys = stat.keys()
-                nd = stat
-                fs = filter_stat
-                k = None
-                for nr in node_re:
-                    k,nd = self.search_node(nr, nd)
-                    if nd == None:
-                        break
-                    if not fs.has_key(k):
-                        fs[k] = {}
-
-                    if node_re[-1] == nr and nd != None:
-                        fs[k] = nd
-                    else:
-                        if not fs.has_key(k):
-                            fs[k] = {}
-                        fs = fs[k]
-
-            filter_stats.append(filter_stat)
+            if filter_stat:
+                filter_stats.append(filter_stat)
 
         return filter_stats
 
