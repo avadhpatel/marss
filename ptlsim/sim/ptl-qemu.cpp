@@ -304,6 +304,8 @@ static bool is_commented(stringbuf& line)
 void ptl_config_from_file(const char *filename) {
     stringbuf line;
     stringbuf cmd_line;
+    char split_char[2] = {COMMENT_CHAR, '\0'};
+    dynarray<stringbuf*> *cmds;
 
     ifstream cmd_file(filename);
     if (!cmd_file) {
@@ -313,6 +315,7 @@ void ptl_config_from_file(const char *filename) {
     }
 
     for (;;) {
+
         line.reset();
         cmd_file.getline(line.buf, line.length);
 
@@ -322,13 +325,21 @@ void ptl_config_from_file(const char *filename) {
         if (is_commented(line))
             continue;
 
-        dynarray<stringbuf*> cmds;
-        char split_char = COMMENT_CHAR;
-        line.split(cmds, &split_char);
+        cmds = new dynarray<stringbuf*>();
+        line.split(*cmds, split_char);
 
-        stringbuf *cmd = cmds[0];
+        if (!cmds->size())
+            continue;
 
+        stringbuf *cmd = (*cmds)[0];
         cmd_line << *cmd << " ";
+
+        while (cmds->size()) {
+            stringbuf *c = cmds->pop();
+            delete c;
+        }
+
+        delete cmds;
     }
 
     ptl_machine_configure(cmd_line);
