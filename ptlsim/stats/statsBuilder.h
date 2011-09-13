@@ -599,6 +599,18 @@ class StatObj : public StatObjBase {
             return (*default_var);
         }
 
+        /**
+         * @brief -= operator
+         *
+         * @param val Amount to decrent
+         *
+         * @return T& with updated value
+         */
+        inline T& operator -= (T& val) {
+            (*default_var) -= val;
+            return (*default_var);
+        }
+
         inline T& operator=(T& val) {
             assert(default_var);
             (*default_var) = val;
@@ -1123,6 +1135,16 @@ class StatArray : public StatObjBase {
             }
 
             return os;
+        }
+
+        /**
+         * @brief Get size of this array
+         *
+         * @return size
+         */
+        int length() const
+        {
+            return size;
         }
 };
 
