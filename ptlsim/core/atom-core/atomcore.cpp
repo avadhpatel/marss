@@ -3287,21 +3287,6 @@ void AtomCore::dump_state(ostream& os)
 
 void AtomCore::update_stats(PTLsimStats* stats)
 {
-    Stats* st_t;
-    foreach(i, 3) {
-        st_t = (i == 0) ? n_user_stats : ((i == 1) ? n_kernel_stats : n_global_stats);
-
-        foreach(i, threadcount) {
-            W64 cycles = threads[i]->st_cycles(st_t);
-
-            threads[i]->st_commit.ipc(st_t) = threads[i]->st_commit.insns(st_t) /
-                (double)(cycles);
-            threads[i]->st_commit.atomop_pc(st_t) = threads[i]->st_commit.atomops(st_t) /
-                (double)(cycles);
-            threads[i]->st_commit.uipc(st_t) = threads[i]->st_commit.uops(st_t) /
-                (double)(cycles);
-        }
-    }
 }
 
 /**
