@@ -16,10 +16,6 @@
 #include <logic.h>
 #include <dcache.h>
 
-// Include ooocore.h for stats - untill we start using new stats
-// #include <ooocore.h>
-#include <stats.h>
-
 #define INSIDE_DEFCORE
 #include <defcore.h>
 
@@ -2349,8 +2345,6 @@ int ReorderBufferEntry::commit() {
         thread.thread_stats.commit.insns++;
         thread.total_insns_committed++;
 
-        stats->summary.insns++;
-
 #ifdef TRACE_RIP
             ptl_rip_trace << "commit_rip: ",
                           hexstring(uop.rip.rip, 64), " \t",
@@ -2365,7 +2359,6 @@ int ReorderBufferEntry::commit() {
         ptl_logfile << "ROB Commit Done...\n", flush;
     }
 
-    stats->summary.uops++;
     total_uops_committed++;
     thread.thread_stats.commit.uops++;
     thread.total_uops_committed++;

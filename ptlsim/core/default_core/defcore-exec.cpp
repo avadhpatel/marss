@@ -19,8 +19,6 @@
 #include <defcore.h>
 #include <memoryHierarchy.h>
 
-#include <stats.h>
-
 #ifndef ENABLE_CHECKS
 #undef assert
 #define assert(x) (x)
@@ -423,7 +421,6 @@ int ReorderBufferEntry::issue() {
     // needed. This is our last chance to do so.
     //
 
-    stats->summary.uops++;
     thread.thread_stats.issue.uops++;
 
     fu = lsbindex(executable_on_fu);
@@ -2508,7 +2505,6 @@ int DefaultCore::issue(int cluster) {
         int threadid, idx;
         decode_tag(robid, threadid, idx);
         ThreadContext* thread = threads[threadid];
-        stats = thread->stats_;
         assert(inrange(idx, 0, ROB_SIZE-1));
         ReorderBufferEntry& rob = thread->ROB[idx];
 
@@ -2525,7 +2521,6 @@ int DefaultCore::issue(int cluster) {
             issuecount++;
     }
 
-    stats = stats_;
     per_cluster_stats_update(issue.width,
             cluster, [min(issuecount, MAX_ISSUE_WIDTH)]++);
 
