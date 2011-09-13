@@ -369,7 +369,7 @@ bool PhysicalRegisterFile::cleanup() {
         }
     }
 
-    per_ooo_core_stats_update(coreid, commit.free_regs_recycled += freed);
+    CORE_DEF_STATS(commit.free_reg_recycled) += freed;
     return (freed > 0);
 }
 
@@ -555,8 +555,8 @@ bool DefaultCore::runcycle() {
             if(thread->handle_interrupt_at_next_eom) {
                 commitrc[tid] = COMMIT_RESULT_INTERRUPT;
                 if(thread->ctx.is_int_pending()) {
-                    per_context_ooocore_stats_update(thread->threadid,
-                            cycles_in_pause -= thread->pause_counter);
+                    thread->thread_stats.cycles_in_pause -=
+                        thread->pause_counter;
                     thread->pause_counter = 0;
                 }
             } else {
@@ -1384,10 +1384,8 @@ bool ThreadContext::handle_interrupt() {
 
     // update the stats
     if(ctx.exit_request) {
-        per_context_ooocore_stats_update(threadid, cpu_exit_requests++);
         thread_stats.cpu_exit_requests++;
     } else {
-        per_context_ooocore_stats_update(threadid, interrupt_requests++);
         thread_stats.interrupt_requests++;
     }
     return true;

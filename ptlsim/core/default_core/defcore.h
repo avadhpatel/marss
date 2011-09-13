@@ -45,6 +45,13 @@
 #define stop_timer(ct) (0)
 #endif
 
+#define CORE_STATS(var) \
+    getcore().core_stats.var(getthread().thread_stats.get_default_stats())
+
+#define CORE_DEF_STATS(var) \
+    getcore().core_stats.var(getcore().getthread().thread_stats.get_default_stats())
+
+
 // #define per_context_ooocore_stats_ref(vcpuid) (*(((PerContextDefaultCoreStats*)&stats.ooocore.vcpu0) + (vcpuid)))
 // #define per_context_ooocore_stats_update(vcpuid, expr) stats.ooocore.total.expr, per_context_ooocore_stats_ref(vcpuid).expr
 
@@ -1266,6 +1273,7 @@ namespace OOO_CORE_MODEL {
     struct ThreadContext {
         DefaultCore& core;
         DefaultCore& getcore() { return core; }
+        ThreadContext& getthread() { return *this; }
 
         PTLsimStats *stats_;
 
@@ -1412,6 +1420,11 @@ namespace OOO_CORE_MODEL {
         W8 coreid;
         DefaultCore& getcore() { return *this; }
 
+        /* This is only used for stats collection. By default if core is
+         * collecting stats that is common across threads then its collected
+         * into Stats that Thread-0 is using. */
+        ThreadContext& getthread() { return *threads[0]; }
+
         PTLsimStats *stats_;
 
         int threadcount;
@@ -1464,10 +1477,10 @@ namespace OOO_CORE_MODEL {
 
 #define per_cluster_stats_update(prefix, cluster, expr) \
         switch (cluster) { \
-            case 0: prefix.int0 expr; break; \
-            case 1: prefix.int1 expr; break; \
-            case 2: prefix.ld expr; break; \
-            case 3: prefix.fp expr; break; \
+            case 0: CORE_STATS(prefix.int0) expr; break; \
+            case 1: CORE_STATS(prefix.int1) expr; break; \
+            case 2: CORE_STATS(prefix.ld) expr; break; \
+            case 3: CORE_STATS(prefix.fp) expr; break; \
         }
 
 #else
@@ -1480,16 +1493,16 @@ namespace OOO_CORE_MODEL {
             a[0] = issueq_all.remaining();
         }
 #define issueq_operation_on_cluster_with_result(core, cluster, rc, expr) rc = core.issueq_all.expr;
-#define per_cluster_stats_update(prefix, cluster, expr) prefix.all expr;
+#define per_cluster_stats_update(prefix, cluster, expr) CORE_STATS(prefix.all) expr;
 
 #endif
 
 #define per_physregfile_stats_update(prefix, rfid, expr) \
         switch (rfid) { \
-            case 0: prefix.integer expr; break; \
-            case 1: prefix.fp expr; break; \
-            case 2: prefix.st expr; break; \
-            case 3: prefix.br expr; break; \
+            case 0: CORE_STATS(prefix.integer) expr; break; \
+            case 1: CORE_STATS(prefix.fp) expr; break; \
+            case 2: CORE_STATS(prefix.st) expr; break; \
+            case 3: CORE_STATS(prefix.br) expr; break; \
         }
 
 #define issueq_operation_on_cluster(core, cluster, expr) { int dummyrc; issueq_operation_on_cluster_with_result(core, cluster, dummyrc, expr); }

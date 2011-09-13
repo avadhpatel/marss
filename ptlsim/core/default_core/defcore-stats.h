@@ -367,6 +367,7 @@ namespace OOO_CORE_MODEL {
                         StatObj<W64> fence;
                         StatObj<W64> bank_conflict;
                         StatObj<W64> dcache_stall;
+                        StatObj<W64> parallel_aliasing;
 
                         replay(Statable *parent)
                             : Statable("replay", parent)
@@ -379,6 +380,7 @@ namespace OOO_CORE_MODEL {
                               , fence("fence", this)
                               , bank_conflict("bank_conflict", this)
                               , dcache_stall("dcache_stall", this)
+                              , parallel_aliasing("parallel_aliasing", this)
                         {}
                     } replay;
 
@@ -398,13 +400,15 @@ namespace OOO_CORE_MODEL {
                 {
                     StatObj<W64> cache;
                     StatObj<W64> sfr;
+                    StatObj<W64> zero;
                     StatObj<W64> sfr_and_cache;
 
                         forward(Statable *parent)
                             : Statable("forward", parent)
-                    , cache("cache", this)
-                    , sfr("sfr", this)
-                    , sfr_and_cache("sfr_and_cache", this)
+                              , cache("cache", this)
+                              , sfr("sfr", this)
+                              , zero("zero", this)
+                              , sfr_and_cache("sfr_and_cache", this)
                     {}
                 } forward;
 
@@ -419,12 +423,12 @@ namespace OOO_CORE_MODEL {
 
                         dependency(Statable *parent)
                             : Statable("dependency", parent)
-                    , independent("independent", this)
-                    , predicted_alias_unresolved("predicted_alias_unresolved", this)
-                    , stq_address_match("stq_address_match", this)
-                    , stq_address_not_ready("stq_address_not_ready", this)
-                    , fence("fence", this)
-                    , mmio("mmio", this)
+                              , independent("independent", this)
+                              , predicted_alias_unresolved("predicted_alias_unresolved", this)
+                              , stq_address_match("stq_address_match", this)
+                              , stq_address_not_ready("stq_address_not_ready", this)
+                              , fence("fence", this)
+                              , mmio("mmio", this)
                     {}
                 } dependency;
 
@@ -436,9 +440,9 @@ namespace OOO_CORE_MODEL {
 
                         type(Statable *parent)
                             : Statable("type", parent)
-                    , aligned("aligned", this)
-                    , unaligned("unaligned", this)
-                    , internal("internal", this)
+                              , aligned("aligned", this)
+                              , unaligned("unaligned", this)
+                              , internal("internal", this)
                     {}
                 } type;
 
@@ -449,11 +453,11 @@ namespace OOO_CORE_MODEL {
                 access_type(const char *name, Statable *parent)
                     : Statable(name, parent)
                       , issue(this)
-                , forward(this)
-                , dependency(this)
-                , type(this)
-                , size("size", this, sizeshift_names)
-                , datatype("datatype", this, datatype_names)
+                      , forward(this)
+                      , dependency(this)
+                      , type(this)
+                      , size("size", this, sizeshift_names)
+                      , datatype("datatype", this, datatype_names)
                 {}
             };
 
@@ -468,9 +472,9 @@ namespace OOO_CORE_MODEL {
                 
                 fence(Statable *parent)
                     : Statable("fence", parent)
-                , lfence("lfence", this)
-                , sfence("sfence", this)
-                , mfence("mfence", this)
+                      , lfence("lfence", this)
+                      , sfence("sfence", this)
+                      , mfence("mfence", this)
                 {}
             } fence;
 
@@ -481,8 +485,8 @@ namespace OOO_CORE_MODEL {
 
                 tlb_stat(const char *name, Statable *parent)
                     : Statable(name, parent)
-                , hits("hits", this)
-                , misses("misses", this)
+                      , hits("hits", this)
+                      , misses("misses", this)
                 {}
             };
 
