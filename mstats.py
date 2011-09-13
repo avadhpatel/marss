@@ -449,7 +449,7 @@ class HistogramWriter(Writers):
     def histogram_of_node(self, node, pad):
         for key,val in node.items():
 
-            if type(val) not in [dict, len]:
+            if type(val) not in [dict, list]:
                 continue
 
             print("%s%s {" % (pad, key))
