@@ -33,8 +33,6 @@
  * DEPRECATED CONFIG OPTIONS:
  perfect_cache
  verify_cache (this one implements 'data' in caches, it might be helpful to find bugs)
- trace_memory_updates
- trace_memory_updates_logfile
  */
 
 #ifndef CONFIG_ONLY
@@ -107,21 +105,9 @@ void PTLsimConfig::reset() {
   screenshot_file = "";
   log_user_only = 0;
 
-  event_log_enabled = 0;
-  event_log_ring_buffer_size = 32768;
-  flush_event_log_every_cycle = 0;
-  log_backwards_from_trigger_rip = INVALIDRIP;
   dump_state_now = 0;
-  log_trigger_virt_addr_start = 0;
-  log_trigger_virt_addr_end = 0;
-
-  mem_event_log_enabled = 0;
-  mem_event_log_ring_buffer_size = 262144;
-  mem_flush_event_log_every_cycle = 0;
 
   verify_cache = 0;
-  trace_memory_updates = 0;
-  trace_memory_updates_logfile = "ptlsim.mem.log";
   stats_filename.reset();
   yaml_stats_filename="";
   snapshot_cycles = infinity;
@@ -204,14 +190,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(screenshot_file,              "screenshot",           "Takes screenshot of VM window at the end of simulation");
   add(log_user_only,                "log-user-only",        "Only log the user mode activities");
 
-  section("Event Ring Buffer Logging Control");
-  add(event_log_enabled,            "ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
-  add(event_log_ring_buffer_size,   "ringbuf-size",         "Core event log ring buffer size: only save last <ringbuf> entries");
-  add(flush_event_log_every_cycle,  "flush-events",         "Flush event log ring buffer to ptl_logfile after every cycle");
-  add(log_backwards_from_trigger_rip,"ringbuf-trigger-rip", "Print event ring buffer when first uop in this rip is committed");
-  add(log_trigger_virt_addr_start,   "ringbuf-trigger-virt-start", "Print event ring buffer when any virtual address in this range is touched");
-  add(log_trigger_virt_addr_end,     "ringbuf-trigger-virt-end",   "Print event ring buffer when any virtual address in this range is touched");
-
   section("Statistics Database");
   add(stats_filename,               "stats",                "Statistics data store hierarchy root");
   add(yaml_stats_filename,          "yamlstats",                "Statistics data stores in YAML format");
@@ -252,13 +230,6 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(bbcache_dump_filename,        "bbdump",               "Basic block cache dump filename");
 
  add(verify_cache,               "verify-cache",                   "run simulation with storing actual data in cache");
- add(trace_memory_updates,               "trace-memory-updates",                   "log memory updates");
- add(trace_memory_updates_logfile,        "trace-memory-updates-ptl_logfile",                   "ptl_logfile for memory updates");
-
- section("Memory Event Ring Buffer Logging Control");
- add(mem_event_log_enabled,            "mem-ringbuf",              "Log all core events to the ring buffer for backwards-in-time debugging");
- add(mem_event_log_ring_buffer_size,   "mem-ringbuf-size",         "Core event log ring buffer size: only save last <ringbuf> entries");
- add(mem_flush_event_log_every_cycle,  "mem-flush-events",         "Flush event log ring buffer to ptl_logfile after every cycle");
 
   section("Core Configuration");
   stringbuf* m_names = new stringbuf();
@@ -361,17 +332,6 @@ void backup_and_reopen_logfile() {
   }
 }
 
-void backup_and_reopen_memory_logfile() {
-  if (config.trace_memory_updates_logfile) {
-    if (trace_mem_logfile) trace_mem_logfile.close();
-    stringbuf oldname;
-    oldname << config.trace_memory_updates_logfile, ".backup";
-    sys_unlink(oldname);
-    sys_rename(config.trace_memory_updates_logfile, oldname);
-    trace_mem_logfile.open(config.trace_memory_updates_logfile);
-  }
-}
-
 void backup_and_reopen_yamlstats() {
   if (config.yaml_stats_filename) {
     if (yaml_stats_file) yaml_stats_file.close();
@@ -387,7 +347,6 @@ void force_logging_enabled() {
   logenable = 1;
   config.start_log_at_iteration = 0;
   config.loglevel = 99;
-  config.flush_event_log_every_cycle = 1;
 }
 
 extern byte _binary_ptlsim_build_ptlsim_dst_start;
@@ -526,11 +485,6 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
         current_stats_filename = config.stats_filename;
     }
 
-  if (config.trace_memory_updates_logfile.set() && (config.trace_memory_updates_logfile != current_trace_memory_updates_logfile)) {
-    backup_and_reopen_memory_logfile();
-    current_trace_memory_updates_logfile = config.trace_memory_updates_logfile;
-  }
-
   if (config.yaml_stats_filename.set() && (config.yaml_stats_filename != current_yaml_stats_filename)) {
     backup_and_reopen_yamlstats();
     current_yaml_stats_filename = config.yaml_stats_filename;
@@ -538,12 +492,6 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 
 if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.start_log_at_iteration == infinity)) {
     config.start_log_at_iteration = 0;
-  }
-
-  // Force printing every cycle if loglevel >= 100:
-  if (config.loglevel >= 100) {
-    config.event_log_enabled = 1;
-    config.flush_event_log_every_cycle = 1;
   }
 
   //
@@ -563,13 +511,8 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
     current_bbcache_dump_filename = config.bbcache_dump_filename;
   }
 
-  if (config.log_trigger_virt_addr_start && (!config.log_trigger_virt_addr_end)) {
-    config.log_trigger_virt_addr_end = config.log_trigger_virt_addr_start;
-  }
-
 #ifdef __x86_64__
   config.start_log_at_rip = signext64(config.start_log_at_rip, 48);
-  config.log_backwards_from_trigger_rip = signext64(config.log_backwards_from_trigger_rip, 48);
   config.start_at_rip = signext64(config.start_at_rip, 48);
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif

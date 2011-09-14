@@ -218,25 +218,10 @@ struct PTLsimConfig {
   stringbuf screenshot_file;
   bool log_user_only;
 
-  // Event Logging
-  bool event_log_enabled;
-  W64 event_log_ring_buffer_size;
-  bool flush_event_log_every_cycle;
-  W64 log_backwards_from_trigger_rip;
   bool dump_state_now;
   bool abort_at_end;
 
-  W64 log_trigger_virt_addr_start;
-  W64 log_trigger_virt_addr_end;
-
-  // Memory Event Logging
-  bool mem_event_log_enabled;
-  W64 mem_event_log_ring_buffer_size;
-  bool mem_flush_event_log_every_cycle;
-
   bool verify_cache;
-  bool trace_memory_updates;
-  stringbuf trace_memory_updates_logfile;
 
   // Statistics Database
   stringbuf stats_filename;
