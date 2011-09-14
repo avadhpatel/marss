@@ -32,7 +32,7 @@
 using namespace OOO_CORE_MODEL;
 using namespace Memory;
 
-bool DefaultCore::icache_wakeup(void *arg) {
+bool OooCore::icache_wakeup(void *arg) {
     Memory::MemoryRequest *request = (Memory::MemoryRequest*)arg;
 
     W64 physaddr = request->get_physical_address();
@@ -150,16 +150,16 @@ static W32 phys_reg_files_writable_by_uop(const TransOp& uop) {
 
 #ifdef UNIFIED_INT_FP_PHYS_REG_FILE
     return
-        (c & OPCLASS_STORE) ? DefaultCore::PHYS_REG_FILE_MASK_ST :
-        (c & OPCLASS_BRANCH) ? DefaultCore::PHYS_REG_FILE_MASK_BR :
-        DefaultCore::PHYS_REG_FILE_MASK_INT;
+        (c & OPCLASS_STORE) ? OooCore::PHYS_REG_FILE_MASK_ST :
+        (c & OPCLASS_BRANCH) ? OooCore::PHYS_REG_FILE_MASK_BR :
+        OooCore::PHYS_REG_FILE_MASK_INT;
 #else
     return
-        (c & OPCLASS_STORE) ? DefaultCore::PHYS_REG_FILE_MASK_ST :
-        (c & OPCLASS_BRANCH) ? DefaultCore::PHYS_REG_FILE_MASK_BR :
-        (c & (OPCLASS_LOAD | OPCLASS_PREFETCH)) ? ((uop.datatype == DATATYPE_INT) ? DefaultCore::PHYS_REG_FILE_MASK_INT : DefaultCore::PHYS_REG_FILE_MASK_FP) :
-        ((c & OPCLASS_FP) | inrange((int)uop.rd, REG_xmml0, REG_xmmh15) | inrange((int)uop.rd, REG_fptos, REG_ctx)) ? DefaultCore::PHYS_REG_FILE_MASK_FP :
-        DefaultCore::PHYS_REG_FILE_MASK_INT;
+        (c & OPCLASS_STORE) ? OooCore::PHYS_REG_FILE_MASK_ST :
+        (c & OPCLASS_BRANCH) ? OooCore::PHYS_REG_FILE_MASK_BR :
+        (c & (OPCLASS_LOAD | OPCLASS_PREFETCH)) ? ((uop.datatype == DATATYPE_INT) ? OooCore::PHYS_REG_FILE_MASK_INT : OooCore::PHYS_REG_FILE_MASK_FP) :
+        ((c & OPCLASS_FP) | inrange((int)uop.rd, REG_xmml0, REG_xmmh15) | inrange((int)uop.rd, REG_fptos, REG_ctx)) ? OooCore::PHYS_REG_FILE_MASK_FP :
+        OooCore::PHYS_REG_FILE_MASK_INT;
 #endif
 }
 
@@ -184,7 +184,7 @@ void ThreadContext::annul_fetchq() {
 // state saved in ctx.commitarf.
 //
 
-void DefaultCore::flush_pipeline() {
+void OooCore::flush_pipeline() {
     // Clear per-thread state:
     if (logable(3)) ptl_logfile << "flush_pipeline all.",endl;
     foreach (i, threadcount) {
@@ -463,24 +463,24 @@ static void print_fetch_bb_address_ringbuf(ostream& os) {
     }
 }
 
-int DefaultCore::hash_unaligned_predictor_slot(const RIPVirtPhysBase& rvp) {
+int OooCore::hash_unaligned_predictor_slot(const RIPVirtPhysBase& rvp) {
     W32 h = rvp.rip ^ rvp.mfnlo;
     return lowbits(h, log2(UNALIGNED_PREDICTOR_SIZE));
 }
 
-bool DefaultCore::get_unaligned_hint(const RIPVirtPhysBase& rvp) const {
+bool OooCore::get_unaligned_hint(const RIPVirtPhysBase& rvp) const {
     int slot = hash_unaligned_predictor_slot(rvp);
     return unaligned_predictor[slot];
 }
 
-void DefaultCore::set_unaligned_hint(const RIPVirtPhysBase& rvp, bool value) {
+void OooCore::set_unaligned_hint(const RIPVirtPhysBase& rvp, bool value) {
     int slot = hash_unaligned_predictor_slot(rvp);
     assert(inrange(slot, 0, UNALIGNED_PREDICTOR_SIZE));
     unaligned_predictor[slot] = value;
 }
 
 bool ThreadContext::fetch() {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
 
     time_this_scope(ctfetch);
 
@@ -1647,7 +1647,7 @@ namespace OOO_CORE_MODEL {
 };
 
 int ReorderBufferEntry::commit() {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
     Context& ctx = thread.ctx;
     bool all_ready_to_commit = true;

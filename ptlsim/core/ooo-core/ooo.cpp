@@ -76,7 +76,7 @@ static void init_luts() {
     globals_initialized = true;
 }
 
-ThreadContext::ThreadContext(DefaultCore& core_, W8 threadid_, Context& ctx_)
+ThreadContext::ThreadContext(OooCore& core_, W8 threadid_, Context& ctx_)
     : core(core_), threadid(threadid_), ctx(ctx_)
       , thread_stats("thread", &core_.core_stats)
 {
@@ -184,7 +184,7 @@ void ThreadContext::init() {
 }
 
 
-DefaultCore::DefaultCore(BaseMachine& machine_, W8 num_threads,
+OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
         const char* name)
 : BaseCore(machine_)
     , core_stats("core", &machine_)
@@ -215,14 +215,14 @@ DefaultCore::DefaultCore(BaseMachine& machine_, W8 num_threads,
 
     dcache_signal.set_name(sig_name.buf);
     dcache_signal.connect(signal_mem_ptr(*this,
-                &DefaultCore::dcache_wakeup));
+                &OooCore::dcache_wakeup));
 
     sig_name.reset();
 
     sig_name << core_name << "-icache-wakeup";
     icache_signal.set_name(sig_name.buf);
     icache_signal.connect(signal_mem_ptr(*this,
-                &DefaultCore::icache_wakeup));
+                &OooCore::icache_wakeup));
 
     threads = (ThreadContext**)malloc(sizeof(ThreadContext*) * threadcount);
 
@@ -239,7 +239,7 @@ DefaultCore::DefaultCore(BaseMachine& machine_, W8 num_threads,
     init_luts();
 }
 
-void DefaultCore::reset() {
+void OooCore::reset() {
     round_robin_tid = 0;
     round_robin_reg_file_offset = 0;
 
@@ -278,7 +278,7 @@ void DefaultCore::reset() {
     foreach (i, threadcount) threads[i]->reset();
 }
 
-void DefaultCore::init_generic() {
+void OooCore::init_generic() {
     reset();
 }
 
@@ -301,7 +301,7 @@ static void OOO_CORE_MODEL::print_list_of_state_lists(ostream& os, const ListOfS
     }
 }
 
-void PhysicalRegisterFile::init(const char* name, W8 coreid, int rfid, int size, DefaultCore* core) {
+void PhysicalRegisterFile::init(const char* name, W8 coreid, int rfid, int size, OooCore* core) {
     assert(rfid < PHYS_REG_FILE_COUNT);
     assert(size <= MAX_PHYS_REG_FILE_SIZE);
     this->size = size;
@@ -434,7 +434,7 @@ int ThreadContext::get_priority() const {
 //
 // Execute one cycle of the entire core state machine
 //
-bool DefaultCore::runcycle() {
+bool OooCore::runcycle() {
     bool exiting = 0;
     //
     // Detect edge triggered transition from 0->1 for
@@ -533,7 +533,7 @@ bool DefaultCore::runcycle() {
     writecount = 0;
 
     if (logable(9)) {
-        ptl_logfile << "DefaultCore::run():thread-commit\n";
+        ptl_logfile << "OooCore::run():thread-commit\n";
     }
 
     foreach (permute, threadcount) {
@@ -562,7 +562,7 @@ bool DefaultCore::runcycle() {
     }
 
     if (logable(100)) {
-        ptl_logfile << "DefaultCore::run():context after commit\n";
+        ptl_logfile << "OooCore::run():context after commit\n";
         ptl_logfile << flush;
         foreach(x, threadcount) {
             ptl_logfile << threads[x]->ctx, endl;
@@ -590,7 +590,7 @@ bool DefaultCore::runcycle() {
     // Issue whatever is ready
     //
     if (logable(9)) {
-        ptl_logfile << "DefaultCore::run():issue\n";
+        ptl_logfile << "OooCore::run():issue\n";
     }
 
     for_each_cluster(i) { issue(i); }
@@ -599,7 +599,7 @@ bool DefaultCore::runcycle() {
     // Most of the frontend (except fetch!) also works with round robin priority
     //
     if (logable(9)) {
-        ptl_logfile << "DefaultCore::run():dispatch\n";
+        ptl_logfile << "OooCore::run():dispatch\n";
     }
 
     int dispatchrc[threadcount];
@@ -626,7 +626,7 @@ bool DefaultCore::runcycle() {
     // (if any) given the lowest priority.
     //
     if (logable(9)) {
-        ptl_logfile << "DefaultCore::run():fetch\n";
+        ptl_logfile << "OooCore::run():fetch\n";
     }
 
     int priority_value[threadcount];
@@ -689,7 +689,7 @@ bool DefaultCore::runcycle() {
         if unlikely (!thread->ctx.running) continue;
         int rc = commitrc[i];
         if (logable(9)) {
-            ptl_logfile << "DefaultCore::run():result check thread[",
+            ptl_logfile << "OooCore::run():result check thread[",
             i, "] rc[", rc, "]\n";
         }
 
@@ -901,7 +901,7 @@ bool ReorderBufferEntry::ready_to_commit() const {
 }
 
 StateList& ReorderBufferEntry::get_ready_to_issue_list() {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
     return
         isload(uop.opcode) ? thread.rob_ready_to_load_list[cluster] :
@@ -1012,7 +1012,7 @@ void ThreadContext::print_rename_tables(ostream& os) {
     os << commitrrt;
 }
 
-void DefaultCore::print_smt_state(ostream& os) {
+void OooCore::print_smt_state(ostream& os) {
     os << "Print SMT statistics:", endl;
 
     foreach (i, threadcount) {
@@ -1037,7 +1037,7 @@ void ThreadContext::dump_smt_state(ostream& os) {
     os << flush;
 }
 
-void DefaultCore::dump_state(ostream& os) {
+void OooCore::dump_state(ostream& os) {
     os << "dump_state for core[",coreid,"]: SMT common structures:", endl;
 
     print_list_of_state_lists<PhysicalRegister>(os, physreg_states, "Physical register states");
@@ -1067,7 +1067,7 @@ void DefaultCore::dump_state(ostream& os) {
 //
 // This is for debugging only.
 //
-void DefaultCore::check_refcounts() {
+void OooCore::check_refcounts() {
     // this should be for each thread instead of whole core:
     // for now, we just work on thread[0];
     ThreadContext& thread = *threads[0];
@@ -1123,7 +1123,7 @@ void DefaultCore::check_refcounts() {
     if (errors) assert(false);
 }
 
-void DefaultCore::check_rob() {
+void OooCore::check_rob() {
     // this should be for each thread instead of whole core:
     // for now, we just work on thread[0];
     ThreadContext& thread = *threads[0];
@@ -1391,18 +1391,18 @@ ostream& OOO_CORE_MODEL::operator <<(ostream& os, const PhysicalRegisterOperandI
     return os;
 }
 
-void DefaultCore::flush_tlb(Context& ctx) {
+void OooCore::flush_tlb(Context& ctx) {
     foreach(i, threadcount) {
         threads[i]->dtlb.flush_all();
         threads[i]->itlb.flush_all();
     }
 }
 
-void DefaultCore::flush_tlb_virt(Context& ctx, Waddr virtaddr) {
+void OooCore::flush_tlb_virt(Context& ctx, Waddr virtaddr) {
     // FIXME AVADH DEFCORE
 }
 
-void DefaultCore::check_ctx_changes()
+void OooCore::check_ctx_changes()
 {
     foreach(i, threadcount) {
         Context& ctx = threads[i]->ctx;
@@ -1421,24 +1421,24 @@ void DefaultCore::check_ctx_changes()
     }
 }
 
-void DefaultCore::update_stats(PTLsimStats* stats)
+void OooCore::update_stats(PTLsimStats* stats)
 {
 }
 
-DefaultCoreBuilder::DefaultCoreBuilder(const char* name)
+OooCoreBuilder::OooCoreBuilder(const char* name)
     : CoreBuilder(name)
 {
 }
 
-BaseCore* DefaultCoreBuilder::get_new_core(BaseMachine& machine,
+BaseCore* OooCoreBuilder::get_new_core(BaseMachine& machine,
         const char* name)
 {
-    DefaultCore* core = new DefaultCore(machine, 1, name);
+    OooCore* core = new OooCore(machine, 1, name);
     return core;
 }
 
 namespace OOO_CORE_MODEL {
-    DefaultCoreBuilder defaultCoreBuilder(OOO_CORE_NAME);
+    OooCoreBuilder defaultCoreBuilder(OOO_CORE_NAME);
 };
 
 namespace OOO_CORE_MODEL {

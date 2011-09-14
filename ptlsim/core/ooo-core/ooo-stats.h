@@ -9,7 +9,7 @@
 
 namespace OOO_CORE_MODEL {
 
-    struct DefaultCoreThreadStats : public Statable
+    struct OooCoreThreadStats : public Statable
     {
         struct fetch : public Statable
         {
@@ -512,7 +512,7 @@ namespace OOO_CORE_MODEL {
         StatObj<W64> cpu_exit_requests;
         StatObj<W64> cycles_in_pause;
 
-        DefaultCoreThreadStats(const char *name, Statable *parent)
+        OooCoreThreadStats(const char *name, Statable *parent)
             : Statable(name, parent)
               , fetch(this)
               , frontend(this)
@@ -528,7 +528,7 @@ namespace OOO_CORE_MODEL {
         {}
     };
 
-    struct DefaultCoreStats : public Statable
+    struct OooCoreStats : public Statable
     {
         struct dispatch : public Statable
         {
@@ -653,7 +653,7 @@ namespace OOO_CORE_MODEL {
 
         StatObj<W64> cycles;
 
-        DefaultCoreStats(const char *name, Statable *parent)
+        OooCoreStats(const char *name, Statable *parent)
             : Statable(name, parent)
               , dispatch(this)
               , issue(this) 

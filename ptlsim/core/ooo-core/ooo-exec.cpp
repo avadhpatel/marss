@@ -40,12 +40,12 @@ template <int size, int operandcount>
 int IssueQueue<size, operandcount>::issueq_id_seq = 0;
 
 template <int size, int operandcount>
-void IssueQueue<size, operandcount>::reset(W8 coreid, DefaultCore* core_) {
+void IssueQueue<size, operandcount>::reset(W8 coreid, OooCore* core_) {
 
     this->coreid = coreid;
     this->core = core_;
 
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
 
     count = 0;
     valid = 0;
@@ -72,9 +72,9 @@ void IssueQueue<size, operandcount>::reset(W8 coreid, DefaultCore* core_) {
 
 template <int size, int operandcount>
 void IssueQueue<size, operandcount>::reset(W8 coreid, W8 threadid,
-        DefaultCore* core_)
+        OooCore* core_)
 {
-    DefaultCore& core = *core_;
+    OooCore& core = *core_;
 
     if unlikely (core.threadcount == 1) {
         reset(coreid, core_);
@@ -288,7 +288,7 @@ static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
 //  -1 if there was an exception and we should stop issuing this cycle
 //
 int ReorderBufferEntry::issue() {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
 
     // We keep TLB miss handling entries into issue queue
@@ -738,7 +738,7 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 }
 
 bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry& state, Waddr& origaddr, Waddr& addr, int& exception, PageFaultErrorCode& pfec) {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
 
     bool st = isstore(uop.opcode);
@@ -802,7 +802,7 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
 bool ReorderBufferEntry::release_mem_lock(bool forced) {
     if likely (!lock_acquired) return false;
 
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
 
     W64 physaddr = lsq->physaddr << 3;
@@ -845,7 +845,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 
     time_this_scope(ctissuestore);
 
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
 
     int sizeshift = uop.size;
     int aligntype = uop.cond;
@@ -1162,7 +1162,7 @@ W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
 #define USE_MSDEBUG logable(1000)
 
     msdebug << " rob ", *this, " data ", (void*) data, endl;
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
     Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
 
@@ -1232,7 +1232,7 @@ W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
 int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate) {
     time_this_scope(ctissueload);
 
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
     Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
     LoadStoreAliasPredictor& lsap = thread.lsap;
@@ -1637,7 +1637,7 @@ void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
 // Probe the cache and initiate a miss if required
 //
 int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
     int sizeshift = uop.size;
     int aligntype = uop.cond;
@@ -1691,7 +1691,7 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
     bool st;
 
     ThreadContext& thread = getthread();
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     st = isstore(uop.opcode);
     handled = true;
     exception = 0;
@@ -1782,7 +1782,7 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
 //
 void ReorderBufferEntry::tlbwalk() {
 
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
 
     // The virtpage contains the page address of exception.
@@ -1942,7 +1942,7 @@ LoadStoreQueueEntry* ReorderBufferEntry::find_nearest_memory_fence() {
 int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
     ThreadContext& thread = getthread();
 
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
 
     assert(uop.opcode == OP_mf);
 
@@ -1970,7 +1970,7 @@ int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
 // Issues a prefetch on the given memory address into the specified cache level.
 //
 void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc, int cachelevel) {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
 
     state.reg.rddata = 0;
@@ -2021,7 +2021,7 @@ void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc
 //
 // Data cache has delivered a load: wake up corresponding ROB/LSQ/physreg entries
 //
-bool DefaultCore::dcache_wakeup(void *arg) {
+bool OooCore::dcache_wakeup(void *arg) {
 
     Memory::MemoryRequest* request = (Memory::MemoryRequest*)arg;
 
@@ -2220,7 +2220,7 @@ void ReorderBufferEntry::fencewakeup() {
 // a deadlock if there is not enough room in the issue queue.
 //
 void ReorderBufferEntry::replay() {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
 
     assert(!lock_acquired);
@@ -2256,7 +2256,7 @@ void ReorderBufferEntry::replay() {
 
 
 void ReorderBufferEntry::replay_locked() {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
 
     assert(!lock_acquired);
@@ -2299,7 +2299,7 @@ void ReorderBufferEntry::release() {
     issueq_operation_on_cluster(getcore(), cluster, release(iqslot));
 
     ThreadContext& thread = getthread();
-    DefaultCore& core = thread.core;
+    OooCore& core = thread.core;
 #ifdef MULTI_IQ
     int reserved_iq_entries_per_thread = core.reserved_iq_entries[cluster] / core.threadcount;
     if (thread.issueq_count[cluster] > reserved_iq_entries_per_thread) {
@@ -2338,7 +2338,7 @@ void ReorderBufferEntry::release() {
 //
 // Process the ready to issue queue and issue as many ROBs as possible
 //
-int DefaultCore::issue(int cluster) {
+int OooCore::issue(int cluster) {
     time_this_scope(ctissue);
 
     int issuecount = 0;
@@ -2436,7 +2436,7 @@ int ReorderBufferEntry::forward() {
 //
 
 W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_anNULLed_rip) {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
 
     ThreadContext& thread = getthread();
     BranchPredictorInterface& branchpred = thread.branchpred;
@@ -2655,7 +2655,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_anNULLed_
 //
 
 void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operands, ReorderBufferEntry* prevrob) {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
 
     if(issued){
@@ -2730,7 +2730,7 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
 // redispatch each of them.
 //
 void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
     ThreadContext& thread = getthread();
     Queue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
 
@@ -2788,7 +2788,7 @@ void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
 }
 
 int ReorderBufferEntry::pseudocommit() {
-    DefaultCore& core = getcore();
+    OooCore& core = getcore();
 
     ThreadContext& thread = getthread();
     RegisterRenameTable& specrrt = thread.specrrt;

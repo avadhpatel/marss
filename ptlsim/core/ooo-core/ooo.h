@@ -303,8 +303,8 @@ namespace OOO_CORE_MODEL {
 #undef ANYFPU
 #undef ANYINT
 
-    struct DefaultCore;
-    DefaultCore& coreof(W8 coreid);
+    struct OooCore;
+    OooCore& coreof(W8 coreid);
 
     struct ReorderBufferEntry;
 
@@ -346,7 +346,7 @@ namespace OOO_CORE_MODEL {
             bitvec<size> allready;
             int count;
             byte coreid;
-            DefaultCore* core;
+            OooCore* core;
             int shared_free_entries;
             int reserved_entries;
             int issueq_id;
@@ -387,8 +387,8 @@ namespace OOO_CORE_MODEL {
                 return uopids.search(uopid);
             }
 
-            void reset(W8 coreid, DefaultCore* core);
-            void reset(W8 coreid, W8 threadid, DefaultCore* core);
+            void reset(W8 coreid, OooCore* core);
+            void reset(W8 coreid, W8 threadid, OooCore* core);
             void clock();
             bool insert(tag_t uopid, const tag_t* operands, const tag_t* preready);
             bool broadcast(tag_t uopid);
@@ -430,7 +430,7 @@ namespace OOO_CORE_MODEL {
                 return true;
             }
 
-            DefaultCore& getcore() { return *core; }
+            OooCore& getcore() { return *core; }
         };
 
     template <int size, int operandcount>
@@ -472,7 +472,7 @@ namespace OOO_CORE_MODEL {
     //
     // ReorderBufferEntry
     struct ThreadContext;
-    struct DefaultCore;
+    struct OooCore;
     struct PhysicalRegister;
     struct LoadStoreQueueEntry;
 
@@ -495,7 +495,7 @@ namespace OOO_CORE_MODEL {
         W16  executable_on_cluster_mask;
         W8s  cluster;
         W8   coreid;
-        DefaultCore* core;
+        OooCore* core;
         W64  tlb_miss_init_cycle;
 
         W8   threadid;
@@ -558,7 +558,7 @@ namespace OOO_CORE_MODEL {
         stringbuf& get_operand_info(stringbuf& sb, int operand) const;
         ostream& print_operand_info(ostream& os, int operand);
 
-        DefaultCore& getcore() const { return *core; }
+        OooCore& getcore() const { return *core; }
 
         ThreadContext& getthread() const;
         issueq_tag_t get_tag();
@@ -586,7 +586,7 @@ namespace OOO_CORE_MODEL {
         ReorderBufferEntry* rob;
         W16 idx;
         byte coreid;
-        DefaultCore* core;
+        OooCore* core;
         W8s mbtag;
         W8 store:1, lfence:1, sfence:1, entry_valid:1, mmio:1;
         //   W32 padding;
@@ -624,7 +624,7 @@ namespace OOO_CORE_MODEL {
             return *this;
         }
 
-        DefaultCore& getcore() { return *core; }
+        OooCore& getcore() { return *core; }
     };
 
     static inline ostream& operator <<(ostream& os, const LoadStoreQueueEntry& lsq) {
@@ -653,7 +653,7 @@ namespace OOO_CORE_MODEL {
         W16 flags;
         W16 idx;
         W8  coreid;
-        DefaultCore* core;
+        OooCore* core;
         W8  rfid;
         W8  state;
         W8  archreg;
@@ -670,7 +670,7 @@ namespace OOO_CORE_MODEL {
             get_state_list(state).enqueue(this);
         }
 
-        void init(W8 coreid, int rfid, int idx, DefaultCore* core) {
+        void init(W8 coreid, int rfid, int idx, OooCore* core) {
             this->coreid = coreid;
             this->core = core;
             this->rfid = rfid;
@@ -734,14 +734,14 @@ namespace OOO_CORE_MODEL {
 
         void fill_operand_info(PhysicalRegisterOperandInfo& opinfo);
 
-        DefaultCore& getcore() { return *core; }
+        OooCore& getcore() { return *core; }
     };
 
     ostream& operator <<(ostream& os, const PhysicalRegister& physreg);
 
     struct PhysicalRegisterFile: public array<PhysicalRegister, MAX_PHYS_REG_FILE_SIZE> {
         byte coreid;
-        DefaultCore *core;
+        OooCore *core;
         byte rfid;
         W16 size;
         const char* name;
@@ -752,17 +752,17 @@ namespace OOO_CORE_MODEL {
         PhysicalRegisterFile() { }
 
         PhysicalRegisterFile(const char* name, W8 coreid, int rfid, int size,
-                DefaultCore* core) {
+                OooCore* core) {
             init(name, coreid, rfid, size, core); reset();
         }
 
-        PhysicalRegisterFile& operator ()(const char* name, W8 coreid, int rfid, int size, DefaultCore* core) {
+        PhysicalRegisterFile& operator ()(const char* name, W8 coreid, int rfid, int size, OooCore* core) {
             init(name, coreid, rfid, size, core); reset(); return *this;
         }
 
         bool cleanup();
 
-        void init(const char* name, W8 coreid, int rfid, int size, DefaultCore* core);
+        void init(const char* name, W8 coreid, int rfid, int size, OooCore* core);
         // bool remaining() const { return (!states[PHYSREG_FREE].empty()); }
         bool remaining() {
             if unlikely (states[PHYSREG_FREE].empty()) {
@@ -775,7 +775,7 @@ namespace OOO_CORE_MODEL {
         void reset(W8 threadid);
         ostream& print(ostream& os) const;
 
-        DefaultCore& getcore() { return *core; }
+        OooCore& getcore() { return *core; }
 
         private:
         void reset();
@@ -922,8 +922,8 @@ namespace OOO_CORE_MODEL {
     typedef TranslationLookasideBuffer<1, ITLB_SIZE> ITLB;
 
     struct ThreadContext {
-        DefaultCore& core;
-        DefaultCore& getcore() { return core; }
+        OooCore& core;
+        OooCore& getcore() { return core; }
         ThreadContext& getthread() { return *this; }
 
         PTLsimStats *stats_;
@@ -1022,7 +1022,7 @@ namespace OOO_CORE_MODEL {
         byte queued_mem_lock_release_count;
         W64 queued_mem_lock_release_list[4];
 
-        ThreadContext(DefaultCore& core_, W8 threadid_, Context& ctx_);
+        ThreadContext(OooCore& core_, W8 threadid_, Context& ctx_);
 
         int commit();
         int writeback(int cluster);
@@ -1058,7 +1058,7 @@ namespace OOO_CORE_MODEL {
         void init();
 
         // Stats
-        DefaultCoreThreadStats thread_stats;
+        OooCoreThreadStats thread_stats;
     };
 
     //  class MemoryHierarchy;
@@ -1067,9 +1067,9 @@ namespace OOO_CORE_MODEL {
 
     // checkpointed core
     //
-    struct DefaultCore: public BaseCore {
+    struct OooCore: public BaseCore {
         W8 coreid;
-        DefaultCore& getcore() { return *this; }
+        OooCore& getcore() { return *this; }
 
         /* This is only used for stats collection. By default if core is
          * collecting stats that is common across threads then its collected
@@ -1108,7 +1108,7 @@ namespace OOO_CORE_MODEL {
         // Instantiate any issueq sizes used above:
 
 
-#define foreach_issueq(expr) { DefaultCore& core = getcore(); core.issueq_int0.expr; core.issueq_int1.expr; core.issueq_ld.expr; core.issueq_fp.expr; }
+#define foreach_issueq(expr) { OooCore& core = getcore(); core.issueq_int0.expr; core.issueq_int1.expr; core.issueq_ld.expr; core.issueq_fp.expr; }
 
         void sched_get_all_issueq_free_slots(int* a) {
             a[0] = issueq_int0.remaining();
@@ -1160,9 +1160,9 @@ namespace OOO_CORE_MODEL {
 #define for_each_cluster(iter) foreach (iter, MAX_CLUSTERS)
 #define for_each_operand(iter) foreach (iter, MAX_OPERANDS)
 
-        DefaultCore(BaseMachine& machine_, W8 num_threads, const char* name=NULL);
+        OooCore(BaseMachine& machine_, W8 num_threads, const char* name=NULL);
 
-        ~DefaultCore(){
+        ~OooCore(){
             foreach (i, threadcount) delete threads[i];
         };
 
@@ -1245,7 +1245,7 @@ namespace OOO_CORE_MODEL {
         void check_rob();
 
         // Stats
-        DefaultCoreStats core_stats;
+        OooCoreStats core_stats;
 
         void update_stats(PTLsimStats* stats);
 
@@ -1325,8 +1325,8 @@ namespace OOO_CORE_MODEL {
 
 #endif // DECLARE_STRUCTURES
 
-    struct DefaultCoreBuilder : public CoreBuilder {
-        DefaultCoreBuilder(const char* name);
+    struct OooCoreBuilder : public CoreBuilder {
+        OooCoreBuilder(const char* name);
         BaseCore* get_new_core(BaseMachine& machine, const char* name);
     };
 };
