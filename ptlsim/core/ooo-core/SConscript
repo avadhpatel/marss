@@ -4,7 +4,7 @@
 Import('env')
 
 src_files = Glob('*.cpp')
-env.Append(CCFLAGS = '-Iptlsim/core/default_core')
+env.Append(CCFLAGS = '-Iptlsim/core/ooo-core')
 
 core_objs = env.core_builder('ooo', src_files)
 

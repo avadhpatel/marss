@@ -8,8 +8,8 @@
 // Copyright 2009-2010 Avadh Patel <apatel@cs.binghamton.edu>
 //
 
-#ifndef _DEFCORE_H_
-#define _DEFCORE_H_
+#ifndef _OOOCORE_H_
+#define _OOOCORE_H_
 
 #include <ptlsim.h>
 #include <basecore.h>
@@ -18,8 +18,8 @@
 #include <statsBuilder.h>
 #include <decode.h>
 
-#include <defcore-const.h>
-#include <defcore-stats.h>
+#include <ooo-const.h>
+#include <ooo-stats.h>
 
 // With these disabled, simulation is faster
 #define ENABLE_CHECKS
@@ -302,8 +302,6 @@ namespace OOO_CORE_MODEL {
 #undef ANYSTU
 #undef ANYFPU
 #undef ANYINT
-
-#ifdef INSIDE_DEFCORE
 
     struct DefaultCore;
     DefaultCore& coreof(W8 coreid);
@@ -1673,12 +1671,10 @@ namespace OOO_CORE_MODEL {
 
 #endif // DECLARE_STRUCTURES
 
-#endif // INSIDE_DEFCORE
-
     struct DefaultCoreBuilder : public CoreBuilder {
         DefaultCoreBuilder(const char* name);
         BaseCore* get_new_core(BaseMachine& machine, const char* name);
     };
 };
 
-#endif // _DEFCORE_H_
+#endif // _OOOCORE_H_

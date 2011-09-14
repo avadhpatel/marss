@@ -1,6 +1,6 @@
 
-#ifndef DEFCORE_CONST_H
-#define DEFCORE_CONST_H
+#ifndef OOOCORE_CONST_H
+#define OOOCORE_CONST_H
 
 #ifndef OOO_ISSUE_WIDTH
 #define OOO_ISSUE_WIDTH 4
@@ -220,4 +220,4 @@ namespace OOO_CORE_MODEL {
 
 };
 
-#endif // DEFCORE_CONST_H
+#endif // OOOCORE_CONST_H

@@ -8,8 +8,7 @@
 #include <statsBuilder.h>
 #include <memoryHierarchy.h>
 
-#define INSIDE_DEFCORE
-#include <defcore.h>
+#include <ooo.h>
 
 #include <atomcore.h>
 

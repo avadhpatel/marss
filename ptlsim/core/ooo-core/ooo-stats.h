@@ -1,11 +1,11 @@
 
-#ifndef DEFCORE_STATS_H
-#define DEFCORE_STATS_H
+#ifndef OOOCORE_STATS_H
+#define OOOCORE_STATS_H
 
 #include <ptlhwdef.h>
 #include <branchpred.h>
 #include <statsBuilder.h>
-#include <defcore-const.h>
+#include <ooo-const.h>
 
 namespace OOO_CORE_MODEL {
 
@@ -665,4 +665,4 @@ namespace OOO_CORE_MODEL {
 
 };
 
-#endif // DEFCORE_STATS_H
+#endif // OOOCORE_STATS_H

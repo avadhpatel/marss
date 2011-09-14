@@ -15,8 +15,7 @@
 #include <datastore.h>
 #include <logic.h>
 
-#define INSIDE_DEFCORE
-#include <defcore.h>
+#include <ooo.h>
 
 #include <memoryHierarchy.h>
 

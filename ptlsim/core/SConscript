@@ -41,7 +41,7 @@ env['core_builder'] = core_builder_func
 # Now get list of .cpp files
 src_files = Glob('*.cpp')
 
-core_model_dirs = ['default_core', 'atom-core']
+core_model_dirs = ['ooo-core', 'atom-core']
 
 core_objs = []
 for core_model in core_model_dirs:

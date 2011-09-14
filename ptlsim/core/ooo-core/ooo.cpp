@@ -18,9 +18,8 @@
 #include <statelist.h>
 #include <superstl.h>
 
-#define INSIDE_DEFCORE
 #define DECLARE_STRUCTURES
-#include <defcore.h>
+#include <ooo.h>
 
 #include <memoryHierarchy.h>
 
