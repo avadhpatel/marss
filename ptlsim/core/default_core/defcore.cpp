@@ -15,7 +15,6 @@
 #include <branchpred.h>
 #include <datastore.h>
 #include <logic.h>
-#include <dcache.h>
 #include <statelist.h>
 #include <superstl.h>
 
@@ -1716,10 +1715,6 @@ ostream& OutOfOrderCoreEvent::print(ostream& os) const {
             }
         case EVENT_LOAD_BANK_CONFLICT:
             {
-                os << "ldbank", " rob ", intstring(rob, -3), " ldq ", lsq,
-                   " r", intstring(physreg, -3), " on ", padstring(fu_names[fu], -4), " @ ",
-                   (void*)(Waddr)loadstore.virtaddr, " (phys ", (void*)(Waddr)(loadstore.sfr.physaddr << 3), "): ",
-                   "L1 bank conflict over bank ", lowbits(loadstore.sfr.physaddr, log2(CacheSubsystem::L1_DCACHE_BANKS));
                 break;
             }
         case EVENT_LOAD_TLB_MISS:

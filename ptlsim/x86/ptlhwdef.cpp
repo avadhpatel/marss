@@ -6,7 +6,6 @@
 //
 
 #include <ptlsim.h>
-#include <dcache.h>
 #include <stats.h>
 
 Context* ptl_contexts[MAX_CONTEXTS];

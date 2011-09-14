@@ -14,7 +14,6 @@
 #include <branchpred.h>
 #include <datastore.h>
 #include <logic.h>
-#include <dcache.h>
 
 #define INSIDE_DEFCORE
 #include <defcore.h>

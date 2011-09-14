@@ -21,6 +21,8 @@
 #include <netinet/in.h>
 #include <bson/bson.h>
 #include <bson/mongo.h>
+#include <machine.h>
+#include <statelist.h>
 
 #include <fstream>
 #include <syscalls.h>
@@ -896,7 +898,6 @@ void compare_checker(W8 context_id, W64 flagmask) {
 // print selected stats to log for average of all cores
 void print_stats_in_log(){
 
-
   // 1. execution key stats:
   // uops_in_mode: kernel and user
   ptl_logfile << " kernel-insns ", (stats->external.total.insns_in_mode.kernel64 * 100.0) / total_user_insns_committed, endl;
@@ -909,20 +910,6 @@ void print_stats_in_log(){
   //#define OPCLASS_LOAD                    (1 << 11)
   //#define OPCLASS_STORE                   (1 << 12)
 
-  // opclass: load, store, branch,
-  W64 total_uops = stats->ooocore_context_total.commit.uops;
-  ptl_logfile << " total_uop ", total_uops, endl;
- 
-   
-  ptl_logfile << " total_load ", stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)], endl;
-  ptl_logfile << " load_percentage ", (stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_LOAD)] * 100.0 )/ (total_uops * 1.0), endl;
-  ptl_logfile << " total_store ", stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)], endl;
-  ptl_logfile << " store_percentage ", (stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_STORE)] * 100.0)/(total_uops * 1.0), endl;
-  ptl_logfile << " total_branch ", stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)], endl;
-  ptl_logfile << " branch_percentage ", (stats->ooocore_context_total.commit.opclass[lsbindex(OPCLASS_BRANCH)] * 100.0)/(total_uops * 1.0), endl;
-  // branch prediction accuracy
-  ptl_logfile << " branch-accuracy ", double (stats->ooocore_context_total.branchpred.cond[1] * 100.0)/double (stats->ooocore_context_total.branchpred.cond[0] + stats->ooocore_context_total.branchpred.cond[1]), endl;
-
   // 2. simulation speed:
   ptl_logfile << " elapse_seconds ", stats->elapse_seconds, endl;
   // CPS : number of similated cycle per second
@@ -930,42 +917,6 @@ void print_stats_in_log(){
   // IPS : number of instruction commited per second
   ptl_logfile << " IPS ", W64(double(total_user_insns_committed) / double(stats->elapse_seconds)), endl;
 
-  // 3. performance:
-  // IPC : number of instruction per second
-  ptl_logfile << " total_cycle ", sim_cycle, endl;
-  ptl_logfile << " per_vcpu_IPC ", stats->ooocore_context_total.commit.ipc, endl;
-  ptl_logfile << " total_IPC ",  double(total_user_insns_committed) / double(sim_cycle), endl;
-
-  // 4. internconnection related
-  struct CacheStats::cpurequest::count &count_L1I = stats->memory.total.L1I.cpurequest.count;
-  W64 hit_L1I = count_L1I.hit.read.hit.hit + count_L1I.hit.read.hit.forward +  count_L1I.hit.write.hit.hit + count_L1I.hit.write.hit.forward;
-  W64 miss_L1I = count_L1I.miss.read +  count_L1I.miss.write;
-  ptl_logfile << " L1I_hit_rate ", double(hit_L1I * 100.0) / double (hit_L1I + miss_L1I), endl;
-
-  struct CacheStats::cpurequest::count &count_L1D = stats->memory.total.L1D.cpurequest.count;
-  W64 hit_L1D = count_L1D.hit.read.hit.hit + count_L1D.hit.read.hit.forward +  count_L1D.hit.write.hit.hit + count_L1D.hit.write.hit.forward;
-  W64 miss_L1D = count_L1D.miss.read +  count_L1D.miss.write;
-  ptl_logfile << " L1D_hit_rate ", double(hit_L1D * 100.0) / double (hit_L1D + miss_L1D), endl;
-
-  struct CacheStats::cpurequest::count &count_L2 = stats->memory.total.L2.cpurequest.count;
-  W64 hit_L2 = count_L2.hit.read.hit.hit + count_L2.hit.read.hit.forward +  count_L2.hit.write.hit.hit + count_L2.hit.write.hit.forward;
-  W64 miss_L2 = count_L2.miss.read +  count_L2.miss.write;
-  ptl_logfile << " L2_hit_rate ", double(hit_L2 * 100.0) / double (hit_L2 + miss_L2), endl;
-
-  // average load latency
-  ptl_logfile << " L1I_IF_latency ", double (stats->memory.total.L1I.latency.IF) / double (stats->memory.total.L1I.lat_count.IF), endl;
-  ptl_logfile << " L1D_load_latency ", double (stats->memory.total.L1D.latency.load) / double (stats->memory.total.L1D.lat_count.load), endl;
-  ptl_logfile << " L1_read_latency ", double (stats->memory.total.L1I.latency.IF + stats->memory.total.L1D.latency.load) / double (stats->memory.total.L1I.lat_count.IF + stats->memory.total.L1D.lat_count.load), endl;
-  ptl_logfile << " L1D_store_latency ", double (stats->memory.total.L1D.latency.store) / double (stats->memory.total.L1D.lat_count.store), endl;
-
-  ptl_logfile << " L2_IF_latency ", double (stats->memory.total.L2.latency.IF) / double (stats->memory.total.L2.lat_count.IF), endl;
-  ptl_logfile << " L2_load_latency ", double (stats->memory.total.L2.latency.load) / double (stats->memory.total.L2.lat_count.load), endl;
-  ptl_logfile << " L2_read_latency ", double (stats->memory.total.L2.latency.IF + stats->memory.total.L2.latency.load) / double (stats->memory.total.L2.lat_count.IF + stats->memory.total.L2.lat_count.load), endl;
-  ptl_logfile << " L2_store_latency ", double (stats->memory.total.L2.latency.store) / double (stats->memory.total.L2.lat_count.store), endl;
-
-  // average load miss latency
-   ptl_logfile << " L1_read_miss_latency ", double (stats->memory.total.L1I.latency.IF + stats->memory.total.L1D.latency.load) / double (count_L1I.miss.read +  count_L2.miss.read), endl;
-   ptl_logfile << " L1_write_miss_latency ", double (stats->memory.total.L1D.latency.store) / double (count_L1D.miss.write), endl;
 }
 
 void setup_qemu_switch_all_ctx(Context& last_ctx) {

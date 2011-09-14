@@ -183,22 +183,12 @@ namespace Memory {
     // interface to memory hierarchy
 	bool access_cache(MemoryRequest *request);
 
-	// callback with response
-	void icache_wakeup_wrapper(MemoryRequest *request);
-	void dcache_wakeup_wrapper(MemoryRequest *request);
-
     // New Core wakeup function that uses Signal of MemoryRequest
     // if Signal is not setup, it uses old wrapper functions
     void core_wakeup(MemoryRequest *request) {
         if(request->get_coreSignal()) {
             request->get_coreSignal()->emit((void*)request);
             return;
-        }
-
-        if(request->is_instruction()) {
-            icache_wakeup_wrapper(request);
-        } else {
-            dcache_wakeup_wrapper(request);
         }
     }
 

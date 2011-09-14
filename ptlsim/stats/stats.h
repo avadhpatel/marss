@@ -16,8 +16,6 @@
 
 #define STATS_ONLY
 #include <decode.h>
-#include <ooocore.h>
-#include <dcache.h>
 #include <branchpred.h>
 
 #include <memoryStats.h>
@@ -265,77 +263,7 @@ struct PTLsimStats { // rootnode:
     }
   } decoder;
 
-  OutOfOrderCoreStats ooocore_total;
-  PerContextOutOfOrderCoreStats ooocore_context_total;
   W64 elapse_seconds;
-//   OutOfOrderCoreStats ooocore;
-  struct ooocore{
-    OutOfOrderCoreStats total;
-    //up to MAX_VCPUS instances
-    OutOfOrderCoreStats c0;
-    OutOfOrderCoreStats c1;
-    OutOfOrderCoreStats c2;
-    OutOfOrderCoreStats c3;
-    OutOfOrderCoreStats c4;
-    OutOfOrderCoreStats c5;
-    OutOfOrderCoreStats c6;
-    OutOfOrderCoreStats c7;
-//     OutOfOrderCoreStats c8;
-//     OutOfOrderCoreStats c9;
-//     OutOfOrderCoreStats c10;
-//     OutOfOrderCoreStats c11;
-//     OutOfOrderCoreStats c12;
-//     OutOfOrderCoreStats c13;
-//     OutOfOrderCoreStats c14;
-//     OutOfOrderCoreStats c15;
-
-    ooocore& operator +=(const ooocore &rhs) { // operator
-        total += rhs.total;
-        c0 += rhs.c0;
-        c1 += rhs.c1;
-        c2 += rhs.c2;
-        c3 += rhs.c3;
-        c4 += rhs.c4;
-        c5 += rhs.c5;
-        c6 += rhs.c6;
-        c7 += rhs.c7;
-        // c8 += rhs.c8;
-        // c9 += rhs.c9;
-        // c10 += rhs.c10;
-        // c11 += rhs.c11;
-        // c12 += rhs.c12;
-        // c13 += rhs.c13;
-        // c14 += rhs.c14;
-        // c15 += rhs.c15;
-        return *this;
-    }
-
-    const ooocore operator +(const ooocore &other) { // operator
-        return ooocore(*this) += other;
-    }
-  } ooocore;
-
-  //  DataCacheStats dcache;
-  struct dcache{
-    DataCacheStats total;
-    //up to number of cores
-    DataCacheStats c0;
-    DataCacheStats c1;
-    DataCacheStats c2;
-    DataCacheStats c3;
-    DataCacheStats c4;
-    DataCacheStats c5;
-    DataCacheStats c6;
-    DataCacheStats c7;
-//     DataCacheStats c8;
-//     DataCacheStats c9;
-//     DataCacheStats c10;
-//     DataCacheStats c11;
-//     DataCacheStats c12;
-//     DataCacheStats c13;
-//     DataCacheStats c14;
-//     DataCacheStats c15;
-  } dcache;
 
 
   struct external {
@@ -445,9 +373,6 @@ struct PTLsimStats { // rootnode:
       memcpy(&simulator, &(rhs.simulator), sizeof(simulator));
 
       decoder += rhs.decoder;
-      ooocore += rhs.ooocore;
-      ooocore_total += rhs.ooocore_total;
-      ooocore_context_total += rhs.ooocore_context_total;
       external += rhs.external;
       memory += rhs.memory;
 

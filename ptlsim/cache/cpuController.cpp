@@ -319,14 +319,12 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
         } else {
             user_stats.memory.icache_latency[req_latency]++;
         }
-		// memoryHierarchy_->icache_wakeup_wrapper(request);
 	} else {
         if(kernel_req) {
             kernel_stats.memory.dcache_latency[req_latency]++;
         } else {
             user_stats.memory.dcache_latency[req_latency]++;
         }
-		// memoryHierarchy_->dcache_wakeup_wrapper(request);
 	}
     memoryHierarchy_->core_wakeup(request);
 

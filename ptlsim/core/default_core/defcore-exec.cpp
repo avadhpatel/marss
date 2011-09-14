@@ -13,7 +13,6 @@
 #include <branchpred.h>
 #include <datastore.h>
 #include <logic.h>
-#include <dcache.h>
 
 #define INSIDE_DEFCORE
 #include <defcore.h>
@@ -1771,15 +1770,6 @@ int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
 
     cycles_left = 0;
     changestate(thread.rob_cache_miss_list);
-
-    LoadStoreInfo lsi;
-    lsi.threadid = thread.threadid;
-    lsi.rob = index();
-    lsi.sizeshift = sizeshift;
-    lsi.aligntype = aligntype;
-    lsi.sfrused = 0;
-    lsi.internal = uop.internal;
-    lsi.signext = signext;
 
     SFR dummysfr;
     setzero(dummysfr);
