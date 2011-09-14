@@ -703,15 +703,7 @@ bool assist_write_cr2(Context& ctx) {
   return true;
 }
 
-#define STORE_CR3_VALUES
-#ifdef STORE_CR3_VALUES
-static ofstream cr3_values("cr3_values.txt");
-#endif
-
 bool assist_write_cr3(Context& ctx) {
-#ifdef STORE_CR3_VALUES
-	cr3_values << "sim_cycle: ", sim_cycle, " cr3: ", (void*)ctx.reg_ar1, endl, flush;
-#endif
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
   ctx.eip = ctx.reg_nextrip;
