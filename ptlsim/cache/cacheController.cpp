@@ -230,9 +230,9 @@ bool CacheController::handle_interconnect_cb(void *arg)
 			OP_TYPE type = queueEntry->request->get_type();
             bool kernel_req = queueEntry->request->is_kernel();
 			if(type == MEMORY_OP_READ) {
-				STAT_UPDATE(cpurequest.stall.read.dependency++, kernel_req);
+				N_STAT_UPDATE(new_stats.cpurequest.stall.read.dependency, ++, kernel_req);
 			} else if(type == MEMORY_OP_WRITE) {
-				STAT_UPDATE(cpurequest.stall.write.dependency++, kernel_req);
+				N_STAT_UPDATE(new_stats.cpurequest.stall.write.dependency, ++, kernel_req);
 			}
 		} else {
 			cache_access_cb(queueEntry);
@@ -370,7 +370,6 @@ int CacheController::access_fast_path(Interconnect *interconnect,
 	if(hit && request->get_type() != MEMORY_OP_WRITE) {
         N_STAT_UPDATE(new_stats.cpurequest.count.hit.read.hit, ++,
                 request->is_kernel());
-		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, request->is_kernel());
 		return cacheLines_->latency();
 	}
 
@@ -424,11 +423,9 @@ bool CacheController::cache_hit_cb(void *arg)
 	OP_TYPE type = queueEntry->request->get_type();
     bool kernel_req = queueEntry->request->is_kernel();
 	if(type == MEMORY_OP_READ) {
-		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, kernel_req);
 		N_STAT_UPDATE(new_stats.cpurequest.count.hit.read.hit, ++,
                 kernel_req);
 	} else if(type == MEMORY_OP_WRITE) {
-		STAT_UPDATE(cpurequest.count.hit.write.hit.hit++, kernel_req);
 		N_STAT_UPDATE(new_stats.cpurequest.count.hit.write.hit, ++,
                 kernel_req);
 	}
@@ -462,11 +459,6 @@ bool CacheController::cache_miss_cb(void *arg)
 
 	OP_TYPE type = queueEntry->request->get_type();
     bool kernel_req = queueEntry->request->is_kernel();
-	if(type == MEMORY_OP_READ) {
-		STAT_UPDATE(cpurequest.count.miss.read++, kernel_req);
-	} else if(type == MEMORY_OP_WRITE) {
-		STAT_UPDATE(cpurequest.count.miss.write++, kernel_req);
-	}
 	if(type == MEMORY_OP_READ) {
 		N_STAT_UPDATE(new_stats.cpurequest.count.miss.read, ++, kernel_req);
 	} else if(type == MEMORY_OP_WRITE) {
@@ -634,9 +626,9 @@ bool CacheController::cache_access_cb(void *arg)
 		OP_TYPE type = queueEntry->request->get_type();
         bool kernel_req = queueEntry->request->is_kernel();
 		if(type == MEMORY_OP_READ) {
-			STAT_UPDATE(cpurequest.stall.read.cache_port++, kernel_req);
+			N_STAT_UPDATE(new_stats.cpurequest.stall.read.cache_port, ++, kernel_req);
 		} else if(type == MEMORY_OP_WRITE) {
-			STAT_UPDATE(cpurequest.stall.write.cache_port++, kernel_req);
+			N_STAT_UPDATE(new_stats.cpurequest.stall.write.cache_port, ++, kernel_req);
 		}
 	}
 

@@ -165,10 +165,6 @@ namespace Memory {
 
                 CacheType       type_;
                 CacheLinesBase *cacheLines_;
-                CacheStats     *userStats_;
-                CacheStats     *totalUserStats_;
-                CacheStats     *kernelStats_;
-                CacheStats     *totalKernelStats_;
 
                 // No of bits needed to find Cache Line address
                 int cacheLineBits_;

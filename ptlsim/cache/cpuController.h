@@ -107,13 +107,12 @@ class CPUController : public Controller
 		Interconnect *int_L1_d_;
 		int icacheLineBits_;
 		int dcacheLineBits_;
-		CacheStats *userStats_;
-		CacheStats *totalUserStats_;
-		CacheStats *kernelStats_;
-		CacheStats *totalKernelStats_;
 
 		Signal cacheAccess_;
 		Signal queueAccess_;
+
+        // Stats Objects
+        CPUControllerStats stats;
 
 		FixStateList<CPUControllerQueueEntry, \
 			CPU_CONT_PENDING_REQ_SIZE> pendingRequests_;

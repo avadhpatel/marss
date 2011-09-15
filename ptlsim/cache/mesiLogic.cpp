@@ -41,7 +41,6 @@ void MESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
     OP_TYPE type                = queueEntry->request->get_type();
     bool kernel_req             = queueEntry->request->is_kernel();
 
-    STAT_UPDATE(mesi_stats.hit_state.cpu[oldState]++, kernel_req);
     N_STAT_UPDATE(hit_state.cpu, [oldState]++,
                  kernel_req);
 
@@ -135,7 +134,6 @@ void MESILogic::handle_interconn_hit(CacheQueueEntry *queueEntry)
     OP_TYPE type                = queueEntry->request->get_type();
     bool kernel_req             = queueEntry->request->is_kernel();
 
-    STAT_UPDATE(mesi_stats.hit_state.snoop[oldState]++, kernel_req);
     N_STAT_UPDATE(hit_state.snoop, [oldState]++,
                  kernel_req);
     if(type == MEMORY_OP_EVICT) {

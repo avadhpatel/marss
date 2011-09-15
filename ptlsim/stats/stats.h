@@ -22,10 +22,6 @@
 
 #undef STATS_ONLY
 
-using Memory::CacheStats;
-using Memory::PerCoreCacheStats;
-using Memory::BusStats;
-
 #define increment_clipped_histogram(h, slot, incr) h[clipto(W64(slot), W64(0), W64(lengthof(h)-1))] += incr;
 
 #define per_ooo_core_stats_ref(coreid) (*(((OutOfOrderCoreStats*)&stats->ooocore.c0) + (coreid)))
@@ -125,71 +121,7 @@ struct PTLsimStats { // rootnode:
   W64 snapshot_uuid;
   char snapshot_name[64];
 
-  struct memory{
-//	  PerCoreCacheStats total;
-//	  PerCoreCacheStats cacheStats[10];
-    PerCoreCacheStats total;
-    PerCoreCacheStats c0;
-    PerCoreCacheStats c1;
-    PerCoreCacheStats c2;
-    PerCoreCacheStats c3;
-    PerCoreCacheStats c4;
-    PerCoreCacheStats c5;
-    PerCoreCacheStats c6;
-    PerCoreCacheStats c7;
-
-//     PerCoreCacheStats c8;
-//     PerCoreCacheStats c9;
-//     PerCoreCacheStats c10;
-//     PerCoreCacheStats c11;
-//     PerCoreCacheStats c12;
-//     PerCoreCacheStats c13;
-//     PerCoreCacheStats c14;
-//     PerCoreCacheStats c15;
-
-    BusStats bus;
-
-	W64 dcache_latency[200]; // histo: 0, 199, 1
-	W64 icache_latency[200]; // histo: 0, 199, 1
-
-    memory& operator +=(const memory &rhs) { // operator
-        total += rhs.total;
-        c0 += rhs.c0;
-        c1 += rhs.c1;
-        c2 += rhs.c2;
-        c3 += rhs.c3;
-        c4 += rhs.c4;
-        c5 += rhs.c5;
-        c6 += rhs.c6;
-        c7 += rhs.c7;
-        // c8 += rhs.c8;
-        // c9 += rhs.c9;
-        // c10 += rhs.c10;
-        // c11 += rhs.c11;
-        // c12 += rhs.c12;
-        // c13 += rhs.c13;
-        // c14 += rhs.c14;
-        // c15 += rhs.c15;
-
-        bus += rhs.bus;
-
-        // FIXME : Currently dstbuild.py can't handle in function
-        // '{' so dont add them
-        foreach(i, 200)
-            dcache_latency[i] += rhs.dcache_latency[i];
-        foreach(i, 200)
-            icache_latency[i] += rhs.icache_latency[i];
-        return *this; //in memory
-    }
-
-    const memory operator +(const memory &other) { // operator
-        return memory(*this) += other;
-    }
-  } memory;
-
   PTLsimStats& operator +=(const PTLsimStats &rhs) { // operator
-      memory += rhs.memory;
-
       return *this;
   }
 

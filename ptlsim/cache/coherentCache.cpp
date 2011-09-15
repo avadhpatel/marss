@@ -210,10 +210,8 @@ bool CacheController::handle_upper_interconnect(Message &message)
         OP_TYPE type       = queueEntry->request->get_type();
         bool kernel_req    = queueEntry->request->is_kernel();
         if(type == MEMORY_OP_READ) {
-            STAT_UPDATE(cpurequest.stall.read.dependency++, kernel_req);
             N_STAT_UPDATE(new_stats->cpurequest.stall.read.dependency, ++, kernel_req);
         } else if(type == MEMORY_OP_WRITE) {
-            STAT_UPDATE(cpurequest.stall.write.dependency++, kernel_req);
             N_STAT_UPDATE(new_stats->cpurequest.stall.write.dependency, ++, kernel_req);
         }
     } else {
@@ -446,7 +444,6 @@ int CacheController::access_fast_path(Interconnect *interconnect,
             request->get_type() != MEMORY_OP_WRITE) {
         N_STAT_UPDATE(new_stats->cpurequest.count.hit.read.hit, ++,
                 request->is_kernel());
-        STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, request->is_kernel());
         return cacheLines_->latency();
     }
 
@@ -543,16 +540,13 @@ bool CacheController::cache_hit_cb(void *arg)
 
     if(queueEntry->isSnoop) {
         coherence_logic_->handle_interconn_hit(queueEntry);
-        STAT_UPDATE(snooprequest.hit++, kernel_req);
     } else {
         coherence_logic_->handle_local_hit(queueEntry);
         OP_TYPE type = queueEntry->request->get_type();
         if(type == MEMORY_OP_READ) {
-            STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, kernel_req);
             N_STAT_UPDATE(new_stats->cpurequest.count.hit.read.hit, ++,
                     kernel_req);
         } else if(type == MEMORY_OP_WRITE) {
-            STAT_UPDATE(cpurequest.count.hit.write.hit.hit++, kernel_req);
             N_STAT_UPDATE(new_stats->cpurequest.count.hit.write.hit, ++,
                     kernel_req);
         }
@@ -588,17 +582,14 @@ bool CacheController::cache_miss_cb(void *arg)
         queueEntry->line         = NULL;
         queueEntry->isShared     = false;
         queueEntry->responseData = false;
-        STAT_UPDATE(snooprequest.miss++, queueEntry->request->is_kernel());
         coherence_logic_->handle_interconn_miss(queueEntry);
     } else {
         OP_TYPE type = queueEntry->request->get_type();
         bool kernel_req = queueEntry->request->is_kernel();
         if(type == MEMORY_OP_READ) {
-            STAT_UPDATE(cpurequest.count.miss.read++, kernel_req);
             N_STAT_UPDATE(new_stats->cpurequest.count.miss.read, ++, kernel_req);
         } else if(type == MEMORY_OP_WRITE) {
             N_STAT_UPDATE(new_stats->cpurequest.count.miss.write, ++, kernel_req);
-            STAT_UPDATE(cpurequest.count.miss.write++, kernel_req);
         }
 
         coherence_logic_->handle_local_miss(queueEntry);
@@ -691,11 +682,9 @@ bool CacheController::cache_access_cb(void *arg)
     } else {
         OP_TYPE type = queueEntry->request->get_type();
         if(type == MEMORY_OP_READ) {
-            STAT_UPDATE(cpurequest.stall.read.cache_port++, kernel_req);
             N_STAT_UPDATE(new_stats->cpurequest.stall.read.cache_port, ++,
                     kernel_req);
         } else if(type == MEMORY_OP_WRITE) {
-            STAT_UPDATE(cpurequest.stall.write.cache_port++, kernel_req);
             N_STAT_UPDATE(new_stats->cpurequest.stall.write.cache_port, ++,
                     kernel_req);
         }
