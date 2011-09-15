@@ -1208,7 +1208,8 @@ bool ThreadContext::handle_barrier() {
 
     if (logable(6)) ptl_logfile << "Calling assist function at ", (void*)assist, "...", endl, flush;
 
-    update_assist_stats(assist);
+    thread_stats.assists[assistid]++;
+
     if (logable(6)) {
         ptl_logfile << "Before assist:", endl, ctx, endl;
     }

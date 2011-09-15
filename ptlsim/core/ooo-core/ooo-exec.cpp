@@ -1628,7 +1628,7 @@ void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
 
     state.reg.rdflags = (W16)(new_flags);
 
-    update_light_assist_stats(assistid);
+    getthread().thread_stats.lassists[assistid]++;
 
     return;
 }

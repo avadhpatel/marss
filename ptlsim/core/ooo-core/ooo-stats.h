@@ -6,6 +6,7 @@
 #include <branchpred.h>
 #include <statsBuilder.h>
 #include <ooo-const.h>
+#include <decode.h>
 
 namespace OOO_CORE_MODEL {
 
@@ -511,6 +512,8 @@ namespace OOO_CORE_MODEL {
         StatObj<W64> interrupt_requests;
         StatObj<W64> cpu_exit_requests;
         StatObj<W64> cycles_in_pause;
+        StatArray<W64, ASSIST_COUNT> assists;
+        StatArray<W64, L_ASSIST_COUNT> lassists;
 
         OooCoreThreadStats(const char *name, Statable *parent)
             : Statable(name, parent)
@@ -525,6 +528,8 @@ namespace OOO_CORE_MODEL {
               , interrupt_requests("interrupt_requests", this)
               , cpu_exit_requests("cpu_exit_requests", this)
               , cycles_in_pause("cycles_in_pause", this)
+              , assists("assists", this, assist_names)
+              , lassists("lassists", this, light_assist_names)
         {}
     };
 

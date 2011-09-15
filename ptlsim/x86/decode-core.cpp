@@ -189,12 +189,6 @@ const char* assist_name(assist_func_t assist) {
     return "unknown";
 }
 
-void update_assist_stats(assist_func_t assist) {
-    int idx = assist_index(assist);
-    assert(inrange(idx, 0, ASSIST_COUNT-1));
-    stats->external.assists[idx]++;
-}
-
 const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT] = {
     l_assist_sti,
     l_assist_cli,
@@ -223,10 +217,6 @@ const char* light_assist_name(light_assist_func_t assist) {
     }
 
     return "unknown";
-}
-
-void update_light_assist_stats(int idx) {
-    stats->external.l_assists[idx]++;
 }
 
 void split_unaligned(const TransOp& transop, TransOpBuffer& buf) {

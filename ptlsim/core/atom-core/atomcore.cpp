@@ -841,6 +841,8 @@ W8 AtomOp::execute_ast(TransOp& uop)
 
     state.reg.rdflags = new_flags;
 
+    thread->lassists[assistid]++;
+
     ATOMOPLOG2("Flags after ast: ", hexstring(new_flags, 16));
 
     return ISSUE_OK;
@@ -1711,6 +1713,8 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
       , st_dcache("dcache", this)
       , st_icache("icache", this)
       , st_cycles("cycles", this)
+      , assists("assists", this, assist_names)
+      , lassists("lassists", this, light_assist_names)
 {
     stringbuf th_name;
     th_name << "thread_" << threadid;
@@ -2813,6 +2817,8 @@ bool AtomThread::handle_barrier()
     ATOMTHLOG1("Executing Assist Function ", assist_name(assist));
 
     bool flush_required = assist(ctx);
+
+    assists[assistid]++;
 
     if(flush_required) {
         flush_pipeline();

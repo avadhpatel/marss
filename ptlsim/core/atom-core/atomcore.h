@@ -5,6 +5,7 @@
 #include <basecore.h>
 #include <branchpred.h>
 #include <statelist.h>
+#include <decode.h>
 
 #include <statsBuilder.h>
 
@@ -962,6 +963,9 @@ namespace ATOM_CORE_MODEL {
         cache_access st_dcache, st_icache;
 
         StatObj<W64> st_cycles;
+
+        StatArray<W64, ASSIST_COUNT> assists;
+        StatArray<W64, L_ASSIST_COUNT> lassists;
     };
 
     static inline ostream& operator <<(ostream& os, const AtomThread& th)

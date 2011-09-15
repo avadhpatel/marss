@@ -88,17 +88,6 @@ inline Context& contextof(W8 i) {
 	return *ptl_contexts[i];
 }
 
-/* Simulation related stats like tags, benchmark name etc.*/
-struct SimStats : public Statable {
-    StatString tags;
-    SimStats() :
-        Statable("sim_stats")
-        , tags("tags", this)
-    {
-        tags.set_split(",");
-    }
-};
-
 /* Checker */
 extern Context* checker_context;
 
@@ -144,7 +133,6 @@ void split_unaligned(const TransOp& transop, TransOpBuffer& buf);
 
 void capture_stats_snapshot(const char* name = NULL);
 bool handle_config_change(PTLsimConfig& config, int argc = 0, char** argv = NULL);
-void collect_common_sysinfo(PTLsimStats& stats);
 void collect_sysinfo(PTLsimStats& stats, int argc, char** argv);
 void print_sysinfo(ostream& os);
 void backup_and_reopen_logfile();

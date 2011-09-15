@@ -125,99 +125,6 @@ struct PTLsimStats { // rootnode:
   W64 snapshot_uuid;
   char snapshot_name[64];
 
-  struct summary {
-    W64 cycles;
-    W64 insns;
-    W64 uops;
-    W64 basicblocks;
-
-    summary& operator +=(const summary &rhs) { // operator
-        cycles += rhs.cycles;
-        insns += rhs.insns;
-        uops += rhs.uops;
-        basicblocks += rhs.basicblocks;
-        return *this;
-    }
-
-    const summary operator +(const summary &other) { // operator
-        return summary(*this) += other;
-    }
-  } summary;
-
-  struct simulator {
-    // Compile time information
-    struct version {
-      char build_timestamp[32];
-      W64 svn_revision;
-      char svn_timestamp[32];
-      char build_hostname[64];
-      char build_compiler[16];
-    } version;
-
-    // Runtime information
-    struct run {
-      W64 timestamp;
-      char hostname[64];
-      char kernel_version[32];
-      char hypervisor_version[32];
-      W64 native_cpuid;
-      W64 native_hz;
-    } run;
-
-    struct config {
-      // Configuration string passed for this run
-      char config[256];
-    } config;
-
-    struct performance {
-      struct rate {
-        double cycles_per_sec;
-        double issues_per_sec;
-        double user_commits_per_sec;
-      } rate;
-    } performance;
-  } simulator;
-
-  W64 elapse_seconds;
-
-  struct external {
-    W64 assists[ASSIST_COUNT]; // label: assist_names
-	W64 l_assists[L_ASSIST_COUNT]; // label: light_assist_names
-    W64 traps[256]; // label: x86_exception_names
-	PerCoreEvents total;
-	PerCoreEvents c0;
-	PerCoreEvents c1;
-	PerCoreEvents c2;
-	PerCoreEvents c3;
-	PerCoreEvents c4;
-	PerCoreEvents c5;
-	PerCoreEvents c6;
-	PerCoreEvents c7;
-
-    external& operator +=(const external &rhs) { // operator
-        foreach(i, ASSIST_COUNT)
-            assists[i] += rhs.assists[i];
-        foreach(i, L_ASSIST_COUNT)
-            l_assists[i] += rhs.l_assists[i];
-
-        total += rhs.total;
-        c0 += rhs.c0;
-        c1 += rhs.c1;
-        c2 += rhs.c2;
-        c3 += rhs.c3;
-        c4 += rhs.c4;
-        c5 += rhs.c5;
-        c6 += rhs.c6;
-        c7 += rhs.c7;
-        return *this;
-    }
-
-    const external operator +(const external &other) { // operator
-        return external(*this) += other;
-    }
-  } external;
-
-
   struct memory{
 //	  PerCoreCacheStats total;
 //	  PerCoreCacheStats cacheStats[10];
@@ -281,12 +188,6 @@ struct PTLsimStats { // rootnode:
   } memory;
 
   PTLsimStats& operator +=(const PTLsimStats &rhs) { // operator
-      summary += rhs.summary;
-
-      // Copy the 'simulator' struct
-      memcpy(&simulator, &(rhs.simulator), sizeof(simulator));
-
-      external += rhs.external;
       memory += rhs.memory;
 
       return *this;

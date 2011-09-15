@@ -75,7 +75,6 @@ const char *snapshot_names[] = {"user", "kernel", "global"};
 Stats *n_user_stats;
 Stats *n_kernel_stats;
 Stats *n_global_stats;
-SimStats sim_stats;
 
 ofstream *time_stats_file;
 
@@ -84,6 +83,71 @@ ofstream *time_stats_file;
 static void kill_simulation();
 static void write_mongo_stats();
 static void setup_sim_stats();
+
+/* Stats structure for Simulation Statistics */
+struct SimStats : public Statable
+{
+    struct version : public Statable
+    {
+        StatString git_commit;
+        StatString git_branch;
+        StatString git_timestamp;
+        StatString build_timestamp;
+        StatString build_hostname;
+        StatString build_compiler;
+
+        version(Statable *parent)
+            : Statable("version", parent)
+              , git_commit("git_commit", this)
+              , git_branch("git_branch", this)
+              , git_timestamp("git_timestamp", this)
+              , build_timestamp("build_timestamp", this)
+              , build_hostname("build_hostname", this)
+              , build_compiler("build_compiler", this)
+        { }
+    } version;
+
+    struct run : public Statable
+    {
+        StatObj<W64> timestamp;
+        StatString   hostname;
+        StatObj<W64> native_hz;
+        StatObj<W64> seconds;
+
+        run(Statable *parent)
+            : Statable("run", parent)
+              , timestamp("timestamp", this)
+              , hostname("hostname", this)
+              , native_hz("native_hz", this)
+              , seconds("seconds", this)
+        { }
+    } run;
+
+    struct performance : public Statable
+    {
+        StatObj<W64> cycles_per_sec;
+        StatObj<W64> commits_per_sec;
+
+        performance(Statable *parent)
+            : Statable("performance", parent)
+              , cycles_per_sec("cycles_per_sec", this)
+              , commits_per_sec("commits_per_sec", this)
+        { }
+    } performance;
+
+    StatString tags;
+
+    SimStats()
+        : Statable("simulator")
+          , tags("tags", this)
+          , version(this)
+          , run(this)
+          , performance(this)
+    {
+        tags.set_split(",");
+    }
+} simstats;
+
 
 void PTLsimConfig::reset() {
   help=0;
@@ -285,26 +349,26 @@ void print_banner(ostream& os, const PTLsimStats& stats, int argc, char** argv) 
   os << flush;
 }
 
-void collect_common_sysinfo(PTLsimStats& stats) {
+static void collect_common_sysinfo() {
   utsname hostinfo;
   sys_uname(&hostinfo);
 
   stringbuf sb;
-#define strput(x, y) (strncpy((x), (y), sizeof(x)))
-
   sb.reset(); sb << __DATE__, " ", __TIME__;
-  strput(stats.simulator.version.build_timestamp, sb);
-//  stats.simulator.version.svn_revision = SVNREV;
-  strput(stats.simulator.version.svn_timestamp, stringify(SVNDATE));
-  strput(stats.simulator.version.build_hostname, stringify(BUILDHOST));
+  simstats.version.build_timestamp = sb;
+  simstats.version.build_hostname = stringify(BUILDHOST);
   sb.reset(); sb << "gcc-", __GNUC__, ".", __GNUC_MINOR__;
-  strput(stats.simulator.version.build_compiler, sb);
+  simstats.version.build_compiler = sb;
+  simstats.version.git_branch = stringify(GITBRANCH);
+  simstats.version.git_commit = stringify(GITCOMMIT);
+  simstats.version.git_timestamp = stringify(GITDATE);
 
-  stats.simulator.run.timestamp = sys_time(0);
+  W64 time = sys_time(0);
+  simstats.run.timestamp = time;
   sb.reset(); sb << hostinfo.nodename, ".", hostinfo.domainname;
-  strput(stats.simulator.run.hostname, sb);
-  stats.simulator.run.native_hz = get_core_freq_hz();
-  strput(stats.simulator.run.kernel_version, hostinfo.release);
+  simstats.run.hostname = sb;
+  W64 hz = get_core_freq_hz();
+  simstats.run.native_hz = hz;
 }
 
 void print_usage() {
@@ -838,30 +902,6 @@ void compare_checker(W8 context_id, W64 flagmask) {
     }
 }
 
-// print selected stats to log for average of all cores
-void print_stats_in_log(){
-
-  // 1. execution key stats:
-  // uops_in_mode: kernel and user
-  ptl_logfile << " kernel-insns ", (stats->external.total.insns_in_mode.kernel64 * 100.0) / total_user_insns_committed, endl;
-  ptl_logfile << " user-insns ", (stats->external.total.insns_in_mode.user64 * 100.0) / total_user_insns_committed, endl;
-  // cycles_in_mode: kernel and user
-  ptl_logfile << " kernel-cycles ", (stats->external.total.cycles_in_mode.kernel64 * 100.0) / sim_cycle, endl;
-  ptl_logfile << " user-cycles ", (stats->external.total.cycles_in_mode.user64 * 100.0) / sim_cycle, endl;
-  //#define OPCLASS_BRANCH                  (OPCLASS_COND_BRANCH|OPCLASS_INDIR_BRANCH|OPCLASS_UNCOND_BRANCH|OPCLASS_ASSIST)
-
-  //#define OPCLASS_LOAD                    (1 << 11)
-  //#define OPCLASS_STORE                   (1 << 12)
-
-  // 2. simulation speed:
-  ptl_logfile << " elapse_seconds ", stats->elapse_seconds, endl;
-  // CPS : number of similated cycle per second
-  ptl_logfile << " CPS ",  W64(double(sim_cycle) / double(stats->elapse_seconds)), endl;
-  // IPS : number of instruction commited per second
-  ptl_logfile << " IPS ", W64(double(total_user_insns_committed) / double(stats->elapse_seconds)), endl;
-
-}
-
 void setup_qemu_switch_all_ctx(Context& last_ctx) {
 	foreach(c, contextcount) {
 		Context& ctx = contextof(c);
@@ -963,8 +1003,31 @@ stringbuf get_date()
     return date;
 }
 
+static void set_run_stats()
+{
+    static W64 seconds = 0;
+    W64 tsc_at_end = rdtsc();
+    seconds += W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
+    W64 cycles_per_sec = W64(double(sim_cycle) / double(seconds));
+    W64 commits_per_sec = W64(
+            double(total_user_insns_committed) / double(seconds));
+
+#define RUN_STAT(stat) \
+    simstats.set_default_stats(stat); \
+    simstats.run.seconds = seconds; \
+    simstats.performance.cycles_per_sec = cycles_per_sec; \
+    simstats.performance.commits_per_sec = commits_per_sec;
+
+    RUN_STAT(n_user_stats);
+    RUN_STAT(n_kernel_stats);
+    RUN_STAT(n_global_stats);
+#undef RUN_STAT
+}
+
 static void setup_sim_stats()
 {
+    set_run_stats();
+
     /* Simlation tags contains benchmark name, host name, simulation-date,
      * user specified tags */
     stringbuf base_tags, kernel_tags, user_tags, total_tags;
@@ -989,9 +1052,18 @@ static void setup_sim_stats()
     total_tags << base_tags << "total";
     ptl_logfile << "Total Tags: " << total_tags << endl;
 
-    sim_stats.tags.set(n_kernel_stats, kernel_tags);
-    sim_stats.tags.set(n_user_stats, user_tags);
-    sim_stats.tags.set(n_global_stats, total_tags);
+    simstats.tags.set(n_kernel_stats, kernel_tags);
+    simstats.tags.set(n_user_stats, user_tags);
+    simstats.tags.set(n_global_stats, total_tags);
+
+#define COLLECT_SYSINFO(stat) \
+    simstats.set_default_stats(stat); \
+    collect_common_sysinfo();
+
+    COLLECT_SYSINFO(n_user_stats);
+    COLLECT_SYSINFO(n_kernel_stats);
+    COLLECT_SYSINFO(n_global_stats);
+#undef COLLECT_SYSINFO
 }
 
 extern "C" uint8_t ptl_simulate() {
@@ -1129,7 +1201,6 @@ extern "C" uint8_t ptl_simulate() {
 	curr_ptl_machine = NULL;
 
 	W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
-	stats->elapse_seconds = seconds;
 	stringbuf sb;
 	sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_user_insns_committed, " instructions and ",
 	   seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_user_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_user_insns_committed) / double(sim_cycle), ")", endl;
@@ -1149,7 +1220,6 @@ extern "C" uint8_t ptl_simulate() {
 
 	last_printed_status_at_ticks = 0;
 	cerr << endl;
-	print_stats_in_log();
 
     flush_stats();
 
