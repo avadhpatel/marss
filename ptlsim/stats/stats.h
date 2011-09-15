@@ -178,93 +178,7 @@ struct PTLsimStats { // rootnode:
     } performance;
   } simulator;
 
-  //
-  // Decoder and basic block cache
-  //
-  struct decoder {
-    struct throughput {
-      W64 basic_blocks;
-      W64 x86_insns;
-      W64 uops;
-      W64 bytes;
-
-      throughput& operator +=(const throughput &rhs) { // operator
-          basic_blocks += rhs.basic_blocks;
-          x86_insns += rhs.x86_insns;
-          uops += rhs.uops;
-          bytes += rhs.bytes;
-          return *this;
-      }
-
-      const throughput operator +(const throughput &other) { // operator
-          return throughput(*this) += other;
-      }
-    } throughput;
-
-    W64 x86_decode_type[DECODE_TYPE_COUNT]; // label: decode_type_names
-
-    struct bb_decode_type { // node: summable
-      W64 all_insns_fast;
-      W64 some_complex_insns;
-
-      bb_decode_type& operator+=(const bb_decode_type &rhs) { // operator
-          all_insns_fast += rhs.all_insns_fast;
-          some_complex_insns += rhs.some_complex_insns;
-          return *this;
-      }
-
-      const bb_decode_type operator +(const bb_decode_type &other) { // operator
-          return bb_decode_type(*this) += other;
-      }
-    } bb_decode_type;
-
-    // Alignment of instructions within pages
-    struct page_crossings { // node: summable
-      W64 within_page;
-      W64 crosses_page;
-    } page_crossings;
-
-    // Basic block cache
-    struct bbcache {
-      W64 count;
-      W64 inserts;
-      W64 invalidates[INVALIDATE_REASON_COUNT]; // label: invalidate_reason_names
-    } bbcache;
-
-    // Page cache
-    struct pagecache {
-      W64 count;
-      W64 inserts;
-      W64 invalidates[INVALIDATE_REASON_COUNT]; // label: invalidate_reason_names
-    } pagecache;
-
-    W64 reclaim_rounds;
-
-    decoder& operator +=(const decoder &rhs) { // operator
-        throughput += rhs.throughput;
-        foreach(i, DECODE_TYPE_COUNT)
-            x86_decode_type[i] += rhs.x86_decode_type[i];
-        bb_decode_type += rhs.bb_decode_type;
-
-        page_crossings.within_page += rhs.page_crossings.within_page;
-        page_crossings.crosses_page += rhs.page_crossings.crosses_page;
-
-        pagecache.count += rhs.pagecache.count;
-        pagecache.inserts += rhs.pagecache.inserts;
-        foreach(i, INVALIDATE_REASON_COUNT)
-            pagecache.invalidates[i] += rhs.pagecache.invalidates[i];
-
-        reclaim_rounds += rhs.reclaim_rounds;
-        return *this;
-    }
-
-    const decoder operator +(const decoder &other) { // operator
-        return decoder(*this) += other;
-    }
-  } decoder;
-
   W64 elapse_seconds;
-
 
   struct external {
     W64 assists[ASSIST_COUNT]; // label: assist_names
@@ -372,7 +286,6 @@ struct PTLsimStats { // rootnode:
       // Copy the 'simulator' struct
       memcpy(&simulator, &(rhs.simulator), sizeof(simulator));
 
-      decoder += rhs.decoder;
       external += rhs.external;
       memory += rhs.memory;
 

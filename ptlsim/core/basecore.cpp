@@ -9,8 +9,9 @@
 
 using namespace Core;
 
-BaseCore::BaseCore(BaseMachine& machine)
-    : machine(machine)
+BaseCore::BaseCore(BaseMachine& machine, const char* name)
+    : Statable(name, &machine)
+      , machine(machine)
 {
 }
 

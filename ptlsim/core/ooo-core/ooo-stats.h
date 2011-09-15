@@ -528,7 +528,7 @@ namespace OOO_CORE_MODEL {
         {}
     };
 
-    struct OooCoreStats : public Statable
+    struct OooCoreStats
     {
         struct dispatch : public Statable
         {
@@ -654,12 +654,11 @@ namespace OOO_CORE_MODEL {
         StatObj<W64> cycles;
 
         OooCoreStats(const char *name, Statable *parent)
-            : Statable(name, parent)
-              , dispatch(this)
-              , issue(this) 
-              , writeback(this)
-              , commit(this)
-              , cycles("cycles", this)
+            : dispatch(parent)
+              , issue(parent)
+              , writeback(parent)
+              , commit(parent)
+              , cycles("cycles", parent)
         { }
     };
 

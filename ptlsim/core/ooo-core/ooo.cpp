@@ -78,11 +78,14 @@ static void init_luts() {
 
 ThreadContext::ThreadContext(OooCore& core_, W8 threadid_, Context& ctx_)
     : core(core_), threadid(threadid_), ctx(ctx_)
-      , thread_stats("thread", &core_.core_stats)
+      , thread_stats("thread", &core_)
 {
     stringbuf stats_name;
     stats_name << "thread" << threadid;
     thread_stats.update_name(stats_name.buf);
+
+    // Set decoder stats
+    set_decoder_stats(&thread_stats, ctx.cpu_index);
 
     // Connect stats equations
     thread_stats.issue.uipc.add_elem(&thread_stats.issue.uops);
@@ -186,8 +189,8 @@ void ThreadContext::init() {
 
 OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
         const char* name)
-: BaseCore(machine_)
-    , core_stats("core", &machine_)
+: BaseCore(machine_, name)
+    , core_stats("core", this)
 {
     coreid = machine.get_next_coreid();
 
@@ -207,7 +210,7 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
         core_name << "core_" << coreid;
     }
 
-    core_stats.update_name(core_name.buf);
+    update_name(core_name.buf);
 
     // Setup Cache Signals
     stringbuf sig_name;
@@ -458,7 +461,7 @@ bool OooCore::runcycle() {
 
     // Each core's thread-shared stats counter will be added to
     // the thread-0's counters for simplicity
-    core_stats.set_default_stats(threads[0]->thread_stats.get_default_stats(), false);
+    set_default_stats(threads[0]->thread_stats.get_default_stats(), false);
 
     //
     // Compute reserved issue queue entries to avoid starvation:

@@ -212,6 +212,7 @@ struct TraceDecoder {
   bool pe;
   bool vm86;
   bool handle_exec_fault;
+  W8 cpuid;
 
   Level1PTE ptelo;
   Level1PTE ptehi;
@@ -766,7 +767,7 @@ enum {
 
 struct BasicBlockCache: public SelfHashtable<RIPVirtPhys, BasicBlock, BB_CACHE_SIZE, BasicBlockHashtableLinkManager> {
   BasicBlockCache(): SelfHashtable<RIPVirtPhys, BasicBlock, BB_CACHE_SIZE, BasicBlockHashtableLinkManager>() {
-      cpuid = cpuid++;
+      cpuid = cpuid_counter++;
   }
 
   BasicBlock* translate(Context& ctx, const RIPVirtPhys& rvp);
@@ -789,12 +790,6 @@ extern BasicBlockCache bbcache[NUM_SIM_CORES];
 
 extern ofstream bbcache_dump_file;
 
-//
-// This part is used when parsing stats.h to build the
-// data store template; these must be in sync with the
-// corresponding definitions elsewhere.
-//
-#ifdef DSTBUILD
 static const char* decode_type_names[DECODE_TYPE_COUNT] = {
   "fast", "complex", "x87", "sse", "assist"
 };
@@ -802,6 +797,14 @@ static const char* decode_type_names[DECODE_TYPE_COUNT] = {
 static const char* invalidate_reason_names[INVALIDATE_REASON_COUNT] = {
   "smc", "dma", "spurious", "reclaim", "dirty", "empty"
 };
-#endif
+
+/* Decoder Stats */
+#include <decoder-stats.h>
+
+#define DECODERSTAT decoder_stats[cpuid]
+
+extern DecoderStats* decoder_stats[NUM_SIM_CORES];
+
+void set_decoder_stats(Statable *parent, int vcpuid);
 
 #endif // _DECODE_H_

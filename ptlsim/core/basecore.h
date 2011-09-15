@@ -9,8 +9,8 @@
 
 namespace Core {
 
-    struct BaseCore {
-        BaseCore(BaseMachine& machine);
+    struct BaseCore : public Statable {
+        BaseCore(BaseMachine& machine, const char* name);
         virtual ~BaseCore() {}
 
         virtual void reset() = 0;

@@ -1716,6 +1716,9 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
     th_name << "thread_" << threadid;
     update_name(th_name.buf);
 
+    // Set decoder stats
+    set_decoder_stats(this, ctx.cpu_index);
+
     // Setup the signals
     stringbuf sig_name;
     sig_name << "Core" << core.coreid << "-Th" << threadid << "-dcache-wakeup";
@@ -2984,7 +2987,7 @@ ostream& AtomThread::print(ostream& os) const
  * @param num_threads Number of Hardware-threads per core
  */
 AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
-    : BaseCore(machine), Statable(name, &machine)
+    : BaseCore(machine, name)
       , threadcount(num_threads)
 {
     int th_count;

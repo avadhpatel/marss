@@ -976,7 +976,7 @@ namespace ATOM_CORE_MODEL {
      * multi-threading. In some cases it tries to mimic Intel Atom
      * architecture.
      */
-    struct AtomCore : public BaseCore , Statable {
+    struct AtomCore : public BaseCore {
 
         AtomCore(BaseMachine& machine, int num_threads, const char* name=NULL);
         ~AtomCore();
