@@ -387,21 +387,21 @@ int ReorderBufferEntry::issue() {
     if likely ((!st || (st && load_store_second_phase)) && (uop.rc != REG_imm)) assert(rc.ready());
     if likely (!st) assert(operands[RS]->ready());
 
-    if likely (ra.nonNULL()) {
+    if likely (ra.nonnull()) {
         ra.get_state_list().issue_source_counter++;
         ra.all_consumers_sourced_from_bypass &= (ra.state == PHYSREG_BYPASS);
         per_physregfile_stats_update(issue.source,
                 ra.rfid, [ra.state]++);
     }
 
-    if likely ((!uop.rbimm) & (rb.nonNULL())) {
+    if likely ((!uop.rbimm) & (rb.nonnull())) {
         rb.get_state_list().issue_source_counter++;
         rb.all_consumers_sourced_from_bypass &= (rb.state == PHYSREG_BYPASS);
         per_physregfile_stats_update(issue.source,
                rb.rfid, [rb.state]++);
     }
 
-    if unlikely ((!uop.rcimm) & (rc.nonNULL())) {
+    if unlikely ((!uop.rcimm) & (rc.nonnull())) {
         rc.get_state_list().issue_source_counter++;
         rc.all_consumers_sourced_from_bypass &= (rc.state == PHYSREG_BYPASS);
         per_physregfile_stats_update(issue.source,
@@ -471,7 +471,7 @@ int ReorderBufferEntry::issue() {
         //
         // If the uop caused an exception, force it directly to the commit
         // state and not through writeback (this keeps dependencies waiting until
-        // they can be properly anNULLed by the speculation logic.) The commit
+        // they can be properly annulled by the speculation logic.) The commit
         // stage will detect the exception and take appropriate action.
         //
         // If the exceptional uop was speculatively executed beyond a
@@ -503,7 +503,7 @@ int ReorderBufferEntry::issue() {
 
     //
     // Release the issue queue entry, since we are beyond the point of no return:
-    // the uop cannot possibly be replayed at this point, but may still be anNULLed
+    // the uop cannot possibly be replayed at this point, but may still be annulled
     // or re-dispatched in case of speculation failures.
     //
     release();
@@ -997,7 +997,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     // Aliasing is detected when stores issue: the load queue is scanned
     // for earlier loads in program order which collide with the store's
     // address. In this case all uops in program order after and including
-    // the store (and by extension, the colliding load) must be anNULLed.
+    // the store (and by extension, the colliding load) must be annulled.
     //
     // To keep this from happening repeatedly, whenever a collision is
     // detected, the store looks up the rip of the colliding load and adds
@@ -1388,7 +1388,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         //
         // Consider the following sequence of events:
         // - Load B issues
-        // - Store A issues and detects aliasing with load B; both A and B anNULLed
+        // - Store A issues and detects aliasing with load B; both A and B annulled
         // - Load B attempts to re-issue but aliasing is predicted, so it creates a dependency on store A
         // - Store A issues but sees that load B has already attempted to issue, so an aliasing replay is taken
         //
@@ -2413,7 +2413,7 @@ int ReorderBufferEntry::forward() {
 // consideration for future pipeline stages and will be dropped on
 // the next cycle.
 //
-// Normally this means that mispredicted branch uops are anNULLed
+// Normally this means that mispredicted branch uops are annulled
 // even though only the code after the branch itself is invalid.
 // In this special case, the recovery rip is set to the actual
 // target of the branch rather than refetching the branch insn.
@@ -2434,7 +2434,7 @@ int ReorderBufferEntry::forward() {
 // being retained as occurs with mispredicted branches.
 //
 
-W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_anNULLed_rip) {
+W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_rip) {
     OooCore& core = getcore();
 
     ThreadContext& thread = getthread();
@@ -2475,7 +2475,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_anNULLed_
     if (keep_misspec_uop) assert(eomidx == index());
 
     //
-    // Pass 1: invalidate issue queue slot for the anNULLed ROB
+    // Pass 1: invalidate issue queue slot for the annulled ROB
     //
     idx = endidx;
     for (;;) {
@@ -2610,7 +2610,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_anNULLed_
             //   C3
             //     C4
             //
-            // BR mispredicts, so everything after BR must be anNULLed.
+            // BR mispredicts, so everything after BR must be annulled.
             // RAS contains: C1 C3 C4, so we need to annul [C4 C3].
             //
             branchpred.annulras(annulrob.uop.predinfo);
@@ -2627,7 +2627,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_anNULLed_
     }
 
     assert(ROB[startidx].uop.som);
-    if (return_first_anNULLed_rip) return ROB[startidx].uop.rip;
+    if (return_first_annulled_rip) return ROB[startidx].uop.rip;
     return (keep_misspec_uop) ? ROB[startidx].uop.riptaken : (Waddr)ROB[startidx].uop.rip;
 }
 
@@ -2705,7 +2705,7 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
         lsq->invalid = 0;
         lsq->time_stamp = -1;
 
-        if (operands[RS]->nonNULL()) {
+        if (operands[RS]->nonnull()) {
             operands[RS]->unref(*this, thread.threadid);
             operands[RS] = &core.physregfiles[0][PHYS_REG_NULL];
             operands[RS]->addref(*this, thread.threadid);

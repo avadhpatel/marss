@@ -1179,7 +1179,7 @@ bool ReorderBufferEntry::find_sources() {
             preready[operand] = 1;
         }
 
-        if likely (source_physreg.nonNULL()) {
+        if likely (source_physreg.nonnull()) {
             per_physregfile_stats_update(dispatch.source,
                     source_physreg.rfid, [source_physreg.state]++);
         }
@@ -2133,7 +2133,7 @@ int ReorderBufferEntry::commit() {
     assert(archdest_can_commit[uop.rd]);
     assert(oldphysreg->state == PHYSREG_ARCH);
 
-    if likely (oldphysreg->nonNULL()) {
+    if likely (oldphysreg->nonnull()) {
         if unlikely (oldphysreg->referenced()) {
             oldphysreg->changestate(PHYSREG_PENDINGFREE);
             CORE_STATS(commit.freereg.pending)++;

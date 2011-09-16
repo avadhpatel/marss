@@ -540,7 +540,7 @@ namespace OOO_CORE_MODEL {
         void tlbwalk();
         int issuefence(LoadStoreQueueEntry& state);
         void release();
-        W64 annul(bool keep_misspec_uop, bool return_first_anNULLed_rip = false);
+        W64 annul(bool keep_misspec_uop, bool return_first_annulled_rip = false);
         W64 annul_after() { return annul(true); }
         W64 annul_after_and_including() { return annul(false); }
         int commit();
@@ -695,7 +695,7 @@ namespace OOO_CORE_MODEL {
         void uncommitref(int archreg, W8 threadid) { unref();  }
 
         bool referenced() const { return (refcount > 0); }
-        bool nonNULL() const { return (index() != PHYS_REG_NULL); }
+        bool nonnull() const { return (index() != PHYS_REG_NULL); }
         bool allocated() const { return (state != PHYSREG_FREE); }
         void commit() { changestate(PHYSREG_ARCH); }
         void complete() { changestate(PHYSREG_BYPASS); }

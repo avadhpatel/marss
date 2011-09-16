@@ -414,7 +414,7 @@ struct CombinedPredictor {
   //
   // Speculative execution can corrupt the RAS, since entries will be pushed
   // as call insns are fetched. If those call insns were along an incorrect
-  // branch path, they must be anNULLed.
+  // branch path, they must be annulled.
   //
   void annulras(const PredictorUpdate& predinfo) {
 #ifdef DEBUG_RAS
