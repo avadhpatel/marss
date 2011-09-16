@@ -13,7 +13,6 @@
 #include <elf.h>
 #include <ptlsim.h>
 #include <branchpred.h>
-#include <datastore.h>
 #include <logic.h>
 #include <statelist.h>
 #include <superstl.h>

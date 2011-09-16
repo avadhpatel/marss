@@ -11,7 +11,6 @@
 
 #include <globals.h>
 #include <ptlsim.h>
-#include <datastore.h>
 #include <ptl-qemu.h>
 
 // This macro is used to call helper functions in QEMU

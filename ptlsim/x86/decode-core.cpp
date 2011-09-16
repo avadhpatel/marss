@@ -7,7 +7,6 @@
 
 #include <globals.h>
 #include <ptlsim.h>
-#include <datastore.h>
 #include <decode.h>
 
 

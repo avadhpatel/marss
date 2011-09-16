@@ -119,7 +119,6 @@ config_helper.save_config(str(env['config_file']), env['config'])
 
 # Now call the SConscript in all subdirectories to build object files
 objs = []
-dst_objs = []
 for dir in dirs:
 	# Skip the Tools directory
     if dir == "tools":
@@ -127,11 +126,9 @@ for dir in dirs:
     o = SConscript('%s/SConscript' % dir, variant_dir='build/%s' % dir)
     if type(o) == list:
         objs.append(o[0])
-        dst_objs.append(o[1])
     else:
         objs.append(o)
 
-# Build ptlsim.dst.o
 inc_str = ""
 for i_s in env['CPPPATH']:
     inc_str += " -I%s" % i_s

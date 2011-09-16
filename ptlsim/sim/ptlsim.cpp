@@ -10,7 +10,6 @@
 
 #include <globals.h>
 #include <ptlsim.h>
-#include <datastore.h>
 #include <memoryStats.h>
 #include <elf.h>
 #include <netdb.h>
@@ -409,14 +408,10 @@ void force_logging_enabled() {
 
 extern byte _binary_ptlsim_build_ptlsim_dst_start;
 extern byte _binary_ptlsim_build_ptlsim_dst_end;
-StatsFileWriter statswriter;
 
 void capture_stats_snapshot(const char* name) {
-  if unlikely (!statswriter) return;
-
   if (logable(100)|1) {
-    ptl_logfile << "Making stats snapshot uuid ", statswriter.next_uuid();
-    if (name) ptl_logfile << " named ", name;
+    if (name) ptl_logfile << "Snapshot named ", name;
     ptl_logfile << " at cycle ", sim_cycle, endl;
   }
 
@@ -508,11 +503,14 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 #endif
 
     if(config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
+        config.yaml_stats_filename = config.stats_filename;
         backup_and_reopen_yamlstats();
         current_yaml_stats_filename = config.stats_filename;
     }
 
-  if (config.yaml_stats_filename.set() && (config.yaml_stats_filename != current_yaml_stats_filename)) {
+  if (config.yaml_stats_filename.set() &&
+          (config.yaml_stats_filename != current_yaml_stats_filename) &&
+          !config.stats_filename.set()) {
     backup_and_reopen_yamlstats();
     current_yaml_stats_filename = config.yaml_stats_filename;
   }
