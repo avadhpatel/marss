@@ -43,11 +43,6 @@
 #include <statelist.h>
 
 #include <cpuController.h>
-#include <cacheController.h>
-#include <coherentCache.h>
-#include <p2p.h>
-#include <bus.h>
-#include <mesiBus.h>
 #include <memoryController.h>
 
 #include <yaml/yaml.h>

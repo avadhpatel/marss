@@ -33,12 +33,12 @@
 #include <ptlhwdef.h>
 #endif
 
-#include <mesiBus.h>
+#include <splitPhaseBus.h>
 #include <memoryHierarchy.h>
 #include <machine.h>
 
 using namespace Memory;
-using namespace Memory::MESICache;
+using namespace Memory::SplitPhaseBus;
 
 BusInterconnect::BusInterconnect(const char *name,
         MemoryHierarchy *memoryHierarchy) :
@@ -502,17 +502,17 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
     return true;
 }
 
-struct MESIBusBuilder : public InterconnectBuilder
+struct SplitPhaseBusBuilder : public InterconnectBuilder
 {
-    MESIBusBuilder(const char* name) :
+    SplitPhaseBusBuilder(const char* name) :
         InterconnectBuilder(name)
     { }
 
     Interconnect* get_new_interconnect(MemoryHierarchy& mem,
             const char* name)
     {
-        return new MESICache::BusInterconnect(name, &mem);
+        return new SplitPhaseBus::BusInterconnect(name, &mem);
     }
 };
 
-MESIBusBuilder mesiBusBuilder("mesi_bus");
+SplitPhaseBusBuilder splitPhaseBusBuilder("split_bus");

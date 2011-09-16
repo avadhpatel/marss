@@ -40,13 +40,11 @@
 
 namespace Memory {
 
-namespace SimpleWTCache {
-
-    enum CacheLineState {
-        LINE_NOT_VALID = 0, // has to be 0 as its default
-        LINE_VALID,
-        LINE_MODIFIED,
-    };
+enum CacheLineState {
+    LINE_NOT_VALID = 0, // has to be 0 as its default
+    LINE_VALID,
+    LINE_MODIFIED,
+};
 
 // Cache Events enum used for Queue entry flags
 enum {
@@ -258,8 +256,6 @@ class CacheController : public Controller
 			if(lowerInterconnect_)
 				os << "\t\tlower: ",  lowerInterconnect_->get_name(), endl;
 		}
-
-};
 
 };
 

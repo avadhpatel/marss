@@ -33,7 +33,7 @@
 
 namespace Memory {
 
-namespace MESICache {
+namespace SplitPhaseBus {
 
 struct BusControllerQueue;
 

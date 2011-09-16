@@ -46,7 +46,6 @@
 //#endif
 
 using namespace Memory;
-using namespace Memory::SimpleWTCache;
 
 
 CacheController::CacheController(W8 coreid, const char *name,
