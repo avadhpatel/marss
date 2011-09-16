@@ -112,9 +112,9 @@ class MemoryRequest: public selfqueuelink
 		W64 get_physical_address() { return physicalAddress_; }
 		void set_physical_address(W64 addr) { physicalAddress_ = addr; }
 
-		W8 get_coreid() { return coreId_; }
+		int get_coreid() { return int(coreId_); }
 
-		W8 get_threadid() { return threadId_; }
+		int get_threadid() { return int(threadId_); }
 
 		int get_robid() { return robId_; }
 		void set_robid(int idx) { robId_ = idx; }
