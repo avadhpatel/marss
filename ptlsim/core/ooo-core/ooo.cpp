@@ -944,12 +944,12 @@ ThreadContext& ReorderBufferEntry::getthread() const { return *core->threads[thr
 
 issueq_tag_t ReorderBufferEntry::get_tag() {
     int mask = ((1 << MAX_THREADS_BIT) - 1) << MAX_ROB_IDX_BIT;
-    if (logable(100)) ptl_logfile << " get_tag() thread ", (void*) threadid, " rob idx ", (void*)idx, " mask ", (void*)mask, endl;
+    if (logable(100)) ptl_logfile << " get_tag() thread ", hexstring(threadid, 8), " rob idx ", hexstring(idx, 16), " mask ", (void*)mask, endl;
 
     assert(!(idx & mask));
     assert(!(threadid >> MAX_THREADS_BIT));
     issueq_tag_t rc = (idx | (threadid << MAX_ROB_IDX_BIT));
-    if (logable(100)) ptl_logfile <<  " tag ", (void*) rc, endl;
+    if (logable(100)) ptl_logfile <<  " tag ", hexstring(rc, 16), endl;
     return rc;
 }
 

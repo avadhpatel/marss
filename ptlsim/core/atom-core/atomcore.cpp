@@ -684,8 +684,8 @@ W8 AtomOp::execute_uop(W8 idx)
     ATOMOPLOG2("Executing Uop ", uops[idx]);
     ATOMOPLOG2("radata: ", (void*)radata, " rbdata: ", (void*)rbdata,
             " rcdata: ", (void*)rcdata);
-    ATOMOPLOG2("af: ", (void*)(raflags), " bf: ", (void*)(rbflags),
-            " cf: ", (void*)(rcflags));
+    ATOMOPLOG2("af: ", hexstring(raflags, 8), " bf: ", hexstring(rbflags, 8),
+            " cf: ", hexstring(rcflags, 8));
 
     if(ld) {
         issue_result = execute_load(uop);
