@@ -665,6 +665,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
         return -1;
     }
 
+    W64 cr2 = -1;
     int n = 0 ;
     pfec = 0;
 
@@ -679,8 +680,12 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
     Waddr physaddr = check_and_translate(source, 0, 0, 0, exception,
             mmio, pfec, forexec);
     if (exception) {
+        cr2 = cr[2];
         int old_exception = exception_index;
-        bool fail = !try_handle_fault(source, 2);
+        int mmu_index = cpu_mmu_index((CPUState*)this);
+        int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
+                source, 2, mmu_index, 1);
+        cr[2] = cr2;
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source),
@@ -730,8 +735,12 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
     physaddr = check_and_translate(source + n, 0, 0, 0, exception,
             mmio, pfec, forexec);
     if (exception) {
+        cr2 = cr[2];
         int old_exception = exception_index;
-        bool fail = !try_handle_fault(source + n, 2);
+        int mmu_index = cpu_mmu_index((CPUState*)this);
+        int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
+                source + n, 2, mmu_index, 1);
+        cr[2] = cr2;
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source + n),

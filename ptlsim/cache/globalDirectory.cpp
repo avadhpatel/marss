@@ -687,6 +687,8 @@ bool DirectoryController::send_msg_cb(void *arg)
     if (!success) {
         int delay = interconn_->get_delay();
         if (delay == 0) delay = AVG_WAIT_DELAY;
+        if (queueEntry->request->get_type() == MEMORY_OP_EVICT)
+            delay = 1;
         memoryHierarchy_->add_event(&send_msg, delay, queueEntry);
         return true;
     }
