@@ -218,10 +218,10 @@ class TagFilter(Filters):
 
         filtered = []
         for stat in stats:
-            if not stat['sim_stats']['tags']:
+            if not stat['simulator']['tags']:
                 pass
 
-            res = self.check_required(re_tags, stat['sim_stats']['tags'])
+            res = self.check_required(re_tags, stat['simulator']['tags'])
             if res[0] == True:
                 st = {}
                 st['.'.join([stat['_name']] + res[1])] = stat
@@ -282,7 +282,7 @@ class NodeFilter(Filters):
             elif type(tree[key]) == dict:
                 node = self.find_node(tree[key], node_re[1:])
 
-            if node:
+            if node != None:
                 ret[key] = node
         return ret
 
