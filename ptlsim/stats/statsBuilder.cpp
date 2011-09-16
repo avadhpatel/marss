@@ -311,8 +311,8 @@ ostream& StatsBuilder::dump_periodic(ostream& os, W64 cycle) const
     /* Here we perform diff of last saved stats and updated user/kernel stats.
      * Addition/Subtraction is done on the operand1 so we keep two temporary
      * stats as copying is faster than addition/subtraction. */
-    *temp_stats = *n_user_stats;
-    add_periodic_stats(*temp_stats, *n_kernel_stats);
+    *temp_stats = *user_stats;
+    add_periodic_stats(*temp_stats, *kernel_stats);
 
     *temp2_stats = *periodic_stats;
     *periodic_stats = *temp_stats;

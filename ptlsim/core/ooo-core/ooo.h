@@ -1247,7 +1247,7 @@ namespace OOO_CORE_MODEL {
         // Stats
         OooCoreStats core_stats;
 
-        void update_stats(PTLsimStats* stats);
+        void update_stats();
 
         void check_ctx_changes();
 

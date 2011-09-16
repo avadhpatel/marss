@@ -991,7 +991,7 @@ namespace ATOM_CORE_MODEL {
         void flush_tlb(Context& ctx);
         void flush_tlb_virt(Context& ctx, Waddr virtaddr);
         void dump_state(ostream& os);
-        void update_stats(PTLsimStats* stats);
+        void update_stats();
         void flush_pipeline();
         W8   get_coreid();
 

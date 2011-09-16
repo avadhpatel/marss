@@ -3148,9 +3148,9 @@ bool AtomCore::runcycle()
         running_thread->ctx.check_events();
 
     if(running_thread->ctx.kernel_mode) {
-        running_thread->set_default_stats(n_kernel_stats);
+        running_thread->set_default_stats(kernel_stats);
     } else {
-        running_thread->set_default_stats(n_user_stats);
+        running_thread->set_default_stats(user_stats);
     }
 
     running_thread->st_cycles++;
@@ -3294,7 +3294,7 @@ void AtomCore::dump_state(ostream& os)
     os << *this;
 }
 
-void AtomCore::update_stats(PTLsimStats* stats)
+void AtomCore::update_stats()
 {
 }
 

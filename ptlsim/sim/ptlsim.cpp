@@ -11,9 +11,6 @@
 #include <globals.h>
 #include <ptlsim.h>
 #include <datastore.h>
-#define CPT_STATS
-#include <stats.h>
-#undef CPT_STATS
 #include <memoryStats.h>
 #include <elf.h>
 #include <netdb.h>
@@ -23,6 +20,7 @@
 #include <bson/mongo.h>
 #include <machine.h>
 #include <statelist.h>
+#include <decode.h>
 
 #include <fstream>
 #include <syscalls.h>
@@ -41,10 +39,6 @@
 //
 PTLsimConfig config;
 ConfigurationParser<PTLsimConfig> configparser;
-PTLsimStats *stats;
-PTLsimStats user_stats;
-PTLsimStats kernel_stats;
-PTLsimStats global_stats;
 PTLsimMachine ptl_machine;
 
 ofstream ptl_logfile;
@@ -72,9 +66,9 @@ W64 tsc_at_start ;
 
 const char *snapshot_names[] = {"user", "kernel", "global"};
 
-Stats *n_user_stats;
-Stats *n_kernel_stats;
-Stats *n_global_stats;
+Stats *user_stats;
+Stats *kernel_stats;
+Stats *global_stats;
 
 ofstream *time_stats_file;
 
@@ -331,7 +325,7 @@ ostream& operator <<(ostream& os, const PTLsimConfig& config) {
   return configparser.print(os, config);
 }
 
-void print_banner(ostream& os, const PTLsimStats& stats, int argc, char** argv) {
+static void print_banner(ostream& os) {
   utsname hostinfo;
   sys_uname(&hostinfo);
 
@@ -426,19 +420,7 @@ void capture_stats_snapshot(const char* name) {
     ptl_logfile << " at cycle ", sim_cycle, endl;
   }
 
-  if (PTLsimMachine::getcurrent()) {
-    PTLsimMachine::getcurrent()->update_stats(stats);
-  }
-
-  setzero(stats->snapshot_name);
-
-  if (name) {
-    stringbuf sb;
-    strncpy(stats->snapshot_name, name, sizeof(stats->snapshot_name));
-  }
-
-  stats->snapshot_uuid = statswriter.next_uuid();
-  statswriter.write(stats, name);
+  /* TODO: Support stats snapshot in new Stats module */
 }
 
 void print_sysinfo(ostream& os) {
@@ -453,13 +435,13 @@ void dump_yaml_stats()
 
     YAML::Emitter k_out, u_out, g_out;
 
-    (StatsBuilder::get()).dump(n_kernel_stats, k_out);
+    (StatsBuilder::get()).dump(kernel_stats, k_out);
     yaml_stats_file << k_out.c_str() << "\n";
 
-    (StatsBuilder::get()).dump(n_user_stats, u_out);
+    (StatsBuilder::get()).dump(user_stats, u_out);
     yaml_stats_file << u_out.c_str() << "\n";
 
-    (StatsBuilder::get()).dump(n_global_stats, g_out);
+    (StatsBuilder::get()).dump(global_stats, g_out);
     yaml_stats_file << g_out.c_str() << "\n";
 
     yaml_stats_file.flush();
@@ -473,27 +455,10 @@ static void flush_stats()
 
     PTLsimMachine* machine = PTLsimMachine::getmachine(config.core_name.buf);
     assert(machine);
-    machine->update_stats(stats);
+    machine->update_stats();
 
     // Call this function to setup tags and other info
     setup_sim_stats();
-
-	const char *user_name = "user";
-    strncpy(user_stats.snapshot_name, snapshot_names[0], sizeof(user_name));
-	user_stats.snapshot_uuid = statswriter.next_uuid();
-	statswriter.write(&user_stats, user_name);
-
-	const char *kernel_name = "kernel";
-    strncpy(kernel_stats.snapshot_name, snapshot_names[1], sizeof(kernel_name));
-	kernel_stats.snapshot_uuid = statswriter.next_uuid();
-	statswriter.write(&kernel_stats, kernel_name);
-
-	const char *global_name = "final";
-    strncpy(global_stats.snapshot_name, snapshot_names[2], sizeof(global_name));
-	global_stats.snapshot_uuid = statswriter.next_uuid();
-	statswriter.write(&global_stats, global_name);
-
-	statswriter.close();
 
     dump_yaml_stats();
 
@@ -543,10 +508,8 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 #endif
 
     if(config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
-        statswriter.open(config.stats_filename, &_binary_ptlsim_build_ptlsim_dst_start,
-                &_binary_ptlsim_build_ptlsim_dst_end - &_binary_ptlsim_build_ptlsim_dst_start,
-                sizeof(PTLsimStats));
-        current_stats_filename = config.stats_filename;
+        backup_and_reopen_yamlstats();
+        current_yaml_stats_filename = config.stats_filename;
     }
 
   if (config.yaml_stats_filename.set() && (config.yaml_stats_filename != current_yaml_stats_filename)) {
@@ -605,7 +568,7 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
       if (!(config.run | config.kill))
         cerr << "Simulator is now waiting for a 'run' command.", endl, flush;
     }
-    print_banner(ptl_logfile, *stats, argc, argv);
+    print_banner(ptl_logfile);
     print_sysinfo(ptl_logfile);
     cerr << flush;
     ptl_logfile << config;
@@ -633,7 +596,7 @@ Hashtable<const char*, PTLsimMachine*, 1>* machinetable = NULL;
 
 bool PTLsimMachine::init(PTLsimConfig& config) { return false; }
 int PTLsimMachine::run(PTLsimConfig& config) { return 0; }
-void PTLsimMachine::update_stats(PTLsimStats* stats) { return; }
+void PTLsimMachine::update_stats() { return; }
 void PTLsimMachine::dump_state(ostream& os) { return; }
 void PTLsimMachine::flush_tlb(Context& ctx) { return; }
 void PTLsimMachine::flush_tlb_virt(Context& ctx, Waddr virtaddr) { return; }
@@ -723,16 +686,12 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
         }
         assert(machine);
         machine->initialized = 0;
-        setzero(user_stats);
-        setzero(kernel_stats);
-        setzero(global_stats);
-        stats = &user_stats;
 
         // Setup YAML Stats
         StatsBuilder& builder = StatsBuilder::get();
-        n_user_stats = builder.get_new_stats();
-        n_kernel_stats = builder.get_new_stats();
-        n_global_stats = builder.get_new_stats();
+        user_stats = builder.get_new_stats();
+        kernel_stats = builder.get_new_stats();
+        global_stats = builder.get_new_stats();
 
         // time based stats
         if (config.time_stats_logfile.length > 0)
@@ -969,9 +928,9 @@ void write_mongo_stats() {
         bson_append_new_oid(bb, "_id");
 
         switch(i) {
-            case 0: stats_ = n_user_stats; break;
-            case 1: stats_ = n_kernel_stats; break;
-            case 2: stats_ = n_global_stats; break;
+            case 0: stats_ = user_stats; break;
+            case 1: stats_ = kernel_stats; break;
+            case 2: stats_ = global_stats; break;
         }
 
         bb = (StatsBuilder::get()).dump(stats_, bb);
@@ -1018,9 +977,9 @@ static void set_run_stats()
     simstats.performance.cycles_per_sec = cycles_per_sec; \
     simstats.performance.commits_per_sec = commits_per_sec;
 
-    RUN_STAT(n_user_stats);
-    RUN_STAT(n_kernel_stats);
-    RUN_STAT(n_global_stats);
+    RUN_STAT(user_stats);
+    RUN_STAT(kernel_stats);
+    RUN_STAT(global_stats);
 #undef RUN_STAT
 }
 
@@ -1052,17 +1011,17 @@ static void setup_sim_stats()
     total_tags << base_tags << "total";
     ptl_logfile << "Total Tags: " << total_tags << endl;
 
-    simstats.tags.set(n_kernel_stats, kernel_tags);
-    simstats.tags.set(n_user_stats, user_tags);
-    simstats.tags.set(n_global_stats, total_tags);
+    simstats.tags.set(kernel_stats, kernel_tags);
+    simstats.tags.set(user_stats, user_tags);
+    simstats.tags.set(global_stats, total_tags);
 
 #define COLLECT_SYSINFO(stat) \
     simstats.set_default_stats(stat); \
     collect_common_sysinfo();
 
-    COLLECT_SYSINFO(n_user_stats);
-    COLLECT_SYSINFO(n_kernel_stats);
-    COLLECT_SYSINFO(n_global_stats);
+    COLLECT_SYSINFO(user_stats);
+    COLLECT_SYSINFO(kernel_stats);
+    COLLECT_SYSINFO(global_stats);
 #undef COLLECT_SYSINFO
 }
 
@@ -1196,7 +1155,6 @@ extern "C" uint8_t ptl_simulate() {
 	}
 
 
-    stats = &global_stats;
 	W64 tsc_at_end = rdtsc();
 	curr_ptl_machine = NULL;
 
@@ -1301,17 +1259,6 @@ void dump_all_info() {
 		curr_ptl_machine->dump_state(ptl_logfile);
 		ptl_logfile.flush();
 	}
-}
-
-extern void shutdown_uops();
-
-void shutdown_subsystems() {
-  //
-  // Let the subsystems close any special files or buffers
-  // they may have open:
-  //
-  shutdown_uops();
-  shutdown_decode();
 }
 
 /* IO Signal Support */

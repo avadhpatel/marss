@@ -31,9 +31,9 @@
 
 #define UPDATE_MOESI_TRANS_STATS(old_state, new_state, mode) \
     if(mode) { /* kernel mode */ \
-        state_transition(n_kernel_stats)[MOESITransTable[old_state][new_state]]++; \
+        state_transition(kernel_stats)[MOESITransTable[old_state][new_state]]++; \
     } else { \
-        state_transition(n_user_stats)[MOESITransTable[old_state][new_state]]++; \
+        state_transition(user_stats)[MOESITransTable[old_state][new_state]]++; \
     }
 
 namespace Memory {

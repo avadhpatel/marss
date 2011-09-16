@@ -39,10 +39,10 @@ static const int MAX_TRANSOP_BUFFER_SIZE = 4;
 struct PTLsimConfig;
 struct PTLsimStats;
 
-extern Stats *n_user_stats;
-extern Stats *n_kernel_stats;
-extern Stats *n_global_stats;
-extern Stats *n_time_stats;
+extern Stats *user_stats;
+extern Stats *kernel_stats;
+extern Stats *global_stats;
+extern Stats *time_stats;
 extern ofstream *time_stats_file;
 
 struct PTLsimCore{
@@ -59,7 +59,7 @@ struct PTLsimMachine : public Statable {
   PTLsimMachine() : Statable("machine") { initialized = 0; stopped = 0;}
   virtual bool init(PTLsimConfig& config);
   virtual int run(PTLsimConfig& config);
-  virtual void update_stats(PTLsimStats* stats);
+  virtual void update_stats();
   virtual void dump_state(ostream& os);
   virtual void flush_tlb(Context& ctx);
   virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);
@@ -160,7 +160,6 @@ uopimpl_func_t get_synthcode_for_uop(int op, int size, bool setflags, int cond, 
 uopimpl_func_t get_synthcode_for_cond_branch(int opcode, int cond, int size, bool except);
 void synth_uops_for_bb(BasicBlock& bb);
 struct PTLsimStats;
-void print_banner(ostream& os, const PTLsimStats& stats, int argc = 0, char** argv = NULL);
 
 extern ofstream ptl_logfile;
 extern ofstream trace_mem_logfile;

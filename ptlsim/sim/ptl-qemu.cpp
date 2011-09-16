@@ -41,7 +41,6 @@ extern "C" {
 }
 
 #include <ptl-qemu.h>
-#include <stats.h>
 #include <ptlsim.h>
 
 #include <cacheConstants.h>

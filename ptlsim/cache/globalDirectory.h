@@ -14,7 +14,6 @@
 #include <ptlsim.h>
 #endif
 
-#include <stats.h>
 #include <cpuController.h>
 #include <memoryHierarchy.h>
 

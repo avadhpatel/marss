@@ -4,7 +4,6 @@
 #include <config.h>
 
 #include <basecore.h>
-#include <stats.h>
 #include <statsBuilder.h>
 #include <memoryHierarchy.h>
 
@@ -211,14 +210,14 @@ void BaseMachine::flush_all_pipelines()
     // TODO
 }
 
-void BaseMachine::update_stats(PTLsimStats* stats)
+void BaseMachine::update_stats()
 {
-    n_global_stats->reset();
-    *n_global_stats += *n_user_stats;
-    *n_global_stats += *n_kernel_stats;
+    global_stats->reset();
+    *global_stats += *user_stats;
+    *global_stats += *kernel_stats;
 
     foreach(i, cores.count()) {
-        cores[i]->update_stats(stats);
+        cores[i]->update_stats();
     }
 }
 

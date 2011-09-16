@@ -1,7 +1,6 @@
 
 #include <basecore.h>
 #include <globals.h>
-#include <stats.h>
 
 #include <ooo.h>
 

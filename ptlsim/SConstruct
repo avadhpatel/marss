@@ -136,40 +136,7 @@ inc_str = ""
 for i_s in env['CPPPATH']:
     inc_str += " -I%s" % i_s
 env['incstr'] = inc_str
-dst_script = "%s/tools/dstbuild.py" % os.getcwd()
-st_i = env.Command('build/stats.i', 'stats/stats.h',
-        "$CXX $CCFLAGS $incstr -E -C $SOURCE > $TARGET")
-dst_tmp_cpp = env.Command('build/dstbuild.temp.cpp', st_i,
-        "%s $SOURCE PTLsimStats > $TARGET" % dst_script)
-dst_tmp = env.Program('build/dstbuild.temp',
-        dst_objs + ["build/dstbuild.temp.cpp"],
-        CCFLAGS = env['CCFLAGS'] + " -DDSTBUILD -include stats.h")
-ptl_dst = env.Command('build/ptlsim.dst', dst_tmp,
-        "./$SOURCE $TARGET")
-ptl_dst_o = env.Command('build/ptlsim.dst.o', ptl_dst,
-        "objcopy -I binary -O elf64-x86-64 -B i386 --rename-section "+
-        ".data=.dst,alloc,load,readonly,data,contents $SOURCE $TARGET")
 
-# Build Tools
-dst_objs.append(ptl_dst_o)
-Export('dst_objs')
-SConscript('tools/SConscript', variant_dir='build/tools')
-
-Depends(dst_tmp_cpp, dst_script)
-Requires(st_i, '../qemu/config-host.h')
-Requires(st_i, '../qemu/x86_64-softmmu/config-target.h')
-Requires(dst_tmp_cpp, st_i)
-Requires(dst_tmp, dst_tmp_cpp)
-
-dst_bson_script = "%s/tools/dstbuild_bson.py" % os.getcwd()
-dst_bson_tmp_cpp = env.Command('build/bson_stats.cpp', st_i,
-        "%s $SOURCE PTLsimStats > $TARGET" % dst_bson_script)
-dst_bson_obj = env.Object(dst_bson_tmp_cpp,
-        CCFLAGS = env['CCFLAGS'] + " -DDSTBUILD -include stats.h")
-
-Depends(dst_bson_tmp_cpp, [dst_script, st_i])
-
-#lib = env.Library('build/libmptlsim', objs + ptl_dst_o)
-lib = objs + ptl_dst_o + dst_bson_obj
+lib = objs
 
 Return('lib')

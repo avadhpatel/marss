@@ -9,7 +9,6 @@
 #include <ptlsim.h>
 #include <datastore.h>
 #include <decode.h>
-#include <stats.h>
 
 
 BasicBlockCache bbcache[NUM_SIM_CORES];
@@ -2434,5 +2433,5 @@ void set_decoder_stats(Statable *parent, int cpuid)
     DecoderStats *stat = new DecoderStats(parent);
     assert(cpuid < NUM_SIM_CORES);
     decoder_stats[cpuid] = stat;
-    stat->set_default_stats(n_global_stats);
+    stat->set_default_stats(global_stats);
 }

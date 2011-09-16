@@ -140,7 +140,7 @@ namespace {
 
                 foreach(i, base_machine->cores.count()) {
                     AtomCore* core = (AtomCore*)base_machine->cores[i];
-                    core->set_default_stats(n_user_stats);
+                    core->set_default_stats(user_stats);
                 }
             }
 

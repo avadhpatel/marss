@@ -31,9 +31,9 @@
 
 #define UPDATE_MESI_TRANS_STATS(old_state, new_state, mode) \
     if(mode) { /* kernel mode */ \
-        state_transition(n_kernel_stats)[(old_state << 2) | new_state]++; \
+        state_transition(kernel_stats)[(old_state << 2) | new_state]++; \
     } else { \
-        state_transition(n_user_stats)[(old_state << 2) | new_state]++; \
+        state_transition(user_stats)[(old_state << 2) | new_state]++; \
     }
 
 namespace Memory {

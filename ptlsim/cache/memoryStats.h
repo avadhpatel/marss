@@ -45,9 +45,9 @@
 
 #define N_STAT_UPDATE(counter, expr, mode) { \
     if(mode) { /* kernel mode */ \
-        counter(n_kernel_stats)expr; \
+        counter(kernel_stats)expr; \
     } else { \
-        counter(n_user_stats)expr; \
+        counter(user_stats)expr; \
     } \
 }
 

@@ -9,7 +9,6 @@
 //
 
 #include <branchpred.h>
-#include <stats.h>
 
 
 template <int SIZE>

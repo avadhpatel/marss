@@ -98,7 +98,7 @@ ThreadContext::ThreadContext(OooCore& core_, W8 threadid_, Context& ctx_)
     thread_stats.commit.ipc.add_elem(&core_.core_stats.cycles);
     // thread_stats.commit.ipc.enable_periodic_dump();
 
-    thread_stats.set_default_stats(n_user_stats);
+    thread_stats.set_default_stats(user_stats);
     reset();
 }
 
@@ -453,9 +453,9 @@ bool OooCore::runcycle() {
         thread->prev_interrupts_pending = current_interrupts_pending;
 
         if(thread->ctx.kernel_mode) {
-            thread->thread_stats.set_default_stats(n_kernel_stats);
+            thread->thread_stats.set_default_stats(kernel_stats);
         } else {
-            thread->thread_stats.set_default_stats(n_user_stats);
+            thread->thread_stats.set_default_stats(user_stats);
         }
     }
 
@@ -1425,7 +1425,7 @@ void OooCore::check_ctx_changes()
     }
 }
 
-void OooCore::update_stats(PTLsimStats* stats)
+void OooCore::update_stats()
 {
 }
 

@@ -33,7 +33,6 @@
 #include <ptlhwdef.h>
 #endif
 
-#include <stats.h>
 #include <memoryHierarchy.h>
 #include <cacheController.h>
 

@@ -33,7 +33,6 @@
 #include <ptlhwdef.h>
 #endif
 
-#include <stats.h>
 #include <memoryHierarchy.h>
 #include <coherentCache.h>
 #include <mesiLogic.h>

@@ -56,10 +56,10 @@ namespace {
         TestStat st;
         builder.init_timer_stats();
 
-        st.ct1.set_default_stats(n_kernel_stats);
-        st.ct2.set_default_stats(n_user_stats);
-        st.ct3.set_default_stats(n_user_stats);
-        st.time_arr.set_default_stats(n_user_stats);
+        st.ct1.set_default_stats(kernel_stats);
+        st.ct2.set_default_stats(user_stats);
+        st.ct3.set_default_stats(user_stats);
+        st.time_arr.set_default_stats(user_stats);
         st.ct3.enable_periodic_dump();
         st.sum.enable_periodic_dump();
         st.time_arr.enable_periodic_dump();
@@ -82,7 +82,7 @@ namespace {
         ASSERT_STREQ(os.str().c_str(), "0,1,0,0,1,0,0,0\n");
         reset_stream(os);
 
-        st.ct1.set_default_stats(n_user_stats);
+        st.ct1.set_default_stats(user_stats);
         st.ct1 += 30;
         builder.dump_periodic(os,100);
         ASSERT_STREQ(os.str().c_str(), "100,30,0,0,30,0,0,0\n");
@@ -109,7 +109,7 @@ namespace {
 
         TestStat st;
 
-        st.arr1.set_default_stats(n_user_stats);
+        st.arr1.set_default_stats(user_stats);
 
         foreach(i, 10) {
             ASSERT_EQ(st.arr1[i], 0);
@@ -123,13 +123,13 @@ namespace {
             }
         }
 
-        st.arr1.set_default_stats(n_kernel_stats);
+        st.arr1.set_default_stats(kernel_stats);
 
         foreach(i, 10) {
             ASSERT_EQ(st.arr1[i], 0);
         }
 
-        st.arr1.set_default_stats(n_user_stats);
+        st.arr1.set_default_stats(user_stats);
 
         foreach(i, 10) {
             if(i%2)
@@ -141,7 +141,7 @@ namespace {
         // Test the operators
         W64* u_pt_i0 = &st.arr1[0];
 
-        StatArray<W64, 10>::BaseArr& barr = st.arr1(n_user_stats);
+        StatArray<W64, 10>::BaseArr& barr = st.arr1(user_stats);
 
         foreach(i, 10) {
             ASSERT_EQ(u_pt_i0, &barr[i]);
@@ -151,37 +151,37 @@ namespace {
         }
 
         // Test ct1
-        st.ct1.set_default_stats(n_user_stats);
+        st.ct1.set_default_stats(user_stats);
         foreach(i, 20) {
             st.ct1++;
         }
 
-        ASSERT_EQ(st.ct1(n_user_stats), 20);
+        ASSERT_EQ(st.ct1(user_stats), 20);
 
         st.ct1 += 20;
-        ASSERT_EQ(st.ct1(n_user_stats), 40);
+        ASSERT_EQ(st.ct1(user_stats), 40);
 
         foreach(i, 19)
             st.ct1--;
-        ASSERT_EQ(st.ct1(n_user_stats), 21);
+        ASSERT_EQ(st.ct1(user_stats), 21);
     }
 
     TEST(Stats, StatString) {
         TestStat st;
 
-        st.set_default_stats(n_user_stats);
+        st.set_default_stats(user_stats);
 
         st.st1 = "String Test Assignment";
         st.st2 = "string,test,assignment";
         st.st2.set_split(",");
 
-        ASSERT_STREQ(st.st1(n_user_stats), "String Test Assignment");
-        ASSERT_STREQ(st.st2(n_user_stats), "string,test,assignment");
+        ASSERT_STREQ(st.st1(user_stats), "String Test Assignment");
+        ASSERT_STREQ(st.st2(user_stats), "string,test,assignment");
 
         {
             YAML::Emitter out;
             out << YAML::BeginMap;
-            out = st.st1.dump(out, n_user_stats);
+            out = st.st1.dump(out, user_stats);
             out << YAML::EndMap;
 
             ASSERT_TRUE(out.good());
@@ -191,7 +191,7 @@ namespace {
         {
             YAML::Emitter out;
             out << YAML::BeginMap;
-            out = st.st2.dump(out, n_user_stats);
+            out = st.st2.dump(out, user_stats);
             out << YAML::EndMap;
 
             ASSERT_TRUE(out.good());
@@ -204,7 +204,7 @@ namespace {
 
             YAML::Emitter out;
             out << YAML::BeginMap;
-            out = st.st2.dump(out, n_user_stats);
+            out = st.st2.dump(out, user_stats);
             out << YAML::EndMap;
 
             ASSERT_TRUE(out.good());
@@ -216,9 +216,9 @@ namespace {
 
         TestStat st;
 
-        st.ct1.set_default_stats(n_user_stats);
-        st.ct2.set_default_stats(n_user_stats);
-        st.ct3.set_default_stats(n_user_stats);
+        st.ct1.set_default_stats(user_stats);
+        st.ct2.set_default_stats(user_stats);
+        st.ct3.set_default_stats(user_stats);
 
         /* Test Add */
         foreach(i, 100) {
@@ -228,10 +228,10 @@ namespace {
 
         YAML::Emitter out;
         out << YAML::BeginMap;
-        out = st.sum.dump(out, n_user_stats);
+        out = st.sum.dump(out, user_stats);
         out << YAML::EndMap;
 
-        W64 res = st.sum(n_user_stats);
+        W64 res = st.sum(user_stats);
         ASSERT_EQ(res, 200);
 
         ASSERT_TRUE(out.good());
@@ -242,8 +242,8 @@ namespace {
 
         TestStat st;
 
-        st.ct1.set_default_stats(n_user_stats);
-        st.ct2.set_default_stats(n_user_stats);
+        st.ct1.set_default_stats(user_stats);
+        st.ct2.set_default_stats(user_stats);
 
         /* Test Add */
         foreach(i, 100) {
@@ -256,10 +256,10 @@ namespace {
 
         YAML::Emitter out;
         out << YAML::BeginMap;
-        out = st.div.dump(out, n_user_stats);
+        out = st.div.dump(out, user_stats);
         out << YAML::EndMap;
 
-        double res = st.div(n_user_stats);
+        double res = st.div(user_stats);
         ASSERT_EQ(res, double(100)/double(3));
 
         ASSERT_TRUE(out.good());

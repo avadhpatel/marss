@@ -35,7 +35,6 @@
 
 #include <mesiBus.h>
 #include <memoryHierarchy.h>
-#include <stats.h>
 #include <machine.h>
 
 using namespace Memory;
@@ -61,7 +60,7 @@ BusInterconnect::BusInterconnect(const char *name,
     SET_SIGNAL_CB(name, "_Data_Broadcast_Complete", dataBroadcastCompleted_,
             &BusInterconnect::data_broadcast_completed_cb);
 
-    new_stats->set_default_stats(n_global_stats);
+    new_stats->set_default_stats(global_stats);
 }
 
 BusInterconnect::~BusInterconnect()

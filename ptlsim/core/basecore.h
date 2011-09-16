@@ -19,7 +19,7 @@ namespace Core {
         virtual void flush_tlb(Context& ctx) = 0;
         virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr) = 0;
         virtual void dump_state(ostream& os) = 0;
-        virtual void update_stats(PTLsimStats* stats) = 0;
+        virtual void update_stats() = 0;
         virtual void flush_pipeline() = 0;
         virtual W8 get_coreid() = 0;
 
