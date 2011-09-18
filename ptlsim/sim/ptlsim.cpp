@@ -502,7 +502,7 @@ bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
 		ptl_rip_trace.open("ptl_rip_trace");
 #endif
 
-    if(config.stats_filename.set() && (config.stats_filename != current_stats_filename)) {
+    if(config.stats_filename.set() && (config.stats_filename != current_yaml_stats_filename)) {
         config.yaml_stats_filename = config.stats_filename;
         backup_and_reopen_yamlstats();
         current_yaml_stats_filename = config.stats_filename;
