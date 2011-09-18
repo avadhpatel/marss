@@ -50,7 +50,13 @@ namespace ATOM_CORE_MODEL {
     using namespace Core;
 
     /* Constants */
-    const W8 FU_COUNT = 6;
+    const W8 FU_COUNT = ATOM_MAX_FU_COUNT;
+    const int ALU_FU_COUNT = ATOM_ALU_FU_COUNT;
+    const int FPU_FU_COUNT = ATOM_FPU_FU_COUNT;
+    const int AGU_FU_COUNT = ATOM_AGU_FU_COUNT;
+
+    const int LOADLAT = ATOM_LOADLAT;
+    const int ALULAT = ATOM_ALULAT;
 
     const W8 NUM_ATOM_OPS_PER_THREAD = ATOM_OPS_PER_THREAD;
 
@@ -83,21 +89,33 @@ namespace ATOM_CORE_MODEL {
     const W8 COMMIT_BUF_SIZE = ATOM_COMMIT_BUF_SIZE;
 
     enum {
-        FU_ALU0     = (1 << 0),
-        FU_ALU1     = (1 << 1),
-        FU_FPU0     = (1 << 2),
-        FU_FPU1     = (1 << 3),
-        FU_AGU0     = (1 << 4),
-        FU_AGU1     = (1 << 5),
+        FU_ALU0 = (1 << 0),
+        FU_ALU1 = (1 << 1),
+        FU_ALU2 = (1 << 2),
+        FU_ALU3 = (1 << 3),
+        FU_FPU0 = (1 << 4),
+        FU_FPU1 = (1 << 5),
+        FU_FPU2 = (1 << 6),
+        FU_FPU3 = (1 << 7),
+        FU_AGU0 = (1 << 8),
+        FU_AGU1 = (1 << 9),
+        FU_AGU2 = (1 << 10),
+        FU_AGU3 = (1 << 11),
     };
 
     static const char* fu_names[FU_COUNT] = {
         "alu0",
         "alu1",
+        "alu2",
+        "alu3",
         "fp0",
         "fp1",
+        "fp2",
+        "fp3",
         "agu0",
         "agu1",
+        "agu2",
+        "agu3",
     };
 
     enum {
@@ -144,25 +162,28 @@ namespace ATOM_CORE_MODEL {
         "ok", "barrier", "interrupt", "smc", "failed",
     };
 
-    extern W8 first_set_fu_map[1 << FU_COUNT];
-    extern W8 fu_map_to_fu[1 << FU_COUNT];
-
     //
     // Opcodes and properties
     //
-#define ALU0 FU_ALU0
-#define ALU1 FU_ALU1
-#define AGU0 FU_AGU0
-#define AGU1 FU_AGU1
-#define FPU0 FU_FPU0
-#define FPU1 FU_FPU1
-#define A 1 // ALU latency, assuming fast bypass
-#define L 1 
+#define ALU0 (FU_ALU0 * ((ALU_FU_COUNT - 1) >= 0))
+#define ALU1 (FU_ALU1 * ((ALU_FU_COUNT - 2) >= 0))
+#define ALU2 (FU_ALU2 * ((ALU_FU_COUNT - 3) >= 0))
+#define ALU3 (FU_ALU3 * ((ALU_FU_COUNT - 4) >= 0))
+#define AGU0 (FU_AGU0 * ((AGU_FU_COUNT - 1) >= 0))
+#define AGU1 (FU_AGU1 * ((AGU_FU_COUNT - 2) >= 0))
+#define AGU2 (FU_AGU2 * ((AGU_FU_COUNT - 3) >= 0))
+#define AGU3 (FU_AGU3 * ((AGU_FU_COUNT - 4) >= 0))
+#define FPU0 (FU_FPU0 * ((FPU_FU_COUNT - 1) >= 0))
+#define FPU1 (FU_FPU1 * ((FPU_FU_COUNT - 2) >= 0))
+#define FPU2 (FU_FPU2 * ((FPU_FU_COUNT - 3) >= 0))
+#define FPU3 (FU_FPU3 * ((FPU_FU_COUNT - 4) >= 0))
+#define A ALULAT // ALU latency, assuming fast bypass
+#define L LOADLAT
 
-#define ANYALU ALU0|ALU1
-#define ANYLDU AGU0|AGU1
-#define ANYSTU AGU0|AGU1
-#define ANYFPU FPU0|FPU1
+#define ANYALU ALU0|ALU1|ALU2|ALU3
+#define ANYLDU AGU0|AGU1|AGU2|AGU3
+#define ANYSTU AGU0|AGU1|AGU2|AGU3
+#define ANYFPU FPU0|FPU1|FPU2|FPU3
 #define ANYINT ANYALU
 #define ANYFU  ANYALU | ANYLDU | ANYFPU
 
@@ -486,7 +507,7 @@ namespace ATOM_CORE_MODEL {
         W8   execute_ast(TransOp& uop);
         W8   execute_fence(TransOp& uop);
         bool check_execute_exception(int idx);
-        W8   execute_load(TransOp& uop);
+        W8   execute_load(TransOp& uop, int idx);
         W8   execute_store(TransOp& uop, W8 idx);
         W64  get_load_data(W64 addr, TransOp& uop);
         W64  generate_address(TransOp& uop, bool is_st);
@@ -543,6 +564,7 @@ namespace ATOM_CORE_MODEL {
 
         uopimpl_func_t synthops[MAX_UOPS_PER_ATOMOP];
         TransOp        uops[MAX_UOPS_PER_ATOMOP];
+        bool           load_requestd[MAX_UOPS_PER_ATOMOP];
         W16            rflags[MAX_UOPS_PER_ATOMOP];
         W8             num_uops_used;
         W64            uuid;

@@ -1137,6 +1137,10 @@ static inline int find_random_set_bit(W32 v, int randsource) {
     return bit_indices_set_8bits[v & 0xff][randsource & 0x7];
 }
 
+static inline int find_first_set_bit(W32 v) {
+    return (v & (-v));
+}
+
 //
 // This function locates the source operands for a uop and prepares to add the
 // uop to its cluster's issue queue.
@@ -1250,7 +1254,7 @@ int ReorderBufferEntry::select_cluster() {
     }
 
     int n = 0;
-    int cluster = find_random_set_bit(executable_on_cluster, sim_cycle);
+    int cluster = find_first_set_bit(executable_on_cluster);
 
     foreach (i, MAX_CLUSTERS) {
         if ((cluster_operand_tally[i] > n) && bit(executable_on_cluster, i)) {

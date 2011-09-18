@@ -68,10 +68,18 @@ namespace OOO_CORE_MODEL {
         FU_STU0       = (1 << 1),
         FU_LDU1       = (1 << 2),
         FU_STU1       = (1 << 3),
-        FU_ALU0       = (1 << 4),
-        FU_FPU0       = (1 << 5),
-        FU_ALU1       = (1 << 6),
-        FU_FPU1       = (1 << 7),
+        FU_LDU2       = (1 << 4),
+        FU_STU2       = (1 << 5),
+        FU_LDU3       = (1 << 6),
+        FU_STU3       = (1 << 7),
+        FU_ALU0       = (1 << 8),
+        FU_FPU0       = (1 << 9),
+        FU_ALU1       = (1 << 10),
+        FU_FPU1       = (1 << 11),
+        FU_ALU2       = (1 << 12),
+        FU_FPU2       = (1 << 13),
+        FU_ALU3       = (1 << 14),
+        FU_FPU3       = (1 << 15),
     };
 
     static const char* fu_names[FU_COUNT] = {
@@ -79,32 +87,52 @@ namespace OOO_CORE_MODEL {
         "stu0",
         "ldu1",
         "stu1",
+        "ldu2",
+        "stu2",
+        "ldu3",
+        "stu4",
         "alu0",
         "fpu0",
         "alu1",
         "fpu1",
+        "alu2",
+        "fpu2",
+        "alu3",
+        "fpu3",
     };
 
-    //
-    // Opcodes and properties
-    //
-#define ALU0 FU_ALU0
-#define ALU1 FU_ALU1
-#define ALU2 FU_ALU2
-#define STU0 FU_STU0
-#define STU1 FU_STU1
-#define LDU0 FU_LDU0
-#define LDU1 FU_LDU1
-#define FPU0 FU_FPU0
-#define FPU1 FU_FPU1
-#define A 1 // ALU latency, assuming fast bypass
+//
+// Opcodes and properties
+//
+#define ALU0 (FU_ALU0 * ((ALU_FU_COUNT - 1) >= 0))
+#define ALU1 (FU_ALU1 * ((ALU_FU_COUNT - 2) >= 0))
+#define ALU2 (FU_ALU2 * ((ALU_FU_COUNT - 3) >= 0))
+#define ALU3 (FU_ALU3 * ((ALU_FU_COUNT - 4) >= 0))
+
+#define FPU0 (FU_FPU0 * ((FPU_FU_COUNT - 1) >= 0))
+#define FPU1 (FU_FPU1 * ((FPU_FU_COUNT - 2) >= 0))
+#define FPU2 (FU_FPU2 * ((FPU_FU_COUNT - 3) >= 0))
+#define FPU3 (FU_FPU3 * ((FPU_FU_COUNT - 4) >= 0))
+
+#define STU0 (FU_STU0 * ((STORE_FU_COUNT - 1) >= 0))
+#define STU1 (FU_STU1 * ((STORE_FU_COUNT - 2) >= 0))
+#define STU2 (FU_STU2 * ((STORE_FU_COUNT - 3) >= 0))
+#define STU3 (FU_STU3 * ((STORE_FU_COUNT - 4) >= 0))
+
+#define LDU0 (FU_LDU0 * ((LOAD_FU_COUNT - 1) >= 0))
+#define LDU1 (FU_LDU1 * ((LOAD_FU_COUNT - 2) >= 0))
+#define LDU2 (FU_LDU2 * ((LOAD_FU_COUNT - 3) >= 0))
+#define LDU3 (FU_LDU3 * ((LOAD_FU_COUNT - 4) >= 0))
+
+#define A ALULAT
 #define L LOADLAT
 
-#define ANYALU ALU0|ALU1
-#define ANYLDU LDU0|LDU1
-#define ANYSTU STU0|STU1
-#define ANYFPU FPU0|FPU1
+#define ANYALU ALU0|ALU1|ALU2|ALU3
+#define ANYLDU LDU0|LDU1|LDU2|LDU3
+#define ANYSTU STU0|STU1|STU2|STU3
+#define ANYFPU FPU0|FPU1|FPU2|FPU3
 #define ANYINT ANYALU|ANYSTU|ANYLDU
+#define ALLFU  ANYINT|ANYFPU
 
     struct FunctionalUnitInfo {
         byte opcode;   // Must match definition in ptlhwdef.h and ptlhwdef.cpp!
@@ -118,17 +146,17 @@ namespace OOO_CORE_MODEL {
     //
     const FunctionalUnitInfo fuinfo[OP_MAX_OPCODE] = {
         // name, latency, fumask
-        {OP_nop,            A, ANYINT|ANYFPU},
-        {OP_mov,            A, ANYINT|ANYFPU},
+        {OP_nop,            A, ALLFU},
+        {OP_mov,            A, ALLFU},
         // Logical
-        {OP_and,            A, ANYINT|ANYFPU},
-        {OP_andnot,         A, ANYINT|ANYFPU},
-        {OP_xor,            A, ANYINT|ANYFPU},
-        {OP_or,             A, ANYINT|ANYFPU},
-        {OP_nand,           A, ANYINT|ANYFPU},
-        {OP_ornot,          A, ANYINT|ANYFPU},
-        {OP_eqv,            A, ANYINT|ANYFPU},
-        {OP_nor,            A, ANYINT|ANYFPU},
+        {OP_and,            A, ALLFU},
+        {OP_andnot,         A, ALLFU},
+        {OP_xor,            A, ALLFU},
+        {OP_or,             A, ALLFU},
+        {OP_nand,           A, ALLFU},
+        {OP_ornot,          A, ALLFU},
+        {OP_eqv,            A, ALLFU},
+        {OP_nor,            A, ALLFU},
         // Mask, insert or extract bytes
         {OP_maskb,          A, ANYINT},
         // Add and subtract
@@ -286,22 +314,6 @@ namespace OOO_CORE_MODEL {
 #undef A
 #undef L
 #undef F
-
-#undef ALU0
-#undef ALU1
-#undef STU0
-#undef STU1
-#undef LDU0
-#undef LDU1
-#undef FPU0
-#undef FPU1
-#undef L
-
-#undef ANYALU
-#undef ANYLDU
-#undef ANYSTU
-#undef ANYFPU
-#undef ANYINT
 
     struct OooCore;
     OooCore& coreof(W8 coreid);
@@ -1317,7 +1329,7 @@ namespace OOO_CORE_MODEL {
 
 #else // single issueq
     const Cluster clusters[MAX_CLUSTERS] = {
-        {"all",  4, (FU_ALU0|FU_ALU1|FU_STU0|FU_STU1|FU_LDU0|FU_LDU1|FU_FPU0|FU_FPU1)},
+        {"all",  4, (ALLFU)},
     };
     const byte intercluster_latency_map[MAX_CLUSTERS][MAX_CLUSTERS] = {{0}};
     const byte intercluster_bandwidth_map[MAX_CLUSTERS][MAX_CLUSTERS] = {{64}};
@@ -1330,5 +1342,32 @@ namespace OOO_CORE_MODEL {
         BaseCore* get_new_core(BaseMachine& machine, const char* name);
     };
 };
+
+#undef ALU0
+#undef ALU1
+#undef ALU2
+#undef ALU3
+
+#undef FPU0
+#undef FPU1
+#undef FPU2
+#undef FPU3
+
+#undef STU0
+#undef STU1
+#undef STU2
+#undef STU3
+
+#undef LDU0
+#undef LDU1
+#undef LDU2
+#undef LDU3
+
+#undef ANYALU
+#undef ANYLDU
+#undef ANYSTU
+#undef ANYFPU
+#undef ANYINT
+#undef ALLFU
 
 #endif // _OOOCORE_H_

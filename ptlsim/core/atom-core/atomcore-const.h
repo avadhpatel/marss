@@ -54,4 +54,29 @@
 #define ATOM_COMMIT_BUF_SIZE 32
 #endif
 
+//functional units
+
+#ifndef ATOM_ALU_FU_COUNT
+#define ATOM_ALU_FU_COUNT 2
+#endif
+
+#ifndef ATOM_FPU_FU_COUNT
+#define ATOM_FPU_FU_COUNT 2
+#endif
+
+#ifndef ATOM_AGU_FU_COUNT
+#define ATOM_AGU_FU_COUNT 2
+#endif
+
+#ifndef ATOM_LOADLAT
+#define ATOM_LOADLAT 1
+#endif
+
+#ifndef ATOM_ALULAT
+#define ATOM_ALULAT 1
+#endif
+
+//max resources - None Configurable
+#define ATOM_MAX_FU_COUNT 12
+
 #endif

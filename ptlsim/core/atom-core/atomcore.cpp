@@ -86,22 +86,21 @@ static inline W64 extract_bytes(byte* target, int SIZESHIFT, bool SIGNEXT) {
     return data;
 }
 
-W8 ATOM_CORE_MODEL::first_set_fu_map[1<<FU_COUNT] = {
-   //0     1     2     3     4     5     6     7     8     9     a     b     c     d     e     f
-    0x00, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
-    0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
-    0x20, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
-    0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
-};
+static inline W32 first_set(W32 val)
+{
+    return (val & (-val));
+}
 
-W8 ATOM_CORE_MODEL::fu_map_to_fu[1 << FU_COUNT] = {
-  //0   1   2   3   4   5   6   7   8   9   a   b   c   d   e   f
-    0,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
-    4,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
-    5,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
-    4,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
-};
+static inline int get_fu_idx(W32 fu)
+{
+    int i = -1;
+    while (fu > 0) {
+        fu >>= 1;
+        i++;
+    }
 
+    return i;
+}
 
 //---------------------------------------------//
 //   AtomOp
@@ -149,6 +148,7 @@ void AtomOp::reset()
 
         stores[i] = NULL;
         rflags[i] = 0;
+        load_requestd[i] = false;
     }
 
     uuid = -1;
@@ -514,19 +514,19 @@ W8 AtomOp::issue(bool first_issue)
         }
     }
 
+
+    /* Set flag in core's fu_used so same FU can't be used in same cycle */
+    W32 fu_available = (thread->core.fu_available) & ~(thread->core.fu_used);
+    W32 fu_selected = first_set((fu_mask & fu_available) & ((1 << FU_COUNT) - 1));
+    thread->core.fu_used |= fu_selected;
+    thread->st_issue.fu_usage[get_fu_idx(fu_selected)]++;
+
     /* If not pipelined then set flag in core's fu_available */
     if(is_nonpipe) {
         thread->core.fu_available &= ~fu_mask;
         thread->st_issue.non_pipelined++;
         return_value = ISSUE_OK_BLOCK;
     }
-
-    /* Set flag in core's fu_used so same FU can't be used in same cycle */
-    W32 fu_available = (thread->core.fu_available) & ~(thread->core.fu_used);
-    W32 fu_selected = first_set_fu_map[(fu_mask & fu_available) & 0x3f];
-    thread->core.fu_used |= fu_selected;
-    thread->st_issue.fu_usage[fu_map_to_fu[fu_selected]]++;
-
     change_state(thread->op_executing_list);
     cycles_left = execution_cycles;
 
@@ -688,7 +688,7 @@ W8 AtomOp::execute_uop(W8 idx)
             " cf: ", hexstring(rcflags, 8));
 
     if(ld) {
-        issue_result = execute_load(uop);
+        issue_result = execute_load(uop, idx);
     } else if(st) {
 
         state.reg.rddata = rcdata;
@@ -855,7 +855,7 @@ W8 AtomOp::execute_ast(TransOp& uop)
  *
  * @return Issue status
  */
-W8 AtomOp::execute_load(TransOp& uop)
+W8 AtomOp::execute_load(TransOp& uop, int idx)
 {
     if(thread->mmio_pending) {
         ATOMOPLOG2("no load cause of mmio");
@@ -924,13 +924,17 @@ W8 AtomOp::execute_load(TransOp& uop)
         return ISSUE_OK;
     }
 
-    /* Access memory */
-    bool L1_miss = !thread->access_dcache(addr, rip,
-            Memory::MEMORY_OP_READ,
-            uuid);
+    if (!load_requestd[idx]) {
+        load_requestd[idx] = true;
 
-    if(L1_miss) {
-        return ISSUE_CACHE_MISS;
+        /* Access memory */
+        bool L1_miss = !thread->access_dcache(addr, rip,
+                Memory::MEMORY_OP_READ,
+                uuid);
+
+        if(L1_miss) {
+            return ISSUE_CACHE_MISS;
+        }
     }
 
     state.reg.rddata = get_load_data(addr, uop);

@@ -70,6 +70,34 @@
 #define OOO_DTLB_SIZE 32
 #endif
 
+//functional units
+#ifndef OOO_ALU_FU_COUNT
+#define OOO_ALU_FU_COUNT 2
+#endif
+
+#ifndef OOO_FPU_FU_COUNT
+#define OOO_FPU_FU_COUNT 2
+#endif
+
+#ifndef OOO_LOAD_FU_COUNT
+#define OOO_LOAD_FU_COUNT 2
+#endif
+
+#ifndef OOO_STORE_FU_COUNT
+#define OOO_STORE_FU_COUNT 2
+#endif
+
+#ifndef OOO_LOADLAT
+#define OOO_LOADLAT 2
+#endif
+
+#ifndef OOO_ALULAT
+#define OOO_ALULAT 1 // ALU latency, assuming fast bypass
+#endif
+
+//max resources - Non configurable
+#define OOO_MAX_FU_COUNT 16
+
 namespace OOO_CORE_MODEL {
 
     static const int MAX_THREADS_BIT = 4; // up to 16 threads
@@ -87,10 +115,14 @@ namespace OOO_CORE_MODEL {
     //
     // Uop to functional unit mappings
     //
-    static const int FU_COUNT = 8;
-    static const int LOADLAT = 2;
+    const int FU_COUNT = OOO_MAX_FU_COUNT;
+    const int ALU_FU_COUNT = OOO_ALU_FU_COUNT;
+    const int FPU_FU_COUNT = OOO_FPU_FU_COUNT;
+    const int STORE_FU_COUNT = OOO_STORE_FU_COUNT;
+    const int LOAD_FU_COUNT = OOO_LOAD_FU_COUNT;
 
-    static const int LOAD_FU_COUNT = 2;
+    const int LOADLAT = OOO_LOADLAT;
+    const int ALULAT = OOO_ALULAT;
 
     //
     // Global limits
