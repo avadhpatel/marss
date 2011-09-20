@@ -24,6 +24,8 @@ def read_config(conf_file = None):
 	config.add_section('util')
 	config.set('util', 'dir', os.path.dirname(conf_file))
 
+	return config
+
 def check_config_param(config, section, param, is_path=False):
 	if config.has_option(section, param):
 		# If specified parameter is relative path then use config
@@ -54,8 +56,8 @@ def get_xoauth_filename():
 def get_marss_dir_path(filename):
 	if not config:
 		read_config()
-	check_config_param(config, 'marss', 'marss_dir', True)
-	return "%s/%s" % (config.get('marss', 'marss_dir'), filename)
+	check_config_param(config, 'DEFAULT', 'marss_dir', True)
+	return "%s/%s" % (config.get('DEFAULT', 'marss_dir'), filename)
 
 def get_destination_email():
 	if not config:
@@ -67,5 +69,3 @@ def get_destination_email():
 		exit()
 	else:
 		return dest_email 
-
-	
