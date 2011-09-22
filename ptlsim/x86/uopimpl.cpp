@@ -119,7 +119,7 @@ struct name { \
   T operator ()(T ra, T rb, T rc, W16 raflags, W16 rbflags, W16 rcflags, byte& cf, byte& of) { \
     if (genflags & (SETFLAG_CF|SETFLAG_OF)) \
       asm(pretext #opcode " %[rb],%[ra]; setc %[cf]; seto %[of]" : [ra] "+q" (ra), [cf] "=q" (cf), [of] "=q" (of) : [rb] "qm" (rb), [rcflags] "rm" (rcflags)); \
-    else asm(#opcode " %[rb],%[ra]" : [ra] "+q" (ra) : [rb] "qm" (rb) : "flags"); \
+    else asm(pretext #opcode " %[rb],%[ra]" : [ra] "+q" (ra) : [rb] "qm" (rb) , [rcflags] "rm" (rcflags) : "flags"); \
     return ra; \
   } \
 }
@@ -391,7 +391,7 @@ struct name { \
   T operator ()(T ra, T rb, T rc, W16 raflags, W16 rbflags, W16 rcflags, byte& cf, byte& of) { \
     if (genflags & (SETFLAG_CF|SETFLAG_OF)) \
       asm(pretext #opcode " %[rb],%[ra]; setc %[cf]; seto %[of]" : [ra] "+r" (ra), [cf] "=q" (cf), [of] "=q" (of) : [rb] "c" ((byte)rb), [rcflags] "rm" (rcflags)); \
-    else asm(#opcode " %[rb],%[ra]" : [ra] "+r" (ra) : [rb] "c" ((byte)rb) : "flags"); \
+    else asm(pretext #opcode " %[rb],%[ra]" : [ra] "+r" (ra) : [rb] "c" ((byte)rb) , [rcflags] "rm" (rcflags) : "flags"); \
     return ra; \
   } \
 }
