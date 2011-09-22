@@ -32,7 +32,10 @@ optimization_defs += '-fno-rtti -funroll-loops -fno-strict-aliasing '
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
     env.Append(CCFLAGS = '-g')
-    env.Append(CCFLAGS = '-O')
+
+    # If debugging level is 1 then do optimize
+    if int(debug) == 1:
+        env.Append(CCFLAGS = '-O')
 
     # Enable tests
     env.Append(CCFLAGS = '-DENABLE_TESTS')
