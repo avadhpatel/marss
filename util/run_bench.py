@@ -243,7 +243,7 @@ class RunSim(Thread):
                 checkpoint_lock.release()
 
             print("Checkpoint %s" % checkpoint)
-            if checkpoint == None:
+            if not checkpoint:
                 break
 
             sim_file_cmd_name = "/tmp/%s.simconfig" % checkpoint
@@ -276,7 +276,7 @@ class RunSim(Thread):
             print("Command: %s" % self.qemu_cmd)
 
             p = subprocess.Popen(self.qemu_cmd.split(), stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT, bufsize=0)
+                    stderr=subprocess.STDOUT, stdin=subprocess.PIPE, bufsize=0)
 
             monitor_pty = None
             serial_pty = None
