@@ -48,8 +48,11 @@ MemoryController::MemoryController(W8 coreid, const char *name,
     memoryHierarchy_->add_cache_mem_controller(this);
 
     if(!memoryHierarchy_->get_machine().get_option(name, "latency", latency_)) {
-        latency_ = 20;
+        latency_ = 50;
     }
+
+    /* Convert latency from ns to cycles */
+    latency_ = ns_to_simcycles(latency_);
 
     SET_SIGNAL_CB(name, "_Access_Completed", accessCompleted_,
             &MemoryController::access_completed_cb);
