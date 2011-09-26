@@ -209,6 +209,8 @@ extern uint64_t ptl_start_sim_rip;
 
 extern uint64_t qemu_ram_size;
 
+uint64_t get_sim_cpu_freq(void);
+
 #ifdef __cplusplus
 }
 #endif

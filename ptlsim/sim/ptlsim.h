@@ -300,4 +300,6 @@ void force_logging_enabled();
 void init_qemu_io_events();
 void clock_qemu_io_events();
 
+W64 ns_to_simcycles(W64 ns);
+
 #endif // _PTLSIM_H_

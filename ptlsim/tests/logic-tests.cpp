@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #define DISABLE_ASSERT
+#include <ptlsim.h>
 #include <logic.h>
 
 namespace {
@@ -39,5 +40,19 @@ namespace {
             W16 val = tags[i];
             ASSERT_EQ((W16(i+1)), val) << "Tags: " << tags;
         }
+    }
+
+    /* Test simulation freq related functions */
+    TEST(Sim, SimFreq)
+    {
+#define TEST_NS_TO_CYCLE(freq, ns, expected) \
+        config.core_freq_hz = freq; \
+        ASSERT_EQ(expected, ns_to_simcycles(ns));
+
+        TEST_NS_TO_CYCLE(1e9, 10, 10);
+        TEST_NS_TO_CYCLE(2.8e9, 20, 56);
+        TEST_NS_TO_CYCLE(3e9, 1, 3);
+        TEST_NS_TO_CYCLE(3e9, 50, 150);
+#undef TEST_NS_TO_CYCLE
     }
 };

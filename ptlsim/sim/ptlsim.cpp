@@ -587,6 +587,10 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
         config.checker_enabled = false;
   }
 
+  if (config.core_freq_hz == 0) {
+      config.core_freq_hz = get_core_freq_hz();
+  }
+
   return true;
 }
 
@@ -1309,6 +1313,11 @@ extern "C" void add_qemu_io_event(QemuIOCB fn, void *arg, int delay)
     signal->setup(fn, arg, delay);
 
     ptl_logfile << "Added QEMU IO event for " << (sim_cycle + delay) << endl;
+}
+
+W64 ns_to_simcycles(W64 ns)
+{
+    return (config.core_freq_hz/1e9) * ns;
 }
 
 #endif // CONFIG_ONLY

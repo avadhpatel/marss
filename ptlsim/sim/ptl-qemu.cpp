@@ -1356,3 +1356,7 @@ void ptl_quit()
     no_shutdown = 0;
     qemu_system_shutdown_request();
 }
+
+uint64_t get_sim_cpu_freq() {
+    return config.core_freq_hz;
+}
