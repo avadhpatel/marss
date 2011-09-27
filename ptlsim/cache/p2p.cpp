@@ -35,23 +35,26 @@
 
 #include <p2p.h>
 #include <memoryHierarchy.h>
+#include <machine.h>
 
 using namespace Memory;
 
-P2PInterconnect::P2PInterconnect(char *name,
+P2PInterconnect::P2PInterconnect(const char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Interconnect(name, memoryHierarchy)
 {
-	controllers_[0] = null;
-	controllers_[1] = null;
+	controllers_[0] = NULL;
+	controllers_[1] = NULL;
+
+    memoryHierarchy->add_interconnect(this);
 }
 
 void P2PInterconnect::register_controller(Controller *controller)
 {
-	if(controllers_[0] == null) {
+	if(controllers_[0] == NULL) {
 		controllers_[0] = controller;
 		return;
-	} else if(controllers_[1] == null) {
+	} else if(controllers_[1] == NULL) {
 		controllers_[1] = controller;
 		return;
 	}
@@ -100,12 +103,12 @@ void P2PInterconnect::print_map(ostream &os)
 	os << "Interconnect: " , get_name(), endl;
 	os << "\tconntected to:", endl;
 
-	if(controllers_[0] == null)
+	if(controllers_[0] == NULL)
 		os << "\t\tcontroller-1: None", endl;
 	else
 		os << "\t\tcontroller-1: ", controllers_[0]->get_name(), endl;
 
-	if(controllers_[1] == null)
+	if(controllers_[1] == NULL)
 		os << "\t\tcontroller-2: None", endl;
 	else
 		os << "\t\tcontroller-2: ", controllers_[1]->get_name(), endl;
@@ -117,3 +120,18 @@ bool P2PInterconnect::send_request(Controller *sender,
 	assert(0);
 	return false;
 }
+
+struct P2PBuilder : public InterconnectBuilder
+{
+    P2PBuilder(const char* name) :
+        InterconnectBuilder(name)
+    { }
+
+    Interconnect* get_new_interconnect(MemoryHierarchy& mem,
+            const char* name)
+    {
+        return new P2PInterconnect(name, &mem);
+    }
+};
+
+P2PBuilder p2pBuilder("p2p");

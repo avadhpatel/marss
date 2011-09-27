@@ -94,10 +94,14 @@ namespace superstl {
 
   class stringbuf {
   public:
-    stringbuf() { buf = null; reset(); }
+    stringbuf() { buf = NULL; reset(); }
     stringbuf(int length) {
-      buf = null;
+      buf = NULL;
       reset(length);
+    }
+
+    stringbuf(const stringbuf& sb) {
+        *this << sb;
     }
 
     void reset(int length = stringbuf_smallbufsize);
@@ -153,8 +157,16 @@ namespace superstl {
       return strequal((char*)(*this), (char*)s);
     }
 
+    bool operator ==(const char *s) {
+        return strequal((char*)(*this), s);
+    }
+
     bool operator !=(const stringbuf& s) {
       return !strequal((char*)(*this), (char*)s);
+    }
+
+    bool operator !=(const char *s) {
+        return !strequal((char*)(*this), s);
     }
 
   public:
@@ -687,14 +699,14 @@ namespace superstl {
     dynarray() {
       length = reserved = 0;
       granularity = 16;
-      data = null;
+      data = NULL;
     }
 
     dynarray(int initcap, int g = 16) {
       length = 0;
       reserved = 0;
       granularity = g;
-      data = null;
+      data = NULL;
       reserve(initcap);
     }
 
@@ -704,7 +716,7 @@ namespace superstl {
       }
 
       if(data) free(data);
-      data = null;
+      data = NULL;
       length = 0;
       reserved = 0;
     }
@@ -858,14 +870,14 @@ namespace superstl {
     selflistlink* next;
     selflistlink* prev;
   public:
-    void reset() { next = null; prev = null; }
+    void reset() { next = NULL; prev = NULL; }
     selflistlink() { reset(); }
 
     selflistlink* unlink() {
       if likely (prev) prev->next = next;
       if likely (next) next->prev = prev;
-      prev = null;
-      next = null;
+      prev = NULL;
+      next = NULL;
       return this;
     }
 
@@ -941,14 +953,14 @@ namespace superstl {
     }
 
     selfqueuelink* removehead() {
-      if unlikely (empty()) return null;
+      if unlikely (empty()) return NULL;
       selfqueuelink* link = next;
       link->unlink();
       return link;
     }
 
     selfqueuelink* removetail() {
-      if unlikely (empty()) return null;
+      if unlikely (empty()) return NULL;
       selfqueuelink* link = prev;
       link->unlink();
       return link;
@@ -1015,7 +1027,7 @@ namespace superstl {
     T* data;
 	bool free;
   public:
-	void reset() { next = null; prev = null; data = null;
+	void reset() { next = NULL; prev = NULL; data = NULL;
 		free = true; }
     queuelink() { reset(); }
     queuelink(const T& t) { reset(); data = &t; }
@@ -1026,8 +1038,8 @@ namespace superstl {
       // No effect if next = prev = this (i.e., unlinked)
       next->prev = prev;
       prev->next = next;
-      prev = null;
-      next = null;
+      prev = NULL;
+      next = NULL;
       return *data;
     }
 
@@ -1128,26 +1140,26 @@ namespace superstl {
 		  for(int i=0; i < SIZE; i++) {
 			  objects[(i+1) % SIZE].add_to_tail(objects[i]);
 		  }
-		  head = tail = null;
+		  head = tail = NULL;
 		  count = 0;
 		  iter_count = -1;
-		  last_iter_entry = null;
+		  last_iter_entry = NULL;
 	  }
 
 	  T* peek() {
-		  assert(head != null);
+		  assert(head != NULL);
 		  return head->data;
 	  }
 
 	  void reset_iter() {
 		  iter_count = -1;
-		  last_iter_entry = null;
+		  last_iter_entry = NULL;
 	  }
 
 	  T* iter_next() {
 		  iter_count++;
 		  if(iter_count >= count)
-			  return null;
+			  return NULL;
 
 		  if(iter_count == 0) {
 			  last_iter_entry = head;
@@ -1167,9 +1179,9 @@ namespace superstl {
 	  }
 
 	  T* alloc() {
-		  if unlikely (isFull()) return null;
-		  if unlikely (tail == null) {
-			  assert(head == null);
+		  if unlikely (isFull()) return NULL;
+		  if unlikely (tail == NULL) {
+			  assert(head == NULL);
 
 			  head = &objects[0];
 			  tail = head;
@@ -1192,8 +1204,8 @@ namespace superstl {
 		  count--;
 		  if(count == 0) {
 			  assert(head == tail);
-			  head = null;
-			  tail = null;
+			  head = NULL;
+			  tail = NULL;
 			  return;
 		  }
 		  if(head == entry) {
@@ -1205,7 +1217,7 @@ namespace superstl {
 			  return;
 		  }
 		  entry->unlink();
-		  assert(tail != null);
+		  assert(tail != NULL);
 		  entry->add_to_head(*tail);
 	  }
 
@@ -1215,8 +1227,8 @@ namespace superstl {
 		  if(count == 0) {
 			  assert(head == entry);
 			  assert(head == tail);
-			  head = null;
-			  tail = null;
+			  head = NULL;
+			  tail = NULL;
 			  return;
 		  }
 		  if(head == entry) {
@@ -1248,7 +1260,7 @@ namespace superstl {
 		  os << " count is ", count, " \n";
 		  queuelink<T> *entry = head;
 		  foreach(i, count) {
-			  assert(entry != null);
+			  assert(entry != NULL);
 			  entry->data->print(os);
 			  entry = entry->next;
 		  }
@@ -1291,25 +1303,25 @@ namespace superstl {
 
 		  T* start() {
 			  count = 0;
-			  if(last_iter_entry != null) {
+			  if(last_iter_entry != NULL) {
 				  start_entry = last_iter_entry;
 				  return last_iter_entry->data;
 			  }
-			  return null;
+			  return NULL;
 		  }
 
 		  T* next() {
 			  count++;
-			  if(last_iter_entry->next != null &&
+			  if(last_iter_entry->next != NULL &&
 					  last_iter_entry->next != last_iter_entry) {
 				  last_iter_entry = last_iter_entry->next;
 				  if(last_iter_entry == start_entry) {
-					  return null;
+					  return NULL;
 				  }
 				  if(!last_iter_entry->free)
 					  return last_iter_entry->data;
 			  }
-			  return null;
+			  return NULL;
 
 		  }
   };
@@ -1318,7 +1330,7 @@ namespace superstl {
   linktype *entry; \
   FixQueueIter<linktype> iter(Q.head); \
   for(entry = iter.start(); \
-		  entry != null; entry = iter.next())
+		  entry != NULL; entry = iter.next())
 
   template<class T, int SIZE>
   static inline ostream& operator <<(ostream& os, const FixQueueLink<T, SIZE>& queue)
@@ -1341,14 +1353,14 @@ namespace superstl {
     void add_to_tail(T* obj) { add_to_tail(LM::linkof(obj)); }
 
     T* remove_head() {
-      if unlikely (empty()) return null;
+      if unlikely (empty()) return NULL;
       selflistlink* link = next;
       link->unlink();
       return LM::objof(link);
     }
 
     T* remove_tail() {
-      if unlikely (empty()) return null;
+      if unlikely (empty()) return NULL;
       selflistlink* link = prev;
       link->unlink();
       return LM::objof(link);
@@ -1361,11 +1373,11 @@ namespace superstl {
     void pop(T* obj) { remove_tail(); }
 
     T* head() const {
-      return (unlikely (empty())) ? null : next;
+      return (unlikely (empty())) ? NULL : next;
     }
 
     T* tail() const {
-      return (unlikely (empty())) ? null : tail;
+      return (unlikely (empty())) ? NULL : tail;
     }
 
     bool empty() const { return (next == this); }
@@ -1381,7 +1393,7 @@ namespace superstl {
     }
   };
 
-  template <typename T, T nulltag, int N, int Q>
+  template <typename T, T NULLtag, int N, int Q>
   struct FixedIntegerQueueSet {
     T heads[Q];
     T tails[Q];
@@ -1390,30 +1402,30 @@ namespace superstl {
     FixedIntegerQueueSet() { reset(); }
 
     void reset() {
-      foreach (i, Q) { heads[i] = nulltag; }
-      foreach (i, Q) { tails[i] = nulltag; }
-      foreach (i, N) { next[i] = nulltag; }
+      foreach (i, Q) { heads[i] = NULLtag; }
+      foreach (i, Q) { tails[i] = NULLtag; }
+      foreach (i, N) { next[i] = NULLtag; }
     }
 
-    bool isnull(T tag) const {
-      return (tag == nulltag);
+    bool isNULL(T tag) const {
+      return (tag == NULLtag);
     }
 
     void add(int qid, T tag) {
       T& head = heads[qid];
       T& tail = tails[qid];
 
-      assert(isnull(next[tag]));
-      if likely (!isnull(tail)) next[tail] = tag;
+      assert(isNULL(next[tag]));
+      if likely (!isNULL(tail)) next[tail] = tag;
       tail = tag;
-      if unlikely (isnull(head)) head = tag;
+      if unlikely (isNULL(head)) head = tag;
     }
 
     void addhead(int qid, T tag) {
       T& head = heads[qid];
       T& tail = tails[qid];
 
-      assert(isnull(next[tag]));
+      assert(isNULL(next[tag]));
       if unlikely (empty(qid)) {
         head = tail = tag;
         return;
@@ -1428,10 +1440,10 @@ namespace superstl {
       T& tail = tails[qid];
 
       T tag = head;
-      if unlikely (isnull(head)) return nulltag;
+      if unlikely (isNULL(head)) return NULLtag;
       head = next[tag];
-      next[tag] = nulltag;
-      if unlikely (tail == tag) tail = nulltag;
+      next[tag] = NULLtag;
+      if unlikely (tail == tag) tail = NULLtag;
       return tag;
     }
 
@@ -1453,8 +1465,8 @@ namespace superstl {
       next[srctail] = desthead;
       desthead = srchead;
       desttail = desttail;
-      srchead = nulltag;
-      srctail = nulltag;
+      srchead = NULLtag;
+      srctail = NULLtag;
     }
 
     void splice_into_tail(int destqid, int srcqid) {
@@ -1476,12 +1488,12 @@ namespace superstl {
       desthead = desthead;
       desttail = srctail;
 
-      srchead = nulltag;
-      srctail = nulltag;
+      srchead = NULLtag;
+      srctail = NULLtag;
     }
 
     bool empty(int qid) const {
-      return (isnull(heads[qid]));
+      return (isNULL(heads[qid]));
     }
 
     ostream& print(ostream& os) const {
@@ -1490,7 +1502,7 @@ namespace superstl {
         if likely (empty(qid)) continue;
         os << "  Q", intstring(qid, -3), " [ head t", intstring(heads[qid], -4), " | tail t", intstring(tails[qid], -4), " ] ->";
         T tag = heads[qid];
-        while (!isnull(tag)) {
+        while (!isNULL(tag)) {
           os << " t", tag;
           tag = next[tag];
         }
@@ -1500,8 +1512,8 @@ namespace superstl {
     }
   };
 
-  template <typename T, T nulltag, int N, int Q>
-  ostream& operator <<(ostream& os, FixedIntegerQueueSet<T, nulltag, N, Q> q) {
+  template <typename T, T NULLtag, int N, int Q>
+  ostream& operator <<(ostream& os, FixedIntegerQueueSet<T, NULLtag, N, Q> q) {
     return q.print(os);
   }
 
@@ -1565,34 +1577,34 @@ namespace superstl {
     return os << (T*)sp;
   }
 
-  // null allowed:
+  // NULL allowed:
   template <typename T>
-  struct indexrefnull {
+  struct indexrefNULL {
     W16s index;
 
-    indexrefnull() { }
+    indexrefNULL() { }
 
-    indexrefnull<T>& operator =(const T& obj) {
+    indexrefNULL<T>& operator =(const T& obj) {
       index = (&obj) ? obj.index() : -1;
       return *this;
     }
 
-    indexrefnull<T>& operator =(const T* obj) {
+    indexrefNULL<T>& operator =(const T* obj) {
       index = (obj) ? obj->index() : -1;
       return *this;
     }
 
-    indexrefnull<T>& operator =(int i) {
+    indexrefNULL<T>& operator =(int i) {
       index = i;
       return *this;
     }
 
     T* operator ->() const {
-      return (index >= 0) ? &(get(index)) : null;
+      return (index >= 0) ? &(get(index)) : NULL;
     }
 
     T& operator *() const {
-      return (index >= 0) ? get(index) : *(T*)null;
+      return (index >= 0) ? get(index) : *(T*)NULL;
     }
 
     operator T*() const { return &(get(index)); }
@@ -2547,7 +2559,7 @@ namespace superstl {
         tlink = tlink->next;
       }
 
-      return null;
+      return NULL;
     }
 
     struct Iterator {
@@ -2577,12 +2589,12 @@ namespace superstl {
 
       T* next() {
         for (;;) {
-          if unlikely (slot >= setcount) return null;
+          if unlikely (slot >= setcount) return NULL;
 
           if unlikely (!link) {
             // End of chain: advance to next chain
             slot++;
-            if unlikely (slot >= setcount) return null;
+            if unlikely (slot >= setcount) return NULL;
             link = ht->sets[slot];
             continue;
           }
@@ -2613,7 +2625,7 @@ namespace superstl {
 
     void reset() {
       count = 0;
-      foreach (i, setcount) { sets[i] = null; }
+      foreach (i, setcount) { sets[i] = NULL; }
     }
 
     void clear(bool free_after_remove = false) {
@@ -2628,7 +2640,7 @@ namespace superstl {
           }
           tlink = tnext;
         }
-        sets[i] = null;
+        sets[i] = NULL;
       }
       count = 0;
     }
@@ -3031,7 +3043,7 @@ namespace superstl {
 
         T* next() {
           for (;;) {
-            if unlikely (i >= lengthof(chunk.data)) return null;
+            if unlikely (i >= lengthof(chunk.data)) return NULL;
             if unlikely (chunk->freemap[i]) { i++; continue; }
             return &chunk->data[i++];
           }
@@ -3055,13 +3067,13 @@ namespace superstl {
       Chunk* chunk;
       int index;
 
-      void reset() { chunk = null; index = 0; }
+      void reset() { chunk = NULL; index = 0; }
     };
 
     selflistlink* head;
     int elemcount;
 
-    ChunkList() { head = null; elemcount = 0; }
+    ChunkList() { head = NULL; elemcount = 0; }
 
     bool add(const T& entry, Locator& hint) {
       Chunk* chunk = (Chunk*)head;
@@ -3114,7 +3126,7 @@ namespace superstl {
       }
 
       elemcount = 0;
-      head = null;
+      head = NULL;
     }
 
     int count() { return elemcount; }
@@ -3138,17 +3150,17 @@ namespace superstl {
 
       void reset(ChunkList<T, N>* chunklist) {
         chunk = (Chunk*)chunklist->head;
-        nextchunk = (chunk) ? (Chunk*)chunk->link.next : null;
+        nextchunk = (chunk) ? (Chunk*)chunk->link.next : NULL;
         i = 0;
       }
 
       T* next() {
         for (;;) {
-          if unlikely (!chunk) return null;
+          if unlikely (!chunk) return NULL;
 
           if unlikely (i >= lengthof(chunk->data)) {
             chunk = nextchunk;
-            if unlikely (!chunk) return null;
+            if unlikely (!chunk) return NULL;
             nextchunk = (Chunk*)chunk->link.next;
             prefetch(nextchunk);
             i = 0;
@@ -3188,7 +3200,7 @@ namespace superstl {
 
   //
   // Chunk list for storing objects without tags.
-  // The null object is considered all zeros; this
+  // The NULL object is considered all zeros; this
   // works for both pointers and integers.
   //
   // By default this is 64 bytes (1 cache line), enough
@@ -3216,7 +3228,7 @@ namespace superstl {
         if unlikely (p == obj) return &p;
       }
 
-      return null;
+      return NULL;
     }
 
     T* add(T obj) {
@@ -3229,18 +3241,18 @@ namespace superstl {
           return &p;
         }
       }
-      return null;
+      return NULL;
     }
 
     // NOT thread safe:
     T* addunique(T obj) {
-      T* np = null;
+      T* np = NULL;
       for (int i = lengthof(list)-1; i >= 0; i--) {
         T& p = list[i];
         if unlikely (p == obj) return &p;
         if unlikely (!p) np = &p;
       }
-      if unlikely (!np) return null;
+      if unlikely (!np) return NULL;
       *np = obj;
       return np;
     }
@@ -3254,7 +3266,7 @@ namespace superstl {
         if (old == obj) return &p;
       }
 
-      return null;
+      return NULL;
     }
 
     // Not thread safe: should only be called during RCU-like update
@@ -3292,7 +3304,7 @@ namespace superstl {
 
       T* next() {
         for (;;) {
-          if unlikely (!chunk) return null;
+          if unlikely (!chunk) return NULL;
 
           if unlikely (slot >= lengthof(chunk->list)) {
             reset(chunk->next);
@@ -3334,7 +3346,7 @@ namespace superstl {
 
     void reset() {
       valid = 0;
-      next = null;
+      next = NULL;
     }
 
     SearchableChunkList16Entry() {
@@ -3349,20 +3361,20 @@ namespace superstl {
 
     T* get(const T& target) {
       W32 matches = x86_sse_maskeqb(tags, tagof(target)) & valid;
-      if likely (!matches) return null;
+      if likely (!matches) return NULL;
       while likely (matches) {
         int index = lsbindex32(matches);
         matches = x86_btr(matches, W32(index));
         T* p = &list[index];
         if likely (equal(target, *p)) return p;
       }
-      return null;
+      return NULL;
     }
 
     T* add(const T& e) {
       T* p = get(e);
       if unlikely (p) return p;
-      if unlikely (full()) return null;
+      if unlikely (full()) return NULL;
 
       int index = lsbindex32(~valid);
       assert(index < lengthof(list));
@@ -3377,7 +3389,7 @@ namespace superstl {
 
     T* remove(const T& e) {
       T* p = get(e);
-      if unlikely (!p) return null;
+      if unlikely (!p) return NULL;
 
       int index = p - list;
       valid = x86_btr(W32(valid), W32(index));
@@ -3417,7 +3429,7 @@ namespace superstl {
 
       T* next() {
         for (;;) {
-          if unlikely (slot >= lengthof(chunk->list)) return null;
+          if unlikely (slot >= lengthof(chunk->list)) return NULL;
           T* entry = &list[slot++];
           if unlikely (!bit(valid, slot)) continue;
           return entry;
@@ -3956,23 +3968,26 @@ namespace superstl {
 
   class Signal {
 	  private:
-		  const char* name_;
+		  stringbuf name_;
 		  TFunctor* func;
 
 	  public:
 		  Signal();
 		  Signal(const char* name);
+
+          ~Signal() {}
+
 		  bool emit(void *arg) ;
 		  void connect(TFunctor* _func);
 		  const char* get_name() {
-			  return name_;
+			  return name_.buf;
 		  }
 		  void set_name(const char *name) {
-			  name_ = name;
+			  name_ << name;
 		  }
   };
 
 
-} // namespace superstl
+}; // namespace superstl
 
 #endif // _SUPERSTL_H_

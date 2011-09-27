@@ -322,7 +322,8 @@ static int syborg_serial_init(SysBusDevice *dev)
 
     sysbus_init_irq(dev, &s->irq);
     iomemtype = cpu_register_io_memory(syborg_serial_readfn,
-                                       syborg_serial_writefn, s);
+                                       syborg_serial_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
     s->chr = qdev_init_chardev(&dev->qdev);
     if (s->chr) {
@@ -335,7 +336,7 @@ static int syborg_serial_init(SysBusDevice *dev)
     }
     s->read_fifo = qemu_mallocz(s->fifo_size * sizeof(s->read_fifo[0]));
 
-    register_savevm("syborg_serial", -1, 1,
+    register_savevm(&dev->qdev, "syborg_serial", -1, 1,
                     syborg_serial_save, syborg_serial_load, s);
     return 0;
 }

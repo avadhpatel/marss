@@ -74,7 +74,7 @@ static void sh_serial_clear_fifo(sh_serial_state * s)
     s->rx_tail = 0;
 }
 
-static void sh_serial_ioport_write(void *opaque, uint32_t offs, uint32_t val)
+static void sh_serial_write(void *opaque, uint32_t offs, uint32_t val)
 {
     sh_serial_state *s = opaque;
     unsigned char ch;
@@ -182,10 +182,10 @@ static void sh_serial_ioport_write(void *opaque, uint32_t offs, uint32_t val)
     }
 
     fprintf(stderr, "sh_serial: unsupported write to 0x%02x\n", offs);
-    assert(0);
+    abort();
 }
 
-static uint32_t sh_serial_ioport_read(void *opaque, uint32_t offs)
+static uint32_t sh_serial_read(void *opaque, uint32_t offs)
 {
     sh_serial_state *s = opaque;
     uint32_t ret = ~0;
@@ -282,7 +282,7 @@ static uint32_t sh_serial_ioport_read(void *opaque, uint32_t offs)
 
     if (ret & ~((1 << 16) - 1)) {
         fprintf(stderr, "sh_serial: unsupported read from 0x%02x\n", offs);
-	assert(0);
+        abort();
     }
 
     return ret;
@@ -291,26 +291,6 @@ static uint32_t sh_serial_ioport_read(void *opaque, uint32_t offs)
 static int sh_serial_can_receive(sh_serial_state *s)
 {
     return s->scr & (1 << 4);
-}
-
-static void sh_serial_receive_byte(sh_serial_state *s, int ch)
-{
-    if (s->feat & SH_SERIAL_FEAT_SCIF) {
-        if (s->rx_cnt < SH_RX_FIFO_LENGTH) {
-            s->rx_fifo[s->rx_head++] = ch;
-            if (s->rx_head == SH_RX_FIFO_LENGTH)
-                s->rx_head = 0;
-            s->rx_cnt++;
-            if (s->rx_cnt >= s->rtrg) {
-                s->flags |= SH_SERIAL_FLAG_RDF;
-                if (s->scr & (1 << 6) && s->rxi) {
-                    qemu_set_irq(s->rxi, 1);
-                }
-            }
-        }
-    } else {
-        s->rx_fifo[0] = ch;
-    }
 }
 
 static void sh_serial_receive_break(sh_serial_state *s)
@@ -328,7 +308,27 @@ static int sh_serial_can_receive1(void *opaque)
 static void sh_serial_receive1(void *opaque, const uint8_t *buf, int size)
 {
     sh_serial_state *s = opaque;
-    sh_serial_receive_byte(s, buf[0]);
+
+    if (s->feat & SH_SERIAL_FEAT_SCIF) {
+        int i;
+        for (i = 0; i < size; i++) {
+            if (s->rx_cnt < SH_RX_FIFO_LENGTH) {
+                s->rx_fifo[s->rx_head++] = buf[i];
+                if (s->rx_head == SH_RX_FIFO_LENGTH) {
+                    s->rx_head = 0;
+                }
+                s->rx_cnt++;
+                if (s->rx_cnt >= s->rtrg) {
+                    s->flags |= SH_SERIAL_FLAG_RDF;
+                    if (s->scr & (1 << 6) && s->rxi) {
+                        qemu_set_irq(s->rxi, 1);
+                    }
+                }
+            }
+        }
+    } else {
+        s->rx_fifo[0] = buf[0];
+    }
 }
 
 static void sh_serial_event(void *opaque, int event)
@@ -336,19 +336,6 @@ static void sh_serial_event(void *opaque, int event)
     sh_serial_state *s = opaque;
     if (event == CHR_EVENT_BREAK)
         sh_serial_receive_break(s);
-}
-
-static uint32_t sh_serial_read (void *opaque, target_phys_addr_t addr)
-{
-    sh_serial_state *s = opaque;
-    return sh_serial_ioport_read(s, addr);
-}
-
-static void sh_serial_write (void *opaque,
-                             target_phys_addr_t addr, uint32_t value)
-{
-    sh_serial_state *s = opaque;
-    sh_serial_ioport_write(s, addr, value);
 }
 
 static CPUReadMemoryFunc * const sh_serial_readfn[] = {
@@ -395,7 +382,8 @@ void sh_serial_init (target_phys_addr_t base, int feat,
     sh_serial_clear_fifo(s);
 
     s_io_memory = cpu_register_io_memory(sh_serial_readfn,
-					 sh_serial_writefn, s);
+					 sh_serial_writefn, s,
+                                         DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(P4ADDR(base), 0x28, s_io_memory);
     cpu_register_physical_memory(A7ADDR(base), 0x28, s_io_memory);
 

@@ -1,0 +1,76 @@
+[DEFAULT]
+marss_dir = /path/to/your/marss/dir
+util_dir = /path/to/your/marss/utils/dir
+img_dir = /path/to/qcow2/disk/images
+
+# This variable is set from marss directory variable
+# specified above. If your binary is in different location
+# then change it. You can also specify 'run' specific binary
+# in each section
+qemu_bin = %(marss_dir)s/qemu/qemu-system-x86_64
+
+# You can specify common simconfig options in 'DEFAULT' section
+# and use them in 'run' section's simconfig.
+default_simconfig = -kill-after-run -quiet
+
+
+# For more detail about configuration file please visit:
+# http://docs.python.org/library/configparser.html
+
+[email]
+xoauth = xoauth.txt
+to = youremail@domain.com
+
+# Benchmark Suite Configuration:
+#
+# Each run configuration uses a benchmark suite configuration to get
+# the list of checkpoints stored into qcow2 images seperated by ','
+[suite name]
+checkpoints = chk1, chk2, chk3
+
+# Example Spec-2006 Int benchmarks suite
+[suite spec2006-int]
+checkpoints = perl, bzip, gcc, mcf, gobmk, hmmer, sjeng
+
+
+# Run Configuration:
+#
+# Each run configuration has following required options:
+#       suite     : specify which benchmarks/checkpoints to use
+#       images    : ',' or new line seperated list of qcow2 images
+#       memory    : VM memory size
+#       simconfig : Simulation configuration options
+#
+# Optional arguments:
+#       qemu_args : specific arguments to qemu command line
+#
+# Run-time variables:
+# (This variable values will be filled at runtime by run_bench.py)
+#       out_dir : output directory where all simulation files will be stored
+#       bench   : benchmark/checkpoint name
+#
+# Note: For multiline option, indent each line with atleast 2 spaces
+#       as shown in 'simconfig' option below.
+#
+[run name]
+suite = suite_name
+images = /image1, /image2
+memory = 2G
+simconfig = -logfile %(out_dir)s/%(bench)s.log
+  -stats %(out_dir)s/%(bench)s.yml
+  -machine machineX
+  %(default_simconfig)s
+
+# Sample run configuration for spec int that uses 'ooo' machine configuration
+[run spec-int-ooo]
+suite = spec2006-int
+images = %(img_dir)s/spec_1.qcow2
+  %(img_dir)s/spec_2.qcow2
+  %(img_dir)s/spec_3.qcow2
+
+memory = 2G
+
+simconfig = -logfile %(out_dir)s/%(bench)s.log
+  -stats %(out_dir)s/%(bench)s.yml
+  -machine ooo
+  %(default_simconfig)s

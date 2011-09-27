@@ -3,11 +3,3 @@
 # Import envrionment
 Import('env')
 Import('dst_objs')
-
-tool_env = env.Clone()
-tool_env.Append(CCFLAGS = '-g -O2')
-
-ptlstats = tool_env.Program('ptlstats', dst_objs + ['ptlstats.cpp'])
-ptlstats_target = "%s/ptlstats" % tool_env['RT_DIR']
-tool_env.Command(ptlstats_target, ptlstats, Copy("$TARGET", "$SOURCE"))
-

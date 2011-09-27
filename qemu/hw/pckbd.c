@@ -29,6 +29,12 @@
 
 /* debug PC keyboard */
 //#define DEBUG_KBD
+#ifdef DEBUG_KBD
+#define DPRINTF(fmt, ...)                                       \
+    do { printf("KBD: " fmt , ## __VA_ARGS__); } while (0)
+#else
+#define DPRINTF(fmt, ...)
+#endif
 
 /*	Keyboard Controller Commands */
 #define KBD_CCMD_READ_MODE	0x20	/* Read mode bits */
@@ -50,7 +56,9 @@
 #define KBD_CCMD_WRITE_MOUSE	0xD4	/* Write the following byte to the mouse */
 #define KBD_CCMD_DISABLE_A20    0xDD    /* HP vectra only ? */
 #define KBD_CCMD_ENABLE_A20     0xDF    /* HP vectra only ? */
-#define KBD_CCMD_RESET	        0xFE
+#define KBD_CCMD_PULSE_BITS_3_0 0xF0    /* Pulse bits 3-0 of the output port P2. */
+#define KBD_CCMD_RESET          0xFE    /* Pulse bit 0 of the output port P2 = CPU reset. */
+#define KBD_CCMD_NO_OP          0xFF    /* Pulse no bits of the output port P2. */
 
 /* Keyboard Commands */
 #define KBD_CMD_SET_LEDS	0xED	/* Set keyboard leds */
@@ -87,6 +95,12 @@
 #define KBD_MODE_KCC 		0x40	/* Scan code conversion to PC format */
 #define KBD_MODE_RFU		0x80
 
+/* Output Port Bits */
+#define KBD_OUT_RESET           0x01    /* 1=normal mode, 0=reset */
+#define KBD_OUT_A20             0x02    /* x86 only */
+#define KBD_OUT_OBF             0x10    /* Keyboard output buffer full */
+#define KBD_OUT_MOUSE_OBF       0x20    /* Mouse output buffer full */
+
 /* Mouse Commands */
 #define AUX_SET_SCALE11		0xE6	/* Set 1:1 scaling */
 #define AUX_SET_SCALE21		0xE7	/* Set 2:1 scaling */
@@ -116,6 +130,7 @@ typedef struct KBDState {
     uint8_t write_cmd; /* if non zero, write data to port 60 is expected */
     uint8_t status;
     uint8_t mode;
+    uint8_t outport;
     /* Bitmask of devices with data available.  */
     uint8_t pending;
     void *kbd;
@@ -123,10 +138,9 @@ typedef struct KBDState {
 
     qemu_irq irq_kbd;
     qemu_irq irq_mouse;
+    qemu_irq *a20_out;
     target_phys_addr_t mask;
 } KBDState;
-
-static KBDState kbd_state;
 
 /* update irq and KBD_STAT_[MOUSE_]OBF */
 /* XXX: not generating the irqs if KBD_MODE_DISABLE_KBD is set may be
@@ -138,11 +152,14 @@ static void kbd_update_irq(KBDState *s)
     irq_kbd_level = 0;
     irq_mouse_level = 0;
     s->status &= ~(KBD_STAT_OBF | KBD_STAT_MOUSE_OBF);
+    s->outport &= ~(KBD_OUT_OBF | KBD_OUT_MOUSE_OBF);
     if (s->pending) {
         s->status |= KBD_STAT_OBF;
+        s->outport |= KBD_OUT_OBF;
         /* kbd data takes priority over aux data.  */
         if (s->pending == KBD_PENDING_AUX) {
             s->status |= KBD_STAT_MOUSE_OBF;
+            s->outport |= KBD_OUT_MOUSE_OBF;
             if (s->mode & KBD_MODE_MOUSE_INT)
                 irq_mouse_level = 1;
         } else {
@@ -182,9 +199,7 @@ static uint32_t kbd_read_status(void *opaque, uint32_t addr)
     KBDState *s = opaque;
     int val;
     val = s->status;
-#if defined(DEBUG_KBD)
-    printf("kbd: read status=0x%02x\n", val);
-#endif
+    DPRINTF("kbd: read status=0x%02x\n", val);
     return val;
 }
 
@@ -196,13 +211,38 @@ static void kbd_queue(KBDState *s, int b, int aux)
         ps2_queue(s->kbd, b);
 }
 
+static void outport_write(KBDState *s, uint32_t val)
+{
+    DPRINTF("kbd: write outport=0x%02x\n", val);
+    s->outport = val;
+    if (s->a20_out) {
+        qemu_set_irq(*s->a20_out, (val >> 1) & 1);
+    }
+    if (!(val & 1)) {
+        qemu_system_reset_request();
+    }
+}
+
 static void kbd_write_command(void *opaque, uint32_t addr, uint32_t val)
 {
     KBDState *s = opaque;
 
-#ifdef DEBUG_KBD
-    printf("kbd: write cmd=0x%02x\n", val);
-#endif
+    DPRINTF("kbd: write cmd=0x%02x\n", val);
+
+    /* Bits 3-0 of the output port P2 of the keyboard controller may be pulsed
+     * low for approximately 6 micro seconds. Bits 3-0 of the KBD_CCMD_PULSE
+     * command specify the output port bits to be pulsed.
+     * 0: Bit should be pulsed. 1: Bit should not be modified.
+     * The only useful version of this command is pulsing bit 0,
+     * which does a CPU reset.
+     */
+    if((val & KBD_CCMD_PULSE_BITS_3_0) == KBD_CCMD_PULSE_BITS_3_0) {
+        if(!(val & 1))
+            val = KBD_CCMD_RESET;
+        else
+            val = KBD_CCMD_NO_OP;
+    }
+
     switch(val) {
     case KBD_CCMD_READ_MODE:
         kbd_queue(s, s->mode, 0);
@@ -242,31 +282,25 @@ static void kbd_write_command(void *opaque, uint32_t addr, uint32_t val)
         kbd_queue(s, 0x00, 0);
         break;
     case KBD_CCMD_READ_OUTPORT:
-        /* XXX: check that */
-#ifdef TARGET_I386
-        val = 0x01 | (ioport_get_a20() << 1);
-#else
-        val = 0x01;
-#endif
-        if (s->status & KBD_STAT_OBF)
-            val |= 0x10;
-        if (s->status & KBD_STAT_MOUSE_OBF)
-            val |= 0x20;
-        kbd_queue(s, val, 0);
+        kbd_queue(s, s->outport, 0);
         break;
-#ifdef TARGET_I386
     case KBD_CCMD_ENABLE_A20:
-        ioport_set_a20(1);
+        if (s->a20_out) {
+            qemu_irq_raise(*s->a20_out);
+        }
+        s->outport |= KBD_OUT_A20;
         break;
     case KBD_CCMD_DISABLE_A20:
-        ioport_set_a20(0);
+        if (s->a20_out) {
+            qemu_irq_lower(*s->a20_out);
+        }
+        s->outport &= ~KBD_OUT_A20;
         break;
-#endif
     case KBD_CCMD_RESET:
         qemu_system_reset_request();
         break;
-    case 0xff:
-        /* ignore that - I don't know what is its use */
+    case KBD_CCMD_NO_OP:
+        /* ignore that */
         break;
     default:
         fprintf(stderr, "qemu: unsupported keyboard cmd=0x%02x\n", val);
@@ -284,9 +318,7 @@ static uint32_t kbd_read_data(void *opaque, uint32_t addr)
     else
         val = ps2_read_data(s->kbd);
 
-#if defined(DEBUG_KBD)
-    printf("kbd: read data=0x%02x\n", val);
-#endif
+    DPRINTF("kbd: read data=0x%02x\n", val);
     return val;
 }
 
@@ -294,9 +326,7 @@ static void kbd_write_data(void *opaque, uint32_t addr, uint32_t val)
 {
     KBDState *s = opaque;
 
-#ifdef DEBUG_KBD
-    printf("kbd: write data=0x%02x\n", val);
-#endif
+    DPRINTF("kbd: write data=0x%02x\n", val);
 
     switch(s->write_cmd) {
     case 0:
@@ -315,12 +345,7 @@ static void kbd_write_data(void *opaque, uint32_t addr, uint32_t val)
         kbd_queue(s, val, 1);
         break;
     case KBD_CCMD_WRITE_OUTPORT:
-#ifdef TARGET_I386
-        ioport_set_a20((val >> 1) & 1);
-#endif
-        if (!(val & 1)) {
-            qemu_system_reset_request();
-        }
+        outport_write(s, val);
         break;
     case KBD_CCMD_WRITE_MOUSE:
         ps2_write_mouse(s->mouse, val);
@@ -337,6 +362,7 @@ static void kbd_reset(void *opaque)
 
     s->mode = KBD_MODE_KBD_INT | KBD_MODE_MOUSE_INT;
     s->status = KBD_STAT_CMD | KBD_STAT_UNLOCKED;
+    s->outport = KBD_OUT_RESET | KBD_OUT_A20;
 }
 
 static const VMStateDescription vmstate_kbd = {
@@ -390,22 +416,20 @@ void i8042_mm_init(qemu_irq kbd_irq, qemu_irq mouse_irq,
                    target_phys_addr_t base, ram_addr_t size,
                    target_phys_addr_t mask)
 {
-    KBDState *s = &kbd_state;
+    KBDState *s = qemu_mallocz(sizeof(KBDState));
     int s_io_memory;
 
     s->irq_kbd = kbd_irq;
     s->irq_mouse = mouse_irq;
     s->mask = mask;
 
-    vmstate_register(0, &vmstate_kbd, s);
-    s_io_memory = cpu_register_io_memory(kbd_mm_read, kbd_mm_write, s);
+    vmstate_register(NULL, 0, &vmstate_kbd, s);
+    s_io_memory = cpu_register_io_memory(kbd_mm_read, kbd_mm_write, s,
+                                         DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, size, s_io_memory);
 
     s->kbd = ps2_kbd_init(kbd_update_kbd_irq, s);
     s->mouse = ps2_mouse_init(kbd_update_aux_irq, s);
-#ifdef TARGET_I386
-    vmmouse_init(s->mouse);
-#endif
     qemu_register_reset(kbd_reset, s);
 }
 
@@ -413,6 +437,21 @@ typedef struct ISAKBDState {
     ISADevice dev;
     KBDState  kbd;
 } ISAKBDState;
+
+void i8042_isa_mouse_fake_event(void *opaque)
+{
+    ISADevice *dev = opaque;
+    KBDState *s = &(DO_UPCAST(ISAKBDState, dev, dev)->kbd);
+
+    ps2_mouse_fake_event(s->mouse);
+}
+
+void i8042_setup_a20_line(ISADevice *dev, qemu_irq *a20_out)
+{
+    KBDState *s = &(DO_UPCAST(ISAKBDState, dev, dev)->kbd);
+
+    s->a20_out = a20_out;
+}
 
 static const VMStateDescription vmstate_kbd_isa = {
     .name = "pckbd",
@@ -434,14 +473,13 @@ static int i8042_initfn(ISADevice *dev)
 
     register_ioport_read(0x60, 1, 1, kbd_read_data, s);
     register_ioport_write(0x60, 1, 1, kbd_write_data, s);
+    isa_init_ioport(dev, 0x60);
     register_ioport_read(0x64, 1, 1, kbd_read_status, s);
     register_ioport_write(0x64, 1, 1, kbd_write_command, s);
+    isa_init_ioport(dev, 0x64);
 
     s->kbd = ps2_kbd_init(kbd_update_kbd_irq, s);
     s->mouse = ps2_mouse_init(kbd_update_aux_irq, s);
-#ifdef TARGET_I386
-    vmmouse_init(s->mouse);
-#endif
     qemu_register_reset(kbd_reset, s);
     return 0;
 }

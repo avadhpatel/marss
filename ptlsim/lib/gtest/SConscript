@@ -1,0 +1,11 @@
+# SConscript for gtest subdirectory
+
+# Import envrionment
+Import('env')
+
+# Now get list of .cpp files
+src_files = ["src/gtest-all.cc"]
+
+objs = env.Object(src_files)
+
+Return('objs')

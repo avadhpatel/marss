@@ -20,7 +20,6 @@
 #define NBD_H
 
 #include <sys/types.h>
-#include <stdbool.h>
 
 #include <qemu-common.h>
 #include "block_int.h"
@@ -43,6 +42,8 @@ enum {
     NBD_CMD_DISC = 2
 };
 
+#define NBD_DEFAULT_PORT	10809
+
 size_t nbd_wr_sync(int fd, void *buffer, size_t size, bool do_read);
 int tcp_socket_outgoing(const char *address, uint16_t port);
 int tcp_socket_incoming(const char *address, uint16_t port);
@@ -50,13 +51,14 @@ int unix_socket_outgoing(const char *path);
 int unix_socket_incoming(const char *path);
 
 int nbd_negotiate(int csock, off_t size);
-int nbd_receive_negotiate(int csock, off_t *size, size_t *blocksize);
+int nbd_receive_negotiate(int csock, const char *name, uint32_t *flags,
+                          off_t *size, size_t *blocksize);
 int nbd_init(int fd, int csock, off_t size, size_t blocksize);
 int nbd_send_request(int csock, struct nbd_request *request);
 int nbd_receive_reply(int csock, struct nbd_reply *reply);
 int nbd_trip(BlockDriverState *bs, int csock, off_t size, uint64_t dev_offset,
              off_t *offset, bool readonly, uint8_t *data, int data_size);
-int nbd_client(int fd, int csock);
+int nbd_client(int fd);
 int nbd_disconnect(int fd);
 
 #endif

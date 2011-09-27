@@ -52,14 +52,11 @@ static void vga_map(PCIDevice *pci_dev, int region_num,
 {
     PCIVGAState *d = (PCIVGAState *)pci_dev;
     VGACommonState *s = &d->vga;
-    if (region_num == PCI_ROM_SLOT) {
-        cpu_register_physical_memory(addr, s->bios_size, s->bios_offset);
-    } else {
-        cpu_register_physical_memory(addr, s->vram_size, s->vram_offset);
-        s->map_addr = addr;
-        s->map_end = addr + s->vram_size;
-        vga_dirty_log_start(s);
-    }
+
+    cpu_register_physical_memory(addr, s->vram_size, s->vram_offset);
+    s->map_addr = addr;
+    s->map_end = addr + s->vram_size;
+    vga_dirty_log_start(s);
 }
 
 static void pci_vga_write_config(PCIDevice *d,
@@ -90,38 +87,22 @@ static int pci_vga_initfn(PCIDevice *dev)
      pci_config_set_vendor_id(pci_conf, PCI_VENDOR_ID_QEMU);
      pci_config_set_device_id(pci_conf, PCI_DEVICE_ID_QEMU_VGA);
      pci_config_set_class(pci_conf, PCI_CLASS_DISPLAY_VGA);
-     pci_conf[PCI_HEADER_TYPE] = PCI_HEADER_TYPE_NORMAL; // header_type
 
      /* XXX: VGA_RAM_SIZE must be a power of two */
      pci_register_bar(&d->dev, 0, VGA_RAM_SIZE,
                       PCI_BASE_ADDRESS_MEM_PREFETCH, vga_map);
 
-     if (s->bios_size) {
-        unsigned int bios_total_size;
-        /* must be a power of two */
-        bios_total_size = 1;
-        while (bios_total_size < s->bios_size)
-            bios_total_size <<= 1;
-        pci_register_bar(&d->dev, PCI_ROM_SLOT, bios_total_size,
-                         PCI_BASE_ADDRESS_MEM_PREFETCH, vga_map);
+     if (!dev->rom_bar) {
+         /* compatibility with pc-0.13 and older */
+         vga_init_vbe(s);
      }
 
-    vga_init_vbe(s);
-     /* ROM BIOS */
-     rom_add_vga(VGABIOS_FILENAME);
      return 0;
 }
 
-int pci_vga_init(PCIBus *bus,
-                 unsigned long vga_bios_offset, int vga_bios_size)
+int pci_vga_init(PCIBus *bus)
 {
-    PCIDevice *dev;
-
-    dev = pci_create(bus, -1, "VGA");
-    qdev_prop_set_uint32(&dev->qdev, "bios-offset", vga_bios_offset);
-    qdev_prop_set_uint32(&dev->qdev, "bios-size", vga_bios_size);
-    qdev_init_nofail(&dev->qdev);
-
+    pci_create_simple(bus, -1, "VGA");
     return 0;
 }
 
@@ -129,13 +110,10 @@ static PCIDeviceInfo vga_info = {
     .qdev.name    = "VGA",
     .qdev.size    = sizeof(PCIVGAState),
     .qdev.vmsd    = &vmstate_vga_pci,
+    .no_hotplug   = 1,
     .init         = pci_vga_initfn,
     .config_write = pci_vga_write_config,
-    .qdev.props   = (Property[]) {
-        DEFINE_PROP_HEX32("bios-offset", PCIVGAState, vga.bios_offset, 0),
-        DEFINE_PROP_HEX32("bios-size",   PCIVGAState, vga.bios_size,   0),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+    .romfile      = "vgabios-stdvga.bin",
 };
 
 static void vga_register(void)

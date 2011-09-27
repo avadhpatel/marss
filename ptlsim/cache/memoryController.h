@@ -31,18 +31,20 @@
 #include <controller.h>
 #include <interconnect.h>
 #include <superstl.h>
+#include <memoryStats.h>
 
 namespace Memory {
 
 struct MemoryQueueEntry : public FixStateListObject
 {
 	MemoryRequest *request;
+	Controller *source;
 	int depends;
 	bool annuled;
 	bool inUse;
 
 	void init() {
-		request = null;
+		request = NULL;
 		depends = -1;
 		annuled = false;
 		inUse = false;
@@ -51,6 +53,8 @@ struct MemoryQueueEntry : public FixStateListObject
 	ostream& print(ostream &os) const {
 		if(request)
 			os << "Request{", *request, "} ";
+        if (source)
+            os << "source[", source->get_name(), "] ";
 		os << "depends[", depends, "] ";
 		os << "annuled[", annuled, "] ";
 		os << "inUse[", inUse, "] ";
@@ -71,11 +75,14 @@ class MemoryController : public Controller
 
 		FixStateList<MemoryQueueEntry, MEM_REQ_NUM> pendingRequests_;
 
+        int latency_;
 		int bankBits_;
 		int get_bank_id(W64 addr);
 
+        RAMStats new_stats;
+
 	public:
-		MemoryController(W8 coreid, char *name,
+		MemoryController(W8 coreid, const char *name,
 				 MemoryHierarchy *memoryHierarchy);
 		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);
@@ -83,6 +90,7 @@ class MemoryController : public Controller
 				MemoryRequest *request);
 		void print(ostream& os) const;
 
+        void register_interconnect(Interconnect *interconnect, int type);
 		void register_cache_interconnect(Interconnect *interconnect);
 
 		bool access_completed_cb(void *arg);

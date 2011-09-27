@@ -62,12 +62,11 @@ static const uint8_t wm8750_vol_db_table[] = {
 
 static inline void wm8750_in_load(WM8750State *s)
 {
-    int acquired;
     if (s->idx_in + s->req_in <= sizeof(s->data_in))
         return;
     s->idx_in = audio_MAX(0, (int) sizeof(s->data_in) - s->req_in);
-    acquired = AUD_read(*s->in[0], s->data_in + s->idx_in,
-                    sizeof(s->data_in) - s->idx_in);
+    AUD_read(*s->in[0], s->data_in + s->idx_in,
+             sizeof(s->data_in) - s->idx_in);
 }
 
 static inline void wm8750_out_flush(WM8750State *s)
@@ -172,7 +171,6 @@ static void wm8750_set_format(WM8750State *s)
     int i;
     struct audsettings in_fmt;
     struct audsettings out_fmt;
-    struct audsettings monoout_fmt;
 
     wm8750_out_flush(s);
 
@@ -213,10 +211,6 @@ static void wm8750_set_format(WM8750State *s)
     out_fmt.nchannels = 2;
     out_fmt.freq = s->dac_hz;
     out_fmt.fmt = AUD_FMT_S16;
-    monoout_fmt.endianness = 0;
-    monoout_fmt.nchannels = 1;
-    monoout_fmt.freq = s->rate->dac_hz;
-    monoout_fmt.fmt = AUD_FMT_S16;
 
     s->dac_voice[0] = AUD_open_out(&s->card, s->dac_voice[0],
                     CODEC ".speaker", s, wm8750_audio_out_cb, &out_fmt);

@@ -40,10 +40,10 @@ enum OP_TYPE {
 	MEMORY_OP_WRITE,
 	MEMORY_OP_UPDATE,
 	MEMORY_OP_EVICT,
-	NO_MEMORY_OP
+	NUM_MEMORY_OP
 };
 
-static const char* memory_op_names[NO_MEMORY_OP] = {
+static const char* memory_op_names[NUM_MEMORY_OP] = {
 	"memory_op_read",
 	"memory_op_write",
 	"memory_op_update",
@@ -66,6 +66,7 @@ class MemoryRequest: public selfqueuelink
 			opType_ = MEMORY_OP_READ;
 			isData_ = 0;
 			history = new stringbuf();
+            coreSignal_ = NULL;
 		}
 
 		void incRefCounter(){
@@ -111,9 +112,9 @@ class MemoryRequest: public selfqueuelink
 		W64 get_physical_address() { return physicalAddress_; }
 		void set_physical_address(W64 addr) { physicalAddress_ = addr; }
 
-		W8 get_coreid() { return coreId_; }
+		int get_coreid() { return int(coreId_); }
 
-		W8 get_threadid() { return threadId_; }
+		int get_threadid() { return int(threadId_); }
 
 		int get_robid() { return robId_; }
 		void set_robid(int idx) { robId_ = idx; }
@@ -137,6 +138,16 @@ class MemoryRequest: public selfqueuelink
             return false;
         }
 
+        void set_coreSignal(Signal* signal)
+        {
+            coreSignal_ = signal;
+        }
+
+        Signal* get_coreSignal()
+        {
+            return coreSignal_;
+        }
+
 		ostream& print(ostream& os) const
 		{
 			os << "Memory Request: core[", coreId_, "] ";
@@ -150,6 +161,9 @@ class MemoryRequest: public selfqueuelink
 			os << "ownerUUID[", ownerUUID_, "] ";
 			os << "ownerRIP[", (void*)ownerRIP_, "] ";
 			os << "History[ " << *history << "] ";
+            if(coreSignal_) {
+                os << "Signal[ " << coreSignal_->get_name() << "] ";
+            }
 			return os;
 		}
 
@@ -165,6 +179,7 @@ class MemoryRequest: public selfqueuelink
 		int refCounter_;
 		OP_TYPE opType_;
 		stringbuf *history;
+        Signal *coreSignal_;
 
 };
 

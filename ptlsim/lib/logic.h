@@ -15,13 +15,14 @@ inline vec16b x86_sse_ldvbu(const vec16b* m) { vec16b rd; asm("movdqu %[m],%[rd]
 inline void x86_sse_stvbu(vec16b* m, const vec16b ra) { asm("movdqu %[ra],%[m]" : [m] "=xm" (*m) : [ra] "x" (ra) : "memory"); }
 inline vec8w x86_sse_ldvwu(const vec8w* m) {
 	vec8w rd;
-	asm("movdqu %[m],%[rd]" : [rd] "=x" (rd) : [m] "xm" (*m));
+	asm("movdqu %[m],%[rd]" : [rd] "=x" (rd) : [m] "m" (*m));
 	return rd;
 }
 //inline vec8w x86_sse_ldvwu(const vec8w* m) { vec8w rd; asm("movdqu %[rd], %[m]" : [rd] "=x" (rd) : [m] "xm" (*m)); return rd; }
-inline void x86_sse_stvwu(vec8w* m, const vec8w ra) { asm("movdqu %[ra],%[m]" : [m] "=xm" (*m) : [ra] "x" (ra) : "memory"); }
+inline void x86_sse_stvwu(vec8w* m, const vec8w ra) { asm("movdqu %[ra],%[m]" : [m] "=m" (*m) : [ra] "x" (ra) : "memory"); }
 
 extern ofstream ptl_logfile;
+extern ofstream yaml_stats_file;
 
 template <typename T>
 struct latch {
@@ -136,7 +137,7 @@ struct FixedQueue: public array<T, SIZE> {
 
   T* alloc() {
     if (!remaining())
-      return null;
+      return NULL;
 
     T* entry = &(*this)[tail];
 
@@ -152,7 +153,7 @@ struct FixedQueue: public array<T, SIZE> {
 
   T* push(const T& data) {
     T* slot = push();
-    if (!slot) return null;
+    if (!slot) return NULL;
     *slot = data;
     return slot;
   }
@@ -174,7 +175,7 @@ struct FixedQueue: public array<T, SIZE> {
   }
 
   T* pop() {
-    if (empty()) return null;
+    if (empty()) return NULL;
     tail = add_index_modulo(tail, -1, SIZE);
     count--;
     return &(*this)[tail];
@@ -182,13 +183,13 @@ struct FixedQueue: public array<T, SIZE> {
 
   T* peek() {
     if (empty())
-      return null;
+      return NULL;
     return &(*this)[head];
   }
 
   T* dequeue() {
     if (empty())
-      return null;
+      return NULL;
     count--;
     T* entry = &(*this)[head];
     head = add_index_modulo(head, +1, SIZE);
@@ -199,14 +200,14 @@ struct FixedQueue: public array<T, SIZE> {
   void annul(T* entry) { annul(*entry); }
 
   T* pushhead() {
-    if (full()) return null;
+    if (full()) return NULL;
     head = add_index_modulo(head, -1, SIZE);
     count++;
     return &(*this)[head];
   }
 
   T* pophead() {
-    if (empty()) return null;
+    if (empty()) return NULL;
     T* p = &(*this)[head];
     count--;
     head = add_index_modulo(head, +1, SIZE);
@@ -214,12 +215,12 @@ struct FixedQueue: public array<T, SIZE> {
   }
 
   T* peekhead() {
-    if (empty()) return null;
+    if (empty()) return NULL;
     return &(*this)[head];
   }
 
   T* peektail() {
-    if (empty()) return null;
+    if (empty()) return NULL;
     int t = add_index_modulo(tail, -1, SIZE);
     return &(*this)[t];
   }
@@ -423,6 +424,10 @@ struct FullyAssociativeTags {
       tags[way] = target;
     }
     use(way);
+    if (evictmap.allset()) {
+        evictmap = 0;
+        use(way);
+    }
     return way;
   }
 
@@ -757,12 +762,12 @@ struct FullyAssociativeArray {
   V* probe(T tag) {
     int way = tags.probe(tag);
     stats::probed((way < 0) ? data[0] : data[way], tag, way, (way >= 0));
-    return (way < 0) ? null : &data[way];
+    return (way < 0) ? NULL : &data[way];
   }
 
   V* match(T tag) {
     int way = tags.match(tag);
-    return (way < 0) ? null : &data[way];
+    return (way < 0) ? NULL : &data[way];
   }
 
   V* select(T tag, T& oldtag) {
@@ -1065,7 +1070,7 @@ struct LockableFullyAssociativeArray {
   V* probe(T tag) {
     int way = tags.probe(tag);
     stats::probed((way < 0) ? data[0] : data[way], tag, way, (way >= 0));
-    return (way < 0) ? null : &data[way];
+    return (way < 0) ? NULL : &data[way];
   }
 
   V* select(T tag, T& oldtag) {
@@ -1073,7 +1078,7 @@ struct LockableFullyAssociativeArray {
 
     if (way < 0) {
       stats::overflow(tag);
-      return null;
+      return NULL;
     }
 
     V& slot = data[way];
@@ -1099,7 +1104,7 @@ struct LockableFullyAssociativeArray {
 
     if (way < 0) {
       stats::overflow(tag);
-      return null;
+      return NULL;
     }
 
     V& slot = data[way];
@@ -1351,7 +1356,7 @@ struct LockableCommitRollbackAssociativeArray {
 
   V* select_and_lock(T addr, bool& firstlock, T& oldtag) {
     V* line = sets[setof(addr)].select_and_lock(tagof(addr), firstlock, oldtag);
-    if unlikely (!line) return null;
+    if unlikely (!line) return NULL;
     if likely (firstlock) {
       int set = setof(addr);
       int way = sets[set].wayof(line);
@@ -1506,7 +1511,7 @@ struct CommitRollbackCache: public LockableCommitRollbackAssociativeArray<T, V, 
 
     bool firstlock;
     V* line = array_t::select_and_lock(addr, firstlock, oldaddr);
-    if (!line) return null;
+    if (!line) return NULL;
 
     if (firstlock) {
       W64* linedata = (W64*)addr;
@@ -1829,7 +1834,7 @@ struct FullyAssociativeTags16bit {
     base_t* tagbase = (base_t*)&tags;
     base_t* base = tagbase + index;
     vec_t* dp = (vec_t*)base;
-    vec_t* sp = (vec_t*)(base + 1);//dp + 1;//((vec_t*)(base)) + 1;
+    vec_t* sp = (vec_t*)(base + 1);
 
     foreach (i, chunkcount) {
       x86_sse_stvwu(dp++, x86_sse_ldvwu(sp++));

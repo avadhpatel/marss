@@ -23,28 +23,41 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 #endif
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <inttypes.h>
 
+#include "qemu-common.h"
 #include "cpu.h"
 #include "exec-all.h"
-#include "qemu-common.h"
 #include "tcg.h"
 #include "hw/hw.h"
+#include "hw/qdev.h"
 #include "osdep.h"
 #include "kvm.h"
+#include "qemu-timer.h"
 #if defined(CONFIG_USER_ONLY)
 #include <qemu.h>
+#include <signal.h>
+#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+#include <sys/param.h>
+#if __FreeBSD_version >= 700104
+#define HAVE_KINFO_GETVMMAP
+#define sigqueue sigqueue_freebsd  /* avoid redefinition */
+#include <sys/time.h>
+#include <sys/proc.h>
+#include <machine/profile.h>
+#define _KERNEL
+#include <sys/user.h>
+#undef _KERNEL
+#undef sigqueue
+#include <libutil.h>
+#endif
+#endif
+
 #endif
 
 #ifdef MARSS_QEMU
 #include <ptl-qemu.h>
 #endif
+
 //#define DEBUG_TB_INVALIDATE
 //#define DEBUG_FLUSH
 //#define DEBUG_TLB
@@ -64,25 +77,8 @@
 
 #define SMC_BITMAP_USE_THRESHOLD 10
 
-#if defined(TARGET_SPARC64)
-#define TARGET_PHYS_ADDR_SPACE_BITS 41
-#elif defined(TARGET_SPARC)
-#define TARGET_PHYS_ADDR_SPACE_BITS 36
-#elif defined(TARGET_ALPHA)
-#define TARGET_PHYS_ADDR_SPACE_BITS 42
-#define TARGET_VIRT_ADDR_SPACE_BITS 42
-#elif defined(TARGET_PPC64)
-#define TARGET_PHYS_ADDR_SPACE_BITS 42
-#elif defined(TARGET_X86_64)
-#define TARGET_PHYS_ADDR_SPACE_BITS 42
-#elif defined(TARGET_I386)
-#define TARGET_PHYS_ADDR_SPACE_BITS 36
-#else
-#define TARGET_PHYS_ADDR_SPACE_BITS 32
-#endif
-
 static TranslationBlock *tbs;
-int code_gen_max_blocks;
+static int code_gen_max_blocks;
 TranslationBlock *tb_phys_hash[CODE_GEN_PHYS_HASH_SIZE];
 static int nb_tbs;
 /* any access to the tbs or the page table must use this lock */
@@ -109,25 +105,13 @@ static uint8_t *code_gen_buffer;
 static unsigned long code_gen_buffer_size;
 /* threshold to flush the translated code buffer */
 static unsigned long code_gen_buffer_max_size;
-uint8_t *code_gen_ptr;
+static uint8_t *code_gen_ptr;
 
 #if !defined(CONFIG_USER_ONLY)
 int phys_ram_fd;
-uint8_t *phys_ram_dirty;
 static int in_migration;
 
-typedef struct RAMBlock {
-    uint8_t *host;
-    ram_addr_t offset;
-    ram_addr_t length;
-    struct RAMBlock *next;
-} RAMBlock;
-
-static RAMBlock *ram_blocks;
-/* TODO: When we implement (and use) ram deallocation (e.g. for hotplug)
-   then we can no longer assume contiguous ram offsets, and external uses
-   of this variable will break.  */
-ram_addr_t last_ram_offset;
+RAMList ram_list = { .blocks = QLIST_HEAD_INITIALIZER(ram_list) };
 #endif
 
 CPUState *first_cpu;
@@ -154,36 +138,67 @@ typedef struct PageDesc {
 #endif
 } PageDesc;
 
-typedef struct PhysPageDesc {
-    /* offset in host memory of the page + io_index in the low bits */
-    ram_addr_t phys_offset;
-    ram_addr_t region_offset;
-} PhysPageDesc;
-
-#define L2_BITS 10
-#if defined(CONFIG_USER_ONLY) && defined(TARGET_VIRT_ADDR_SPACE_BITS)
-/* XXX: this is a temporary hack for alpha target.
- *      In the future, this is to be replaced by a multi-level table
- *      to actually be able to handle the complete 64 bits address space.
- */
-#define L1_BITS (TARGET_VIRT_ADDR_SPACE_BITS - L2_BITS - TARGET_PAGE_BITS)
+/* In system mode we want L1_MAP to be based on ram offsets,
+   while in user mode we want it to be based on virtual addresses.  */
+#if !defined(CONFIG_USER_ONLY)
+#if HOST_LONG_BITS < TARGET_PHYS_ADDR_SPACE_BITS
+# define L1_MAP_ADDR_SPACE_BITS  HOST_LONG_BITS
 #else
-#define L1_BITS (TARGET_PHYS_ADDR_SPACE_BITS - L2_BITS - TARGET_PAGE_BITS)
+# define L1_MAP_ADDR_SPACE_BITS  TARGET_PHYS_ADDR_SPACE_BITS
+#endif
+#else
+# define L1_MAP_ADDR_SPACE_BITS  TARGET_VIRT_ADDR_SPACE_BITS
 #endif
 
-#define L1_SIZE (1 << L1_BITS)
+/* Size of the L2 (and L3, etc) page tables.  */
+#define L2_BITS 10
 #define L2_SIZE (1 << L2_BITS)
+
+/* The bits remaining after N lower levels of page tables.  */
+#define P_L1_BITS_REM \
+    ((TARGET_PHYS_ADDR_SPACE_BITS - TARGET_PAGE_BITS) % L2_BITS)
+#define V_L1_BITS_REM \
+    ((L1_MAP_ADDR_SPACE_BITS - TARGET_PAGE_BITS) % L2_BITS)
+
+/* Size of the L1 page table.  Avoid silly small sizes.  */
+#if P_L1_BITS_REM < 4
+#define P_L1_BITS  (P_L1_BITS_REM + L2_BITS)
+#else
+#define P_L1_BITS  P_L1_BITS_REM
+#endif
+
+#if V_L1_BITS_REM < 4
+#define V_L1_BITS  (V_L1_BITS_REM + L2_BITS)
+#else
+#define V_L1_BITS  V_L1_BITS_REM
+#endif
+
+#define P_L1_SIZE  ((target_phys_addr_t)1 << P_L1_BITS)
+#define V_L1_SIZE  ((target_ulong)1 << V_L1_BITS)
+
+#define P_L1_SHIFT (TARGET_PHYS_ADDR_SPACE_BITS - TARGET_PAGE_BITS - P_L1_BITS)
+#define V_L1_SHIFT (L1_MAP_ADDR_SPACE_BITS - TARGET_PAGE_BITS - V_L1_BITS)
 
 unsigned long qemu_real_host_page_size;
 unsigned long qemu_host_page_bits;
 unsigned long qemu_host_page_size;
 unsigned long qemu_host_page_mask;
 
-/* XXX: for system emulation, it could just be an array */
-static PageDesc *l1_map[L1_SIZE];
-static PhysPageDesc **l1_phys_map;
+/* This is a multi-level map on the virtual address space.
+   The bottom level has pointers to PageDesc.  */
+static void *l1_map[V_L1_SIZE];
 
 #if !defined(CONFIG_USER_ONLY)
+typedef struct PhysPageDesc {
+    /* offset in host memory of the page + io_index in the low bits */
+    ram_addr_t phys_offset;
+    ram_addr_t region_offset;
+} PhysPageDesc;
+
+/* This is a multi-level map on the physical address space.
+   The bottom level has pointers to PhysPageDesc.  */
+static void *l1_phys_map[P_L1_SIZE];
+
 static void io_mem_init(void);
 
 /* io memory support */
@@ -195,24 +210,21 @@ static int io_mem_watch;
 #endif
 
 /* log support */
+#ifdef WIN32
+static const char *logfilename = "qemu.log";
+#else
 static const char *logfilename = "/tmp/qemu.log";
+#endif
 FILE *logfile;
 int loglevel;
 static int log_append = 0;
 
 /* statistics */
+#if !defined(CONFIG_USER_ONLY)
 static int tlb_flush_count;
+#endif
 static int tb_flush_count;
 static int tb_phys_invalidate_count;
-
-#define SUBPAGE_IDX(addr) ((addr) & ~TARGET_PAGE_MASK)
-typedef struct subpage_t {
-    target_phys_addr_t base;
-    CPUReadMemoryFunc * const *mem_read[TARGET_PAGE_SIZE][4];
-    CPUWriteMemoryFunc * const *mem_write[TARGET_PAGE_SIZE][4];
-    void *opaque[TARGET_PAGE_SIZE][2][4];
-    ram_addr_t region_offset[TARGET_PAGE_SIZE][2][4];
-} subpage_t;
 
 #ifdef _WIN32
 static void map_exec(void *addr, long size)
@@ -262,142 +274,167 @@ static void page_init(void)
     while ((1 << qemu_host_page_bits) < qemu_host_page_size)
         qemu_host_page_bits++;
     qemu_host_page_mask = ~(qemu_host_page_size - 1);
-    l1_phys_map = qemu_vmalloc(L1_SIZE * sizeof(void *));
-    memset(l1_phys_map, 0, L1_SIZE * sizeof(void *));
 
-#if !defined(_WIN32) && defined(CONFIG_USER_ONLY)
+#if defined(CONFIG_BSD) && defined(CONFIG_USER_ONLY)
     {
-        long long startaddr, endaddr;
-        FILE *f;
-        int n;
+#ifdef HAVE_KINFO_GETVMMAP
+        struct kinfo_vmentry *freep;
+        int i, cnt;
 
-        mmap_lock();
-        last_brk = (unsigned long)sbrk(0);
-        f = fopen("/proc/self/maps", "r");
-        if (f) {
-            do {
-                n = fscanf (f, "%llx-%llx %*[^\n]\n", &startaddr, &endaddr);
-                if (n == 2) {
-                    startaddr = MIN(startaddr,
-                                    (1ULL << TARGET_PHYS_ADDR_SPACE_BITS) - 1);
-                    endaddr = MIN(endaddr,
-                                    (1ULL << TARGET_PHYS_ADDR_SPACE_BITS) - 1);
-                    page_set_flags(startaddr & TARGET_PAGE_MASK,
-                                   TARGET_PAGE_ALIGN(endaddr),
-                                   PAGE_RESERVED); 
+        freep = kinfo_getvmmap(getpid(), &cnt);
+        if (freep) {
+            mmap_lock();
+            for (i = 0; i < cnt; i++) {
+                unsigned long startaddr, endaddr;
+
+                startaddr = freep[i].kve_start;
+                endaddr = freep[i].kve_end;
+                if (h2g_valid(startaddr)) {
+                    startaddr = h2g(startaddr) & TARGET_PAGE_MASK;
+
+                    if (h2g_valid(endaddr)) {
+                        endaddr = h2g(endaddr);
+                        page_set_flags(startaddr, endaddr, PAGE_RESERVED);
+                    } else {
+#if TARGET_ABI_BITS <= L1_MAP_ADDR_SPACE_BITS
+                        endaddr = ~0ul;
+                        page_set_flags(startaddr, endaddr, PAGE_RESERVED);
+#endif
+                    }
                 }
-            } while (!feof(f));
-            fclose(f);
-        }
-        mmap_unlock();
-    }
-#endif
-}
-
-static inline PageDesc **page_l1_map(target_ulong index)
-{
-#if TARGET_LONG_BITS > 32
-    /* Host memory outside guest VM.  For 32-bit targets we have already
-       excluded high addresses.  */
-    if (index > ((target_ulong)L2_SIZE * L1_SIZE))
-        return NULL;
-#endif
-    return &l1_map[index >> L2_BITS];
-}
-
-static inline PageDesc *page_find_alloc(target_ulong index)
-{
-    PageDesc **lp, *p;
-    lp = page_l1_map(index);
-    if (!lp)
-        return NULL;
-
-    p = *lp;
-    if (!p) {
-        /* allocate if not found */
-#if defined(CONFIG_USER_ONLY)
-        size_t len = sizeof(PageDesc) * L2_SIZE;
-        /* Don't use qemu_malloc because it may recurse.  */
-        p = mmap(NULL, len, PROT_READ | PROT_WRITE,
-                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        *lp = p;
-        if (h2g_valid(p)) {
-            unsigned long addr = h2g(p);
-            page_set_flags(addr & TARGET_PAGE_MASK,
-                           TARGET_PAGE_ALIGN(addr + len),
-                           PAGE_RESERVED); 
+            }
+            free(freep);
+            mmap_unlock();
         }
 #else
-        p = qemu_mallocz(sizeof(PageDesc) * L2_SIZE);
-        *lp = p;
+        FILE *f;
+
+        last_brk = (unsigned long)sbrk(0);
+
+        f = fopen("/compat/linux/proc/self/maps", "r");
+        if (f) {
+            mmap_lock();
+
+            do {
+                unsigned long startaddr, endaddr;
+                int n;
+
+                n = fscanf (f, "%lx-%lx %*[^\n]\n", &startaddr, &endaddr);
+
+                if (n == 2 && h2g_valid(startaddr)) {
+                    startaddr = h2g(startaddr) & TARGET_PAGE_MASK;
+
+                    if (h2g_valid(endaddr)) {
+                        endaddr = h2g(endaddr);
+                    } else {
+                        endaddr = ~0ul;
+                    }
+                    page_set_flags(startaddr, endaddr, PAGE_RESERVED);
+                }
+            } while (!feof(f));
+
+            fclose(f);
+            mmap_unlock();
+        }
 #endif
     }
-    return p + (index & (L2_SIZE - 1));
+#endif
 }
 
-static inline PageDesc *page_find(target_ulong index)
+static PageDesc *page_find_alloc(tb_page_addr_t index, int alloc)
 {
-    PageDesc **lp, *p;
-    lp = page_l1_map(index);
-    if (!lp)
-        return NULL;
+    PageDesc *pd;
+    void **lp;
+    int i;
 
-    p = *lp;
-    if (!p) {
-        return NULL;
+#if defined(CONFIG_USER_ONLY)
+    /* We can't use qemu_malloc because it may recurse into a locked mutex. */
+# define ALLOC(P, SIZE)                                 \
+    do {                                                \
+        P = mmap(NULL, SIZE, PROT_READ | PROT_WRITE,    \
+                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);   \
+    } while (0)
+#else
+# define ALLOC(P, SIZE) \
+    do { P = qemu_mallocz(SIZE); } while (0)
+#endif
+
+    /* Level 1.  Always allocated.  */
+    lp = l1_map + ((index >> V_L1_SHIFT) & (V_L1_SIZE - 1));
+
+    /* Level 2..N-1.  */
+    for (i = V_L1_SHIFT / L2_BITS - 1; i > 0; i--) {
+        void **p = *lp;
+
+        if (p == NULL) {
+            if (!alloc) {
+                return NULL;
+            }
+            ALLOC(p, sizeof(void *) * L2_SIZE);
+            *lp = p;
+        }
+
+        lp = p + ((index >> (i * L2_BITS)) & (L2_SIZE - 1));
     }
-    return p + (index & (L2_SIZE - 1));
+
+    pd = *lp;
+    if (pd == NULL) {
+        if (!alloc) {
+            return NULL;
+        }
+        ALLOC(pd, sizeof(PageDesc) * L2_SIZE);
+        *lp = pd;
+    }
+
+#undef ALLOC
+
+    return pd + (index & (L2_SIZE - 1));
 }
 
-/*
-	---------------------------------------------
-	|    OFFSET    |   L1 BITS    |   L2 BITS   |
-	---------------------------------------------
-	| <--L1SIZE--> | <--L1SIZE--> | <--L2SIZE-->|
+static inline PageDesc *page_find(tb_page_addr_t index)
+{
+    return page_find_alloc(index, 0);
+}
 
- */
-
+#if !defined(CONFIG_USER_ONLY)
 static PhysPageDesc *phys_page_find_alloc(target_phys_addr_t index, int alloc)
 {
-    void **lp, **p;
     PhysPageDesc *pd;
+    void **lp;
+    int i;
 
-    p = (void **)l1_phys_map;
-#if TARGET_PHYS_ADDR_SPACE_BITS > 32
+    /* Level 1.  Always allocated.  */
+    lp = l1_phys_map + ((index >> P_L1_SHIFT) & (P_L1_SIZE - 1));
 
-#if TARGET_PHYS_ADDR_SPACE_BITS > (32 + L1_BITS)
-#error unsupported TARGET_PHYS_ADDR_SPACE_BITS
-#endif
-/* for large address spaces, first use the L1_SIZE bits above the L1 bits to offset into the L1 map */
-
-    lp = p + ((index >> (L1_BITS + L2_BITS)) & (L1_SIZE - 1));
-    p = *lp;
-    if (!p) {
-        /* allocate if not found */
-        if (!alloc)
-            return NULL;
-        p = qemu_vmalloc(sizeof(void *) * L1_SIZE);
-        memset(p, 0, sizeof(void *) * L1_SIZE);
-        *lp = p;
+    /* Level 2..N-1.  */
+    for (i = P_L1_SHIFT / L2_BITS - 1; i > 0; i--) {
+        void **p = *lp;
+        if (p == NULL) {
+            if (!alloc) {
+                return NULL;
+            }
+            *lp = p = qemu_mallocz(sizeof(void *) * L2_SIZE);
+        }
+        lp = p + ((index >> (i * L2_BITS)) & (L2_SIZE - 1));
     }
-#endif
-	 /* use the L1 bits to index the map */
-    lp = p + ((index >> L2_BITS) & (L1_SIZE - 1));
+
     pd = *lp;
-    if (!pd) {
+    if (pd == NULL) {
         int i;
-        /* allocate if not found */
-        if (!alloc)
+
+        if (!alloc) {
             return NULL;
-        pd = qemu_vmalloc(sizeof(PhysPageDesc) * L2_SIZE);
-        *lp = pd;
+        }
+
+        *lp = pd = qemu_malloc(sizeof(PhysPageDesc) * L2_SIZE);
+
         for (i = 0; i < L2_SIZE; i++) {
-          pd[i].phys_offset = IO_MEM_UNASSIGNED;
-          pd[i].region_offset = (index + i) << TARGET_PAGE_BITS;
+            pd[i].phys_offset = IO_MEM_UNASSIGNED;
+            pd[i].region_offset = (index + i) << TARGET_PAGE_BITS;
         }
     }
-	 /* pd is the base of an array of PhysPageDescs, so add the L2 offset to that to get the actual PhysPageDesc of interest */
-    return ((PhysPageDesc *)pd) + (index & (L2_SIZE - 1));
+
+    return pd + (index & (L2_SIZE - 1));
 }
 
 static inline PhysPageDesc *phys_page_find(target_phys_addr_t index)
@@ -405,8 +442,9 @@ static inline PhysPageDesc *phys_page_find(target_phys_addr_t index)
     return phys_page_find_alloc(index, 0);
 }
 
-#if !defined(CONFIG_USER_ONLY)
-//void tlb_protect_code(ram_addr_t ram_addr);
+#ifndef MARSS_QEMU
+static void tlb_protect_code(ram_addr_t ram_addr);
+#endif
 static void tlb_unprotect_code_phys(CPUState *env, ram_addr_t ram_addr,
                                     target_ulong vaddr);
 #define mmap_lock() do { } while(0)
@@ -422,7 +460,8 @@ static void tlb_unprotect_code_phys(CPUState *env, ram_addr_t ram_addr,
 #endif
 
 #ifdef USE_STATIC_CODE_GEN_BUFFER
-static uint8_t static_code_gen_buffer[DEFAULT_CODE_GEN_BUFFER_SIZE];
+static uint8_t static_code_gen_buffer[DEFAULT_CODE_GEN_BUFFER_SIZE]
+               __attribute__((aligned (CODE_GEN_ALIGN)));
 #endif
 
 static void code_gen_alloc(unsigned long tb_size)
@@ -469,6 +508,13 @@ static void code_gen_alloc(unsigned long tb_size)
         start = (void *) 0x01000000UL;
         if (code_gen_buffer_size > 16 * 1024 * 1024)
             code_gen_buffer_size = 16 * 1024 * 1024;
+#elif defined(__s390x__)
+        /* Map the buffer so that we can use direct calls and branches.  */
+        /* We have a +- 4GB range on the branches; leave some slop.  */
+        if (code_gen_buffer_size > (3ul * 1024 * 1024 * 1024)) {
+            code_gen_buffer_size = 3ul * 1024 * 1024 * 1024;
+        }
+        start = (void *)0x90000000UL;
 #endif
         code_gen_buffer = mmap(start, code_gen_buffer_size,
                                PROT_WRITE | PROT_READ | PROT_EXEC,
@@ -478,7 +524,8 @@ static void code_gen_alloc(unsigned long tb_size)
             exit(1);
         }
     }
-#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__)
+#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__) \
+    || defined(__DragonFly__) || defined(__OpenBSD__)
     {
         int flags;
         void *addr = NULL;
@@ -491,6 +538,13 @@ static void code_gen_alloc(unsigned long tb_size)
         /* Cannot map more than that */
         if (code_gen_buffer_size > (800 * 1024 * 1024))
             code_gen_buffer_size = (800 * 1024 * 1024);
+#elif defined(__sparc_v9__)
+        // Map the buffer below 2G, so we can use direct calls and branches
+        flags |= MAP_FIXED;
+        addr = (void *) 0x60000000UL;
+        if (code_gen_buffer_size > (512 * 1024 * 1024)) {
+            code_gen_buffer_size = (512 * 1024 * 1024);
+        }
 #endif
         code_gen_buffer = mmap(addr, code_gen_buffer_size,
                                PROT_WRITE | PROT_READ | PROT_EXEC, 
@@ -507,7 +561,7 @@ static void code_gen_alloc(unsigned long tb_size)
 #endif /* !USE_STATIC_CODE_GEN_BUFFER */
     map_exec(code_gen_prologue, sizeof(code_gen_prologue));
     code_gen_buffer_max_size = code_gen_buffer_size - 
-        code_gen_max_block_size();
+        (TCG_MAX_OP_SIZE * OPC_MAX_SIZE);
     code_gen_max_blocks = code_gen_buffer_size / CODE_GEN_AVG_BLOCK_SIZE;
     tbs = qemu_malloc(code_gen_max_blocks * sizeof(TranslationBlock));
 }
@@ -524,24 +578,14 @@ void cpu_exec_init_all(unsigned long tb_size)
 #if !defined(CONFIG_USER_ONLY)
     io_mem_init();
 #endif
+#if !defined(CONFIG_USER_ONLY) || !defined(CONFIG_USE_GUEST_BASE)
+    /* There's no guest base to take into account, so go ahead and
+       initialize the prologue now.  */
+    tcg_prologue_init(&tcg_ctx);
+#endif
 }
 
 #if defined(CPU_SAVE_VERSION) && !defined(CONFIG_USER_ONLY)
-
-static void cpu_common_pre_save(void *opaque)
-{
-    CPUState *env = opaque;
-
-    cpu_synchronize_state(env);
-}
-
-static int cpu_common_pre_load(void *opaque)
-{
-    CPUState *env = opaque;
-
-    cpu_synchronize_state(env);
-    return 0;
-}
 
 static int cpu_common_post_load(void *opaque, int version_id)
 {
@@ -560,8 +604,6 @@ static const VMStateDescription vmstate_cpu_common = {
     .version_id = 1,
     .minimum_version_id = 1,
     .minimum_version_id_old = 1,
-    .pre_save = cpu_common_pre_save,
-    .pre_load = cpu_common_pre_load,
     .post_load = cpu_common_post_load,
     .fields      = (VMStateField []) {
         VMSTATE_UINT32(halted, CPUState),
@@ -608,8 +650,8 @@ void cpu_exec_init(CPUState *env)
     cpu_list_unlock();
 #endif
 #if defined(CPU_SAVE_VERSION) && !defined(CONFIG_USER_ONLY)
-    vmstate_register(cpu_index, &vmstate_cpu_common, env);
-    register_savevm("cpu", cpu_index, CPU_SAVE_VERSION,
+    vmstate_register(NULL, cpu_index, &vmstate_cpu_common, env);
+    register_savevm(NULL, "cpu", cpu_index, CPU_SAVE_VERSION,
                     cpu_save, cpu_load, env);
 #endif
 }
@@ -623,21 +665,34 @@ static inline void invalidate_page_bitmap(PageDesc *p)
     p->code_write_count = 0;
 }
 
-/* set to NULL all the 'first_tb' fields in all PageDescs */
+/* Set to NULL all the 'first_tb' fields in all PageDescs. */
+
+static void page_flush_tb_1 (int level, void **lp)
+{
+    int i;
+
+    if (*lp == NULL) {
+        return;
+    }
+    if (level == 0) {
+        PageDesc *pd = *lp;
+        for (i = 0; i < L2_SIZE; ++i) {
+            pd[i].first_tb = NULL;
+            invalidate_page_bitmap(pd + i);
+        }
+    } else {
+        void **pp = *lp;
+        for (i = 0; i < L2_SIZE; ++i) {
+            page_flush_tb_1 (level - 1, pp + i);
+        }
+    }
+}
+
 static void page_flush_tb(void)
 {
-    int i, j;
-    PageDesc *p;
-
-    for(i = 0; i < L1_SIZE; i++) {
-        p = l1_map[i];
-        if (p) {
-            for(j = 0; j < L2_SIZE; j++) {
-                p->first_tb = NULL;
-                invalidate_page_bitmap(p);
-                p++;
-            }
-        }
+    int i;
+    for (i = 0; i < V_L1_SIZE; i++) {
+        page_flush_tb_1(V_L1_SHIFT / L2_BITS - 1, l1_map + i);
     }
 }
 
@@ -781,12 +836,12 @@ static inline void tb_reset_jump(TranslationBlock *tb, int n)
     tb_set_jmp_target(tb, n, (unsigned long)(tb->tc_ptr + tb->tb_next_offset[n]));
 }
 
-void tb_phys_invalidate(TranslationBlock *tb, target_ulong page_addr)
+void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
 {
     CPUState *env;
     PageDesc *p;
     unsigned int h, n1;
-    target_phys_addr_t phys_pc;
+    tb_page_addr_t phys_pc;
     TranslationBlock *tb1, *tb2;
 
     /* remove the TB from the hash list */
@@ -898,10 +953,11 @@ TranslationBlock *tb_gen_code(CPUState *env,
 {
     TranslationBlock *tb;
     uint8_t *tc_ptr;
-    target_ulong phys_pc, phys_page2, virt_page2;
+    tb_page_addr_t phys_pc, phys_page2;
+    target_ulong virt_page2;
     int code_gen_size;
 
-    phys_pc = get_phys_addr_code(env, pc);
+    phys_pc = get_page_addr_code(env, pc);
     tb = tb_alloc(pc);
     if (!tb) {
         /* flush must be done */
@@ -923,9 +979,9 @@ TranslationBlock *tb_gen_code(CPUState *env,
     virt_page2 = (pc + tb->size - 1) & TARGET_PAGE_MASK;
     phys_page2 = -1;
     if ((pc & TARGET_PAGE_MASK) != virt_page2) {
-        phys_page2 = get_phys_addr_code(env, virt_page2);
+        phys_page2 = get_page_addr_code(env, virt_page2);
     }
-    tb_link_phys(tb, phys_pc, phys_page2);
+    tb_link_page(tb, phys_pc, phys_page2);
     return tb;
 }
 
@@ -934,12 +990,12 @@ TranslationBlock *tb_gen_code(CPUState *env,
    the same physical page. 'is_cpu_write_access' should be true if called
    from a real cpu write access: the virtual CPU will exit the current
    TB if code is modified inside this TB. */
-void tb_invalidate_phys_page_range(target_phys_addr_t start, target_phys_addr_t end,
+void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
                                    int is_cpu_write_access)
 {
     TranslationBlock *tb, *tb_next, *saved_tb;
     CPUState *env = cpu_single_env;
-    target_ulong tb_start, tb_end;
+    tb_page_addr_t tb_start, tb_end;
     PageDesc *p;
     int n;
 #ifdef TARGET_HAS_PRECISE_SMC
@@ -1041,7 +1097,7 @@ void tb_invalidate_phys_page_range(target_phys_addr_t start, target_phys_addr_t 
 }
 
 /* len must be <= 8 and start must be a multiple of len */
-static inline void tb_invalidate_phys_page_fast(target_phys_addr_t start, int len)
+static inline void tb_invalidate_phys_page_fast(tb_page_addr_t start, int len)
 {
     PageDesc *p;
     int offset, b;
@@ -1068,7 +1124,7 @@ static inline void tb_invalidate_phys_page_fast(target_phys_addr_t start, int le
 }
 
 #if !defined(CONFIG_SOFTMMU)
-static void tb_invalidate_phys_page(target_phys_addr_t addr,
+static void tb_invalidate_phys_page(tb_page_addr_t addr,
                                     unsigned long pc, void *puc)
 {
     TranslationBlock *tb;
@@ -1130,13 +1186,13 @@ static void tb_invalidate_phys_page(target_phys_addr_t addr,
 
 /* add the tb in the target page and protect it if necessary */
 static inline void tb_alloc_page(TranslationBlock *tb,
-                                 unsigned int n, target_ulong page_addr)
+                                 unsigned int n, tb_page_addr_t page_addr)
 {
     PageDesc *p;
     TranslationBlock *last_first_tb;
 
     tb->page_addr[n] = page_addr;
-    p = page_find_alloc(page_addr >> TARGET_PAGE_BITS);
+    p = page_find_alloc(page_addr >> TARGET_PAGE_BITS, 1);
     tb->page_next[n] = p->first_tb;
     last_first_tb = p->first_tb;
     p->first_tb = (TranslationBlock *)((long)tb | n);
@@ -1162,7 +1218,6 @@ static inline void tb_alloc_page(TranslationBlock *tb,
                 continue;
             prot |= p2->flags;
             p2->flags &= ~PAGE_WRITE;
-            page_get_flags(addr);
           }
         mprotect(g2h(page_addr), qemu_host_page_size,
                  (prot & PAGE_BITS) & ~PAGE_WRITE);
@@ -1211,8 +1266,8 @@ void tb_free(TranslationBlock *tb)
 
 /* add a new TB and link it to the physical page tables. phys_page2 is
    (-1) to indicate that only one page contains the TB. */
-void tb_link_phys(TranslationBlock *tb,
-                  target_ulong phys_pc, target_ulong phys_page2)
+void tb_link_page(TranslationBlock *tb,
+                  tb_page_addr_t phys_pc, tb_page_addr_t phys_page2)
 {
     unsigned int h;
     TranslationBlock **ptb;
@@ -1328,6 +1383,12 @@ static void tb_reset_jump_recursive(TranslationBlock *tb)
 }
 
 #if defined(TARGET_HAS_ICE)
+#if defined(CONFIG_USER_ONLY)
+static void breakpoint_invalidate(CPUState *env, target_ulong pc)
+{
+    tb_invalidate_phys_page_range(pc, pc + 1, 0);
+}
+#else
 static void breakpoint_invalidate(CPUState *env, target_ulong pc)
 {
     target_phys_addr_t addr;
@@ -1346,7 +1407,20 @@ static void breakpoint_invalidate(CPUState *env, target_ulong pc)
     tb_invalidate_phys_page_range(ram_addr, ram_addr + 1, 0);
 }
 #endif
+#endif /* TARGET_HAS_ICE */
 
+#if defined(CONFIG_USER_ONLY)
+void cpu_watchpoint_remove_all(CPUState *env, int mask)
+
+{
+}
+
+int cpu_watchpoint_insert(CPUState *env, target_ulong addr, target_ulong len,
+                          int flags, CPUWatchpoint **watchpoint)
+{
+    return -ENOSYS;
+}
+#else
 /* Add a watchpoint.  */
 int cpu_watchpoint_insert(CPUState *env, target_ulong addr, target_ulong len,
                           int flags, CPUWatchpoint **watchpoint)
@@ -1416,6 +1490,7 @@ void cpu_watchpoint_remove_all(CPUState *env, int mask)
             cpu_watchpoint_remove_by_ref(env, wp);
     }
 }
+#endif
 
 /* Add a breakpoint.  */
 int cpu_breakpoint_insert(CPUState *env, target_ulong pc, int flags,
@@ -1546,24 +1621,22 @@ void cpu_set_log_filename(const char *filename)
 
 static void cpu_unlink_tb(CPUState *env)
 {
-#if defined(CONFIG_USE_NPTL)
     /* FIXME: TB unchaining isn't SMP safe.  For now just ignore the
        problem and hope the cpu will stop of its own accord.  For userspace
        emulation this often isn't actually as bad as it sounds.  Often
        signals are used primarily to interrupt blocking syscalls.  */
-#else
     TranslationBlock *tb;
     static spinlock_t interrupt_lock = SPIN_LOCK_UNLOCKED;
 
+    spin_lock(&interrupt_lock);
     tb = env->current_tb;
     /* if the cpu is currently executing code, we must unlink it and
        all the potentially executing TB */
-    if (tb && !testandset(&interrupt_lock)) {
+    if (tb) {
         env->current_tb = NULL;
         tb_reset_jump_recursive(tb);
-        resetlock(&interrupt_lock);
     }
-#endif
+    spin_unlock(&interrupt_lock);
 }
 
 /* mask must never be zero, except for A20 change call */
@@ -1641,6 +1714,88 @@ const CPULogItem cpu_log_items[] = {
     { 0, NULL, NULL },
 };
 
+#ifndef CONFIG_USER_ONLY
+static QLIST_HEAD(memory_client_list, CPUPhysMemoryClient) memory_client_list
+    = QLIST_HEAD_INITIALIZER(memory_client_list);
+
+static void cpu_notify_set_memory(target_phys_addr_t start_addr,
+                                  ram_addr_t size,
+                                  ram_addr_t phys_offset)
+{
+    CPUPhysMemoryClient *client;
+    QLIST_FOREACH(client, &memory_client_list, list) {
+        client->set_memory(client, start_addr, size, phys_offset);
+    }
+}
+
+static int cpu_notify_sync_dirty_bitmap(target_phys_addr_t start,
+                                        target_phys_addr_t end)
+{
+    CPUPhysMemoryClient *client;
+    QLIST_FOREACH(client, &memory_client_list, list) {
+        int r = client->sync_dirty_bitmap(client, start, end);
+        if (r < 0)
+            return r;
+    }
+    return 0;
+}
+
+static int cpu_notify_migration_log(int enable)
+{
+    CPUPhysMemoryClient *client;
+    QLIST_FOREACH(client, &memory_client_list, list) {
+        int r = client->migration_log(client, enable);
+        if (r < 0)
+            return r;
+    }
+    return 0;
+}
+
+static void phys_page_for_each_1(CPUPhysMemoryClient *client,
+                                 int level, void **lp)
+{
+    int i;
+
+    if (*lp == NULL) {
+        return;
+    }
+    if (level == 0) {
+        PhysPageDesc *pd = *lp;
+        for (i = 0; i < L2_SIZE; ++i) {
+            if (pd[i].phys_offset != IO_MEM_UNASSIGNED) {
+                client->set_memory(client, pd[i].region_offset,
+                                   TARGET_PAGE_SIZE, pd[i].phys_offset);
+            }
+        }
+    } else {
+        void **pp = *lp;
+        for (i = 0; i < L2_SIZE; ++i) {
+            phys_page_for_each_1(client, level - 1, pp + i);
+        }
+    }
+}
+
+static void phys_page_for_each(CPUPhysMemoryClient *client)
+{
+    int i;
+    for (i = 0; i < P_L1_SIZE; ++i) {
+        phys_page_for_each_1(client, P_L1_SHIFT / L2_BITS - 1,
+                             l1_phys_map + 1);
+    }
+}
+
+void cpu_register_phys_memory_client(CPUPhysMemoryClient *client)
+{
+    QLIST_INSERT_HEAD(&memory_client_list, client, list);
+    phys_page_for_each(client);
+}
+
+void cpu_unregister_phys_memory_client(CPUPhysMemoryClient *client)
+{
+    QLIST_REMOVE(client, list);
+}
+#endif
+
 static int cmp1(const char *s1, int n, const char *s2)
 {
     if (strlen(s2) != n)
@@ -1661,17 +1816,17 @@ int cpu_str_to_log_mask(const char *str)
         p1 = strchr(p, ',');
         if (!p1)
             p1 = p + strlen(p);
-	if(cmp1(p,p1-p,"all")) {
-		for(item = cpu_log_items; item->mask != 0; item++) {
-			mask |= item->mask;
-		}
-	} else {
-        for(item = cpu_log_items; item->mask != 0; item++) {
-            if (cmp1(p, p1 - p, item->name))
-                goto found;
+        if(cmp1(p,p1-p,"all")) {
+            for(item = cpu_log_items; item->mask != 0; item++) {
+                mask |= item->mask;
+            }
+        } else {
+            for(item = cpu_log_items; item->mask != 0; item++) {
+                if (cmp1(p, p1 - p, item->name))
+                    goto found;
+            }
+            return 0;
         }
-        return 0;
-	}
     found:
         mask |= item->mask;
         if (*p1 != ',')
@@ -1710,6 +1865,14 @@ void cpu_abort(CPUState *env, const char *fmt, ...)
     }
     va_end(ap2);
     va_end(ap);
+#if defined(CONFIG_USER_ONLY)
+    {
+        struct sigaction act;
+        sigfillset(&act.sa_mask);
+        act.sa_handler = SIG_DFL;
+        sigaction(SIGABRT, &act, NULL);
+    }
+#endif
     abort();
 }
 
@@ -1757,11 +1920,11 @@ static inline void tlb_flush_jmp_cache(CPUState *env, target_ulong addr)
        overlap the flushed page.  */
     i = tb_jmp_cache_hash_page(addr - TARGET_PAGE_SIZE);
     memset (&env->tb_jmp_cache[i], 0, 
-	    TB_JMP_PAGE_SIZE * sizeof(TranslationBlock *));
+            TB_JMP_PAGE_SIZE * sizeof(TranslationBlock *));
 
     i = tb_jmp_cache_hash_page(addr);
     memset (&env->tb_jmp_cache[i], 0, 
-	    TB_JMP_PAGE_SIZE * sizeof(TranslationBlock *));
+            TB_JMP_PAGE_SIZE * sizeof(TranslationBlock *));
 }
 
 static CPUTLBEntry s_cputlb_empty_entry = {
@@ -1792,6 +1955,10 @@ void tlb_flush(CPUState *env, int flush_global)
     }
 
     memset (env->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof (void *));
+
+    env->tlb_flush_addr = -1;
+    env->tlb_flush_mask = 0;
+
 #ifdef MARSS_QEMU
     if(in_simulation)
         ptl_flush_bbcache(env->cpu_index);
@@ -1819,6 +1986,16 @@ void tlb_flush_page(CPUState *env, target_ulong addr)
 #if defined(DEBUG_TLB)
     printf("tlb_flush_page: " TARGET_FMT_lx "\n", addr);
 #endif
+    /* Check if we need to flush due to large pages.  */
+    if ((addr & env->tlb_flush_mask) == env->tlb_flush_addr) {
+#if defined(DEBUG_TLB)
+        printf("tlb_flush_page: forced full flush ("
+               TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
+               env->tlb_flush_addr, env->tlb_flush_mask);
+#endif
+        tlb_flush(env, 1);
+        return;
+    }
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     env->current_tb = NULL;
@@ -1833,6 +2010,9 @@ void tlb_flush_page(CPUState *env, target_ulong addr)
 
 /* update the TLBs so that writes to code in the virtual page 'addr'
    can be detected */
+#ifndef MARSS_QEMU
+static
+#endif
 void tlb_protect_code(ram_addr_t ram_addr)
 {
     cpu_physical_memory_reset_dirty(ram_addr,
@@ -1845,7 +2025,7 @@ void tlb_protect_code(ram_addr_t ram_addr)
 static void tlb_unprotect_code_phys(CPUState *env, ram_addr_t ram_addr,
                                     target_ulong vaddr)
 {
-    phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS] |= CODE_DIRTY_FLAG;
+    cpu_physical_memory_set_dirty_flags(ram_addr, CODE_DIRTY_FLAG);
 }
 
 static inline void tlb_reset_dirty_range(CPUTLBEntry *tlb_entry,
@@ -1866,8 +2046,7 @@ void cpu_physical_memory_reset_dirty(ram_addr_t start, ram_addr_t end,
 {
     CPUState *env;
     unsigned long length, start1;
-    int i, mask, len;
-    uint8_t *p;
+    int i;
 
     start &= TARGET_PAGE_MASK;
     end = TARGET_PAGE_ALIGN(end);
@@ -1875,18 +2054,14 @@ void cpu_physical_memory_reset_dirty(ram_addr_t start, ram_addr_t end,
     length = end - start;
     if (length == 0)
         return;
-    len = length >> TARGET_PAGE_BITS;
-    mask = ~dirty_flags;
-    p = phys_ram_dirty + (start >> TARGET_PAGE_BITS);
-    for(i = 0; i < len; i++)
-        p[i] &= mask;
+    cpu_physical_memory_mask_dirty_range(start, length, dirty_flags);
 
     /* we modify the TLB cache so that the dirty bit will be set again
        when accessing the range */
-    start1 = (unsigned long)qemu_get_ram_ptr(start);
+    start1 = (unsigned long)qemu_safe_ram_ptr(start);
     /* Chek that we don't span multiple blocks - this breaks the
        address comparisons below.  */
-    if ((unsigned long)qemu_get_ram_ptr(end - 1) - start1
+    if ((unsigned long)qemu_safe_ram_ptr(end - 1) - start1
             != (end - 1) - start) {
         abort();
     }
@@ -1903,11 +2078,10 @@ void cpu_physical_memory_reset_dirty(ram_addr_t start, ram_addr_t end,
 
 int cpu_physical_memory_set_dirty_tracking(int enable)
 {
+    int ret = 0;
     in_migration = enable;
-    if (kvm_enabled()) {
-        return kvm_set_migration_log(enable);
-    }
-    return 0;
+    ret = cpu_notify_migration_log(!!enable);
+    return ret;
 }
 
 int cpu_physical_memory_get_dirty_tracking(void)
@@ -1918,10 +2092,9 @@ int cpu_physical_memory_get_dirty_tracking(void)
 int cpu_physical_sync_dirty_bitmap(target_phys_addr_t start_addr,
                                    target_phys_addr_t end_addr)
 {
-    int ret = 0;
+    int ret;
 
-    if (kvm_enabled())
-        ret = kvm_physical_sync_dirty_bitmap(start_addr, end_addr);
+    ret = cpu_notify_sync_dirty_bitmap(start_addr, end_addr);
     return ret;
 }
 
@@ -1933,7 +2106,7 @@ static inline void tlb_update_dirty(CPUTLBEntry *tlb_entry)
     if ((tlb_entry->addr_write & ~TARGET_PAGE_MASK) == IO_MEM_RAM) {
         p = (void *)(unsigned long)((tlb_entry->addr_write & TARGET_PAGE_MASK)
             + tlb_entry->addend);
-        ram_addr = qemu_ram_addr_from_host(p);
+        ram_addr = qemu_ram_addr_from_host_nofail(p);
         if (!cpu_physical_memory_is_dirty(ram_addr)) {
             tlb_entry->addr_write |= TLB_NOTDIRTY;
         }
@@ -1970,25 +2143,50 @@ static inline void tlb_set_dirty(CPUState *env, target_ulong vaddr)
         tlb_set_dirty1(&env->tlb_table[mmu_idx][i], vaddr);
 }
 
-/* add a new TLB entry. At most one entry for a given virtual address
-   is permitted. Return 0 if OK or 2 if the page could not be mapped
-   (can only happen in non SOFTMMU mode for I/O pages or pages
-   conflicting with the host address space). */
-int tlb_set_page_exec(CPUState *env, target_ulong vaddr,
-                      target_phys_addr_t paddr, int prot,
-                      int mmu_idx, int is_softmmu)
+/* Our TLB does not support large pages, so remember the area covered by
+   large pages and trigger a full TLB flush if these are invalidated.  */
+static void tlb_add_large_page(CPUState *env, target_ulong vaddr,
+                               target_ulong size)
+{
+    target_ulong mask = ~(size - 1);
+
+    if (env->tlb_flush_addr == (target_ulong)-1) {
+        env->tlb_flush_addr = vaddr & mask;
+        env->tlb_flush_mask = mask;
+        return;
+    }
+    /* Extend the existing region to include the new page.
+       This is a compromise between unnecessary flushes and the cost
+       of maintaining a full variable size TLB.  */
+    mask &= env->tlb_flush_mask;
+    while (((env->tlb_flush_addr ^ vaddr) & mask) != 0) {
+        mask <<= 1;
+    }
+    env->tlb_flush_addr &= mask;
+    env->tlb_flush_mask = mask;
+}
+
+/* Add a new TLB entry. At most one entry for a given virtual address
+   is permitted. Only a single TARGET_PAGE_SIZE region is mapped, the
+   supplied size is only used by tlb_flush_page.  */
+void tlb_set_page(CPUState *env, target_ulong vaddr,
+                  target_phys_addr_t paddr, int prot,
+                  int mmu_idx, target_ulong size)
 {
     PhysPageDesc *p;
     unsigned long pd;
     unsigned int index;
     target_ulong address;
     target_ulong code_address;
-    target_phys_addr_t addend;
-    int ret;
+    unsigned long addend;
     CPUTLBEntry *te;
     CPUWatchpoint *wp;
     target_phys_addr_t iotlb;
 
+    assert(size >= TARGET_PAGE_SIZE);
+    if (size != TARGET_PAGE_SIZE) {
+        tlb_add_large_page(env, vaddr, size);
+    }
     p = phys_page_find(paddr >> TARGET_PAGE_BITS);
     if (!p) {
         pd = IO_MEM_UNASSIGNED;
@@ -1996,16 +2194,17 @@ int tlb_set_page_exec(CPUState *env, target_ulong vaddr,
         pd = p->phys_offset;
     }
 #if defined(DEBUG_TLB)
-    printf("tlb_set_page: vaddr=" TARGET_FMT_lx " paddr=0x%08x prot=%x idx=%d smmu=%d pd=0x%08lx\n",
-           vaddr, (int)paddr, prot, mmu_idx, is_softmmu, pd);
+    printf("tlb_set_page: vaddr=" TARGET_FMT_lx " paddr=0x" TARGET_FMT_plx
+           " prot=%x idx=%d pd=0x%08lx\n",
+           vaddr, paddr, prot, mmu_idx, pd);
 #endif
 
-    ret = 0;
     address = vaddr;
     if ((pd & ~TARGET_PAGE_MASK) > IO_MEM_ROM && !(pd & IO_MEM_ROMD)) {
         /* IO memory case (romd handled later) */
         address |= TLB_MMIO;
     }
+    addend = (unsigned long)qemu_get_ram_ptr(pd & TARGET_PAGE_MASK);
     if ((pd & ~TARGET_PAGE_MASK) <= IO_MEM_ROM) {
         /* Normal RAM.  */
         iotlb = pd & TARGET_PAGE_MASK;
@@ -2033,15 +2232,15 @@ int tlb_set_page_exec(CPUState *env, target_ulong vaddr,
        watchpoint trap routines.  */
     QTAILQ_FOREACH(wp, &env->watchpoints, entry) {
         if (vaddr == (wp->vaddr & TARGET_PAGE_MASK)) {
-            iotlb = io_mem_watch + paddr;
-            /* TODO: The memory case can be optimized by not trapping
-               reads of pages with a write breakpoint.  */
-            address |= TLB_MMIO;
+            /* Avoid trapping reads of pages with a write breakpoint. */
+            if ((prot & PAGE_WRITE) || (wp->flags & BP_MEM_READ)) {
+                iotlb = io_mem_watch + paddr;
+                address |= TLB_MMIO;
+                break;
+            }
         }
     }
 
-	 /* get_ram_ptr returns block->host + (ARG - block->offset), i.e. the host pointer to the into the ramblock where this address is */
-    addend = (unsigned long)qemu_get_ram_ptr(pd & TARGET_PAGE_MASK);
 #ifdef MARSS_QEMU
 	ptl_add_phys_memory_mapping(env->cpu_index, addend & TARGET_PAGE_MASK, paddr & TARGET_PAGE_MASK);
 #endif
@@ -2049,10 +2248,7 @@ int tlb_set_page_exec(CPUState *env, target_ulong vaddr,
     index = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     env->iotlb[mmu_idx][index] = iotlb - vaddr;
     te = &env->tlb_table[mmu_idx][index];
-
-	 /* in other words: te->addend + guest_vaddr = host virtual address */
     te->addend = addend - vaddr;
-
     if (prot & PAGE_READ) {
         te->addr_read = address;
     } else {
@@ -2078,7 +2274,6 @@ int tlb_set_page_exec(CPUState *env, target_ulong vaddr,
     } else {
         te->addr_write = -1;
     }
-    return ret; /* always returns 0 */
 }
 
 #else
@@ -2091,63 +2286,101 @@ void tlb_flush_page(CPUState *env, target_ulong addr)
 {
 }
 
-int tlb_set_page_exec(CPUState *env, target_ulong vaddr,
-                      target_phys_addr_t paddr, int prot,
-                      int mmu_idx, int is_softmmu)
-{
-    return 0;
-}
-
 /*
  * Walks guest process memory "regions" one by one
  * and calls callback function 'fn' for each region.
  */
-int walk_memory_regions(void *priv,
-    int (*fn)(void *, unsigned long, unsigned long, unsigned long))
+
+struct walk_memory_regions_data
 {
-    unsigned long start, end;
-    PageDesc *p = NULL;
-    int i, j, prot, prot1;
-    int rc = 0;
+    walk_memory_regions_fn fn;
+    void *priv;
+    unsigned long start;
+    int prot;
+};
 
-    start = end = -1;
-    prot = 0;
-
-    for (i = 0; i <= L1_SIZE; i++) {
-        p = (i < L1_SIZE) ? l1_map[i] : NULL;
-        for (j = 0; j < L2_SIZE; j++) {
-            prot1 = (p == NULL) ? 0 : p[j].flags;
-            /*
-             * "region" is one continuous chunk of memory
-             * that has same protection flags set.
-             */
-            if (prot1 != prot) {
-                end = (i << (32 - L1_BITS)) | (j << TARGET_PAGE_BITS);
-                if (start != -1) {
-                    rc = (*fn)(priv, start, end, prot);
-                    /* callback can stop iteration by returning != 0 */
-                    if (rc != 0)
-                        return (rc);
-                }
-                if (prot1 != 0)
-                    start = end;
-                else
-                    start = -1;
-                prot = prot1;
-            }
-            if (p == NULL)
-                break;
+static int walk_memory_regions_end(struct walk_memory_regions_data *data,
+                                   abi_ulong end, int new_prot)
+{
+    if (data->start != -1ul) {
+        int rc = data->fn(data->priv, data->start, end, data->prot);
+        if (rc != 0) {
+            return rc;
         }
     }
-    return (rc);
+
+    data->start = (new_prot ? end : -1ul);
+    data->prot = new_prot;
+
+    return 0;
 }
 
-static int dump_region(void *priv, unsigned long start,
-    unsigned long end, unsigned long prot)
+static int walk_memory_regions_1(struct walk_memory_regions_data *data,
+                                 abi_ulong base, int level, void **lp)
+{
+    abi_ulong pa;
+    int i, rc;
+
+    if (*lp == NULL) {
+        return walk_memory_regions_end(data, base, 0);
+    }
+
+    if (level == 0) {
+        PageDesc *pd = *lp;
+        for (i = 0; i < L2_SIZE; ++i) {
+            int prot = pd[i].flags;
+
+            pa = base | (i << TARGET_PAGE_BITS);
+            if (prot != data->prot) {
+                rc = walk_memory_regions_end(data, pa, prot);
+                if (rc != 0) {
+                    return rc;
+                }
+            }
+        }
+    } else {
+        void **pp = *lp;
+        for (i = 0; i < L2_SIZE; ++i) {
+            pa = base | ((abi_ulong)i <<
+                (TARGET_PAGE_BITS + L2_BITS * level));
+            rc = walk_memory_regions_1(data, pa, level - 1, pp + i);
+            if (rc != 0) {
+                return rc;
+            }
+        }
+    }
+
+    return 0;
+}
+
+int walk_memory_regions(void *priv, walk_memory_regions_fn fn)
+{
+    struct walk_memory_regions_data data;
+    unsigned long i;
+
+    data.fn = fn;
+    data.priv = priv;
+    data.start = -1ul;
+    data.prot = 0;
+
+    for (i = 0; i < V_L1_SIZE; i++) {
+        int rc = walk_memory_regions_1(&data, (abi_ulong)i << V_L1_SHIFT,
+                                       V_L1_SHIFT / L2_BITS - 1, l1_map + i);
+        if (rc != 0) {
+            return rc;
+        }
+    }
+
+    return walk_memory_regions_end(&data, 0, 0);
+}
+
+static int dump_region(void *priv, abi_ulong start,
+    abi_ulong end, unsigned long prot)
 {
     FILE *f = (FILE *)priv;
 
-    (void) fprintf(f, "%08lx-%08lx %08lx %c%c%c\n",
+    (void) fprintf(f, TARGET_ABI_FMT_lx"-"TARGET_ABI_FMT_lx
+        " "TARGET_ABI_FMT_lx" %c%c%c\n",
         start, end, end - start,
         ((prot & PAGE_READ) ? 'r' : '-'),
         ((prot & PAGE_WRITE) ? 'w' : '-'),
@@ -2174,27 +2407,35 @@ int page_get_flags(target_ulong address)
     return p->flags;
 }
 
-/* modify the flags of a page and invalidate the code if
-   necessary. The flag PAGE_WRITE_ORG is positioned automatically
-   depending on PAGE_WRITE */
+/* Modify the flags of a page and invalidate the code if necessary.
+   The flag PAGE_WRITE_ORG is positioned automatically depending
+   on PAGE_WRITE.  The mmap_lock should already be held.  */
 void page_set_flags(target_ulong start, target_ulong end, int flags)
 {
-    PageDesc *p;
-    target_ulong addr;
+    target_ulong addr, len;
 
-    /* mmap_lock should already be held.  */
+    /* This function should never be called with addresses outside the
+       guest address space.  If this assert fires, it probably indicates
+       a missing call to h2g_valid.  */
+#if TARGET_ABI_BITS > L1_MAP_ADDR_SPACE_BITS
+    assert(end < ((abi_ulong)1 << L1_MAP_ADDR_SPACE_BITS));
+#endif
+    assert(start < end);
+
     start = start & TARGET_PAGE_MASK;
     end = TARGET_PAGE_ALIGN(end);
-    if (flags & PAGE_WRITE)
+
+    if (flags & PAGE_WRITE) {
         flags |= PAGE_WRITE_ORG;
-    for(addr = start; addr < end; addr += TARGET_PAGE_SIZE) {
-        p = page_find_alloc(addr >> TARGET_PAGE_BITS);
-        /* We may be called for host regions that are outside guest
-           address space.  */
-        if (!p)
-            return;
-        /* if the write protection is set, then we invalidate the code
-           inside */
+    }
+
+    for (addr = start, len = end - start;
+         len != 0;
+         len -= TARGET_PAGE_SIZE, addr += TARGET_PAGE_SIZE) {
+        PageDesc *p = page_find_alloc(addr >> TARGET_PAGE_BITS, 1);
+
+        /* If the write protection bit is set, then we invalidate
+           the code inside.  */
         if (!(p->flags & PAGE_WRITE) &&
             (flags & PAGE_WRITE) &&
             p->first_tb) {
@@ -2210,14 +2451,27 @@ int page_check_range(target_ulong start, target_ulong len, int flags)
     target_ulong end;
     target_ulong addr;
 
-    if (start + len < start)
-        /* we've wrapped around */
+    /* This function should never be called with addresses outside the
+       guest address space.  If this assert fires, it probably indicates
+       a missing call to h2g_valid.  */
+#if TARGET_ABI_BITS > L1_MAP_ADDR_SPACE_BITS
+    assert(start < ((abi_ulong)1 << L1_MAP_ADDR_SPACE_BITS));
+#endif
+
+    if (len == 0) {
+        return 0;
+    }
+    if (start + len - 1 < start) {
+        /* We've wrapped around.  */
         return -1;
+    }
 
     end = TARGET_PAGE_ALIGN(start+len); /* must do before we loose bits in the next step */
     start = start & TARGET_PAGE_MASK;
 
-    for(addr = start; addr < end; addr += TARGET_PAGE_SIZE) {
+    for (addr = start, len = end - start;
+         len != 0;
+         len -= TARGET_PAGE_SIZE, addr += TARGET_PAGE_SIZE) {
         p = page_find(addr >> TARGET_PAGE_BITS);
         if( !p )
             return -1;
@@ -2245,8 +2499,8 @@ int page_check_range(target_ulong start, target_ulong len, int flags)
    page. Return TRUE if the fault was successfully handled. */
 int page_unprotect(target_ulong address, unsigned long pc, void *puc)
 {
-    unsigned int page_index, prot, pindex;
-    PageDesc *p, *p1;
+    unsigned int prot;
+    PageDesc *p;
     target_ulong host_start, host_end, addr;
 
     /* Technically this isn't safe inside a signal handler.  However we
@@ -2254,37 +2508,36 @@ int page_unprotect(target_ulong address, unsigned long pc, void *puc)
        practice it seems to be ok.  */
     mmap_lock();
 
-    host_start = address & qemu_host_page_mask;
-    page_index = host_start >> TARGET_PAGE_BITS;
-    p1 = page_find(page_index);
-    if (!p1) {
+    p = page_find(address >> TARGET_PAGE_BITS);
+    if (!p) {
         mmap_unlock();
         return 0;
     }
-    host_end = host_start + qemu_host_page_size;
-    p = p1;
-    prot = 0;
-    for(addr = host_start;addr < host_end; addr += TARGET_PAGE_SIZE) {
-        prot |= p->flags;
-        p++;
-    }
+
     /* if the page was really writable, then we change its
        protection back to writable */
-    if (prot & PAGE_WRITE_ORG) {
-        pindex = (address - host_start) >> TARGET_PAGE_BITS;
-        if (!(p1[pindex].flags & PAGE_WRITE)) {
-            mprotect((void *)g2h(host_start), qemu_host_page_size,
-                     (prot & PAGE_BITS) | PAGE_WRITE);
-            p1[pindex].flags |= PAGE_WRITE;
+    if ((p->flags & PAGE_WRITE_ORG) && !(p->flags & PAGE_WRITE)) {
+        host_start = address & qemu_host_page_mask;
+        host_end = host_start + qemu_host_page_size;
+
+        prot = 0;
+        for (addr = host_start ; addr < host_end ; addr += TARGET_PAGE_SIZE) {
+            p = page_find(addr >> TARGET_PAGE_BITS);
+            p->flags |= PAGE_WRITE;
+            prot |= p->flags;
+
             /* and since the content will be modified, we must invalidate
                the corresponding translated code. */
-            tb_invalidate_phys_page(address, pc, puc);
+            tb_invalidate_phys_page(addr, pc, puc);
 #ifdef DEBUG_TB_CHECK
-            tb_invalidate_check(address);
+            tb_invalidate_check(addr);
 #endif
-            mmap_unlock();
-            return 1;
         }
+        mprotect((void *)g2h(host_start), qemu_host_page_size,
+                 prot & PAGE_BITS);
+
+        mmap_unlock();
+        return 1;
     }
     mmap_unlock();
     return 0;
@@ -2298,10 +2551,18 @@ static inline void tlb_set_dirty(CPUState *env,
 
 #if !defined(CONFIG_USER_ONLY)
 
+#define SUBPAGE_IDX(addr) ((addr) & ~TARGET_PAGE_MASK)
+typedef struct subpage_t {
+    target_phys_addr_t base;
+    ram_addr_t sub_io_index[TARGET_PAGE_SIZE];
+    ram_addr_t region_offset[TARGET_PAGE_SIZE];
+} subpage_t;
+
 static int subpage_register (subpage_t *mmio, uint32_t start, uint32_t end,
                              ram_addr_t memory, ram_addr_t region_offset);
-static void *subpage_init (target_phys_addr_t base, ram_addr_t *phys,
-                           ram_addr_t orig_memory, ram_addr_t region_offset);
+static subpage_t *subpage_init (target_phys_addr_t base, ram_addr_t *phys,
+                                ram_addr_t orig_memory,
+                                ram_addr_t region_offset);
 #define CHECK_SUBPAGE(addr, start_addr, start_addr2, end_addr, end_addr2, \
                       need_subpage)                                     \
     do {                                                                \
@@ -2339,10 +2600,9 @@ void cpu_register_physical_memory_offset(target_phys_addr_t start_addr,
     PhysPageDesc *p;
     CPUState *env;
     ram_addr_t orig_size = size;
-    void *subpage;
+    subpage_t *subpage;
 
-    if (kvm_enabled())
-        kvm_set_phys_mem(start_addr, size, phys_offset);
+    cpu_notify_set_memory(start_addr, size, phys_offset);
 
     if (phys_offset == IO_MEM_UNASSIGNED) {
         region_offset = start_addr;
@@ -2359,7 +2619,7 @@ void cpu_register_physical_memory_offset(target_phys_addr_t start_addr,
 
             CHECK_SUBPAGE(addr, start_addr, start_addr2, end_addr, end_addr2,
                           need_subpage);
-            if (need_subpage || phys_offset & IO_MEM_SUBWIDTH) {
+            if (need_subpage) {
                 if (!(orig_memory & IO_MEM_SUBPAGE)) {
                     subpage = subpage_init((addr & TARGET_PAGE_MASK),
                                            &p->phys_offset, orig_memory,
@@ -2391,7 +2651,7 @@ void cpu_register_physical_memory_offset(target_phys_addr_t start_addr,
                 CHECK_SUBPAGE(addr, start_addr, start_addr2, end_addr,
                               end_addr2, need_subpage);
 
-                if (need_subpage || phys_offset & IO_MEM_SUBWIDTH) {
+                if (need_subpage) {
                     subpage = subpage_init((addr & TARGET_PAGE_MASK),
                                            &p->phys_offset, IO_MEM_UNASSIGNED,
                                            addr & TARGET_PAGE_MASK);
@@ -2435,35 +2695,206 @@ void qemu_unregister_coalesced_mmio(target_phys_addr_t addr, ram_addr_t size)
         kvm_uncoalesce_mmio_region(addr, size);
 }
 
-ram_addr_t qemu_ram_alloc(ram_addr_t size)
+void qemu_flush_coalesced_mmio_buffer(void)
 {
-    RAMBlock *new_block;
+    if (kvm_enabled())
+        kvm_flush_coalesced_mmio_buffer();
+}
+
+#if defined(__linux__) && !defined(TARGET_S390X)
+
+#include <sys/vfs.h>
+
+#define HUGETLBFS_MAGIC       0x958458f6
+
+static long gethugepagesize(const char *path)
+{
+    struct statfs fs;
+    int ret;
+
+    do {
+        ret = statfs(path, &fs);
+    } while (ret != 0 && errno == EINTR);
+
+    if (ret != 0) {
+        perror(path);
+        return 0;
+    }
+
+    if (fs.f_type != HUGETLBFS_MAGIC)
+        fprintf(stderr, "Warning: path not on HugeTLBFS: %s\n", path);
+
+    return fs.f_bsize;
+}
+
+static void *file_ram_alloc(RAMBlock *block,
+                            ram_addr_t memory,
+                            const char *path)
+{
+    char *filename;
+    void *area;
+    int fd;
+#ifdef MAP_POPULATE
+    int flags;
+#endif
+    unsigned long hpagesize;
+
+    hpagesize = gethugepagesize(path);
+    if (!hpagesize) {
+        return NULL;
+    }
+
+    if (memory < hpagesize) {
+        return NULL;
+    }
+
+    if (kvm_enabled() && !kvm_has_sync_mmu()) {
+        fprintf(stderr, "host lacks kvm mmu notifiers, -mem-path unsupported\n");
+        return NULL;
+    }
+
+    if (asprintf(&filename, "%s/qemu_back_mem.XXXXXX", path) == -1) {
+        return NULL;
+    }
+
+    fd = mkstemp(filename);
+    if (fd < 0) {
+        perror("unable to create backing store for hugepages");
+        free(filename);
+        return NULL;
+    }
+    unlink(filename);
+    free(filename);
+
+    memory = (memory+hpagesize-1) & ~(hpagesize-1);
+
+    /*
+     * ftruncate is not supported by hugetlbfs in older
+     * hosts, so don't bother bailing out on errors.
+     * If anything goes wrong with it under other filesystems,
+     * mmap will fail.
+     */
+    if (ftruncate(fd, memory))
+        perror("ftruncate");
+
+#ifdef MAP_POPULATE
+    /* NB: MAP_POPULATE won't exhaustively alloc all phys pages in the case
+     * MAP_PRIVATE is requested.  For mem_prealloc we mmap as MAP_SHARED
+     * to sidestep this quirk.
+     */
+    flags = mem_prealloc ? MAP_POPULATE | MAP_SHARED : MAP_PRIVATE;
+    area = mmap(0, memory, PROT_READ | PROT_WRITE, flags, fd, 0);
+#else
+    area = mmap(0, memory, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+#endif
+    if (area == MAP_FAILED) {
+        perror("file_ram_alloc: can't mmap RAM pages");
+        close(fd);
+        return (NULL);
+    }
+    block->fd = fd;
+    return area;
+}
+#endif
+
+static ram_addr_t find_ram_offset(ram_addr_t size)
+{
+    RAMBlock *block, *next_block;
+    ram_addr_t offset = 0, mingap = ULONG_MAX;
+
+    if (QLIST_EMPTY(&ram_list.blocks))
+        return 0;
+
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        ram_addr_t end, next = ULONG_MAX;
+
+        end = block->offset + block->length;
+
+        QLIST_FOREACH(next_block, &ram_list.blocks, next) {
+            if (next_block->offset >= end) {
+                next = MIN(next, next_block->offset);
+            }
+        }
+        if (next - end >= size && next - end < mingap) {
+            offset =  end;
+            mingap = next - end;
+        }
+    }
+    return offset;
+}
+
+static ram_addr_t last_ram_offset(void)
+{
+    RAMBlock *block;
+    ram_addr_t last = 0;
+
+    QLIST_FOREACH(block, &ram_list.blocks, next)
+        last = MAX(last, block->offset + block->length);
+
+    return last;
+}
+
+ram_addr_t qemu_ram_alloc_from_ptr(DeviceState *dev, const char *name,
+                                   ram_addr_t size, void *host)
+{
+    RAMBlock *new_block, *block;
 
     size = TARGET_PAGE_ALIGN(size);
-    new_block = qemu_malloc(sizeof(*new_block));
+    new_block = qemu_mallocz(sizeof(*new_block));
 
-#if defined(TARGET_S390X) && defined(CONFIG_KVM)
-    /* XXX S390 KVM requires the topmost vma of the RAM to be < 256GB */
-    new_block->host = mmap((void*)0x1000000, size, PROT_EXEC|PROT_READ|PROT_WRITE,
-                           MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (dev && dev->parent_bus && dev->parent_bus->info->get_dev_path) {
+        char *id = dev->parent_bus->info->get_dev_path(dev);
+        if (id) {
+            snprintf(new_block->idstr, sizeof(new_block->idstr), "%s/", id);
+            qemu_free(id);
+        }
+    }
+    pstrcat(new_block->idstr, sizeof(new_block->idstr), name);
+
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (!strcmp(block->idstr, new_block->idstr)) {
+            fprintf(stderr, "RAMBlock \"%s\" already registered, abort!\n",
+                    new_block->idstr);
+            abort();
+        }
+    }
+
+    if (host) {
+        new_block->host = host;
+    } else {
+        if (mem_path) {
+#if defined (__linux__) && !defined(TARGET_S390X)
+            new_block->host = file_ram_alloc(new_block, size, mem_path);
+            if (!new_block->host) {
+                new_block->host = qemu_vmalloc(size);
+                qemu_madvise(new_block->host, size, QEMU_MADV_MERGEABLE);
+            }
 #else
-    new_block->host = qemu_vmalloc(size);
+            fprintf(stderr, "-mem-path option unsupported\n");
+            exit(1);
 #endif
-#ifdef MADV_MERGEABLE
-    madvise(new_block->host, size, MADV_MERGEABLE);
+        } else {
+#if defined(TARGET_S390X) && defined(CONFIG_KVM)
+            /* XXX S390 KVM requires the topmost vma of the RAM to be < 256GB */
+            new_block->host = mmap((void*)0x1000000, size,
+                                   PROT_EXEC|PROT_READ|PROT_WRITE,
+                                   MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+#else
+            new_block->host = qemu_vmalloc(size);
 #endif
-    new_block->offset = last_ram_offset;
+            qemu_madvise(new_block->host, size, QEMU_MADV_MERGEABLE);
+        }
+    }
+
+    new_block->offset = find_ram_offset(size);
     new_block->length = size;
 
-    new_block->next = ram_blocks;
-    ram_blocks = new_block;
+    QLIST_INSERT_HEAD(&ram_list.blocks, new_block, next);
 
-    phys_ram_dirty = qemu_realloc(phys_ram_dirty,
-        (last_ram_offset + size) >> TARGET_PAGE_BITS);
-    memset(phys_ram_dirty + (last_ram_offset >> TARGET_PAGE_BITS),
+    ram_list.phys_dirty = qemu_realloc(ram_list.phys_dirty,
+                                       last_ram_offset() >> TARGET_PAGE_BITS);
+    memset(ram_list.phys_dirty + (new_block->offset >> TARGET_PAGE_BITS),
            0xff, size >> TARGET_PAGE_BITS);
-
-    last_ram_offset += size;
 
     if (kvm_enabled())
         kvm_setup_guest_memory(new_block->host, size);
@@ -2471,9 +2902,39 @@ ram_addr_t qemu_ram_alloc(ram_addr_t size)
     return new_block->offset;
 }
 
+ram_addr_t qemu_ram_alloc(DeviceState *dev, const char *name, ram_addr_t size)
+{
+    return qemu_ram_alloc_from_ptr(dev, name, size, NULL);
+}
+
 void qemu_ram_free(ram_addr_t addr)
 {
-    /* TODO: implement this.  */
+    RAMBlock *block;
+
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (addr == block->offset) {
+            QLIST_REMOVE(block, next);
+            if (mem_path) {
+#if defined (__linux__) && !defined(TARGET_S390X)
+                if (block->fd) {
+                    munmap(block->host, block->length);
+                    close(block->fd);
+                } else {
+                    qemu_vfree(block->host);
+                }
+#endif
+            } else {
+#if defined(TARGET_S390X) && defined(CONFIG_KVM)
+                munmap(block->host, block->length);
+#else
+                qemu_vfree(block->host);
+#endif
+            }
+            qemu_free(block);
+            return;
+        }
+    }
+
 }
 
 /* Return a host pointer to ram allocated with qemu_ram_alloc.
@@ -2486,57 +2947,66 @@ void qemu_ram_free(ram_addr_t addr)
  */
 void *qemu_get_ram_ptr(ram_addr_t addr)
 {
-    RAMBlock *prev;
-    RAMBlock **prevp;
     RAMBlock *block;
 
-    prev = NULL;
-    prevp = &ram_blocks;
-    block = ram_blocks;
-    while (block && (block->offset > addr
-                     || block->offset + block->length <= addr)) {
-        if (prev)
-          prevp = &prev->next;
-        prev = block;
-        block = block->next;
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (addr - block->offset < block->length) {
+            QLIST_REMOVE(block, next);
+            QLIST_INSERT_HEAD(&ram_list.blocks, block, next);
+            return block->host + (addr - block->offset);
+        }
     }
-    if (!block) {
-        fprintf(stderr, "Bad ram offset %" PRIx64 "\n", (uint64_t)addr);
-        abort();
+
+    fprintf(stderr, "Bad ram offset %" PRIx64 "\n", (uint64_t)addr);
+    abort();
+
+    return NULL;
+}
+
+/* Return a host pointer to ram allocated with qemu_ram_alloc.
+ * Same as qemu_get_ram_ptr but avoid reordering ramblocks.
+ */
+void *qemu_safe_ram_ptr(ram_addr_t addr)
+{
+    RAMBlock *block;
+
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (addr - block->offset < block->length) {
+            return block->host + (addr - block->offset);
+        }
     }
-    /* Move this entry to to start of the list.  */
-    if (prev) {
-        prev->next = block->next;
-        block->next = *prevp;
-        *prevp = block;
+
+    fprintf(stderr, "Bad ram offset %" PRIx64 "\n", (uint64_t)addr);
+    abort();
+
+    return NULL;
+}
+
+int qemu_ram_addr_from_host(void *ptr, ram_addr_t *ram_addr)
+{
+    RAMBlock *block;
+    uint8_t *host = ptr;
+
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (host - block->host < block->length) {
+            *ram_addr = block->offset + (host - block->host);
+            return 0;
+        }
     }
-    return block->host + (addr - block->offset);
+    return -1;
 }
 
 /* Some of the softmmu routines need to translate from a host pointer
    (typically a TLB entry) back to a ram offset.  */
-ram_addr_t qemu_ram_addr_from_host(void *ptr)
+ram_addr_t qemu_ram_addr_from_host_nofail(void *ptr)
 {
-    RAMBlock *prev;
-    RAMBlock **prevp;
-    RAMBlock *block;
-    uint8_t *host = ptr;
+    ram_addr_t ram_addr;
 
-    prev = NULL;
-    prevp = &ram_blocks;
-    block = ram_blocks;
-    while (block && (block->host > host
-                     || block->host + block->length <= host)) {
-        if (prev)
-          prevp = &prev->next;
-        prev = block;
-        block = block->next;
-    }
-    if (!block) {
+    if (qemu_ram_addr_from_host(ptr, &ram_addr)) {
         fprintf(stderr, "Bad ram pointer %p\n", ptr);
         abort();
     }
-    return block->offset + (host - block->host);
+    return ram_addr;
 }
 
 static uint32_t unassigned_mem_readb(void *opaque, target_phys_addr_t addr)
@@ -2618,16 +3088,16 @@ static void notdirty_mem_writeb(void *opaque, target_phys_addr_t ram_addr,
                                 uint32_t val)
 {
     int dirty_flags;
-    dirty_flags = phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS];
+    dirty_flags = cpu_physical_memory_get_dirty_flags(ram_addr);
     if (!(dirty_flags & CODE_DIRTY_FLAG)) {
 #if !defined(CONFIG_USER_ONLY)
         tb_invalidate_phys_page_fast(ram_addr, 1);
-        dirty_flags = phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS];
+        dirty_flags = cpu_physical_memory_get_dirty_flags(ram_addr);
 #endif
     }
     stb_p(qemu_get_ram_ptr(ram_addr), val);
     dirty_flags |= (0xff & ~CODE_DIRTY_FLAG);
-    phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS] = dirty_flags;
+    cpu_physical_memory_set_dirty_flags(ram_addr, dirty_flags);
     /* we remove the notdirty callback only if the code has been
        flushed */
     if (dirty_flags == 0xff)
@@ -2638,16 +3108,16 @@ static void notdirty_mem_writew(void *opaque, target_phys_addr_t ram_addr,
                                 uint32_t val)
 {
     int dirty_flags;
-    dirty_flags = phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS];
+    dirty_flags = cpu_physical_memory_get_dirty_flags(ram_addr);
     if (!(dirty_flags & CODE_DIRTY_FLAG)) {
 #if !defined(CONFIG_USER_ONLY)
         tb_invalidate_phys_page_fast(ram_addr, 2);
-        dirty_flags = phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS];
+        dirty_flags = cpu_physical_memory_get_dirty_flags(ram_addr);
 #endif
     }
     stw_p(qemu_get_ram_ptr(ram_addr), val);
     dirty_flags |= (0xff & ~CODE_DIRTY_FLAG);
-    phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS] = dirty_flags;
+    cpu_physical_memory_set_dirty_flags(ram_addr, dirty_flags);
     /* we remove the notdirty callback only if the code has been
        flushed */
     if (dirty_flags == 0xff)
@@ -2658,16 +3128,16 @@ static void notdirty_mem_writel(void *opaque, target_phys_addr_t ram_addr,
                                 uint32_t val)
 {
     int dirty_flags;
-    dirty_flags = phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS];
+    dirty_flags = cpu_physical_memory_get_dirty_flags(ram_addr);
     if (!(dirty_flags & CODE_DIRTY_FLAG)) {
 #if !defined(CONFIG_USER_ONLY)
         tb_invalidate_phys_page_fast(ram_addr, 4);
-        dirty_flags = phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS];
+        dirty_flags = cpu_physical_memory_get_dirty_flags(ram_addr);
 #endif
     }
     stl_p(qemu_get_ram_ptr(ram_addr), val);
     dirty_flags |= (0xff & ~CODE_DIRTY_FLAG);
-    phys_ram_dirty[ram_addr >> TARGET_PAGE_BITS] = dirty_flags;
+    cpu_physical_memory_set_dirty_flags(ram_addr, dirty_flags);
     /* we remove the notdirty callback only if the code has been
        flushed */
     if (dirty_flags == 0xff)
@@ -2785,89 +3255,65 @@ static CPUWriteMemoryFunc * const watch_mem_write[3] = {
     watch_mem_writel,
 };
 
-static inline uint32_t subpage_readlen (subpage_t *mmio, target_phys_addr_t addr,
-                                 unsigned int len)
+static inline uint32_t subpage_readlen (subpage_t *mmio,
+                                        target_phys_addr_t addr,
+                                        unsigned int len)
 {
-    uint32_t ret;
-    unsigned int idx;
-
-    idx = SUBPAGE_IDX(addr);
+    unsigned int idx = SUBPAGE_IDX(addr);
 #if defined(DEBUG_SUBPAGE)
     printf("%s: subpage %p len %d addr " TARGET_FMT_plx " idx %d\n", __func__,
            mmio, len, addr, idx);
 #endif
-    ret = (**mmio->mem_read[idx][len])(mmio->opaque[idx][0][len],
-                                       addr + mmio->region_offset[idx][0][len]);
 
-    return ret;
+    addr += mmio->region_offset[idx];
+    idx = mmio->sub_io_index[idx];
+    return io_mem_read[idx][len](io_mem_opaque[idx], addr);
 }
 
 static inline void subpage_writelen (subpage_t *mmio, target_phys_addr_t addr,
-                              uint32_t value, unsigned int len)
+                                     uint32_t value, unsigned int len)
 {
-    unsigned int idx;
-
-    idx = SUBPAGE_IDX(addr);
+    unsigned int idx = SUBPAGE_IDX(addr);
 #if defined(DEBUG_SUBPAGE)
-    printf("%s: subpage %p len %d addr " TARGET_FMT_plx " idx %d value %08x\n", __func__,
-           mmio, len, addr, idx, value);
+    printf("%s: subpage %p len %d addr " TARGET_FMT_plx " idx %d value %08x\n",
+           __func__, mmio, len, addr, idx, value);
 #endif
-    (**mmio->mem_write[idx][len])(mmio->opaque[idx][1][len],
-                                  addr + mmio->region_offset[idx][1][len],
-                                  value);
+
+    addr += mmio->region_offset[idx];
+    idx = mmio->sub_io_index[idx];
+    io_mem_write[idx][len](io_mem_opaque[idx], addr, value);
 }
 
 static uint32_t subpage_readb (void *opaque, target_phys_addr_t addr)
 {
-#if defined(DEBUG_SUBPAGE)
-    printf("%s: addr " TARGET_FMT_plx "\n", __func__, addr);
-#endif
-
     return subpage_readlen(opaque, addr, 0);
 }
 
 static void subpage_writeb (void *opaque, target_phys_addr_t addr,
                             uint32_t value)
 {
-#if defined(DEBUG_SUBPAGE)
-    printf("%s: addr " TARGET_FMT_plx " val %08x\n", __func__, addr, value);
-#endif
     subpage_writelen(opaque, addr, value, 0);
 }
 
 static uint32_t subpage_readw (void *opaque, target_phys_addr_t addr)
 {
-#if defined(DEBUG_SUBPAGE)
-    printf("%s: addr " TARGET_FMT_plx "\n", __func__, addr);
-#endif
-
     return subpage_readlen(opaque, addr, 1);
 }
 
 static void subpage_writew (void *opaque, target_phys_addr_t addr,
                             uint32_t value)
 {
-#if defined(DEBUG_SUBPAGE)
-    printf("%s: addr " TARGET_FMT_plx " val %08x\n", __func__, addr, value);
-#endif
     subpage_writelen(opaque, addr, value, 1);
 }
 
 static uint32_t subpage_readl (void *opaque, target_phys_addr_t addr)
 {
-#if defined(DEBUG_SUBPAGE)
-    printf("%s: addr " TARGET_FMT_plx "\n", __func__, addr);
-#endif
-
     return subpage_readlen(opaque, addr, 2);
 }
 
-static void subpage_writel (void *opaque,
-                         target_phys_addr_t addr, uint32_t value)
+static void subpage_writel (void *opaque, target_phys_addr_t addr,
+                            uint32_t value)
 {
-#if defined(DEBUG_SUBPAGE)
-    printf("%s: addr " TARGET_FMT_plx " val %08x\n", __func__, addr, value);
-#endif
     subpage_writelen(opaque, addr, value, 2);
 }
 
@@ -2887,7 +3333,6 @@ static int subpage_register (subpage_t *mmio, uint32_t start, uint32_t end,
                              ram_addr_t memory, ram_addr_t region_offset)
 {
     int idx, eidx;
-    unsigned int i;
 
     if (start >= TARGET_PAGE_SIZE || end >= TARGET_PAGE_SIZE)
         return -1;
@@ -2897,27 +3342,20 @@ static int subpage_register (subpage_t *mmio, uint32_t start, uint32_t end,
     printf("%s: %p start %08x end %08x idx %08x eidx %08x mem %ld\n", __func__,
            mmio, start, end, idx, eidx, memory);
 #endif
-    memory >>= IO_MEM_SHIFT;
+    if ((memory & ~TARGET_PAGE_MASK) == IO_MEM_RAM)
+        memory = IO_MEM_UNASSIGNED;
+    memory = (memory >> IO_MEM_SHIFT) & (IO_MEM_NB_ENTRIES - 1);
     for (; idx <= eidx; idx++) {
-        for (i = 0; i < 4; i++) {
-            if (io_mem_read[memory][i]) {
-                mmio->mem_read[idx][i] = &io_mem_read[memory][i];
-                mmio->opaque[idx][0][i] = io_mem_opaque[memory];
-                mmio->region_offset[idx][0][i] = region_offset;
-            }
-            if (io_mem_write[memory][i]) {
-                mmio->mem_write[idx][i] = &io_mem_write[memory][i];
-                mmio->opaque[idx][1][i] = io_mem_opaque[memory];
-                mmio->region_offset[idx][1][i] = region_offset;
-            }
-        }
+        mmio->sub_io_index[idx] = memory;
+        mmio->region_offset[idx] = region_offset;
     }
 
     return 0;
 }
 
-static void *subpage_init (target_phys_addr_t base, ram_addr_t *phys,
-                           ram_addr_t orig_memory, ram_addr_t region_offset)
+static subpage_t *subpage_init (target_phys_addr_t base, ram_addr_t *phys,
+                                ram_addr_t orig_memory,
+                                ram_addr_t region_offset)
 {
     subpage_t *mmio;
     int subpage_memory;
@@ -2925,14 +3363,14 @@ static void *subpage_init (target_phys_addr_t base, ram_addr_t *phys,
     mmio = qemu_mallocz(sizeof(subpage_t));
 
     mmio->base = base;
-    subpage_memory = cpu_register_io_memory(subpage_read, subpage_write, mmio);
+    subpage_memory = cpu_register_io_memory(subpage_read, subpage_write, mmio,
+                                            DEVICE_NATIVE_ENDIAN);
 #if defined(DEBUG_SUBPAGE)
     printf("%s: %p base " TARGET_FMT_plx " len %08x %d\n", __func__,
            mmio, base, TARGET_PAGE_SIZE, subpage_memory);
 #endif
     *phys = subpage_memory | IO_MEM_SUBPAGE;
-    subpage_register(mmio, 0, TARGET_PAGE_SIZE - 1, orig_memory,
-                         region_offset);
+    subpage_register(mmio, 0, TARGET_PAGE_SIZE-1, orig_memory, region_offset);
 
     return mmio;
 }
@@ -2946,8 +3384,108 @@ static int get_free_io_mem_idx(void)
             io_mem_used[i] = 1;
             return i;
         }
-
+    fprintf(stderr, "RAN out out io_mem_idx, max %d !\n", IO_MEM_NB_ENTRIES);
     return -1;
+}
+
+/*
+ * Usually, devices operate in little endian mode. There are devices out
+ * there that operate in big endian too. Each device gets byte swapped
+ * mmio if plugged onto a CPU that does the other endianness.
+ *
+ * CPU          Device           swap?
+ *
+ * little       little           no
+ * little       big              yes
+ * big          little           yes
+ * big          big              no
+ */
+
+typedef struct SwapEndianContainer {
+    CPUReadMemoryFunc *read[3];
+    CPUWriteMemoryFunc *write[3];
+    void *opaque;
+} SwapEndianContainer;
+
+static uint32_t swapendian_mem_readb (void *opaque, target_phys_addr_t addr)
+{
+    uint32_t val;
+    SwapEndianContainer *c = opaque;
+    val = c->read[0](c->opaque, addr);
+    return val;
+}
+
+static uint32_t swapendian_mem_readw(void *opaque, target_phys_addr_t addr)
+{
+    uint32_t val;
+    SwapEndianContainer *c = opaque;
+    val = bswap16(c->read[1](c->opaque, addr));
+    return val;
+}
+
+static uint32_t swapendian_mem_readl(void *opaque, target_phys_addr_t addr)
+{
+    uint32_t val;
+    SwapEndianContainer *c = opaque;
+    val = bswap32(c->read[2](c->opaque, addr));
+    return val;
+}
+
+static CPUReadMemoryFunc * const swapendian_readfn[3]={
+    swapendian_mem_readb,
+    swapendian_mem_readw,
+    swapendian_mem_readl
+};
+
+static void swapendian_mem_writeb(void *opaque, target_phys_addr_t addr,
+                                  uint32_t val)
+{
+    SwapEndianContainer *c = opaque;
+    c->write[0](c->opaque, addr, val);
+}
+
+static void swapendian_mem_writew(void *opaque, target_phys_addr_t addr,
+                                  uint32_t val)
+{
+    SwapEndianContainer *c = opaque;
+    c->write[1](c->opaque, addr, bswap16(val));
+}
+
+static void swapendian_mem_writel(void *opaque, target_phys_addr_t addr,
+                                  uint32_t val)
+{
+    SwapEndianContainer *c = opaque;
+    c->write[2](c->opaque, addr, bswap32(val));
+}
+
+static CPUWriteMemoryFunc * const swapendian_writefn[3]={
+    swapendian_mem_writeb,
+    swapendian_mem_writew,
+    swapendian_mem_writel
+};
+
+static void swapendian_init(int io_index)
+{
+    SwapEndianContainer *c = qemu_malloc(sizeof(SwapEndianContainer));
+    int i;
+
+    /* Swap mmio for big endian targets */
+    c->opaque = io_mem_opaque[io_index];
+    for (i = 0; i < 3; i++) {
+        c->read[i] = io_mem_read[io_index][i];
+        c->write[i] = io_mem_write[io_index][i];
+
+        io_mem_read[io_index][i] = swapendian_readfn[i];
+        io_mem_write[io_index][i] = swapendian_writefn[i];
+    }
+    io_mem_opaque[io_index] = c;
+}
+
+static void swapendian_del(int io_index)
+{
+    if (io_mem_read[io_index][0] == swapendian_readfn[0]) {
+        qemu_free(io_mem_opaque[io_index]);
+    }
 }
 
 /* mem_read and mem_write are arrays of functions containing the
@@ -2960,9 +3498,9 @@ static int get_free_io_mem_idx(void)
 static int cpu_register_io_memory_fixed(int io_index,
                                         CPUReadMemoryFunc * const *mem_read,
                                         CPUWriteMemoryFunc * const *mem_write,
-                                        void *opaque)
+                                        void *opaque, enum device_endian endian)
 {
-    int i, subwidth = 0;
+    int i;
 
     if (io_index <= 0) {
         io_index = get_free_io_mem_idx();
@@ -2974,27 +3512,48 @@ static int cpu_register_io_memory_fixed(int io_index,
             return -1;
     }
 
-    for(i = 0;i < 3; i++) {
-        if (!mem_read[i] || !mem_write[i])
-            subwidth = IO_MEM_SUBWIDTH;
-        io_mem_read[io_index][i] = mem_read[i];
-        io_mem_write[io_index][i] = mem_write[i];
+    for (i = 0; i < 3; ++i) {
+        io_mem_read[io_index][i]
+            = (mem_read[i] ? mem_read[i] : unassigned_mem_read[i]);
+    }
+    for (i = 0; i < 3; ++i) {
+        io_mem_write[io_index][i]
+            = (mem_write[i] ? mem_write[i] : unassigned_mem_write[i]);
     }
     io_mem_opaque[io_index] = opaque;
-    return (io_index << IO_MEM_SHIFT) | subwidth;
+
+    switch (endian) {
+    case DEVICE_BIG_ENDIAN:
+#ifndef TARGET_WORDS_BIGENDIAN
+        swapendian_init(io_index);
+#endif
+        break;
+    case DEVICE_LITTLE_ENDIAN:
+#ifdef TARGET_WORDS_BIGENDIAN
+        swapendian_init(io_index);
+#endif
+        break;
+    case DEVICE_NATIVE_ENDIAN:
+    default:
+        break;
+    }
+
+    return (io_index << IO_MEM_SHIFT);
 }
 
 int cpu_register_io_memory(CPUReadMemoryFunc * const *mem_read,
                            CPUWriteMemoryFunc * const *mem_write,
-                           void *opaque)
+                           void *opaque, enum device_endian endian)
 {
-    return cpu_register_io_memory_fixed(0, mem_read, mem_write, opaque);
+    return cpu_register_io_memory_fixed(0, mem_read, mem_write, opaque, endian);
 }
 
 void cpu_unregister_io_memory(int io_table_address)
 {
     int i;
     int io_index = io_table_address >> IO_MEM_SHIFT;
+
+    swapendian_del(io_index);
 
     for (i=0;i < 3; i++) {
         io_mem_read[io_index][i] = unassigned_mem_read[i];
@@ -3008,22 +3567,29 @@ static void io_mem_init(void)
 {
     int i;
 
-    cpu_register_io_memory_fixed(IO_MEM_ROM, error_mem_read, unassigned_mem_write, NULL);
-    cpu_register_io_memory_fixed(IO_MEM_UNASSIGNED, unassigned_mem_read, unassigned_mem_write, NULL);
-    cpu_register_io_memory_fixed(IO_MEM_NOTDIRTY, error_mem_read, notdirty_mem_write, NULL);
+    cpu_register_io_memory_fixed(IO_MEM_ROM, error_mem_read,
+                                 unassigned_mem_write, NULL,
+                                 DEVICE_NATIVE_ENDIAN);
+    cpu_register_io_memory_fixed(IO_MEM_UNASSIGNED, unassigned_mem_read,
+                                 unassigned_mem_write, NULL,
+                                 DEVICE_NATIVE_ENDIAN);
+    cpu_register_io_memory_fixed(IO_MEM_NOTDIRTY, error_mem_read,
+                                 notdirty_mem_write, NULL,
+                                 DEVICE_NATIVE_ENDIAN);
     for (i=0; i<5; i++)
         io_mem_used[i] = 1;
 
     io_mem_watch = cpu_register_io_memory(watch_mem_read,
-                                          watch_mem_write, NULL);
+                                          watch_mem_write, NULL,
+                                          DEVICE_NATIVE_ENDIAN);
 }
 
 #endif /* !defined(CONFIG_USER_ONLY) */
 
 /* physical memory access (slow version, mainly for debug) */
 #if defined(CONFIG_USER_ONLY)
-void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
-                            int len, int is_write)
+int cpu_memory_rw_debug(CPUState *env, target_ulong addr,
+                        uint8_t *buf, int len, int is_write)
 {
     int l, flags;
     target_ulong page;
@@ -3036,23 +3602,21 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
             l = len;
         flags = page_get_flags(page);
         if (!(flags & PAGE_VALID))
-            return;
+            return -1;
         if (is_write) {
             if (!(flags & PAGE_WRITE))
-                return;
+                return -1;
             /* XXX: this code should not depend on lock_user */
             if (!(p = lock_user(VERIFY_WRITE, addr, l, 0)))
-                /* FIXME - should this return an error rather than just fail? */
-                return;
+                return -1;
             memcpy(p, buf, l);
             unlock_user(p, addr, l);
         } else {
             if (!(flags & PAGE_READ))
-                return;
+                return -1;
             /* XXX: this code should not depend on lock_user */
             if (!(p = lock_user(VERIFY_READ, addr, l, 1)))
-                /* FIXME - should this return an error rather than just fail? */
-                return;
+                return -1;
             memcpy(buf, p, l);
             unlock_user(p, addr, 0);
         }
@@ -3060,6 +3624,7 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
         buf += l;
         addr += l;
     }
+    return 0;
 }
 
 #else
@@ -3119,8 +3684,8 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
                     /* invalidate code */
                     tb_invalidate_phys_page_range(addr1, addr1 + l, 0);
                     /* set dirty bit */
-                    phys_ram_dirty[addr1 >> TARGET_PAGE_BITS] |=
-                        (0xff & ~CODE_DIRTY_FLAG);
+                    cpu_physical_memory_set_dirty_flags(
+                        addr1, (0xff & ~CODE_DIRTY_FLAG));
                 }
             }
         } else {
@@ -3316,7 +3881,7 @@ void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
 {
     if (buffer != bounce.buffer) {
         if (is_write) {
-            ram_addr_t addr1 = qemu_ram_addr_from_host(buffer);
+            ram_addr_t addr1 = qemu_ram_addr_from_host_nofail(buffer);
             while (access_len) {
                 unsigned l;
                 l = TARGET_PAGE_SIZE;
@@ -3326,8 +3891,8 @@ void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
                     /* invalidate code */
                     tb_invalidate_phys_page_range(addr1, addr1 + l, 0);
                     /* set dirty bit */
-                    phys_ram_dirty[addr1 >> TARGET_PAGE_BITS] |=
-                        (0xff & ~CODE_DIRTY_FLAG);
+                    cpu_physical_memory_set_dirty_flags(
+                        addr1, (0xff & ~CODE_DIRTY_FLAG));
                 }
                 addr1 += l;
                 access_len -= l;
@@ -3421,12 +3986,36 @@ uint32_t ldub_phys(target_phys_addr_t addr)
     return val;
 }
 
-/* XXX: optimize */
+/* warning: addr must be aligned */
 uint32_t lduw_phys(target_phys_addr_t addr)
 {
-    uint16_t val;
-    cpu_physical_memory_read(addr, (uint8_t *)&val, 2);
-    return tswap16(val);
+    int io_index;
+    uint8_t *ptr;
+    uint64_t val;
+    unsigned long pd;
+    PhysPageDesc *p;
+
+    p = phys_page_find(addr >> TARGET_PAGE_BITS);
+    if (!p) {
+        pd = IO_MEM_UNASSIGNED;
+    } else {
+        pd = p->phys_offset;
+    }
+
+    if ((pd & ~TARGET_PAGE_MASK) > IO_MEM_ROM &&
+        !(pd & IO_MEM_ROMD)) {
+        /* I/O case */
+        io_index = (pd >> IO_MEM_SHIFT) & (IO_MEM_NB_ENTRIES - 1);
+        if (p)
+            addr = (addr & ~TARGET_PAGE_MASK) + p->region_offset;
+        val = io_mem_read[io_index][1](io_mem_opaque[io_index], addr);
+    } else {
+        /* RAM case */
+        ptr = qemu_get_ram_ptr(pd & TARGET_PAGE_MASK) +
+            (addr & ~TARGET_PAGE_MASK);
+        val = lduw_p(ptr);
+    }
+    return val;
 }
 
 /* warning: addr must be aligned. The ram page is not masked as dirty
@@ -3461,8 +4050,8 @@ void stl_phys_notdirty(target_phys_addr_t addr, uint32_t val)
                 /* invalidate code */
                 tb_invalidate_phys_page_range(addr1, addr1 + 4, 0);
                 /* set dirty bit */
-                phys_ram_dirty[addr1 >> TARGET_PAGE_BITS] |=
-                    (0xff & ~CODE_DIRTY_FLAG);
+                cpu_physical_memory_set_dirty_flags(
+                    addr1, (0xff & ~CODE_DIRTY_FLAG));
             }
         }
     }
@@ -3530,8 +4119,8 @@ void stl_phys(target_phys_addr_t addr, uint32_t val)
             /* invalidate code */
             tb_invalidate_phys_page_range(addr1, addr1 + 4, 0);
             /* set dirty bit */
-            phys_ram_dirty[addr1 >> TARGET_PAGE_BITS] |=
-                (0xff & ~CODE_DIRTY_FLAG);
+            cpu_physical_memory_set_dirty_flags(addr1,
+                (0xff & ~CODE_DIRTY_FLAG));
         }
     }
 }
@@ -3543,11 +4132,40 @@ void stb_phys(target_phys_addr_t addr, uint32_t val)
     cpu_physical_memory_write(addr, &v, 1);
 }
 
-/* XXX: optimize */
+/* warning: addr must be aligned */
 void stw_phys(target_phys_addr_t addr, uint32_t val)
 {
-    uint16_t v = tswap16(val);
-    cpu_physical_memory_write(addr, (const uint8_t *)&v, 2);
+    int io_index;
+    uint8_t *ptr;
+    unsigned long pd;
+    PhysPageDesc *p;
+
+    p = phys_page_find(addr >> TARGET_PAGE_BITS);
+    if (!p) {
+        pd = IO_MEM_UNASSIGNED;
+    } else {
+        pd = p->phys_offset;
+    }
+
+    if ((pd & ~TARGET_PAGE_MASK) != IO_MEM_RAM) {
+        io_index = (pd >> IO_MEM_SHIFT) & (IO_MEM_NB_ENTRIES - 1);
+        if (p)
+            addr = (addr & ~TARGET_PAGE_MASK) + p->region_offset;
+        io_mem_write[io_index][1](io_mem_opaque[io_index], addr, val);
+    } else {
+        unsigned long addr1;
+        addr1 = (pd & TARGET_PAGE_MASK) + (addr & ~TARGET_PAGE_MASK);
+        /* RAM case */
+        ptr = qemu_get_ram_ptr(addr1);
+        stw_p(ptr, val);
+        if (!cpu_physical_memory_is_dirty(addr1)) {
+            /* invalidate code */
+            tb_invalidate_phys_page_range(addr1, addr1 + 2, 0);
+            /* set dirty bit */
+            cpu_physical_memory_set_dirty_flags(addr1,
+                (0xff & ~CODE_DIRTY_FLAG));
+        }
+    }
 }
 
 /* XXX: optimize */
@@ -3556,8 +4174,6 @@ void stq_phys(target_phys_addr_t addr, uint64_t val)
     val = tswap64(val);
     cpu_physical_memory_write(addr, (const uint8_t *)&val, 8);
 }
-
-#endif
 
 /* virtual memory access for debug (includes writing to ROM) */
 int cpu_memory_rw_debug(CPUState *env, target_ulong addr,
@@ -3577,11 +4193,9 @@ int cpu_memory_rw_debug(CPUState *env, target_ulong addr,
         if (l > len)
             l = len;
         phys_addr += (addr & ~TARGET_PAGE_MASK);
-#if !defined(CONFIG_USER_ONLY)
         if (is_write)
             cpu_physical_memory_write_rom(phys_addr, buf, l);
         else
-#endif
             cpu_physical_memory_rw(phys_addr, buf, l, is_write);
         len -= l;
         buf += l;
@@ -3589,6 +4203,7 @@ int cpu_memory_rw_debug(CPUState *env, target_ulong addr,
     }
     return 0;
 }
+#endif
 
 /* in deterministic execution mode, instructions doing device I/Os
    must be at the end of the TB */
@@ -3649,8 +4264,9 @@ void cpu_io_recompile(CPUState *env, void *retaddr)
     cpu_resume_from_signal(env, NULL);
 }
 
-void dump_exec_info(FILE *f,
-                    int (*cpu_fprintf)(FILE *f, const char *fmt, ...))
+#if !defined(CONFIG_USER_ONLY)
+
+void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
 {
     int i, target_code_size, max_target_code_size;
     int direct_jmp_count, direct_jmp2_count, cross_page;
@@ -3677,14 +4293,14 @@ void dump_exec_info(FILE *f,
     }
     /* XXX: avoid using doubles ? */
     cpu_fprintf(f, "Translation buffer state:\n");
-    cpu_fprintf(f, "gen code size       %ld/%ld\n",
+    cpu_fprintf(f, "gen code size       %td/%ld\n",
                 code_gen_ptr - code_gen_buffer, code_gen_buffer_max_size);
     cpu_fprintf(f, "TB count            %d/%d\n", 
                 nb_tbs, code_gen_max_blocks);
     cpu_fprintf(f, "TB avg target size  %d max=%d bytes\n",
                 nb_tbs ? target_code_size / nb_tbs : 0,
                 max_target_code_size);
-    cpu_fprintf(f, "TB avg host size    %d bytes (expansion ratio: %0.1f)\n",
+    cpu_fprintf(f, "TB avg host size    %td bytes (expansion ratio: %0.1f)\n",
                 nb_tbs ? (code_gen_ptr - code_gen_buffer) / nb_tbs : 0,
                 target_code_size ? (double) (code_gen_ptr - code_gen_buffer) / target_code_size : 0);
     cpu_fprintf(f, "cross page TB count %d (%d%%)\n",
@@ -3701,8 +4317,6 @@ void dump_exec_info(FILE *f,
     cpu_fprintf(f, "TLB flush count     %d\n", tlb_flush_count);
     tcg_dump_info(f, cpu_fprintf);
 }
-
-#if !defined(CONFIG_USER_ONLY)
 
 #define MMUSUFFIX _cmmu
 #define GETPC() NULL

@@ -91,14 +91,14 @@ static void inet_setport(struct addrinfo *e, int port)
     }
 }
 
-static const char *inet_strfamily(int family)
+const char *inet_strfamily(int family)
 {
     switch (family) {
     case PF_INET6: return "ipv6";
     case PF_INET:  return "ipv4";
     case PF_UNIX:  return "unix";
     }
-    return "????";
+    return "unknown";
 }
 
 static void inet_print_addrinfo(const char *tag, struct addrinfo *res)
@@ -130,7 +130,8 @@ int inet_listen_opts(QemuOpts *opts, int port_offset)
     ai.ai_family = PF_UNSPEC;
     ai.ai_socktype = SOCK_STREAM;
 
-    if (qemu_opt_get(opts, "port") == NULL) {
+    if ((qemu_opt_get(opts, "host") == NULL) ||
+        (qemu_opt_get(opts, "port") == NULL)) {
         fprintf(stderr, "%s: host and/or port not specified\n", __FUNCTION__);
         return -1;
     }
@@ -648,3 +649,27 @@ int unix_connect(const char *path)
 }
 
 #endif
+
+#ifdef _WIN32
+static void socket_cleanup(void)
+{
+    WSACleanup();
+}
+#endif
+
+int socket_init(void)
+{
+#ifdef _WIN32
+    WSADATA Data;
+    int ret, err;
+
+    ret = WSAStartup(MAKEWORD(2,2), &Data);
+    if (ret != 0) {
+        err = WSAGetLastError();
+        fprintf(stderr, "WSAStartup: %d\n", err);
+        return -1;
+    }
+    atexit(socket_cleanup);
+#endif
+    return 0;
+}

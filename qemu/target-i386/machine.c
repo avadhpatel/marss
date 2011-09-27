@@ -47,6 +47,22 @@ static const VMStateDescription vmstate_xmm_reg = {
 #define VMSTATE_XMM_REGS(_field, _state, _n)                         \
     VMSTATE_STRUCT_ARRAY(_field, _state, _n, 0, vmstate_xmm_reg, XMMReg)
 
+/* YMMH format is the same as XMM */
+static const VMStateDescription vmstate_ymmh_reg = {
+    .name = "ymmh_reg",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .minimum_version_id_old = 1,
+    .fields      = (VMStateField []) {
+        VMSTATE_UINT64(XMM_Q(0), XMMReg),
+        VMSTATE_UINT64(XMM_Q(1), XMMReg),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
+#define VMSTATE_YMMH_REGS_VARS(_field, _state, _n, _v)                         \
+    VMSTATE_STRUCT_ARRAY(_field, _state, _n, _v, vmstate_ymmh_reg, XMMReg)
+
 static const VMStateDescription vmstate_mtrr_var = {
     .name = "mtrr_var",
     .version_id = 1,
@@ -321,8 +337,6 @@ static void cpu_pre_save(void *opaque)
     CPUState *env = opaque;
     int i;
 
-    cpu_synchronize_state(env);
-
     /* FPU */
     env->fpus_vmstate = (env->fpus & ~0x3800) | (env->fpstt & 0x7) << 11;
     env->fptag_vmstate = 0;
@@ -335,14 +349,6 @@ static void cpu_pre_save(void *opaque)
 #else
     env->fpregs_format_vmstate = 1;
 #endif
-}
-
-static int cpu_pre_load(void *opaque)
-{
-    CPUState *env = opaque;
-
-    cpu_synchronize_state(env);
-    return 0;
 }
 
 static int cpu_post_load(void *opaque, int version_id)
@@ -367,13 +373,30 @@ static int cpu_post_load(void *opaque, int version_id)
     return 0;
 }
 
+static bool async_pf_msr_needed(void *opaque)
+{
+    CPUState *cpu = opaque;
+
+    return cpu->async_pf_en_msr != 0;
+}
+
+static const VMStateDescription vmstate_async_pf_msr = {
+    .name = "cpu/async_pf_msr",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .minimum_version_id_old = 1,
+    .fields      = (VMStateField []) {
+        VMSTATE_UINT64(async_pf_en_msr, CPUState),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 static const VMStateDescription vmstate_cpu = {
     .name = "cpu",
     .version_id = CPU_SAVE_VERSION,
     .minimum_version_id = 3,
     .minimum_version_id_old = 3,
     .pre_save = cpu_pre_save,
-    .pre_load = cpu_pre_load,
     .post_load = cpu_post_load,
     .fields      = (VMStateField []) {
         VMSTATE_UINTTL_ARRAY(regs, CPUState, CPU_NB_REGS),
@@ -464,8 +487,20 @@ static const VMStateDescription vmstate_cpu = {
         /* KVM pvclock msr */
         VMSTATE_UINT64_V(system_time_msr, CPUState, 11),
         VMSTATE_UINT64_V(wall_clock_msr, CPUState, 11),
+        /* XSAVE related fields */
+        VMSTATE_UINT64_V(xcr0, CPUState, 12),
+        VMSTATE_UINT64_V(xstate_bv, CPUState, 12),
+        VMSTATE_YMMH_REGS_VARS(ymmh_regs, CPUState, CPU_NB_REGS, 12),
         VMSTATE_END_OF_LIST()
         /* The above list is not sorted /wrt version numbers, watch out! */
+    },
+    .subsections = (VMStateSubsection []) {
+        {
+            .vmsd = &vmstate_async_pf_msr,
+            .needed = async_pf_msr_needed,
+        } , {
+            /* empty */
+        }
     }
 };
 

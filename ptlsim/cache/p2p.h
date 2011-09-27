@@ -47,12 +47,12 @@ class P2PInterconnect : public Interconnect
 				return controllers_[0];
 			else
 				assert(0); // Should never happen
-			return null;
+			return NULL;
 		}
 
 
 	public:
-		P2PInterconnect(char *name, MemoryHierarchy *memoryHierarchy);
+		P2PInterconnect(const char *name, MemoryHierarchy *memoryHierarchy);
 		bool controller_request_cb(void *arg);
 		void register_controller(Controller *controller);
 		int access_fast_path(Controller *controller,
@@ -63,9 +63,8 @@ class P2PInterconnect : public Interconnect
 			os << "--P2P Interconnect: ", get_name(), endl;
 		}
 
-		// P2P has 0 delay in sending message
 		int get_delay() {
-			return 0;
+			return 1;
 		}
 
 		void annul_request(MemoryRequest *request) {

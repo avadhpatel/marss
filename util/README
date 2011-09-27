@@ -1,0 +1,169 @@
+This is a set of tools we use for dealing with simulation results that come out
+of marss. 
+
+I sincerely apologize for the code you're about to witness it was written in an
+evolutionary style so it's not particularly clean or elegant, but some of it
+might be useful for people to look at to design their own helper scripts.
+
+I'll eventually try to write up some stuff about what there are intended to do
+...
+
+The graphing scripts rely heavily on numpy and matplotlib, which are excellent
+math and plotting libraries, respectively. 
+
+0. Prerequisites 
+To use the graphing scripts, you'll need matplotlib and numpy. On ubuntu, these
+are in packages: python-matplotlib python-numpy
+
+To use mstats.py, you'll need the yaml bindings for python. On ubuntu, these are
+in package: python-yaml
+
+For the lazy: 
+$ sudo apt-get install python-yaml python-matplotlib python-numpy
+
+
+1. Emailer Scripts
+
+1.1 XOauth
+=================================================================================
+The two gmail scripts here use a token-based authentication system which
+doesn't require a password. This means that you don't have to put your gmail
+password in plaintext on your hard drive and the tokens can be revoked via your
+gmail account in case someone gets access to them. For more details, see:
+http://code.google.com/apis/gmail/oauth/ 
+
+While your key is disposable and won't let someone change your password, it
+will allow someone to send and receive email from your account, so please don't
+go accidentally submitting your file to a git repo or in a patch or something. 
+
+If you do, however, make sure to revoke this key in your google account
+settings.
+
+
+To use the scripts, you're going to need to use the xoauth.py file (which is
+google's sample script, not mine) to generate an xoauth.txt file.
+
+First, run: $ ./xoauth.py --generate_oauth_token --user=YOUR_USERNAME@gmail.com
+
+This will give you a URL to go to which will either use your logged in account
+or will ask you to login. After you enter in your verification code, the xoauth
+script will generate an xoauth.txt file for you. 
+
+1.2 Testing out the passwordless gmail
+================================================================================
+Adjust the paths in your util.cfg so that they match your actual system (use
+util.cfg.example as a starting point).
+
+After you have an xoauth.txt and the correct paths in util.cfg, you can test
+to see that everything went fine by running 
+
+$ ./send_gmail.py 
+
+This will use your xoauth information to send an email to whatever address you
+have specified in your util.cfg file as the destination address from the
+account for which you have a token (these can be the same account). 
+
+If you receieve the email successfully, then the xoauth is working. 
+
+1.3 Polling gmail
+================================================================================
+After the xoauth is working, you can also use the poll_gmail.py script which
+will login to gmail, get the unread messages from a specific label, and send
+back a simulation status report. 
+
+For now the simulation status report is generated in sim_status.py and this
+file tends to be sort of specific to what I name my disk images/screen
+sessions/etc. So, please change it to suit your own simulation setup.
+
+Running: 
+
+$ ./poll_gmail.py 
+
+Should either report that there are no messages in the target gmail lable, or
+send a simulation status string to the email address given in your util.cfg.
+
+This should be scheduled as a cron job. To keep cron from sending you the
+output to your mailbox, I've included a wrapper script called poll_gmail.sh
+which kills the output of the script. So you should adjust the path to your
+utils folder in this file and run: 
+
+
+crontab -e
+
+An editor will come up with the cron file; add the line: 
+
+*/3 * * * * $HOME/marss.utils/poll_gmail.sh
+
+(change the 3 to the polling frequency in minutes).
+
+2. Graphing Scripts
+================================================================================
+2.1 Requirements 
+
+The graphing scripts can generate line plots using matplotlib and numpy. Currently,
+a png output format (raster) and LaTeX output format (vector PDF) are supported. 
+
+The LaTeX output mode is convenient for producing vector graphs that can be imported
+into LaTeX and used directly with pdflatex. 
+
+The graphing scripts are based on the python libraries matplotlib and numpy.
+You'll need to obtain these libraries either through your distribution's
+package manager or some other means. 
+
+If you're on ubuntu, you can use apt-get: 
+
+$ sudo apt-get install python-numpy python-matplotlib
+
+For the LaTeX output mode, you'll also need: texlive-extra-utils texlive-latex-extra packages. 
+
+
+2.2 Data Format
+Currently, the default format that can be read by the scripts is a CSV file
+with header information such as: 
+
+cycle_number,bandwidth,latency
+1000,5.4,122
+2000,5.1,132
+3000,5.2,130
+
+This format is consistent with the output format of the new time-based stats 
+support in marss. For more information about how to use the new time-based stats 
+please my post here: http://www.mail-archive.com/marss86-devel@cs.binghamton.edu/msg00433.html
+
+2.3 Specifying Graphs
+There are four main objects in Graphs.py: CompositeGraph, SingleGraph, LinePlot, and DataTable.
+
+A DataTable is essentially a numpy representation of a CSV file. 
+
+A LinePlot is a single line on a graph. The data source is a DataTable and an x column
+and y column of the DataTable. The columns can either be indexed by name or by number. 
+
+A SingleGraph is made up of one more more LinePlots, a title, and axes labels.
+
+A CompositeGraph is made up of multiple SingleGraphs that are laid out and saved to 
+a file. 
+
+2.4 Adding Derived Columns
+Sometimes purely graphing stats is not very useful and one would like to graph a 
+function of two or more variables (for example: 
+average latency = total latency / number of requests). The function add_derived_column
+allows for this type of functionality. It supports a function that takes an arbitrary
+number of parameters and an array of column indices (name or index). 
+
+So for example: 
+
+def percent(a,b):
+	return float(b)/float(a)*100.0
+dt = DataTable("foo.csv");
+dt.add_derived_column(percent, [1,2], "foo_percent");
+
+This will take columns 1 and 2 and call the function 'percent' on each pair of
+values in these columns. The data will go into the data table with the column
+name titled "foo_percent" which can be referenced when creating a LinePlot
+object. See the main function in Graphs.py for an example. 
+
+2.5 Examples
+For now, please see the bottom of Graphs.py for examples of how to generate
+graphs.
+
+

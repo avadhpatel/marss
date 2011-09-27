@@ -41,7 +41,6 @@ extern "C" {
 }
 
 #include <ptl-qemu.h>
-#include <stats.h>
 #include <ptlsim.h>
 
 #include <cacheConstants.h>
@@ -63,9 +62,45 @@ uint8_t simulation_configured = 0;
 uint8_t ptl_stable_state = 1;
 uint64_t ptl_start_sim_rip = 0;
 
-static char *pending_command_str = null;
+static char *pending_command_str = NULL;
 static int pending_call_type = -1;
 static int pending_call_arg3 = -1;
+
+static void save_core_dump(char* dump, W64 dump_size,
+        char* app_name, W64 app_name_size, W64 signum)
+{
+    stringbuf  filename;
+    ofstream   df;
+    char      *_addr;
+    char      *dmp;
+    char      *app;
+
+    dmp = (char*)qemu_malloc(sizeof(char) * dump_size);
+    app = (char*)qemu_malloc((sizeof(char) * app_name_size) + 1);
+
+    _addr = dump;
+    foreach(i, dump_size) {
+        dmp[i] = (char)ldub_kernel((target_ulong)(_addr));
+        _addr++;
+    }
+
+    _addr = app_name;
+    foreach(i, app_name_size) {
+        app[i] = (char)ldub_kernel((target_ulong)(_addr));
+        _addr++;
+    }
+    app[app_name_size] = '\0';
+
+    filename << app << "-core";
+    df.open(filename, std::ios_base::binary | std::ios_base::out);
+
+    df.write(dmp, dump_size);
+    df.flush();
+    df.close();
+
+    ptl_logfile << "Core dump received from VM is saved in ",
+                filename, " with signal ", signum, endl;
+}
 
 static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
         int length) {
@@ -77,25 +112,22 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
     W64 arg5 = cpu->regs[REG_r8];
     W64 arg6 = cpu->regs[REG_r9];
 
-    cout << "ptlcall_mmio_write: calltype ", calltype, " at rip ", cpu->eip,
-         " (inside_ptlsim = ", in_simulation, " )", endl;
-
     switch(calltype) {
         case PTLCALL_VERSION:
             {
-                cout << "PTLCALL type PTLCALL_VERSION\n";
+                if (!config.quiet) cout << "PTLCALL type PTLCALL_VERSION\n";
                 cpu->regs[REG_rax] = 1;
                 break;
             }
         case PTLCALL_MARKER:
             {
-                cout << "PTLCALL type PTLCALL_MARKER\n";
+                if (!config.quiet) cout << "PTLCALL type PTLCALL_MARKER\n";
                 cpu->regs[REG_rax] = 0;
                 break;
             }
         case PTLCALL_ENQUEUE:
             {
-                cout << "PTLCALL type PTLCALL_ENQUEUE\n";
+                if (!config.quiet) cout << "PTLCALL type PTLCALL_ENQUEUE\n";
 
                 /*
                  * Address of the command is stored in arg1 and
@@ -115,22 +147,19 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                 }
                 command_str[i] = '\0';
 
-                cout << "MARSSx86::Command received : ", command_str, endl;
                 /*
                  * Stop the QEMU vm and change ptlsim configuration
                  * QEMU will be automatically started in simulation mode
                  */
-                vm_stop(0);
-                ptl_machine_configure(command_str);
                 cpu_exit(cpu);
-                if(in_simulation)
-                    vm_start();
+                pending_command_str = command_str;
+                pending_call_type = PTLCALL_ENQUEUE;
                 simulation_configured = 1;
                 break;
             }
         case PTLCALL_CHECKPOINT:
             {
-                cout << "PTLCALL type PTLCALL_CHECKPOINT\n";
+                if (!config.quiet) cout << "PTLCALL type PTLCALL_CHECKPOINT\n";
 
                 char *checkpoint_name = (char*)qemu_malloc(arg2 + 1);
                 char *name_addr = (char*)(arg1);
@@ -179,6 +208,14 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 
                 break;
             }
+        case PTLCALL_CORE_DUMP:
+            {
+                /* User space application has crashed so save its core-dump
+                 * into file '%appname-core-dump' */
+                save_core_dump((char*)arg1, arg2, (char*)arg3, arg4,
+                        arg5);
+                break;
+            }
         default :
             cout << "PTLCALL type unknown : ", calltype, endl;
             cpu->regs[REG_rax] = -EINVAL;
@@ -186,8 +223,6 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 }
 
 static uint32_t ptlcall_mmio_read(CPUX86State* cpu, W64 offset, int length) {
-    cout << "PTLcall MMIO read on cpu: ", cpu->cpu_index, " (rip: ", cpu->eip,
-         " from page offset ", offset, " ,length ", length, endl;
     return 0;
 }
 
@@ -242,53 +277,72 @@ void ptlsim_init() {
 
     /* Register PTLsim PTLCALL mmio page */
     W64 ptlcall_mmio_pd = cpu_register_io_memory(ptlcall_mmio_read_ops,
-            ptlcall_mmio_write_ops, NULL);
+            ptlcall_mmio_write_ops, NULL, DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR, 4096,
             ptlcall_mmio_pd);
-
-    cout << "ptlcall_mmio_init : Registered PTLcall MMIO page at physaddr ",
-         PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR, " descriptor ", ptlcall_mmio_pd,
-         " io_mem_index ", ptlcall_mmio_pd >> IO_MEM_SHIFT, endl;
 
     /* Register ptlsim assert callback functions */
     register_assert_cb(&dump_all_info);
     register_assert_cb(&dump_bbcache_to_logfile);
 }
 
-void ptl_config_from_file(const char *filename) {
-    int const MAX_CMD_SIZE = 1024;
-    char * line = NULL;
-    size_t len = 0;
-    char *cmd_line;
-    int cmd_size=0;
-    ssize_t read;
-    FILE * fp;
+static const char COMMENT_CHAR = '#';
+static bool is_commented(stringbuf& line)
+{
+    stringbuf opt;
 
-    cmd_line = (char*)malloc(MAX_CMD_SIZE);
-    memset(cmd_line,'\0',MAX_CMD_SIZE);
-    fp = fopen(filename, "r");
-    if (fp == NULL){
-        fprintf(stderr, "qemu: file not found\n");
+    opt = line.strip();
+
+    if (opt.buf[0] == COMMENT_CHAR) {
+        return true;
+    }
+
+    return false;
+}
+
+void ptl_config_from_file(const char *filename) {
+    stringbuf line;
+    stringbuf cmd_line;
+    char split_char[2] = {COMMENT_CHAR, '\0'};
+    dynarray<stringbuf*> *cmds;
+
+    ifstream cmd_file(filename);
+    if (!cmd_file) {
+        fprintf(stderr, "qemu: simconfig file '%s' not found\n",
+                filename);
         exit(1);
     }
 
-    while ((read = getline(&line, &len, fp)) != -1) {
-        if(line[0] != '#'){
-            cmd_size+=read;
-            assert(cmd_size<MAX_CMD_SIZE);
-            if (line[read-1] = '\n')
-                line[read-1] = ' ';
-            strncat(cmd_line,line,read);
+    for (;;) {
+
+        line.reset();
+        cmd_file.getline(line.buf, line.length);
+
+        if (!cmd_file)
+            break;
+
+        if (is_commented(line))
+            continue;
+
+        cmds = new dynarray<stringbuf*>();
+        line.split(*cmds, split_char);
+
+        if (!cmds->size())
+            continue;
+
+        stringbuf *cmd = (*cmds)[0];
+        cmd_line << *cmd << " ";
+
+        while (cmds->size()) {
+            stringbuf *c = cmds->pop();
+            delete c;
         }
+
+        delete cmds;
     }
 
-    if (line)
-        free(line);
-
-    printf("%s\n",cmd_line);
     ptl_machine_configure(cmd_line);
     simulation_configured = 1;
-    free(cmd_line);
 }
 
 int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
@@ -411,35 +465,45 @@ void ptl_check_ptlcall_queue() {
 
     if(pending_call_type != -1) {
 
-        cout << "Pending call type: ", pending_call_type, endl;
         switch(pending_call_type) {
+            case PTLCALL_ENQUEUE:
+                {
+                    if (!config.quiet) cout << "MARSSx86::Command received : ",
+                         pending_command_str, endl;
+                    ptl_machine_configure(pending_command_str);
+                    break;
+                }
             case PTLCALL_CHECKPOINT:
                 {
-                    cout << "MARSSx86::Creating checkpoint ",
-                         pending_command_str, endl;
+                    if (!config.quiet)
+                        cout << "MARSSx86::Creating checkpoint ",
+                             pending_command_str, endl;
 
                     QDict *checkpoint_dict = qdict_new();
                     qdict_put_obj(checkpoint_dict, "name", QOBJECT(
                                 qstring_from_str(pending_command_str)));
                     Monitor *mon = cur_mon;
                     do_savevm(cur_mon, checkpoint_dict);
-                    cout << "MARSSx86::Checkpoint ", pending_command_str,
-                         " created\n";
+
+                    if (!config.quiet)
+                        cout << "MARSSx86::Checkpoint ", pending_command_str,
+                             " created\n";
 
                     switch(pending_call_arg3) {
                         case PTLCALL_CHECKPOINT_AND_SHUTDOWN:
-                            cout << "MARSSx86::Shutdown requested\n";
-                            exit(0);
+                            if (!config.quiet) cout << "MARSSx86::Shutdown requested\n";
+                            ptl_quit();
                             break;
                         default:
-                            cout << "MARSSx86::Unkonw Action\n";
+                            if (!config.quiet) cout << "MARSSx86::Unkonw Action\n";
                             break;
                     }
+                    break;
                 }
         }
 
         delete pending_command_str;
-        pending_command_str = null;
+        pending_command_str = NULL;
 
         pending_call_type = -1;
         pending_call_arg3 = -1;
@@ -601,6 +665,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
         return -1;
     }
 
+    W64 cr2 = -1;
     int n = 0 ;
     pfec = 0;
 
@@ -615,10 +680,12 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
     Waddr physaddr = check_and_translate(source, 0, 0, 0, exception,
             mmio, pfec, forexec);
     if (exception) {
+        cr2 = cr[2];
         int old_exception = exception_index;
         int mmu_index = cpu_mmu_index((CPUState*)this);
         int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
                 source, 2, mmu_index, 1);
+        cr[2] = cr2;
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source),
@@ -668,10 +735,12 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
     physaddr = check_and_translate(source + n, 0, 0, 0, exception,
             mmio, pfec, forexec);
     if (exception) {
+        cr2 = cr[2];
         int old_exception = exception_index;
         int mmu_index = cpu_mmu_index((CPUState*)this);
         int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
                 source + n, 2, mmu_index, 1);
+        cr[2] = cr2;
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source + n),
@@ -720,36 +789,9 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 }
 
 void Context::update_mode_count() {
-    W64 prev_cycles = cycles_at_last_mode_switch;
-    W64 prev_insns = insns_at_last_mode_switch;
-    W64 delta_cycles = sim_cycle - cycles_at_last_mode_switch;
-    W64 delta_insns = total_user_insns_committed -
-        insns_at_last_mode_switch;
-
-    cycles_at_last_mode_switch = sim_cycle;
-    insns_at_last_mode_switch = total_user_insns_committed;
-
-    if likely (use64) {
-        if(kernel_mode) {
-            per_core_event_update(cpu_index, cycles_in_mode.kernel64 += delta_cycles);
-            per_core_event_update(cpu_index, insns_in_mode.kernel64 += delta_insns);
-        } else {
-            per_core_event_update(cpu_index, cycles_in_mode.user64 += delta_cycles);
-            per_core_event_update(cpu_index, insns_in_mode.user64 += delta_insns);
-        }
-    } else {
-        if(kernel_mode) {
-            per_core_event_update(cpu_index, cycles_in_mode.kernel32 += delta_cycles);
-            per_core_event_update(cpu_index, insns_in_mode.kernel32 += delta_insns);
-        } else {
-            per_core_event_update(cpu_index, cycles_in_mode.user32 += delta_cycles);
-            per_core_event_update(cpu_index, insns_in_mode.user32 += delta_insns);
-        }
-    }
 }
 
 void Context::update_mode(bool is_kernel) {
-    update_mode_count();
     kernel_mode = is_kernel;
     if(config.log_user_only) {
         if(kernel_mode)
@@ -1197,6 +1239,7 @@ void Context::check_store_virt(Waddr virtaddr, W64 data, byte bytemask, int size
             break;
     }
     if((data & mask) != (data_r & mask)) {
+        // ptl_logfile << "Checker ctx\n", *checker_context, endl;
         ptl_logfile << "Stored data does not match..\n";
         ptl_logfile << "Data: ", (void*)data, " Data_r: ", (void*)data_r, endl, flush;
         assert_fail(__STRING(0), __FILE__, __LINE__,
@@ -1257,7 +1300,8 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
     ptl_stable_state = 1;
     handle_interrupt = 1;
     int mmu_index = cpu_mmu_index((CPUState*)this);
-    tlb_fill(virtaddr, is_write, mmu_index, null);
+    W64 cr2 = cr[2];
+    tlb_fill(virtaddr, is_write, mmu_index, NULL);
     ptl_stable_state = 0;
 
     if(kernel_mode) {
@@ -1267,18 +1311,22 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
     }
 
     setup_ptlsim_switch_all_ctx(*this);
+    cr[2] = cr2;
     return;
 }
 
-bool Context::try_handle_fault(Waddr virtaddr, bool store) {
+bool Context::try_handle_fault(Waddr virtaddr, int store) {
 
     setup_qemu_switch_all_ctx(*this);
 
     if(logable(10))
         ptl_logfile << "Trying to fill tlb for addr: ", (void*)virtaddr, endl;
 
+    W64 cr2 = cr[2];
     int mmu_index = cpu_mmu_index((CPUState*)this);
     int fault = cpu_x86_handle_mmu_fault((CPUState*)this, virtaddr, store, mmu_index, 1);
+
+    cr[2] = cr2;
 
     setup_ptlsim_switch_all_ctx(*this);
     if(fault) {
@@ -1300,4 +1348,15 @@ bool Context::try_handle_fault(Waddr virtaddr, bool store) {
 extern "C" void ptl_add_phys_memory_mapping(int8_t cpu_index, uint64_t host_vaddr, uint64_t guest_paddr)
 {
   contextof(cpu_index).hvirt_gphys_map[(Waddr)host_vaddr] = (Waddr)guest_paddr;
+}
+
+void ptl_quit()
+{
+    in_simulation = 0;
+    no_shutdown = 0;
+    qemu_system_shutdown_request();
+}
+
+uint64_t get_sim_cpu_freq() {
+    return config.core_freq_hz;
 }

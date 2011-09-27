@@ -27,18 +27,23 @@
 
 #define BINARY_DEVICE_TREE_FILE "bamboo.dtb"
 
-static void *bamboo_load_device_tree(target_phys_addr_t addr,
+/* from u-boot */
+#define KERNEL_ADDR  0x1000000
+#define FDT_ADDR     0x1800000
+#define RAMDISK_ADDR 0x1900000
+
+static int bamboo_load_device_tree(target_phys_addr_t addr,
                                      uint32_t ramsize,
                                      target_phys_addr_t initrd_base,
                                      target_phys_addr_t initrd_size,
                                      const char *kernel_cmdline)
 {
-    void *fdt = NULL;
+    int ret = -1;
 #ifdef CONFIG_FDT
     uint32_t mem_reg_property[] = { 0, 0, ramsize };
     char *filename;
     int fdt_size;
-    int ret;
+    void *fdt;
 
     filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, BINARY_DEVICE_TREE_FILE);
     if (!filename) {
@@ -75,12 +80,13 @@ static void *bamboo_load_device_tree(target_phys_addr_t addr,
     if (kvm_enabled())
         kvmppc_fdt_update(fdt);
 
-    cpu_physical_memory_write (addr, (void *)fdt, fdt_size);
+    ret = rom_add_blob_fixed(BINARY_DEVICE_TREE_FILE, fdt, fdt_size, addr);
+    qemu_free(fdt);
 
 out:
 #endif
 
-    return fdt;
+    return ret;
 }
 
 static void bamboo_init(ram_addr_t ram_size,
@@ -97,24 +103,14 @@ static void bamboo_init(ram_addr_t ram_size,
     uint64_t elf_lowaddr;
     target_phys_addr_t entry = 0;
     target_phys_addr_t loadaddr = 0;
-    target_long kernel_size = 0;
-    target_ulong initrd_base = 0;
     target_long initrd_size = 0;
-    target_ulong dt_base = 0;
-    void *fdt;
+    int success;
     int i;
 
     /* Setup CPU. */
     env = ppc440ep_init(&ram_size, &pcibus, pci_irq_nrs, 1, cpu_model);
 
     if (pcibus) {
-        /* Add virtio console devices */
-        for(i = 0; i < MAX_VIRTIO_CONSOLES; i++) {
-            if (virtcon_hds[i]) {
-                pci_create_simple(pcibus, -1, "virtio-console-pci");
-            }
-        }
-
         /* Register network interfaces. */
         for (i = 0; i < nb_nics; i++) {
             /* There are no PCI NICs on the Bamboo board, but there are
@@ -125,15 +121,15 @@ static void bamboo_init(ram_addr_t ram_size,
 
     /* Load kernel. */
     if (kernel_filename) {
-        kernel_size = load_uimage(kernel_filename, &entry, &loadaddr, NULL);
-        if (kernel_size < 0) {
-            kernel_size = load_elf(kernel_filename, 0, &elf_entry, &elf_lowaddr,
-                                   NULL, 1, ELF_MACHINE, 0);
+        success = load_uimage(kernel_filename, &entry, &loadaddr, NULL);
+        if (success < 0) {
+            success = load_elf(kernel_filename, NULL, NULL, &elf_entry,
+                               &elf_lowaddr, NULL, 1, ELF_MACHINE, 0);
             entry = elf_entry;
             loadaddr = elf_lowaddr;
         }
         /* XXX try again as binary */
-        if (kernel_size < 0) {
+        if (success < 0) {
             fprintf(stderr, "qemu: could not load kernel '%s'\n",
                     kernel_filename);
             exit(1);
@@ -142,34 +138,29 @@ static void bamboo_init(ram_addr_t ram_size,
 
     /* Load initrd. */
     if (initrd_filename) {
-        initrd_base = kernel_size + loadaddr;
-        initrd_size = load_image_targphys(initrd_filename, initrd_base,
-                                          ram_size - initrd_base);
+        initrd_size = load_image_targphys(initrd_filename, RAMDISK_ADDR,
+                                          ram_size - RAMDISK_ADDR);
 
         if (initrd_size < 0) {
-            fprintf(stderr, "qemu: could not load initial ram disk '%s'\n",
-                    initrd_filename);
+            fprintf(stderr, "qemu: could not load ram disk '%s' at %x\n",
+                    initrd_filename, RAMDISK_ADDR);
             exit(1);
         }
     }
 
     /* If we're loading a kernel directly, we must load the device tree too. */
     if (kernel_filename) {
-        if (initrd_base)
-            dt_base = initrd_base + initrd_size;
-        else
-            dt_base = kernel_size + loadaddr;
-
-        fdt = bamboo_load_device_tree(dt_base, ram_size,
-                                      initrd_base, initrd_size, kernel_cmdline);
-        if (fdt == NULL) {
+        if (bamboo_load_device_tree(FDT_ADDR, ram_size, RAMDISK_ADDR,
+                                    initrd_size, kernel_cmdline) < 0) {
             fprintf(stderr, "couldn't load device tree\n");
             exit(1);
         }
 
+        cpu_synchronize_state(env);
+
         /* Set initial guest state. */
         env->gpr[1] = (16<<20) - 8;
-        env->gpr[3] = dt_base;
+        env->gpr[3] = FDT_ADDR;
         env->nip = entry;
         /* XXX we currently depend on KVM to create some initial TLB entries. */
     }
@@ -179,14 +170,34 @@ static void bamboo_init(ram_addr_t ram_size,
 }
 
 static QEMUMachine bamboo_machine = {
-    .name = "bamboo",
+    .name = "bamboo-0.13",
+    .alias = "bamboo",
     .desc = "bamboo",
     .init = bamboo_init,
+};
+
+static QEMUMachine bamboo_machine_v0_12 = {
+    .name = "bamboo-0.12",
+    .desc = "bamboo",
+    .init = bamboo_init,
+    .compat_props = (GlobalProperty[]) {
+        {
+            .driver   = "virtio-serial-pci",
+            .property = "max_ports",
+            .value    = stringify(1),
+        },{
+            .driver   = "virtio-serial-pci",
+            .property = "vectors",
+            .value    = stringify(0),
+        },
+        { /* end of list */ }
+    },
 };
 
 static void bamboo_machine_init(void)
 {
     qemu_register_machine(&bamboo_machine);
+    qemu_register_machine(&bamboo_machine_v0_12);
 }
 
 machine_init(bamboo_machine_init);

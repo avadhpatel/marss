@@ -9,7 +9,6 @@
 //
 
 #include <branchpred.h>
-#include <stats.h>
 
 
 template <int SIZE>
@@ -129,8 +128,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
 #endif
     if (base_t::full()) {
       if (logable(5)) ptl_logfile << "  Return address stack overflow: removing oldest entry to make space", endl;
-      //      stats.ooocore.branchpred.ras.overflows++;
-      per_ooo_core_stats_update(coreid, branchpred.ras.overflows++);
       base_t::pophead();
     }
 
@@ -145,8 +142,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     e.uuid = uuid;
     e.rip = rip;
 
-    //    stats.ooocore.branchpred.ras.pushes++;
-    per_ooo_core_stats_update(coreid, branchpred.ras.pushes++);
 #ifdef DEBUG_RAS
     if (logable(5)) { ptl_logfile << *this; }
 #endif
@@ -157,8 +152,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     if (logable(5)) ptl_logfile << "ReturnAddressStack::pop():", endl;
 #endif
     if (base_t::empty()) {
-      //      stats.ooocore.branchpred.ras.underflows++;
-      per_ooo_core_stats_update(coreid, branchpred.ras.underflows++);
       if (logable(5)) ptl_logfile << "  Return address stack underflow: returning entry with zero fields", endl;
       old.idx = -1;
       old.uuid = 0;
@@ -173,8 +166,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     if (logable(5)) { ptl_logfile << "  Old entry: ", old, endl; ptl_logfile << *this; }
 #endif
 
-    //    stats.ooocore.branchpred.ras.pops++;
-    per_ooo_core_stats_update(coreid, branchpred.ras.pops++);
 
     return e;
   }
@@ -221,8 +212,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     assert(e.index() == base_t::tail);
 #endif
 
-    //    stats.ooocore.branchpred.ras.annuls++;
-    per_ooo_core_stats_update(coreid, branchpred.ras.annuls++);
   }
 
   //
@@ -246,8 +235,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     assert(old.index() == base_t::tail);
 #endif
     push(old.uuid, old.rip, dummy);
-    //    stats.ooocore.branchpred.ras.annuls++;
-    per_ooo_core_stats_update(coreid, branchpred.ras.annuls++);
   }
 };
 
@@ -297,9 +284,9 @@ struct CombinedPredictor {
   // since x86 has variable length instructions.
   //
   W64 predict(PredictorUpdate& update, int type, W64 branchaddr, W64 target) {
-    update.cp1 = null;
-    update.cp2 = null;
-    update.cpmeta = null;
+    update.cp1 = NULL;
+    update.cp2 = NULL;
+    update.cpmeta = NULL;
     update.flags = type;
 
     if unlikely ((type & (BRANCH_HINT_COND|BRANCH_HINT_INDIRECT)) == 0) {
@@ -374,11 +361,11 @@ struct CombinedPredictor {
     //
     // Find BTB entry if it's a taken branch (don't allocate for non-taken)
     //
-    BTBEntry* pbtb = (taken) ? btb.select(branchaddr) : null;
+    BTBEntry* pbtb = (taken) ? btb.select(branchaddr) : NULL;
 
     //
-    // Now p is a possibly null pointer into the direction prediction table, 
-    // and pbtb is a possibly null pointer into the BTB (either to a 
+    // Now p is a possibly NULL pointer into the direction prediction table, 
+    // and pbtb is a possibly NULL pointer into the BTB (either to a 
     // matched-on entry or a victim which was LRU in its set)
     //
 
@@ -447,7 +434,7 @@ struct BranchPredictorImplementation: public CombinedPredictor<65536, 65536, 1, 
 
 void BranchPredictorInterface::destroy() {
   if (impl) delete impl;
-  impl = null;
+  impl = NULL;
 }
 
 void BranchPredictorInterface::reset() {

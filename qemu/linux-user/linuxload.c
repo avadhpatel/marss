@@ -96,18 +96,16 @@ static int prepare_binprm(struct linux_binprm *bprm)
 	}
     }
 
-    retval = lseek(bprm->fd, 0L, SEEK_SET);
-    if(retval >= 0) {
-        retval = read(bprm->fd, bprm->buf, 128);
-    }
-    if(retval < 0) {
+    retval = read(bprm->fd, bprm->buf, BPRM_BUF_SIZE);
+    if (retval < 0) {
 	perror("prepare_binprm");
 	exit(-1);
-	/* return(-errno); */
     }
-    else {
-	return(retval);
+    if (retval < BPRM_BUF_SIZE) {
+        /* Make sure the rest of the loader won't read garbage.  */
+        memset(bprm->buf + retval, 0, BPRM_BUF_SIZE - retval);
     }
+    return retval;
 }
 
 /* Construct the envp and argv tables on the target stack.  */
@@ -163,8 +161,7 @@ int loader_exec(const char * filename, char ** argv, char ** envp,
     int i;
 
     bprm->p = TARGET_PAGE_SIZE*MAX_ARG_PAGES-sizeof(unsigned int);
-    for (i=0 ; i<MAX_ARG_PAGES ; i++)       /* clear page-table */
-            bprm->page[i] = NULL;
+    memset(bprm->page, 0, sizeof(bprm->page));
     retval = open(filename, O_RDONLY);
     if (retval < 0)
         return retval;
@@ -177,18 +174,12 @@ int loader_exec(const char * filename, char ** argv, char ** envp,
 
     retval = prepare_binprm(bprm);
 
-    infop->host_argv = argv;
-
     if(retval>=0) {
         if (bprm->buf[0] == 0x7f
                 && bprm->buf[1] == 'E'
                 && bprm->buf[2] == 'L'
                 && bprm->buf[3] == 'F') {
-#ifndef TARGET_HAS_ELFLOAD32
-            retval = load_elf_binary(bprm,regs,infop);
-#else
-            retval = load_elf_binary_multi(bprm, regs, infop);
-#endif
+            retval = load_elf_binary(bprm, regs, infop);
 #if defined(TARGET_HAS_BFLT)
         } else if (bprm->buf[0] == 'b'
                 && bprm->buf[1] == 'F'

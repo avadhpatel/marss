@@ -20,6 +20,7 @@
 #define CPU_I386_H
 
 #include "config.h"
+#include "qemu-common.h"
 
 #ifdef TARGET_X86_64
 #define TARGET_LONG_BITS 64
@@ -250,16 +251,32 @@
 #define PG_ERROR_RSVD_MASK 0x08
 #define PG_ERROR_I_D_MASK  0x10
 
-#define MCG_CTL_P	(1UL<<8)   /* MCG_CAP register available */
+#define MCG_CTL_P	(1ULL<<8)   /* MCG_CAP register available */
+#define MCG_SER_P	(1ULL<<24) /* MCA recovery/new status bits */
 
-#define MCE_CAP_DEF	MCG_CTL_P
+#define MCE_CAP_DEF	(MCG_CTL_P|MCG_SER_P)
 #define MCE_BANKS_DEF	10
 
+#define MCG_STATUS_RIPV	(1ULL<<0)   /* restart ip valid */
+#define MCG_STATUS_EIPV	(1ULL<<1)   /* ip points to correct instruction */
 #define MCG_STATUS_MCIP	(1ULL<<2)   /* machine check in progress */
 
 #define MCI_STATUS_VAL	(1ULL<<63)  /* valid error */
 #define MCI_STATUS_OVER	(1ULL<<62)  /* previous errors lost */
 #define MCI_STATUS_UC	(1ULL<<61)  /* uncorrected error */
+#define MCI_STATUS_EN	(1ULL<<60)  /* error enabled */
+#define MCI_STATUS_MISCV (1ULL<<59) /* misc error reg. valid */
+#define MCI_STATUS_ADDRV (1ULL<<58) /* addr reg. valid */
+#define MCI_STATUS_PCC	(1ULL<<57)  /* processor context corrupt */
+#define MCI_STATUS_S	(1ULL<<56)  /* Signaled machine check */
+#define MCI_STATUS_AR	(1ULL<<55)  /* Action required */
+
+/* MISC register defines */
+#define MCM_ADDR_SEGOFF	0	/* segment offset */
+#define MCM_ADDR_LINEAR	1	/* linear address */
+#define MCM_ADDR_PHYS	2	/* physical address */
+#define MCM_ADDR_MEM	3	/* memory address */
+#define MCM_ADDR_GENERIC 7	/* generic */
 
 #define MSR_IA32_TSC                    0x10
 #define MSR_IA32_APICBASE               0x1b
@@ -404,6 +421,17 @@
 #define CPUID_EXT3_OSVW    (1 << 9)
 #define CPUID_EXT3_IBS     (1 << 10)
 #define CPUID_EXT3_SKINIT  (1 << 12)
+
+#define CPUID_SVM_NPT          (1 << 0)
+#define CPUID_SVM_LBRV         (1 << 1)
+#define CPUID_SVM_SVMLOCK      (1 << 2)
+#define CPUID_SVM_NRIPSAVE     (1 << 3)
+#define CPUID_SVM_TSCSCALE     (1 << 4)
+#define CPUID_SVM_VMCBCLEAN    (1 << 5)
+#define CPUID_SVM_FLUSHASID    (1 << 6)
+#define CPUID_SVM_DECODEASSIST (1 << 7)
+#define CPUID_SVM_PAUSEFILTER  (1 << 10)
+#define CPUID_SVM_PFTHRESHOLD  (1 << 12)
 
 #define CPUID_VENDOR_INTEL_1 0x756e6547 /* "Genu" */
 #define CPUID_VENDOR_INTEL_2 0x49656e69 /* "ineI" */
@@ -658,6 +686,7 @@ typedef struct CPUX86State {
 #endif
     uint64_t system_time_msr;
     uint64_t wall_clock_msr;
+    uint64_t async_pf_en_msr;
 
     uint64_t tsc;
 
@@ -674,6 +703,10 @@ typedef struct CPUX86State {
     }; /* break/watchpoints for dr[0..3] */
     uint32_t smbase;
     int old_exception;  /* exception in flight */
+
+    /* KVM states, automatically cleared on reset */
+    uint8_t nmi_injected;
+    uint8_t nmi_pending;
 
     CPU_COMMON
 
@@ -702,19 +735,19 @@ typedef struct CPUX86State {
     int32_t exception_injected;
     int32_t interrupt_injected;
     uint8_t soft_interrupt;
-    uint8_t nmi_injected;
-    uint8_t nmi_pending;
     uint8_t has_error_code;
     uint32_t sipi_vector;
+    uint32_t cpuid_kvm_features;
+    uint32_t cpuid_svm_features;
 
     /* in order to simplify APIC support, we leave this pointer to the
        user */
-    struct APICState *apic_state;
+    struct DeviceState *apic_state;
 
-    uint64 mcg_cap;
-    uint64 mcg_status;
-    uint64 mcg_ctl;
-    uint64 mce_banks[MCE_BANKS_DEF*4];
+    uint64_t mcg_cap;
+    uint64_t mcg_status;
+    uint64_t mcg_ctl;
+    uint64_t mce_banks[MCE_BANKS_DEF*4];
 
     uint64_t tsc_aux;
 
@@ -722,13 +755,20 @@ typedef struct CPUX86State {
     uint16_t fpus_vmstate;
     uint16_t fptag_vmstate;
     uint16_t fpregs_format_vmstate;
+
+    uint64_t xstate_bv;
+    XMMReg ymmh_regs[CPU_NB_REGS];
+
+    uint64_t xcr0;
 } CPUX86State;
 
 CPUX86State *cpu_x86_init(const char *cpu_model);
 int cpu_x86_exec(CPUX86State *s);
 void cpu_x86_close(CPUX86State *s);
-void x86_cpu_list (FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt,
-                                                 ...));
+void x86_cpu_list (FILE *f, fprintf_function cpu_fprintf, const char *optarg);
+void x86_cpudef_setup(void);
+int cpu_x86_support_mca_broadcast(CPUState *env);
+
 int cpu_get_pic_interrupt(CPUX86State *s);
 /* MSDOS compatibility mode FPU exception support */
 void cpu_set_ferr(CPUX86State *s);
@@ -792,6 +832,17 @@ static inline void cpu_x86_load_seg_cache(CPUX86State *env,
     }
 }
 
+static inline void cpu_x86_load_seg_cache_sipi(CPUX86State *env,
+                                               int sipi_vector)
+{
+    env->eip = 0;
+    cpu_x86_load_seg_cache(env, R_CS, sipi_vector << 8,
+                           sipi_vector << 12,
+                           env->segs[R_CS].limit,
+                           env->segs[R_CS].flags);
+    env->halted = 0;
+}
+
 int cpu_x86_get_descr_debug(CPUX86State *env, unsigned int selector,
                             target_ulong *base, unsigned int *limit,
                             unsigned int *flags);
@@ -824,14 +875,20 @@ void cpu_x86_frstor(CPUX86State *s, target_ulong ptr, int data32);
 int cpu_x86_signal_handler(int host_signum, void *pinfo,
                            void *puc);
 
+/* cpuid.c */
+void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
+                   uint32_t *eax, uint32_t *ebx,
+                   uint32_t *ecx, uint32_t *edx);
+int cpu_x86_register (CPUX86State *env, const char *cpu_model);
+void cpu_clear_apic_feature(CPUX86State *env);
+void host_cpuid(uint32_t function, uint32_t count,
+                uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
+
 /* helper.c */
 int cpu_x86_handle_mmu_fault(CPUX86State *env, target_ulong addr,
                              int is_write, int mmu_idx, int is_softmmu);
 #define cpu_handle_mmu_fault cpu_x86_handle_mmu_fault
 void cpu_x86_set_a20(CPUX86State *env, int a20_state);
-void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
-                   uint32_t *eax, uint32_t *ebx,
-                   uint32_t *ecx, uint32_t *edx);
 
 static inline int hw_breakpoint_enabled(unsigned long dr7, int index)
 {
@@ -858,14 +915,6 @@ void cpu_x86_update_cr0(CPUX86State *env, uint32_t new_cr0);
 void cpu_x86_update_cr3(CPUX86State *env, target_ulong new_cr3);
 void cpu_x86_update_cr4(CPUX86State *env, uint32_t new_cr4);
 
-/* hw/apic.c */
-void cpu_set_apic_base(CPUX86State *env, uint64_t val);
-uint64_t cpu_get_apic_base(CPUX86State *env);
-void cpu_set_apic_tpr(CPUX86State *env, uint8_t val);
-#ifndef NO_CPU_IO_DEFS
-uint8_t cpu_get_apic_tpr(CPUX86State *env);
-#endif
-
 /* hw/pc.c */
 void cpu_smm_update(CPUX86State *env);
 uint64_t cpu_get_tsc(CPUX86State *env);
@@ -876,13 +925,25 @@ uint64_t cpu_get_tsc(CPUX86State *env);
 
 #define TARGET_PAGE_BITS 12
 
+#ifdef TARGET_X86_64
+#define TARGET_PHYS_ADDR_SPACE_BITS 52
+/* ??? This is really 48 bits, sign-extended, but the only thing
+   accessible to userland with bit 48 set is the VSYSCALL, and that
+   is handled via other mechanisms.  */
+#define TARGET_VIRT_ADDR_SPACE_BITS 47
+#else
+#define TARGET_PHYS_ADDR_SPACE_BITS 36
+#define TARGET_VIRT_ADDR_SPACE_BITS 32
+#endif
+
 #define cpu_init cpu_x86_init
 #define cpu_exec cpu_x86_exec
 #define cpu_gen_code cpu_x86_gen_code
 #define cpu_signal_handler cpu_x86_signal_handler
-#define cpu_list x86_cpu_list
+#define cpu_list_id x86_cpu_list
+#define cpudef_setup	x86_cpudef_setup
 
-#define CPU_SAVE_VERSION 11
+#define CPU_SAVE_VERSION 12
 
 /* MMU modes definitions */
 #define MMU_MODE0_SUFFIX _kernel
@@ -919,14 +980,11 @@ static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
 #endif
 
 #include "cpu-all.h"
-#include "exec-all.h"
-
 #include "svm.h"
 
-static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
-{
-    env->eip = tb->pc - tb->cs_base;
-}
+#if !defined(CONFIG_USER_ONLY)
+#include "hw/apic.h"
+#endif
 
 static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
                                         target_ulong *cs_base, int *flags)
@@ -937,8 +995,6 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
         (env->eflags & (IOPL_MASK | TF_MASK | RF_MASK | VM_MASK));
 }
 
-void apic_init_reset(CPUState *env);
-void apic_sipi(CPUState *env);
 void do_cpu_init(CPUState *env);
 void do_cpu_sipi(CPUState *env);
 

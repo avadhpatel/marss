@@ -1,6 +1,9 @@
 /*
  * QEMU e1000 emulation
  *
+ * Software developer's manual:
+ * http://download.intel.com/design/network/manuals/8254x_GBe_SDM.pdf
+ *
  * Nir Peleg, Tutis Systems Ltd. for Qumranet Inc.
  * Copyright (c) 2008 Qumranet
  * Based on work done by:
@@ -27,12 +30,13 @@
 #include "net.h"
 #include "net/checksum.h"
 #include "loader.h"
+#include "sysemu.h"
 
 #include "e1000_hw.h"
 
-#define DEBUG
+#define E1000_DEBUG
 
-#ifdef DEBUG
+#ifdef E1000_DEBUG
 enum {
     DEBUG_GENERAL,	DEBUG_IO,	DEBUG_MMIO,	DEBUG_INTERRUPT,
     DEBUG_RX,		DEBUG_TX,	DEBUG_MDIC,	DEBUG_EEPROM,
@@ -52,6 +56,7 @@ static int debugflags = DBGBIT(TXERR) | DBGBIT(GENERAL);
 
 #define IOPORT_SIZE       0x40
 #define PNPMMIO_SIZE      0x20000
+#define MIN_BUF_SIZE      60 /* Min. octets in an ethernet frame sans FCS */
 
 /*
  * HW models:
@@ -259,19 +264,18 @@ set_eecd(E1000State *s, int index, uint32_t val)
 
     s->eecd_state.old_eecd = val & (E1000_EECD_SK | E1000_EECD_CS |
             E1000_EECD_DI|E1000_EECD_FWE_MASK|E1000_EECD_REQ);
+    if (!(E1000_EECD_CS & val))			// CS inactive; nothing to do
+	return;
+    if (E1000_EECD_CS & (val ^ oldval)) {	// CS rise edge; reset state
+	s->eecd_state.val_in = 0;
+	s->eecd_state.bitnum_in = 0;
+	s->eecd_state.bitnum_out = 0;
+	s->eecd_state.reading = 0;
+    }
     if (!(E1000_EECD_SK & (val ^ oldval)))	// no clock edge
         return;
     if (!(E1000_EECD_SK & val)) {		// falling edge
         s->eecd_state.bitnum_out++;
-        return;
-    }
-    if (!(val & E1000_EECD_CS)) {		// rising, no CS (EEPROM reset)
-        memset(&s->eecd_state, 0, sizeof s->eecd_state);
-        /*
-         * restore old_eecd's E1000_EECD_SK (known to be on)
-         * to avoid false detection of a clock edge
-         */
-        s->eecd_state.old_eecd = E1000_EECD_SK;
         return;
     }
     s->eecd_state.val_in <<= 1;
@@ -341,6 +345,15 @@ is_vlan_txd(uint32_t txd_lower)
     return ((txd_lower & E1000_TXD_CMD_VLE) != 0);
 }
 
+/* FCS aka Ethernet CRC-32. We don't get it from backends and can't
+ * fill it in, just pad descriptor length by 4 bytes unless guest
+ * told us to strip it off the packet. */
+static inline int
+fcs_len(E1000State *s)
+{
+    return (s->mac_reg[RCTL] & E1000_RCTL_SECRC) ? 0 : 4;
+}
+
 static void
 xmit_seg(E1000State *s)
 {
@@ -372,9 +385,12 @@ xmit_seg(E1000State *s)
         } else	// UDP
             cpu_to_be16wu((uint16_t *)(tp->data+css+4), len);
         if (tp->sum_needed & E1000_TXD_POPTS_TXSM) {
+            unsigned int phsum;
             // add pseudo-header length before checksum calculation
             sp = (uint16_t *)(tp->data + tp->tucso);
-            cpu_to_be16wu(sp, be16_to_cpup(sp) + len);
+            phsum = be16_to_cpup(sp) + len;
+            phsum = (phsum >> 16) + (phsum & 0xffff);
+            cpu_to_be16wu(sp, phsum);
         }
         tp->tso_frames++;
     }
@@ -432,9 +448,10 @@ process_tx_desc(E1000State *s, struct e1000_tx_desc *dp)
         // data descriptor
         tp->sum_needed = le32_to_cpu(dp->upper.data) >> 8;
         tp->cptse = ( txd_lower & E1000_TXD_CMD_TSE ) ? 1 : 0;
-    } else
+    } else {
         // legacy descriptor
         tp->cptse = 0;
+    }
 
     if (vlan_enabled(s) && is_vlan_txd(txd_lower) &&
         (tp->cptse || txd_lower & E1000_TXD_CMD_EOP)) {
@@ -541,8 +558,8 @@ start_xmit(E1000State *s)
 static int
 receive_filter(E1000State *s, const uint8_t *buf, int size)
 {
-    static uint8_t bcast[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-    static int mta_shift[] = {4, 3, 2, 0};
+    static const uint8_t bcast[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    static const int mta_shift[] = {4, 3, 2, 0};
     uint32_t f, rctl = s->mac_reg[RCTL], ra[2], *rp;
 
     if (is_vlan_packet(s, buf) && vlan_rx_filter_enabled(s)) {
@@ -624,9 +641,18 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
     uint32_t rdh_start;
     uint16_t vlan_special = 0;
     uint8_t vlan_status = 0, vlan_offset = 0;
+    uint8_t min_buf[MIN_BUF_SIZE];
 
     if (!(s->mac_reg[RCTL] & E1000_RCTL_EN))
         return -1;
+
+    /* Pad to minimum Ethernet frame length */
+    if (size < sizeof(min_buf)) {
+        memcpy(min_buf, buf, size);
+        memset(&min_buf[size], 0, sizeof(min_buf) - size);
+        buf = min_buf;
+        size = sizeof(min_buf);
+    }
 
     if (size > s->rxbuf_size) {
         DBGOUT(RX, "packet too large for buffers (%lu > %d)\n",
@@ -639,14 +665,13 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
 
     if (vlan_enabled(s) && is_vlan_packet(s, buf)) {
         vlan_special = cpu_to_le16(be16_to_cpup((uint16_t *)(buf + 14)));
-        memmove((void *)(buf + 4), buf, 12);
+        memmove((uint8_t *)buf + 4, buf, 12);
         vlan_status = E1000_RXD_STAT_VP;
         vlan_offset = 4;
         size -= 4;
     }
 
     rdh_start = s->mac_reg[RDH];
-    size += 4; // for the header
     do {
         if (s->mac_reg[RDH] == s->mac_reg[RDT] && s->check_rxov) {
             set_ics(s, 0, E1000_ICS_RXO);
@@ -660,10 +685,11 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
         if (desc.buffer_addr) {
             cpu_physical_memory_write(le64_to_cpu(desc.buffer_addr),
                                       (void *)(buf + vlan_offset), size);
-            desc.length = cpu_to_le16(size);
+            desc.length = cpu_to_le16(size + fcs_len(s));
             desc.status |= E1000_RXD_STAT_EOP|E1000_RXD_STAT_IXSM;
-        } else // as per intel docs; skip descriptors with null buf addr
+        } else { // as per intel docs; skip descriptors with null buf addr
             DBGOUT(RX, "Null RX descriptor!!\n");
+        }
         cpu_physical_memory_write(base, (void *)&desc, sizeof(desc));
 
         if (++s->mac_reg[RDH] * sizeof(desc) >= s->mac_reg[RDLEN])
@@ -680,9 +706,14 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
 
     s->mac_reg[GPRC]++;
     s->mac_reg[TPR]++;
-    n = s->mac_reg[TORL];
-    if ((s->mac_reg[TORL] += size) < n)
+    /* TOR - Total Octets Received:
+     * This register includes bytes received in a packet from the <Destination
+     * Address> field through the <CRC> field, inclusively.
+     */
+    n = s->mac_reg[TORL] + size + /* Always include FCS length. */ 4;
+    if (n < s->mac_reg[TORL])
         s->mac_reg[TORH]++;
+    s->mac_reg[TORL] = n;
 
     n = E1000_ICS_RXT0;
     if ((rdt = s->mac_reg[RDT]) < s->mac_reg[RDH])
@@ -827,16 +858,14 @@ e1000_mmio_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
     E1000State *s = opaque;
     unsigned int index = (addr & 0x1ffff) >> 2;
 
-#ifdef TARGET_WORDS_BIGENDIAN
-    val = bswap32(val);
-#endif
-    if (index < NWRITEOPS && macreg_writeops[index])
+    if (index < NWRITEOPS && macreg_writeops[index]) {
         macreg_writeops[index](s, index, val);
-    else if (index < NREADOPS && macreg_readops[index])
+    } else if (index < NREADOPS && macreg_readops[index]) {
         DBGOUT(MMIO, "e1000_mmio_writel RO %x: 0x%04x\n", index<<2, val);
-    else
+    } else {
         DBGOUT(UNKNOWN, "MMIO unknown write addr=0x%08x,val=0x%08x\n",
                index<<2, val);
+    }
 }
 
 static void
@@ -863,11 +892,7 @@ e1000_mmio_readl(void *opaque, target_phys_addr_t addr)
 
     if (index < NREADOPS && macreg_readops[index])
     {
-        uint32_t val = macreg_readops[index](s, index);
-#ifdef TARGET_WORDS_BIGENDIAN
-        val = bswap32(val);
-#endif
-        return val;
+        return macreg_readops[index](s, index);
     }
     DBGOUT(UNKNOWN, "MMIO unknown read addr=0x%08x\n", index<<2);
     return 0;
@@ -1089,20 +1114,23 @@ static int pci_e1000_init(PCIDevice *pci_dev)
 
     pci_config_set_vendor_id(pci_conf, PCI_VENDOR_ID_INTEL);
     pci_config_set_device_id(pci_conf, E1000_DEVID);
-    *(uint16_t *)(pci_conf+0x06) = cpu_to_le16(0x0010);
-    pci_conf[0x08] = 0x03;
+    /* TODO: we have no capabilities, so why is this bit set? */
+    pci_set_word(pci_conf + PCI_STATUS, PCI_STATUS_CAP_LIST);
+    pci_conf[PCI_REVISION_ID] = 0x03;
     pci_config_set_class(pci_conf, PCI_CLASS_NETWORK_ETHERNET);
-    pci_conf[0x0c] = 0x10;
+    /* TODO: RST# value should be 0, PCI spec 6.2.4 */
+    pci_conf[PCI_CACHE_LINE_SIZE] = 0x10;
 
-    pci_conf[0x3d] = 1; // interrupt pin 0
+    /* TODO: RST# value should be 0 if programmable, PCI spec 6.2.4 */
+    pci_conf[PCI_INTERRUPT_PIN] = 1; // interrupt pin 0
 
     d->mmio_index = cpu_register_io_memory(e1000_mmio_read,
-            e1000_mmio_write, d);
+            e1000_mmio_write, d, DEVICE_LITTLE_ENDIAN);
 
-    pci_register_bar((PCIDevice *)d, 0, PNPMMIO_SIZE,
+    pci_register_bar(&d->dev, 0, PNPMMIO_SIZE,
                            PCI_BASE_ADDRESS_SPACE_MEMORY, e1000_mmio_map);
 
-    pci_register_bar((PCIDevice *)d, 1, IOPORT_SIZE,
+    pci_register_bar(&d->dev, 1, IOPORT_SIZE,
                            PCI_BASE_ADDRESS_SPACE_IO, ioport_map);
 
     memmove(d->eeprom_data, e1000_eeprom_template,
@@ -1120,6 +1148,9 @@ static int pci_e1000_init(PCIDevice *pci_dev)
                           d->dev.qdev.info->name, d->dev.qdev.id, d);
 
     qemu_format_nic_info_str(&d->nic->nc, macaddr);
+
+    add_boot_device_path(d->conf.bootindex, &pci_dev->qdev, "/ethernet-phy@0");
+
     return 0;
 }
 

@@ -7,6 +7,22 @@
 
 #include <config-parser.h>
 
+/* Use to remove escape char passed into configuration string */
+static void unescape_string(stringbuf& str)
+{
+    stringbuf tmp(str.size());
+    int j = 0;
+
+    foreach(i, str.size()) {
+        if (str.buf[i] == '\\') continue;
+        tmp.buf[j] = str.buf[i];
+        j++;
+    }
+    tmp.buf[j] = '\0';
+
+    str = tmp;
+}
+
 ostream& ConfigurationParserBase::printusage(const void* baseptr, ostream& os) const {
   os << "Options are:", endl;
   ConfigurationOption* option = options;
@@ -18,7 +34,7 @@ ostream& ConfigurationParserBase::printusage(const void* baseptr, ostream& os) c
 
   option = options;
   while (option) {
-    void* variable = (baseptr) ? ((void*)((Waddr)baseptr + option->offset)) : null;
+    void* variable = (baseptr) ? ((void*)((Waddr)baseptr + option->offset)) : NULL;
     if (option->type == OPTION_TYPE_SECTION) {
       os << option->description, ":", endl;
       option = option->next;
@@ -82,7 +98,7 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
           case OPTION_TYPE_NONE:
             break;
           case OPTION_TYPE_W64: {
-            char* p = (i < argc) ? argv[i] : null;
+            char* p = (i < argc) ? argv[i] : NULL;
             int len = (p) ? strlen(p) : 0;
             if (!len) {
               cerr << "Warning: option ", argv[i-1], " had no argument; ignoring", endl;
@@ -181,8 +197,10 @@ int ConfigurationParserBase::parse(void* baseptr, char* argstr) {
 			for (argv_idx = i; argv_idx < argv.length; argv_idx++) {
 				quoted_string << argv[argv_idx] << " ";
 
+				if (argv[argv_idx][strlen(argv[argv_idx])-1] == '"' &&
+                        argv[argv_idx][strlen(argv[argv_idx])-2] != '\\') {
 
-				if (argv[argv_idx][strlen(argv[argv_idx])-1] == '"') {
+                    unescape_string(quoted_string);
 
 					// copy the stringbuf removing the quotes and space at the end
 					// FIXME: this probably leaks a very tiny amount of memory
@@ -220,7 +238,7 @@ ostream& ConfigurationParserBase::print(const void* baseptr, ostream& os) const 
 
   ConfigurationOption* option = options;
   while (option) {
-    void* variable = (baseptr) ? ((void*)((Waddr)baseptr + option->offset)) : null;
+    void* variable = (baseptr) ? ((void*)((Waddr)baseptr + option->offset)) : NULL;
 
     if (option->type == OPTION_TYPE_SECTION) {
       option = option->next;
@@ -329,7 +347,7 @@ void expand_command_list(dynarray<char*>& list, char* args, int depth) {
 void free_command_list(dynarray<char*>& list) {
   foreach (i, list.length) {
     delete list[i];
-    list[i] = null;
+    list[i] = NULL;
   }
   list.resize(0);
 }

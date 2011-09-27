@@ -1,4 +1,4 @@
-# SConscript for cache subdirectory
+# SConscript for lib subdirectory
 
 # Import envrionment
 Import('env')
@@ -8,11 +8,20 @@ src_files = Glob('*.cpp')
 
 objs = env.Object(src_files)
 
+yaml_objs = SConscript('yaml/SConscript')
 bson_objs = SConscript('bson/SConscript')
+
+if env['tests'] == True:
+    gtest_libs = SConscript('gtest/SConscript')
+else:
+    gtest_libs = []
 
 # specific list of objects for dstbuild
 dst_objs = env.Object(Split("superstl.cpp statelist.cpp"))
 
-ret_objs = [objs + bson_objs, dst_objs]
+ret_objs = [objs + bson_objs + yaml_objs, dst_objs]
+
+# Add gtest library
+ret_objs[0] += gtest_libs
 
 Return('ret_objs')

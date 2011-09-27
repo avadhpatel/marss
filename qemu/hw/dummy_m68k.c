@@ -39,12 +39,12 @@ static void dummy_m68k_init(ram_addr_t ram_size,
 
     /* RAM at address zero */
     cpu_register_physical_memory(0, ram_size,
-        qemu_ram_alloc(ram_size) | IO_MEM_RAM);
+        qemu_ram_alloc(NULL, "dummy_m68k.ram", ram_size) | IO_MEM_RAM);
 
     /* Load kernel.  */
     if (kernel_filename) {
-        kernel_size = load_elf(kernel_filename, 0, &elf_entry, NULL, NULL,
-                               1, ELF_MACHINE, 0);
+        kernel_size = load_elf(kernel_filename, NULL, NULL, &elf_entry,
+                               NULL, NULL, 1, ELF_MACHINE, 0);
         entry = elf_entry;
         if (kernel_size < 0) {
             kernel_size = load_uimage(kernel_filename, &entry, NULL, NULL);

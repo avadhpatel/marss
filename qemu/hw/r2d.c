@@ -23,25 +23,33 @@
  * THE SOFTWARE.
  */
 
+#include "sysbus.h"
 #include "hw.h"
 #include "sh.h"
 #include "devices.h"
 #include "sysemu.h"
 #include "boards.h"
 #include "pci.h"
-#include "sh_pci.h"
 #include "net.h"
 #include "sh7750_regs.h"
 #include "ide.h"
 #include "loader.h"
+#include "usb.h"
+#include "flash.h"
+#include "blockdev.h"
+
+#define FLASH_BASE 0x00000000
+#define FLASH_SIZE 0x02000000
 
 #define SDRAM_BASE 0x0c000000 /* Physical location of SDRAM: Area 3 */
 #define SDRAM_SIZE 0x04000000
 
 #define SM501_VRAM_SIZE 0x800000
 
+#define BOOT_PARAMS_OFFSET 0x0010000
 /* CONFIG_BOOT_LINK_OFFSET of Linux kernel */
-#define LINUX_LOAD_OFFSET 0x800000
+#define LINUX_LOAD_OFFSET  0x0800000
+#define INITRD_LOAD_OFFSET 0x1800000
 
 #define PA_IRLMSK	0x00
 #define PA_POWOFF	0x30
@@ -66,7 +74,6 @@ typedef struct {
     uint16_t keyctlclr;
     uint16_t pad0;
     uint16_t pad1;
-    uint16_t powoff;
     uint16_t verreg;
     uint16_t inport;
     uint16_t outport;
@@ -128,7 +135,7 @@ static uint32_t r2d_fpga_read(void *opaque, target_phys_addr_t addr)
     case PA_OUTPORT:
 	return s->outport;
     case PA_POWOFF:
-	return s->powoff;
+	return 0x00;
     case PA_VERREG:
 	return 0x10;
     }
@@ -150,8 +157,10 @@ r2d_fpga_write(void *opaque, target_phys_addr_t addr, uint32_t value)
 	s->outport = value;
 	break;
     case PA_POWOFF:
-	s->powoff = value;
-	break;
+        if (value & 1) {
+            qemu_system_shutdown_request();
+        }
+        break;
     case PA_VERREG:
 	/* Discard writes */
 	break;
@@ -180,23 +189,39 @@ static qemu_irq *r2d_fpga_init(target_phys_addr_t base, qemu_irq irl)
     s->irl = irl;
 
     iomemtype = cpu_register_io_memory(r2d_fpga_readfn,
-				       r2d_fpga_writefn, s);
+				       r2d_fpga_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x40, iomemtype);
     return qemu_allocate_irqs(r2d_fpga_irq_set, s, NR_IRQS);
 }
 
-static void r2d_pci_set_irq(void *opaque, int n, int l)
-{
-    qemu_irq *p = opaque;
+typedef struct ResetData {
+    CPUState *env;
+    uint32_t vector;
+} ResetData;
 
-    qemu_set_irq(p[n], l);
+static void main_cpu_reset(void *opaque)
+{
+    ResetData *s = (ResetData *)opaque;
+    CPUState *env = s->env;
+
+    cpu_reset(env);
+    env->pc = s->vector;
 }
 
-static int r2d_pci_map_irq(PCIDevice *d, int irq_num)
+static struct __attribute__((__packed__))
 {
-    const int intx[] = { PCI_INTA, PCI_INTB, PCI_INTC, PCI_INTD };
-    return intx[d->devfn >> 3];
-}
+    int mount_root_rdonly;
+    int ramdisk_flags;
+    int orig_root_dev;
+    int loader_type;
+    int initrd_start;
+    int initrd_size;
+
+    char pad[232];
+
+    char kernel_cmdline[256];
+} boot_params;
 
 static void r2d_init(ram_addr_t ram_size,
               const char *boot_device,
@@ -204,10 +229,10 @@ static void r2d_init(ram_addr_t ram_size,
 	      const char *initrd_filename, const char *cpu_model)
 {
     CPUState *env;
+    ResetData *reset_info;
     struct SH7750State *s;
     ram_addr_t sdram_addr;
     qemu_irq *irq;
-    PCIBus *pci;
     DriveInfo *dinfo;
     int i;
 
@@ -219,49 +244,87 @@ static void r2d_init(ram_addr_t ram_size,
         fprintf(stderr, "Unable to find CPU definition\n");
         exit(1);
     }
+    reset_info = qemu_mallocz(sizeof(ResetData));
+    reset_info->env = env;
+    reset_info->vector = env->pc;
+    qemu_register_reset(main_cpu_reset, reset_info);
 
     /* Allocate memory space */
-    sdram_addr = qemu_ram_alloc(SDRAM_SIZE);
+    sdram_addr = qemu_ram_alloc(NULL, "r2d.sdram", SDRAM_SIZE);
     cpu_register_physical_memory(SDRAM_BASE, SDRAM_SIZE, sdram_addr);
     /* Register peripherals */
     s = sh7750_init(env);
     irq = r2d_fpga_init(0x04000000, sh7750_irl(s));
-    pci = sh_pci_register_bus(r2d_pci_set_irq, r2d_pci_map_irq, irq, 0, 4);
+    sysbus_create_varargs("sh_pci", 0x1e200000, irq[PCI_INTA], irq[PCI_INTB],
+                          irq[PCI_INTC], irq[PCI_INTD], NULL);
 
     sm501_init(0x10000000, SM501_VRAM_SIZE, irq[SM501], serial_hds[2]);
 
     /* onboard CF (True IDE mode, Master only). */
-    if ((dinfo = drive_get(IF_IDE, 0, 0)) != NULL)
-	mmio_ide_init(0x14001000, 0x1400080c, irq[CF_IDE], 1,
-		      dinfo, NULL);
+    dinfo = drive_get(IF_IDE, 0, 0);
+    mmio_ide_init(0x14001000, 0x1400080c, irq[CF_IDE], 1,
+                  dinfo, NULL);
+
+    /* onboard flash memory */
+    dinfo = drive_get(IF_PFLASH, 0, 0);
+    pflash_cfi02_register(0x0, qemu_ram_alloc(NULL, "r2d.flash", FLASH_SIZE),
+                          dinfo ? dinfo->bdrv : NULL, (16 * 1024),
+                          FLASH_SIZE >> 16,
+                          1, 4, 0x0000, 0x0000, 0x0000, 0x0000,
+                          0x555, 0x2aa, 0);
 
     /* NIC: rtl8139 on-board, and 2 slots. */
     for (i = 0; i < nb_nics; i++)
         pci_nic_init_nofail(&nd_table[i], "rtl8139", i==0 ? "2" : NULL);
 
+    /* USB keyboard */
+    usbdevice_create("keyboard");
+
     /* Todo: register on board registers */
+    memset(&boot_params, 0, sizeof(boot_params));
+
     if (kernel_filename) {
-      int kernel_size;
-      /* initialization which should be done by firmware */
-      stl_phys(SH7750_BCR1, 1<<3); /* cs3 SDRAM */
-      stw_phys(SH7750_BCR2, 3<<(3*2)); /* cs3 32bit */
+        int kernel_size;
 
-      if (kernel_cmdline) {
-          kernel_size = load_image_targphys(kernel_filename,
-				   SDRAM_BASE + LINUX_LOAD_OFFSET,
-				   SDRAM_SIZE - LINUX_LOAD_OFFSET);
-          env->pc = (SDRAM_BASE + LINUX_LOAD_OFFSET) | 0xa0000000;
-          pstrcpy_targphys("cmdline", SDRAM_BASE + 0x10100, 256, kernel_cmdline);
-      } else {
-          kernel_size = load_image_targphys(kernel_filename, SDRAM_BASE, SDRAM_SIZE);
-          env->pc = SDRAM_BASE | 0xa0000000; /* Start from P2 area */
-      }
+        kernel_size = load_image_targphys(kernel_filename,
+                                          SDRAM_BASE + LINUX_LOAD_OFFSET,
+                                          INITRD_LOAD_OFFSET - LINUX_LOAD_OFFSET);
+        if (kernel_size < 0) {
+          fprintf(stderr, "qemu: could not load kernel '%s'\n", kernel_filename);
+          exit(1);
+        }
 
-      if (kernel_size < 0) {
-        fprintf(stderr, "qemu: could not load kernel '%s'\n", kernel_filename);
-        exit(1);
-      }
+        /* initialization which should be done by firmware */
+        stl_phys(SH7750_BCR1, 1<<3); /* cs3 SDRAM */
+        stw_phys(SH7750_BCR2, 3<<(3*2)); /* cs3 32bit */
+        reset_info->vector = (SDRAM_BASE + LINUX_LOAD_OFFSET) | 0xa0000000; /* Start from P2 area */
     }
+
+    if (initrd_filename) {
+        int initrd_size;
+
+        initrd_size = load_image_targphys(initrd_filename,
+                                          SDRAM_BASE + INITRD_LOAD_OFFSET,
+                                          SDRAM_SIZE - INITRD_LOAD_OFFSET);
+
+        if (initrd_size < 0) {
+          fprintf(stderr, "qemu: could not load initrd '%s'\n", initrd_filename);
+          exit(1);
+        }
+
+        /* initialization which should be done by firmware */
+        boot_params.loader_type = 1;
+        boot_params.initrd_start = INITRD_LOAD_OFFSET;
+        boot_params.initrd_size = initrd_size;
+    }
+
+    if (kernel_cmdline) {
+        strncpy(boot_params.kernel_cmdline, kernel_cmdline,
+                sizeof(boot_params.kernel_cmdline));
+    }
+
+    rom_add_blob_fixed("boot_params", &boot_params, sizeof(boot_params),
+                       SDRAM_BASE + BOOT_PARAMS_OFFSET);
 }
 
 static QEMUMachine r2d_machine = {

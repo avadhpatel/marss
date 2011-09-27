@@ -1,10 +1,54 @@
 # SConscript for cache subdirectory
 
+import os
+
 # Import envrionment
 Import('env')
+
+################################
+# Core Builder Support functions
+################################
+
+
+def core_builder_func(env, base_name, src_files):
+    '''Build user defined cores from configuration'''
+    config = env['config']
+    core_objs = []
+
+    for core_name,core_conf in config['core'].items():
+        if core_conf['base'] == base_name:
+            env['_cur_build_conf'] = core_conf
+            header_name = "%s_%s.h" % (base_name, core_name)
+            header = env.Command(header_name, env['config_file'],
+                    Action("%s -c $SOURCE -t core -n %s -o $TARGET" %
+                    (env['config_gen'], core_name),
+                    cmdstr="$CREATECOMSTR"))[0]
+
+            for src_file in src_files:
+                obj_name = "%s_%s.o" % (os.path.splitext(str(src_file))[0],
+                        core_name)
+                obj = env.Object(obj_name, src_file,
+                        CXXFLAGS = "$CXXFLAGS -include %s" %
+                        header.rfile().abspath)
+                env.Depends(obj, header)
+                core_objs.append(obj)
+
+    return core_objs
+
+env.AddMethod(core_builder_func, "core_builder")
+env['core_builder'] = core_builder_func
 
 # Now get list of .cpp files
 src_files = Glob('*.cpp')
 
+core_model_dirs = ['ooo-core', 'atom-core']
+
+core_objs = []
+for core_model in core_model_dirs:
+    core_objs += SConscript('%s/SConscript' % core_model)
+
 objs = env.Object(src_files)
+
+objs += core_objs
+
 Return('objs')

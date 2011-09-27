@@ -12,6 +12,7 @@
 extern "C" {
 #include <helper.h>
 #include <cpu.h>
+#include <ioport.h>
 }
 
 template <typename T> bool assist_div(Context& ctx) {
@@ -585,7 +586,8 @@ W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	}
 	W64 stable_flags = (ra & mask);
 
-	W64 flagmask = (setflags_to_x86_flags[7]);
+	//W64 flagmask = (setflags_to_x86_flags[7]);
+	W64 flagmask = (setflags_to_x86_flags[7]) | IF_MASK ;
 	flags = (W16)(ra & flagmask);
 
     ctx.setup_qemu_switch();
@@ -701,15 +703,7 @@ bool assist_write_cr2(Context& ctx) {
   return true;
 }
 
-#define STORE_CR3_VALUES
-#ifdef STORE_CR3_VALUES
-static ofstream cr3_values("cr3_values.txt");
-#endif
-
 bool assist_write_cr3(Context& ctx) {
-#ifdef STORE_CR3_VALUES
-	cr3_values << "sim_cycle: ", sim_cycle, " cr3: ", (void*)ctx.reg_ar1, endl, flush;
-#endif
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
   ctx.eip = ctx.reg_nextrip;
@@ -861,7 +855,7 @@ bool assist_ioport_in(Context& ctx) {
 W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
-	W64 port = ra;
+	W32 port = ra & IOPORTS_MASK;
 	W64 sizeshift = rb;
 	W64 old_eax = rc;
 
@@ -914,12 +908,13 @@ bool assist_ioport_out(Context& ctx) {
 W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
-	W64 port = ra;
+	W32 port = ra & IOPORTS_MASK;
 	W64 sizeshift = rb;
 	W64 value = x86_merge(0, rc, sizeshift);
 
 	setup_qemu_switch_except_ctx(ctx);
 	ctx.setup_qemu_switch();
+    assert(port < MAX_IOPORTS);
 	if(sizeshift == 0) {
 		helper_outb(port, value);
 	} else if(sizeshift == 1) {
@@ -1390,7 +1385,7 @@ bool TraceDecoder::decode_complex() {
         It is assumed that rcx is almost never zero, so a check can be inserted at the top of the loop:
 
         # set checkcond MSR to CONST_LOOP_ITER_IS_ZERO and CHECK_RESULT to TARGET_AFTER_LOOP
-        chk.nz  null = rcx,TARGET_AFTER_LOOP,CONST_LOOP_ITER_IS_ZERO
+        chk.nz  NULL = rcx,TARGET_AFTER_LOOP,CONST_LOOP_ITER_IS_ZERO
         chk.nz  rd = ra,imm8,imm8
 
         In response to a failed check of this type, an EXCEPTION_SkipBlock exception is raised and a rollback will
@@ -1478,7 +1473,7 @@ bool TraceDecoder::decode_complex() {
       }
       case 0xaa: case 0xab: {
         // stos
-        if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
+        //if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
         this << TransOp(OP_st,   REG_mem,   REG_rdi,    REG_imm,  REG_rax, sizeshift, 0);
         this << TransOp(OP_add,  REG_rdi,   REG_rdi,    REG_imm,   REG_zero, addrsizeshift, increment);
         if (rep) {
@@ -1496,7 +1491,7 @@ bool TraceDecoder::decode_complex() {
       }
       case 0xac ... 0xad: {
         // lods
-        if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
+        //if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
 
         if (sizeshift >= 2) {
           this << TransOp(OP_ld,   REG_rax,   REG_rsi,    REG_imm,  REG_zero, sizeshift, 0);
@@ -2083,7 +2078,10 @@ bool TraceDecoder::decode_complex() {
 				microcode_assist(ASSIST_VERR, ripstart, rip);
 			else
 				microcode_assist(ASSIST_VERW, ripstart, rip);
+            break;
 		}
+        default:
+            goto invalid_opcode;
 	}
 	end_of_block = 1;
 	break;

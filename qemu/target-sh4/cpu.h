@@ -20,6 +20,7 @@
 #define _CPU_SH4_H
 
 #include "config.h"
+#include "qemu-common.h"
 
 #define TARGET_LONG_BITS 32
 #define TARGET_HAS_ICE 1
@@ -44,6 +45,9 @@
 
 #define TARGET_PAGE_BITS 12	/* 4k XXXXX */
 
+#define TARGET_PHYS_ADDR_SPACE_BITS 32
+#define TARGET_VIRT_ADDR_SPACE_BITS 32
+
 #define SR_MD (1 << 30)
 #define SR_RB (1 << 29)
 #define SR_BL (1 << 28)
@@ -57,10 +61,37 @@
 #define SR_S  (1 << 1)
 #define SR_T  (1 << 0)
 
-#define FPSCR_FR (1 << 21)
-#define FPSCR_SZ (1 << 20)
-#define FPSCR_PR (1 << 19)
-#define FPSCR_DN (1 << 18)
+#define FPSCR_MASK             (0x003fffff)
+#define FPSCR_FR               (1 << 21)
+#define FPSCR_SZ               (1 << 20)
+#define FPSCR_PR               (1 << 19)
+#define FPSCR_DN               (1 << 18)
+#define FPSCR_CAUSE_MASK       (0x3f << 12)
+#define FPSCR_CAUSE_SHIFT      (12)
+#define FPSCR_CAUSE_E          (1 << 17)
+#define FPSCR_CAUSE_V          (1 << 16)
+#define FPSCR_CAUSE_Z          (1 << 15)
+#define FPSCR_CAUSE_O          (1 << 14)
+#define FPSCR_CAUSE_U          (1 << 13)
+#define FPSCR_CAUSE_I          (1 << 12)
+#define FPSCR_ENABLE_MASK      (0x1f << 7)
+#define FPSCR_ENABLE_SHIFT     (7)
+#define FPSCR_ENABLE_V         (1 << 11)
+#define FPSCR_ENABLE_Z         (1 << 10)
+#define FPSCR_ENABLE_O         (1 << 9)
+#define FPSCR_ENABLE_U         (1 << 8)
+#define FPSCR_ENABLE_I         (1 << 7)
+#define FPSCR_FLAG_MASK        (0x1f << 2)
+#define FPSCR_FLAG_SHIFT       (2)
+#define FPSCR_FLAG_V           (1 << 6)
+#define FPSCR_FLAG_Z           (1 << 5)
+#define FPSCR_FLAG_O           (1 << 4)
+#define FPSCR_FLAG_U           (1 << 3)
+#define FPSCR_FLAG_I           (1 << 2)
+#define FPSCR_RM_MASK          (0x03 << 0)
+#define FPSCR_RM_NEAREST       (0 << 0)
+#define FPSCR_RM_ZERO          (1 << 0)
+
 #define DELAY_SLOT             (1 << 0)
 #define DELAY_SLOT_CONDITIONAL (1 << 1)
 #define DELAY_SLOT_TRUE        (1 << 2)
@@ -72,21 +103,20 @@
  * The use of DELAY_SLOT_TRUE flag makes us accept such SR_T modification.
  */
 
-/* XXXXX The structure could be made more compact */
 typedef struct tlb_t {
-    uint8_t asid;		/* address space identifier */
     uint32_t vpn;		/* virtual page number */
-    uint8_t v;			/* validity */
     uint32_t ppn;		/* physical page number */
-    uint8_t sz;			/* page size */
-    uint32_t size;		/* cached page size in bytes */
-    uint8_t sh;			/* share status */
-    uint8_t c;			/* cacheability */
-    uint8_t pr;			/* protection key */
-    uint8_t d;			/* dirty */
-    uint8_t wt;			/* write through */
-    uint8_t sa;			/* space attribute (PCMCIA) */
-    uint8_t tc;			/* timing control */
+    uint32_t size;		/* mapped page size in bytes */
+    uint8_t asid;		/* address space identifier */
+    uint8_t v:1;		/* validity */
+    uint8_t sz:2;		/* page size */
+    uint8_t sh:1;		/* share status */
+    uint8_t c:1;		/* cacheability */
+    uint8_t pr:2;		/* protection key */
+    uint8_t d:1;		/* dirty */
+    uint8_t wt:1;		/* write through */
+    uint8_t sa:3;		/* space attribute (PCMCIA) */
+    uint8_t tc:1;		/* timing control */
 } tlb_t;
 
 #define UTLB_SIZE 64
@@ -106,8 +136,6 @@ typedef struct memory_content {
 } memory_content;
 
 typedef struct CPUSH4State {
-    int id;			/* CPU model */
-
     uint32_t flags;		/* general execution flags */
     uint32_t gregs[24];		/* general registers */
     float32 fregs[32];		/* floating point registers */
@@ -143,14 +171,18 @@ typedef struct CPUSH4State {
     uint32_t expevt;		/* exception event register */
     uint32_t intevt;		/* interrupt event register */
 
+    tlb_t itlb[ITLB_SIZE];	/* instruction translation table */
+    tlb_t utlb[UTLB_SIZE];	/* unified translation table */
+
+    uint32_t ldst;
+
+    CPU_COMMON
+
+    int id;			/* CPU model */
     uint32_t pvr;		/* Processor Version Register */
     uint32_t prr;		/* Processor Revision Register */
     uint32_t cvr;		/* Cache Version Register */
 
-    uint32_t ldst;
-
-     CPU_COMMON tlb_t utlb[UTLB_SIZE];	/* unified translation table */
-    tlb_t itlb[ITLB_SIZE];	/* instruction translation table */
     void *intc_handle;
     int intr_at_halt;		/* SR_BL ignored during sleep */
     memory_content *movcal_backup;
@@ -166,9 +198,26 @@ int cpu_sh4_handle_mmu_fault(CPUSH4State * env, target_ulong address, int rw,
 #define cpu_handle_mmu_fault cpu_sh4_handle_mmu_fault
 void do_interrupt(CPUSH4State * env);
 
-void sh4_cpu_list(FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt, ...));
+void sh4_cpu_list(FILE *f, fprintf_function cpu_fprintf);
+#if !defined(CONFIG_USER_ONLY)
+void cpu_sh4_invalidate_tlb(CPUSH4State *s);
+uint32_t cpu_sh4_read_mmaped_itlb_addr(CPUSH4State *s,
+                                       target_phys_addr_t addr);
+void cpu_sh4_write_mmaped_itlb_addr(CPUSH4State *s, target_phys_addr_t addr,
+                                    uint32_t mem_value);
+uint32_t cpu_sh4_read_mmaped_itlb_data(CPUSH4State *s,
+                                       target_phys_addr_t addr);
+void cpu_sh4_write_mmaped_itlb_data(CPUSH4State *s, target_phys_addr_t addr,
+                                    uint32_t mem_value);
+uint32_t cpu_sh4_read_mmaped_utlb_addr(CPUSH4State *s,
+                                       target_phys_addr_t addr);
 void cpu_sh4_write_mmaped_utlb_addr(CPUSH4State *s, target_phys_addr_t addr,
-				    uint32_t mem_value);
+                                    uint32_t mem_value);
+uint32_t cpu_sh4_read_mmaped_utlb_data(CPUSH4State *s,
+                                       target_phys_addr_t addr);
+void cpu_sh4_write_mmaped_utlb_data(CPUSH4State *s, target_phys_addr_t addr,
+                                    uint32_t mem_value);
+#endif
 
 int cpu_sh4_is_cached(CPUSH4State * env, target_ulong addr);
 
@@ -206,7 +255,6 @@ static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
 #endif
 
 #include "cpu-all.h"
-#include "exec-all.h"
 
 /* Memory access type */
 enum {
@@ -222,6 +270,7 @@ enum {
 /* MMU control register */
 #define MMUCR    0x1F000010
 #define MMUCR_AT (1<<0)
+#define MMUCR_TI (1<<2)
 #define MMUCR_SV (1<<8)
 #define MMUCR_URC_BITS (6)
 #define MMUCR_URC_OFFSET (10)
@@ -296,12 +345,6 @@ static inline int cpu_ptel_pr (uint32_t ptel)
 #define cpu_ptea_sa(ptea) ((ptea) & PTEA_SA_MASK)
 #define PTEA_TC        (1 << 3)
 #define cpu_ptea_tc(ptea) (((ptea) & PTEA_TC) >> 3)
-
-static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
-{
-    env->pc = tb->pc;
-    env->flags = tb->flags;
-}
 
 #define TB_FLAG_PENDING_MOVCA  (1 << 4)
 

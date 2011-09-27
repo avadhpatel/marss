@@ -14,7 +14,8 @@
 #include <globals.h>
 #include <ptlhwdef.h>
 #include <config-parser.h>
-#include <datastore.h>
+
+#include <statsBuilder.h>
 
 #include <sysemu.h>
 
@@ -37,21 +38,27 @@ static const int MAX_TRANSOP_BUFFER_SIZE = 4;
 struct PTLsimConfig;
 struct PTLsimStats;
 
+extern Stats *user_stats;
+extern Stats *kernel_stats;
+extern Stats *global_stats;
+extern Stats *time_stats;
+extern ofstream *time_stats_file;
+
 struct PTLsimCore{
-  virtual PTLsimCore& getcore() const{ return (*((PTLsimCore*)null));}
+  virtual PTLsimCore& getcore() const{ return (*((PTLsimCore*)NULL));}
 };
 
 extern Context* ptl_contexts[MAX_CONTEXTS];
 
-struct PTLsimMachine {
+struct PTLsimMachine : public Statable {
   bool initialized;
   bool stopped;
   bool first_run;
   Context* ret_qemu_env;
-  PTLsimMachine() { initialized = 0; stopped = 0;}
+  PTLsimMachine() : Statable("machine") { initialized = 0; stopped = 0;}
   virtual bool init(PTLsimConfig& config);
   virtual int run(PTLsimConfig& config);
-  virtual void update_stats(PTLsimStats* stats);
+  virtual void update_stats();
   virtual void dump_state(ostream& os);
   virtual void flush_tlb(Context& ctx);
   virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);
@@ -65,6 +72,10 @@ struct PTLsimMachine {
 
   Context& contextof(W8 i) {
 	  return *ptl_contexts[i];
+  }
+
+  virtual W8 get_num_cores() {
+      return NUMBER_OF_CORES;
   }
 };
 
@@ -119,13 +130,13 @@ struct TransOpBuffer {
 
 void split_unaligned(const TransOp& transop, TransOpBuffer& buf);
 
-void capture_stats_snapshot(const char* name = null);
-bool handle_config_change(PTLsimConfig& config, int argc = 0, char** argv = null);
-void collect_common_sysinfo(PTLsimStats& stats);
+void capture_stats_snapshot(const char* name = NULL);
+bool handle_config_change(PTLsimConfig& config, int argc = 0, char** argv = NULL);
 void collect_sysinfo(PTLsimStats& stats, int argc, char** argv);
 void print_sysinfo(ostream& os);
 void backup_and_reopen_logfile();
 void backup_and_reopen_mem_logfile();
+void backup_and_reopen_yamlstats();
 void shutdown_subsystems();
 
 bool simulate(const char* machinename);
@@ -148,7 +159,6 @@ uopimpl_func_t get_synthcode_for_uop(int op, int size, bool setflags, int cond, 
 uopimpl_func_t get_synthcode_for_cond_branch(int opcode, int cond, int size, bool except);
 void synth_uops_for_bb(BasicBlock& bb);
 struct PTLsimStats;
-void print_banner(ostream& os, const PTLsimStats& stats, int argc = 0, char** argv = null);
 
 extern ofstream ptl_logfile;
 extern ofstream trace_mem_logfile;
@@ -172,15 +182,12 @@ extern ofstream ptl_rip_trace;
 //
 struct PTLsimConfig {
   bool help;
-  W64 domain;
   bool run;
   bool stop;
   bool kill;
   bool flush_command_queue;
-  bool simswitch;
 
   stringbuf core_name;
-  stringbuf domain_name;
 
   // Starting Point
   W64 start_at_rip;
@@ -192,47 +199,24 @@ struct PTLsimConfig {
   W64 start_log_at_iteration;
   W64 start_log_at_rip;
   bool log_on_console;
-  bool log_ptlsim_boot;
   W64 log_buffer_size;
   W64 log_file_size;
-  stringbuf mm_logfile;
-  W64 mm_log_buffer_size;
-  bool enable_inline_mm_logging;
-  bool enable_mm_validate;
   stringbuf screenshot_file;
   bool log_user_only;
 
-  // Event Logging
-  bool event_log_enabled;
-  W64 event_log_ring_buffer_size;
-  bool flush_event_log_every_cycle;
-  W64 log_backwards_from_trigger_rip;
   bool dump_state_now;
   bool abort_at_end;
 
-  W64 log_trigger_virt_addr_start;
-  W64 log_trigger_virt_addr_end;
-
-  // Memory Event Logging
-  bool mem_event_log_enabled;
-  W64 mem_event_log_ring_buffer_size;
-  bool mem_flush_event_log_every_cycle;
-
   bool verify_cache;
-  bool comparing_cache;
-  bool trace_memory_updates;
-  stringbuf trace_memory_updates_logfile;
-
-  // bus configration
-  bool atomic_bus_enabled;
 
   // Statistics Database
   stringbuf stats_filename;
+  stringbuf yaml_stats_filename;
   W64 snapshot_cycles;
   stringbuf snapshot_now;
+  stringbuf time_stats_logfile;
+  W64 time_stats_period;
 
-  // prefetcher
-  bool wait_all_finished;
   // memory model:
   bool use_memory_model;
 
@@ -255,15 +239,6 @@ struct PTLsimConfig {
 
   // Core features
   W64 core_freq_hz;
-  W64 timer_interrupt_freq_hz;
-  bool pseudo_real_time_clock;
-  bool realtime;
-  bool mask_interrupts;
-  W64 console_mfn;
-  stringbuf perfctr_name;
-  bool force_native;
-  bool kill_after_finish;
-  bool exit_after_finish;
 
   // Out of order core features
   bool perfect_cache;
@@ -271,15 +246,15 @@ struct PTLsimConfig {
   // Other info
   stringbuf dumpcode_filename;
   bool dump_at_end;
-  bool overshoot_and_dump;
   stringbuf bbcache_dump_filename;
 
+  // Machine configurations
+  stringbuf machine_config;
 
   ///
   /// for memory hierarchy implementaion
   ///
   //  bool memory_log;
-  stringbuf cache_config_type;
 
   bool checker_enabled;
   W64 checker_start_rip;
@@ -289,7 +264,10 @@ struct PTLsimConfig {
   stringbuf mongo_server;
   W64 mongo_port;
   stringbuf bench_name;
-  stringbuf db_tags;
+  stringbuf tags;
+
+  // Test Framework
+  bool run_tests;
 
   //Utilities/Tools
   stringbuf execute_after_kill;
@@ -318,5 +296,10 @@ extern bool logenable;
 #endif
 
 void force_logging_enabled();
+
+void init_qemu_io_events();
+void clock_qemu_io_events();
+
+W64 ns_to_simcycles(W64 ns);
 
 #endif // _PTLSIM_H_

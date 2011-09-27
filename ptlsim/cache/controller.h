@@ -38,18 +38,22 @@ class Interconnect;
 
 struct Message : public FixStateListObject {
 	void *sender;
+    void *origin;
+    void *dest;
 	MemoryRequest *request;
 	bool hasData;
 	bool isShared;
 	void *arg;
 
 	ostream& print(ostream& os) const {
-		if(sender == null) {
+		if(sender == NULL) {
 			os << "Free Message\n";
 			return os;
 		}
-		os << "arg:[", arg, "] ";
 		os << "Message: sender[" , sender, "] ";
+        os << "origin[", origin, "] ";
+        os << "dest[", dest, "] ";
+		os << "arg:[", arg, "] ";
 		os << "request[", *request, "] ";
 		os << "isShared[", isShared, "] ";
 		os << "hasData[", hasData, "]\n";
@@ -57,10 +61,13 @@ struct Message : public FixStateListObject {
 	}
 
 	void init() {
-		sender = null;
-		request = null;
+		sender = NULL;
+        dest = NULL;
+        origin = NULL;
+		request = NULL;
 		hasData = false;
-		arg = null;
+		arg = NULL;
+        isShared = 0;
 	}
 };
 
@@ -74,23 +81,23 @@ class MemoryHierarchy;
 class Controller
 {
 	private:
-		char *name_;
+        stringbuf name_;
 		Signal handle_request_;
 		Signal handle_interconnect_;
 		bool isPrivate_;
 
 	public:
 		MemoryHierarchy *memoryHierarchy_;
-		W8 coreid_;
+		W8 idx;
 
-		Controller(W8 coreid, char *name,
+		Controller(W8 coreid, const char *name,
 				MemoryHierarchy *memoryHierarchy) :
 			memoryHierarchy_(memoryHierarchy)
-			, coreid_(coreid)
+			, idx(coreid)
 			, handle_request_("handle_request")
 			, handle_interconnect_("handle_interconnect")
 		{
-			name_ = name;
+			name_ << name;
 			isPrivate_ = false;
 
 			handle_request_.connect(signal_mem_ptr \
@@ -99,10 +106,17 @@ class Controller
 					(*this, &Controller::handle_interconnect_cb));
 		}
 
+        virtual ~Controller()
+        {
+            memoryHierarchy_ = NULL;
+        }
+
 		virtual bool handle_request_cb(void* arg)=0;
 		virtual bool handle_interconnect_cb(void* arg)=0;
 		virtual int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request)=0;
+        virtual void register_interconnect(Interconnect* interconnect,
+                int conn_type)=0;
 		virtual void print_map(ostream& os)=0;
 
 		virtual void print(ostream& os) const =0;
@@ -124,7 +138,7 @@ class Controller
 		}
 
 		char* get_name() const {
-			return name_;
+			return name_.buf;
 		}
 
 		void set_private(bool flag) {

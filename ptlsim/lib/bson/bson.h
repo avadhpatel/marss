@@ -34,7 +34,7 @@ typedef enum {
     bson_oid=7,
     bson_bool=8,
     bson_date=9,
-    bson_null=10,
+    bson_NULL=10,
     bson_regex=11,
     bson_dbref=12, /* deprecated */
     bson_code=13,
@@ -109,7 +109,7 @@ double bson_iterator_double( const bson_iterator * i );
 int bson_iterator_int( const bson_iterator * i );
 int64_t bson_iterator_long( const bson_iterator * i );
 
-/* false: boolean false, 0 in any type, or null */
+/* false: boolean false, 0 in any type, or NULL */
 /* true: anything else (even empty strings and objects) */
 bson_bool_t bson_iterator_bool( const bson_iterator * i );
 
@@ -146,7 +146,7 @@ const char * bson_iterator_regex_opts( const bson_iterator * i );
 void bson_iterator_subobject(const bson_iterator * i, bson * sub);
 void bson_iterator_subiterator(const bson_iterator * i, bson_iterator * sub);
 
-/* str must be at least 24 hex chars + null byte */
+/* str must be at least 24 hex chars + NULL byte */
 void bson_oid_from_string(bson_oid_t* oid, const char* str);
 void bson_oid_to_string(const bson_oid_t* oid, char* str);
 void bson_oid_gen(bson_oid_t* oid);
@@ -177,11 +177,11 @@ bson_buffer * bson_append_code( bson_buffer * b , const char * name , const char
 bson_buffer * bson_append_code_w_scope( bson_buffer * b , const char * name , const char * code , const bson * scope);
 bson_buffer * bson_append_binary( bson_buffer * b, const char * name, char type, const char * str, int len );
 bson_buffer * bson_append_bool( bson_buffer * b , const char * name , const bson_bool_t v );
-bson_buffer * bson_append_null( bson_buffer * b , const char * name );
+bson_buffer * bson_append_NULL( bson_buffer * b , const char * name );
 bson_buffer * bson_append_undefined( bson_buffer * b , const char * name );
 bson_buffer * bson_append_regex( bson_buffer * b , const char * name , const char * pattern, const char * opts );
 bson_buffer * bson_append_bson( bson_buffer * b , const char * name , const bson* bson);
-bson_buffer * bson_append_element( bson_buffer * b, const char * name_or_null, const bson_iterator* elem);
+bson_buffer * bson_append_element( bson_buffer * b, const char * name_or_NULL, const bson_iterator* elem);
 
 /* these both append a bson_date */
 bson_buffer * bson_append_date(bson_buffer * b, const char * name, bson_date_t millis);

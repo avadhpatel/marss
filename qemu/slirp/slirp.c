@@ -232,7 +232,8 @@ Slirp *slirp_init(int restricted, struct in_addr vnetwork,
 
     slirp->opaque = opaque;
 
-    register_savevm("slirp", 0, 3, slirp_state_save, slirp_state_load, slirp);
+    register_savevm(NULL, "slirp", 0, 3,
+                    slirp_state_save, slirp_state_load, slirp);
 
     QTAILQ_INSERT_TAIL(&slirp_instances, slirp, entry);
 
@@ -243,7 +244,7 @@ void slirp_cleanup(Slirp *slirp)
 {
     QTAILQ_REMOVE(&slirp_instances, slirp, entry);
 
-    unregister_savevm("slirp", slirp);
+    unregister_savevm(NULL, "slirp", slirp);
 
     qemu_free(slirp->tftp_prefix);
     qemu_free(slirp->bootp_filename);
@@ -598,7 +599,7 @@ static void arp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
 {
     struct ethhdr *eh = (struct ethhdr *)pkt;
     struct arphdr *ah = (struct arphdr *)(pkt + ETH_HLEN);
-    uint8_t arp_reply[ETH_HLEN + sizeof(struct arphdr)];
+    uint8_t arp_reply[max(ETH_HLEN + sizeof(struct arphdr), 64)];
     struct ethhdr *reh = (struct ethhdr *)arp_reply;
     struct arphdr *rah = (struct arphdr *)(arp_reply + ETH_HLEN);
     int ar_op;
@@ -618,6 +619,7 @@ static void arp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
             }
             return;
         arp_ok:
+            memset(arp_reply, 0, sizeof(arp_reply));
             /* XXX: make an ARP request to have the client address */
             memcpy(slirp->client_ethaddr, eh->h_source, ETH_ALEN);
 
@@ -1069,9 +1071,8 @@ static int slirp_state_load(QEMUFile *f, void *opaque, int version_id)
 {
     Slirp *slirp = opaque;
     struct ex_list *ex_ptr;
-    int r;
 
-    while ((r = qemu_get_byte(f))) {
+    while (qemu_get_byte(f)) {
         int ret;
         struct socket *so = socreate(slirp);
 

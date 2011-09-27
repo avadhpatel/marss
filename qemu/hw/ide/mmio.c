@@ -125,15 +125,17 @@ void mmio_ide_init (target_phys_addr_t membase, target_phys_addr_t membase2,
     MMIOState *s = qemu_mallocz(sizeof(MMIOState));
     int mem1, mem2;
 
-    ide_init2(&s->bus, hd0, hd1, irq);
+    ide_init2_with_non_qdev_drives(&s->bus, hd0, hd1, irq);
 
     s->shift = shift;
 
-    mem1 = cpu_register_io_memory(mmio_ide_reads, mmio_ide_writes, s);
-    mem2 = cpu_register_io_memory(mmio_ide_status, mmio_ide_cmd, s);
+    mem1 = cpu_register_io_memory(mmio_ide_reads, mmio_ide_writes, s,
+                                  DEVICE_NATIVE_ENDIAN);
+    mem2 = cpu_register_io_memory(mmio_ide_status, mmio_ide_cmd, s,
+                                  DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(membase, 16 << shift, mem1);
     cpu_register_physical_memory(membase2, 2 << shift, mem2);
-    vmstate_register(0, &vmstate_ide_mmio, s);
+    vmstate_register(NULL, 0, &vmstate_ide_mmio, s);
     qemu_register_reset(mmio_ide_reset, s);
 }
 

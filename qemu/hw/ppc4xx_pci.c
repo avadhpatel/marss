@@ -24,7 +24,6 @@
 #include "ppc4xx.h"
 #include "pci.h"
 #include "pci_host.h"
-#include "bswap.h"
 
 #undef DEBUG
 #ifdef DEBUG
@@ -102,10 +101,6 @@ static void pci4xx_cfgaddr_writel(void *opaque, target_phys_addr_t addr,
 {
     PPC4xxPCIState *ppc4xx_pci = opaque;
 
-#ifdef TARGET_WORDS_BIGENDIAN
-    value = bswap32(value);
-#endif
-
     ppc4xx_pci->pci_state.config_reg = value & ~0x3;
 }
 
@@ -119,10 +114,6 @@ static void ppc4xx_pci_reg_write4(void *opaque, target_phys_addr_t offset,
                                   uint32_t value)
 {
     struct PPC4xxPCIState *pci = opaque;
-
-#ifdef TARGET_WORDS_BIGENDIAN
-    value = bswap32(value);
-#endif
 
     /* We ignore all target attempts at PCI configuration, effectively
      * assuming a bidirectional 1:1 mapping of PLB and PCI space. */
@@ -251,10 +242,6 @@ static uint32_t ppc4xx_pci_reg_read4(void *opaque, target_phys_addr_t offset)
         value = 0;
     }
 
-#ifdef TARGET_WORDS_BIGENDIAN
-    value = bswap32(value);
-#endif
-
     return value;
 }
 
@@ -372,19 +359,21 @@ PCIBus *ppc4xx_pci_init(CPUState *env, qemu_irq pci_irqs[4],
 
     /* CFGADDR */
     index = cpu_register_io_memory(pci4xx_cfgaddr_read,
-                                   pci4xx_cfgaddr_write, controller);
+                                   pci4xx_cfgaddr_write, controller,
+                                   DEVICE_LITTLE_ENDIAN);
     if (index < 0)
         goto free;
     cpu_register_physical_memory(config_space + PCIC0_CFGADDR, 4, index);
 
     /* CFGDATA */
-    index = pci_host_data_register_mmio(&controller->pci_state);
+    index = pci_host_data_register_mmio(&controller->pci_state, 1);
     if (index < 0)
         goto free;
     cpu_register_physical_memory(config_space + PCIC0_CFGDATA, 4, index);
 
     /* Internal registers */
-    index = cpu_register_io_memory(pci_reg_read, pci_reg_write, controller);
+    index = cpu_register_io_memory(pci_reg_read, pci_reg_write, controller,
+                                   DEVICE_LITTLE_ENDIAN);
     if (index < 0)
         goto free;
     cpu_register_physical_memory(registers, PCI_REG_SIZE, index);
@@ -392,8 +381,8 @@ PCIBus *ppc4xx_pci_init(CPUState *env, qemu_irq pci_irqs[4],
     qemu_register_reset(ppc4xx_pci_reset, controller);
 
     /* XXX load/save code not tested. */
-    register_savevm("ppc4xx_pci", ppc4xx_pci_id++, 1,
-                    ppc4xx_pci_save, ppc4xx_pci_load, controller);
+    register_savevm(&controller->pci_dev->qdev, "ppc4xx_pci", ppc4xx_pci_id++,
+                    1, ppc4xx_pci_save, ppc4xx_pci_load, controller);
 
     return controller->pci_state.bus;
 

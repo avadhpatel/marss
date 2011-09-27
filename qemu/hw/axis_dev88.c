@@ -30,6 +30,7 @@
 #include "etraxfs.h"
 #include "loader.h"
 #include "elf.h"
+#include "cris-boot.h"
 
 #define D(x)
 #define DNAND(x)
@@ -240,14 +241,7 @@ static CPUWriteMemoryFunc * const gpio_write[] = {
 
 #define INTMEM_SIZE (128 * 1024)
 
-static uint32_t bootstrap_pc;
-static void main_cpu_reset(void *opaque)
-{
-    CPUState *env = opaque;
-    cpu_reset(env);
-
-    env->pc = bootstrap_pc;
-}
+static struct cris_load_info li;
 
 static
 void axisdev88_init (ram_addr_t ram_size,
@@ -261,7 +255,6 @@ void axisdev88_init (ram_addr_t ram_size,
     qemu_irq irq[30], nmi[2], *cpu_irq;
     void *etraxfs_dmac;
     struct etraxfs_dma_client *eth[2] = {NULL, NULL};
-    int kernel_size;
     int i;
     int nand_regs;
     int gpio_regs;
@@ -273,26 +266,27 @@ void axisdev88_init (ram_addr_t ram_size,
         cpu_model = "crisv32";
     }
     env = cpu_init(cpu_model);
-    qemu_register_reset(main_cpu_reset, env);
 
     /* allocate RAM */
-    phys_ram = qemu_ram_alloc(ram_size);
+    phys_ram = qemu_ram_alloc(NULL, "axisdev88.ram", ram_size);
     cpu_register_physical_memory(0x40000000, ram_size, phys_ram | IO_MEM_RAM);
 
     /* The ETRAX-FS has 128Kb on chip ram, the docs refer to it as the 
        internal memory.  */
-    phys_intmem = qemu_ram_alloc(INTMEM_SIZE);
+    phys_intmem = qemu_ram_alloc(NULL, "axisdev88.chipram", INTMEM_SIZE);
     cpu_register_physical_memory(0x38000000, INTMEM_SIZE,
                                  phys_intmem | IO_MEM_RAM);
 
 
       /* Attach a NAND flash to CS1.  */
     nand_state.nand = nand_init(NAND_MFR_STMICRO, 0x39);
-    nand_regs = cpu_register_io_memory(nand_read, nand_write, &nand_state);
+    nand_regs = cpu_register_io_memory(nand_read, nand_write, &nand_state,
+                                       DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(0x10000000, 0x05000000, nand_regs);
 
     gpio_state.nand = &nand_state;
-    gpio_regs = cpu_register_io_memory(gpio_read, gpio_write, &gpio_state);
+    gpio_regs = cpu_register_io_memory(gpio_read, gpio_write, &gpio_state,
+                                       DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(0x3001a000, 0x5c, gpio_regs);
 
 
@@ -339,39 +333,14 @@ void axisdev88_init (ram_addr_t ram_size,
                              irq[0x14 + i]);
     }
 
-    if (kernel_filename) {
-        uint64_t entry, high;
-        int kcmdline_len;
-
-        /* Boots a kernel elf binary, os/linux-2.6/vmlinux from the axis 
-           devboard SDK.  */
-        kernel_size = load_elf(kernel_filename, -0x80000000LL,
-                               &entry, NULL, &high, 0, ELF_MACHINE, 0);
-        bootstrap_pc = entry;
-        if (kernel_size < 0) {
-            /* Takes a kimage from the axis devboard SDK.  */
-            kernel_size = load_image_targphys(kernel_filename, 0x40004000,
-                                              ram_size);
-            bootstrap_pc = 0x40004000;
-            env->regs[9] = 0x40004000 + kernel_size;
-        }
-        env->regs[8] = 0x56902387; /* RAM init magic.  */
-
-        if (kernel_cmdline && (kcmdline_len = strlen(kernel_cmdline))) {
-            if (kcmdline_len > 256) {
-                fprintf(stderr, "Too long CRIS kernel cmdline (max 256)\n");
-                exit(1);
-            }
-            /* Let the kernel know we are modifying the cmdline.  */
-            env->regs[10] = 0x87109563;
-            env->regs[11] = 0x40000000;
-            pstrcpy_targphys("cmdline", env->regs[11], 256, kernel_cmdline);
-        }
+    if (!kernel_filename) {
+        fprintf(stderr, "Kernel image must be specified\n");
+        exit(1);
     }
-    env->pc = bootstrap_pc;
 
-    printf ("pc =%x\n", env->pc);
-    printf ("ram size =%ld\n", ram_size);
+    li.image_filename = kernel_filename;
+    li.cmdline = kernel_cmdline;
+    cris_load_image(env, &li);
 }
 
 static QEMUMachine axisdev88_machine = {

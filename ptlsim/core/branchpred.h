@@ -63,7 +63,7 @@ struct BranchPredictorInterface {
   // Pointer to private implementation:
   BranchPredictorImplementation* impl;
 
-  BranchPredictorInterface() { impl = null; }
+  BranchPredictorInterface() { impl = NULL; }
   //  void init();
   void init(W8 coreid, W8 threadid);
   void reset();

@@ -97,10 +97,12 @@ static void vga_mm_init(ISAVGAMMState *s, target_phys_addr_t vram_base,
     int s_ioport_ctrl, vga_io_memory;
 
     s->it_shift = it_shift;
-    s_ioport_ctrl = cpu_register_io_memory(vga_mm_read_ctrl, vga_mm_write_ctrl, s);
-    vga_io_memory = cpu_register_io_memory(vga_mem_read, vga_mem_write, s);
+    s_ioport_ctrl = cpu_register_io_memory(vga_mm_read_ctrl, vga_mm_write_ctrl, s,
+                                           DEVICE_NATIVE_ENDIAN);
+    vga_io_memory = cpu_register_io_memory(vga_mem_read, vga_mem_write, s,
+                                           DEVICE_NATIVE_ENDIAN);
 
-    vmstate_register(0, &vmstate_vga_common, s);
+    vmstate_register(NULL, 0, &vmstate_vga_common, s);
 
     cpu_register_physical_memory(ctrl_base, 0x100000, s_ioport_ctrl);
     s->vga.bank_offset = 0;
@@ -121,10 +123,6 @@ int isa_vga_mm_init(target_phys_addr_t vram_base,
     s->vga.ds = graphic_console_init(s->vga.update, s->vga.invalidate,
                                      s->vga.screen_dump, s->vga.text_update, s);
 
-#ifdef CONFIG_BOCHS_VBE
-    /* XXX: use optimized standard vga accesses */
-    cpu_register_physical_memory(VBE_DISPI_LFB_PHYSICAL_ADDRESS,
-                                 VGA_RAM_SIZE, s->vga.vram_offset);
-#endif
+    vga_init_vbe(&s->vga);
     return 0;
 }

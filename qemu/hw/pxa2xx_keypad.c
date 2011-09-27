@@ -314,10 +314,10 @@ PXA2xxKeyPadState *pxa27x_keypad_init(target_phys_addr_t base,
     s->irq = irq;
 
     iomemtype = cpu_register_io_memory(pxa2xx_keypad_readfn,
-                    pxa2xx_keypad_writefn, s);
+                    pxa2xx_keypad_writefn, s, DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x00100000, iomemtype);
 
-    register_savevm("pxa2xx_keypad", 0, 0,
+    register_savevm(NULL, "pxa2xx_keypad", 0, 0,
                     pxa2xx_keypad_save, pxa2xx_keypad_load, s);
 
     return s;

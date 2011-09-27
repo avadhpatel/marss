@@ -777,16 +777,16 @@ static void gen_tbl (CPUPPCState *env)
                  &spr_read_tbl, SPR_NOACCESS,
                  0x00000000);
     spr_register(env, SPR_TBL,   "TBL",
-                 SPR_NOACCESS, SPR_NOACCESS,
-                 SPR_NOACCESS, &spr_write_tbl,
+                 &spr_read_tbl, SPR_NOACCESS,
+                 &spr_read_tbl, &spr_write_tbl,
                  0x00000000);
     spr_register(env, SPR_VTBU,  "TBU",
                  &spr_read_tbu, SPR_NOACCESS,
                  &spr_read_tbu, SPR_NOACCESS,
                  0x00000000);
     spr_register(env, SPR_TBU,   "TBU",
-                 SPR_NOACCESS, SPR_NOACCESS,
-                 SPR_NOACCESS, &spr_write_tbu,
+                 &spr_read_tbu, SPR_NOACCESS,
+                 &spr_read_tbu, &spr_write_tbu,
                  0x00000000);
 }
 
@@ -3596,7 +3596,6 @@ static void init_proc_440x4 (CPUPPCState *env)
                               POWERPC_FLAG_DE | POWERPC_FLAG_BUS_CLK)
 #define check_pow_440x5      check_pow_nocheck
 
-__attribute__ (( unused ))
 static void init_proc_440x5 (CPUPPCState *env)
 {
     /* Time base */
@@ -3656,7 +3655,7 @@ static void init_proc_440x5 (CPUPPCState *env)
     init_excp_BookE(env);
     env->dcache_line_size = 32;
     env->icache_line_size = 32;
-    /* XXX: TODO: allocate internal IRQ controller */
+    ppc40x_irq_init(env);
 }
 
 /* PowerPC 460 (guessed)                                                     */
@@ -5237,7 +5236,7 @@ static void init_proc_755 (CPUPPCState *env)
 #define POWERPC_FLAG_7400    (POWERPC_FLAG_VRE | POWERPC_FLAG_SE |            \
                               POWERPC_FLAG_BE | POWERPC_FLAG_PMM |            \
                               POWERPC_FLAG_BUS_CLK)
-#define check_pow_7400       check_pow_hid0_74xx
+#define check_pow_7400       check_pow_hid0
 
 static void init_proc_7400 (CPUPPCState *env)
 {
@@ -5289,7 +5288,7 @@ static void init_proc_7400 (CPUPPCState *env)
 #define POWERPC_FLAG_7410    (POWERPC_FLAG_VRE | POWERPC_FLAG_SE |            \
                               POWERPC_FLAG_BE | POWERPC_FLAG_PMM |            \
                               POWERPC_FLAG_BUS_CLK)
-#define check_pow_7410       check_pow_hid0_74xx
+#define check_pow_7410       check_pow_hid0
 
 static void init_proc_7410 (CPUPPCState *env)
 {
@@ -6536,6 +6535,7 @@ enum {
 #if 0
     CPU_POWERPC_440A4              = xxx,
 #endif
+    CPU_POWERPC_440_XILINX         = 0x7ff21910,
 #if 0
     CPU_POWERPC_440A5              = xxx,
 #endif
@@ -7464,6 +7464,8 @@ static const ppc_def_t ppc_defs[] = {
     /* PowerPC 440 A4                                                        */
     POWERPC_DEF("440A4",         CPU_POWERPC_440A4,                  440x4),
 #endif
+    /* PowerPC 440 Xilinx 5                                                  */
+    POWERPC_DEF("440-Xilinx",    CPU_POWERPC_440_XILINX,             440x5),
 #if defined (TODO)
     /* PowerPC 440 A5                                                        */
     POWERPC_DEF("440A5",         CPU_POWERPC_440A5,                  440x5),
@@ -9754,7 +9756,7 @@ const ppc_def_t *cpu_ppc_find_by_name (const char *name)
     return ret;
 }
 
-void ppc_cpu_list (FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt, ...))
+void ppc_cpu_list (FILE *f, fprintf_function cpu_fprintf)
 {
     int i, max;
 

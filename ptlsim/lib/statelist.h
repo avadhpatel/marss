@@ -53,7 +53,7 @@
     W64 issue_source_counter;
     W32 flags;
 
-    StateList() { name = null; listid = 0; reset(); }
+    StateList() { name = NULL; listid = 0; reset(); }
 
     ~StateList() { if(name) delete name; }
 
@@ -73,7 +73,7 @@
 
     selfqueuelink* dequeue() {
       if (empty())
-        return null;
+        return NULL;
       count--;
       assert(count >=0);
       selfqueuelink* obj = removehead();
@@ -102,7 +102,7 @@
     }
 
     selfqueuelink* peek() {
-      return (empty()) ? null : head();
+      return (empty()) ? NULL : head();
     }
 
     StateList* remove_to_list(StateList* newqueue, bool place_at_head, selfqueuelink* entry) {
@@ -168,12 +168,16 @@ struct FixStateList
 	}
 
 	T* tail() {
-		return (T*)(usedList_.empty() ? null : usedList_.tail());
+		return (T*)(usedList_.empty() ? NULL : usedList_.tail());
 	}
 
 	int count() const {
 		return usedList_.count;
 	}
+
+    int remaining() const {
+        return freeList_.count;
+    }
 
 	int size() const {
 		return size_;
@@ -184,7 +188,7 @@ struct FixStateList
 	}
 
 	T* alloc() {
-		if unlikely (isFull()) return null;
+		if unlikely (isFull()) return NULL;
 		T* obj = (T*)freeList_.peek();
 		obj->init();
 		obj->free = false;
@@ -210,7 +214,7 @@ struct FixStateList
      * This is a very tricky function, first argument
      * is the entry we need to insert after the second argument
      * entry. If you want to add to the head of the list, pass the root
-     * argument as null
+     * argument as NULL
      */
 	void insert_after(T* entry, T* root) {
 		assert((selfqueuelink*)entry->unlinked());

@@ -186,7 +186,8 @@ enum {
     float_flag_divbyzero =  4,
     float_flag_overflow  =  8,
     float_flag_underflow = 16,
-    float_flag_inexact   = 32
+    float_flag_inexact   = 32,
+    float_flag_input_denormal = 64
 };
 
 typedef struct float_status {
@@ -196,7 +197,10 @@ typedef struct float_status {
 #ifdef FLOATX80
     signed char floatx80_rounding_precision;
 #endif
+    /* should denormalised results go to zero and set the inexact flag? */
     flag flush_to_zero;
+    /* should denormalised inputs go to zero and set the input_denormal flag? */
+    flag flush_inputs_to_zero;
     flag default_nan_mode;
 } float_status;
 
@@ -205,6 +209,10 @@ void set_float_exception_flags(int val STATUS_PARAM);
 INLINE void set_flush_to_zero(flag val STATUS_PARAM)
 {
     STATUS(flush_to_zero) = val;
+}
+INLINE void set_flush_inputs_to_zero(flag val STATUS_PARAM)
+{
+    STATUS(flush_inputs_to_zero) = val;
 }
 INLINE void set_default_nan_mode(flag val STATUS_PARAM)
 {
@@ -257,6 +265,8 @@ float32 float16_to_float32( bits16, flag STATUS_PARAM );
 /*----------------------------------------------------------------------------
 | Software IEC/IEEE single-precision conversion routines.
 *----------------------------------------------------------------------------*/
+int float32_to_int16_round_to_zero( float32 STATUS_PARAM );
+unsigned int float32_to_uint16_round_to_zero( float32 STATUS_PARAM );
 int float32_to_int32( float32 STATUS_PARAM );
 int float32_to_int32_round_to_zero( float32 STATUS_PARAM );
 unsigned int float32_to_uint32( float32 STATUS_PARAM );
@@ -281,6 +291,7 @@ float32 float32_mul( float32, float32 STATUS_PARAM );
 float32 float32_div( float32, float32 STATUS_PARAM );
 float32 float32_rem( float32, float32 STATUS_PARAM );
 float32 float32_sqrt( float32 STATUS_PARAM );
+float32 float32_exp2( float32 STATUS_PARAM );
 float32 float32_log2( float32 STATUS_PARAM );
 int float32_eq( float32, float32 STATUS_PARAM );
 int float32_le( float32, float32 STATUS_PARAM );
@@ -290,17 +301,24 @@ int float32_le_quiet( float32, float32 STATUS_PARAM );
 int float32_lt_quiet( float32, float32 STATUS_PARAM );
 int float32_compare( float32, float32 STATUS_PARAM );
 int float32_compare_quiet( float32, float32 STATUS_PARAM );
-int float32_is_nan( float32 );
+int float32_is_quiet_nan( float32 );
 int float32_is_signaling_nan( float32 );
+float32 float32_maybe_silence_nan( float32 );
 float32 float32_scalbn( float32, int STATUS_PARAM );
 
 INLINE float32 float32_abs(float32 a)
 {
+    /* Note that abs does *not* handle NaN specially, nor does
+     * it flush denormal inputs to zero.
+     */
     return make_float32(float32_val(a) & 0x7fffffff);
 }
 
 INLINE float32 float32_chs(float32 a)
 {
+    /* Note that chs does *not* handle NaN specially, nor does
+     * it flush denormal inputs to zero.
+     */
     return make_float32(float32_val(a) ^ 0x80000000);
 }
 
@@ -319,12 +337,25 @@ INLINE int float32_is_zero(float32 a)
     return (float32_val(a) & 0x7fffffff) == 0;
 }
 
+INLINE int float32_is_any_nan(float32 a)
+{
+    return ((float32_val(a) & ~(1 << 31)) > 0x7f800000UL);
+}
+
+INLINE int float32_is_zero_or_denormal(float32 a)
+{
+    return (float32_val(a) & 0x7f800000) == 0;
+}
+
 #define float32_zero make_float32(0)
 #define float32_one make_float32(0x3f800000)
+#define float32_ln2 make_float32(0x3f317218)
 
 /*----------------------------------------------------------------------------
 | Software IEC/IEEE double-precision conversion routines.
 *----------------------------------------------------------------------------*/
+int float64_to_int16_round_to_zero( float64 STATUS_PARAM );
+unsigned int float64_to_uint16_round_to_zero( float64 STATUS_PARAM );
 int float64_to_int32( float64 STATUS_PARAM );
 int float64_to_int32_round_to_zero( float64 STATUS_PARAM );
 unsigned int float64_to_uint32( float64 STATUS_PARAM );
@@ -361,17 +392,24 @@ int float64_le_quiet( float64, float64 STATUS_PARAM );
 int float64_lt_quiet( float64, float64 STATUS_PARAM );
 int float64_compare( float64, float64 STATUS_PARAM );
 int float64_compare_quiet( float64, float64 STATUS_PARAM );
-int float64_is_nan( float64 a );
+int float64_is_quiet_nan( float64 a );
 int float64_is_signaling_nan( float64 );
+float64 float64_maybe_silence_nan( float64 );
 float64 float64_scalbn( float64, int STATUS_PARAM );
 
 INLINE float64 float64_abs(float64 a)
 {
+    /* Note that abs does *not* handle NaN specially, nor does
+     * it flush denormal inputs to zero.
+     */
     return make_float64(float64_val(a) & 0x7fffffffffffffffLL);
 }
 
 INLINE float64 float64_chs(float64 a)
 {
+    /* Note that chs does *not* handle NaN specially, nor does
+     * it flush denormal inputs to zero.
+     */
     return make_float64(float64_val(a) ^ 0x8000000000000000LL);
 }
 
@@ -390,8 +428,14 @@ INLINE int float64_is_zero(float64 a)
     return (float64_val(a) & 0x7fffffffffffffffLL) == 0;
 }
 
+INLINE int float64_is_any_nan(float64 a)
+{
+    return ((float64_val(a) & ~(1ULL << 63)) > 0x7ff0000000000000ULL);
+}
+
 #define float64_zero make_float64(0)
 #define float64_one make_float64(0x3ff0000000000000LL)
+#define float64_ln2 make_float64(0x3fe62e42fefa39efLL)
 
 #ifdef FLOATX80
 
@@ -424,8 +468,9 @@ int floatx80_lt( floatx80, floatx80 STATUS_PARAM );
 int floatx80_eq_signaling( floatx80, floatx80 STATUS_PARAM );
 int floatx80_le_quiet( floatx80, floatx80 STATUS_PARAM );
 int floatx80_lt_quiet( floatx80, floatx80 STATUS_PARAM );
-int floatx80_is_nan( floatx80 );
+int floatx80_is_quiet_nan( floatx80 );
 int floatx80_is_signaling_nan( floatx80 );
+floatx80 floatx80_maybe_silence_nan( floatx80 );
 floatx80 floatx80_scalbn( floatx80, int STATUS_PARAM );
 
 INLINE floatx80 floatx80_abs(floatx80 a)
@@ -453,6 +498,11 @@ INLINE int floatx80_is_neg(floatx80 a)
 INLINE int floatx80_is_zero(floatx80 a)
 {
     return (a.high & 0x7fff) == 0 && a.low == 0;
+}
+
+INLINE int floatx80_is_any_nan(floatx80 a)
+{
+    return ((a.high & 0x7fff) == 0x7fff) && (a.low<<1);
 }
 
 #endif
@@ -490,8 +540,9 @@ int float128_le_quiet( float128, float128 STATUS_PARAM );
 int float128_lt_quiet( float128, float128 STATUS_PARAM );
 int float128_compare( float128, float128 STATUS_PARAM );
 int float128_compare_quiet( float128, float128 STATUS_PARAM );
-int float128_is_nan( float128 );
+int float128_is_quiet_nan( float128 );
 int float128_is_signaling_nan( float128 );
+float128 float128_maybe_silence_nan( float128 );
 float128 float128_scalbn( float128, int STATUS_PARAM );
 
 INLINE float128 float128_abs(float128 a)
@@ -519,6 +570,12 @@ INLINE int float128_is_neg(float128 a)
 INLINE int float128_is_zero(float128 a)
 {
     return (a.high & 0x7fffffffffffffffLL) == 0 && a.low == 0;
+}
+
+INLINE int float128_is_any_nan(float128 a)
+{
+    return ((a.high >> 48) & 0x7fff) == 0x7fff &&
+        ((a.low != 0) || ((a.high & 0xffffffffffffLL) != 0));
 }
 
 #endif

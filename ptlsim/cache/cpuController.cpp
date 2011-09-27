@@ -33,21 +33,24 @@
 #include <ptlhwdef.h>
 #endif
 
-#include <stats.h>
 #include <cpuController.h>
 #include <memoryHierarchy.h>
 
+#include <machine.h>
+
 using namespace Memory;
 
-CPUController::CPUController(W8 coreid, char *name,
+CPUController::CPUController(W8 coreid, const char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Controller(coreid, name, memoryHierarchy)
+    , stats(name, &memoryHierarchy->get_machine())
 {
-	int_L1_i_ = null;
-	int_L1_d_ = null;
+    memoryHierarchy_->add_cpu_controller(this);
+
+	int_L1_i_ = NULL;
+	int_L1_d_ = NULL;
 	icacheLineBits_ = log2(L1I_LINE_SIZE);
 	dcacheLineBits_ = log2(L1D_LINE_SIZE);
-    SETUP_STATS(CPUController);
 
     SET_SIGNAL_CB(name, "_Cache_Access", cacheAccess_, &CPUController::cache_access_cb);
 
@@ -72,7 +75,7 @@ bool CPUController::handle_interconnect_cb(void *arg)
 		return true;
 
 	CPUControllerQueueEntry *queueEntry = find_entry(message->request);
-	if(queueEntry == null) {
+	if(queueEntry == NULL) {
 		return true;
 	}
 
@@ -89,7 +92,7 @@ CPUControllerQueueEntry* CPUController::find_entry(MemoryRequest *request)
 		if(entry->request == request)
 			return entry;
 	}
-	return null;
+	return NULL;
 }
 
 void CPUController::annul_request(MemoryRequest *request)
@@ -100,7 +103,22 @@ void CPUController::annul_request(MemoryRequest *request)
 		if(entry->request->is_same(request)) {
 			entry->annuled = true;
 			entry->request->decRefCounter();
+
+            if (entry->depends >= 0) {
+                CPUControllerQueueEntry *depEntry = &pendingRequests_[entry->depends];
+                if (entry->waitFor >= 0) {
+                    pendingRequests_[entry->waitFor].depends = depEntry->idx;
+                    depEntry->waitFor = entry->waitFor;
+                } else {
+                    depEntry->waitFor = -1;
+                    cache_access_cb(depEntry);
+                }
+            } else if (entry->waitFor >= 0) {
+                pendingRequests_[entry->waitFor].depends = -1;
+            }
+
 			pendingRequests_.free(entry);
+            ADD_HISTORY_REM(entry->request);
 		}
 	}
 }
@@ -124,18 +142,19 @@ bool CPUController::is_icache_buffer_hit(MemoryRequest *request)
 	assert(request->is_instruction());
 	lineAddress = request->get_physical_address() >> icacheLineBits_;
 
-	memdebug("Line Address is : ", lineAddress, endl);
+	memdebug("ICache Line Address is : ", lineAddress, endl);
 
 	CPUControllerBufferEntry* entry;
 	foreach_list_mutable(icacheBuffer_.list(), entry, entry_t,
 			prev_t) {
 		if(entry->lineAddress == lineAddress) {
-			STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, request->is_kernel());
+			N_STAT_UPDATE(stats.cpurequest.count.hit.read.hit, ++, request->is_kernel());
+            N_STAT_UPDATE(stats.icache_latency, [1]++, request->is_kernel());
 			return true;
 		}
 	}
 
-	STAT_UPDATE(cpurequest.count.miss.read++, request->is_kernel());
+	N_STAT_UPDATE(stats.cpurequest.count.miss.read, ++, request->is_kernel());
 	return false;
 }
 
@@ -143,7 +162,9 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 		MemoryRequest *request)
 {
 	int fastPathLat ;
-	if(interconnect == null) {
+    bool kernel_req = request->is_kernel();
+
+	if(interconnect == NULL) {
 		// From CPU
 		if(request->is_instruction()) {
 
@@ -152,12 +173,15 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 				return 0;
 
 			fastPathLat = int_L1_i_->access_fast_path(this, request);
+            N_STAT_UPDATE(stats.icache_latency, [fastPathLat]++, kernel_req);
 		} else {
 			fastPathLat = int_L1_d_->access_fast_path(this, request);
+            N_STAT_UPDATE(stats.dcache_latency, [fastPathLat]++, kernel_req);
 		}
 	}
 
-    if(fastPathLat == 0 && request->is_instruction())
+	// if(fastPathLat == 0 && request->is_instruction())
+    if(fastPathLat == 0)
 		return 0;
 
 	request->incRefCounter();
@@ -167,7 +191,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
-	if(queueEntry == null) {
+	if(queueEntry == NULL) {
 		memoryHierarchy_->add_event(&queueAccess_, 1, request);
 		return -1;
 	}
@@ -178,7 +202,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
      */
 	if(pendingRequests_.isFull()) {
 		memoryHierarchy_->set_controller_full(this, true);
-		STAT_UPDATE(queueFull++, request->is_kernel());
+		N_STAT_UPDATE(stats.queueFull, ++, request->is_kernel());
 	}
 
 	queueEntry->request = request;
@@ -193,16 +217,16 @@ int CPUController::access_fast_path(Interconnect *interconnect,
          */
 		memdebug("Dependent entry is: ", *dependentEntry, endl);
 		dependentEntry->depends = queueEntry->idx;
+        queueEntry->waitFor = dependentEntry->idx;
 		queueEntry->cycles = -1;
-        bool kernel_req = queueEntry->request->is_kernel();
 		if unlikely(queueEntry->request->is_instruction()) {
-			STAT_UPDATE(cpurequest.stall.read.dependency++, kernel_req);
+			N_STAT_UPDATE(stats.cpurequest.stall.read.dependency, ++, kernel_req);
 		}
 		else  {
 			if(queueEntry->request->get_type() == MEMORY_OP_READ) {
-				STAT_UPDATE(cpurequest.stall.read.dependency++, kernel_req);
+				N_STAT_UPDATE(stats.cpurequest.stall.read.dependency, ++, kernel_req);
             } else {
-				STAT_UPDATE(cpurequest.stall.write.dependency++, kernel_req);
+				N_STAT_UPDATE(stats.cpurequest.stall.write.dependency, ++, kernel_req);
             }
 		}
 	} else {
@@ -250,7 +274,7 @@ CPUControllerQueueEntry* CPUController::find_dependency(
 			return retEntry;
 		}
 	}
-	return null;
+	return NULL;
 }
 
 void CPUController::wakeup_dependents(CPUControllerQueueEntry *queueEntry)
@@ -270,6 +294,7 @@ void CPUController::wakeup_dependents(CPUControllerQueueEntry *queueEntry)
 		assert(nextEntry->request);
 		memdebug("Setting cycles left to 1 for dependent\n");
 		nextEntry->cycles = 1;
+        nextEntry->waitFor = -1;
 	}
 }
 
@@ -288,24 +313,15 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 		if(icacheBuffer_.isFull()) {
 			memdebug("Freeing icache buffer head\n");
 			icacheBuffer_.free(icacheBuffer_.head());
-			STAT_UPDATE(queueFull++, request->is_kernel());
+			N_STAT_UPDATE(stats.queueFull, ++, request->is_kernel());
 		}
 		CPUControllerBufferEntry *bufEntry = icacheBuffer_.alloc();
 		bufEntry->lineAddress = lineAddress;
-        if(kernel_req) {
-            kernel_stats.memory.icache_latency[req_latency]++;
-        } else {
-            user_stats.memory.icache_latency[req_latency]++;
-        }
-		memoryHierarchy_->icache_wakeup_wrapper(request);
+        N_STAT_UPDATE(stats.icache_latency, [req_latency]++, kernel_req);
 	} else {
-        if(kernel_req) {
-            kernel_stats.memory.dcache_latency[req_latency]++;
-        } else {
-            user_stats.memory.dcache_latency[req_latency]++;
-        }
-		memoryHierarchy_->dcache_wakeup_wrapper(request);
+        N_STAT_UPDATE(stats.dcache_latency, [req_latency]++, kernel_req);
 	}
+    memoryHierarchy_->core_wakeup(request);
 
 	memdebug("Entry finalized..\n");
 
@@ -320,7 +336,7 @@ void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
      */
 	if(!pendingRequests_.isFull()) {
 		memoryHierarchy_->set_controller_full(this, false);
-		STAT_UPDATE(queueFull++, request->is_kernel());
+		N_STAT_UPDATE(stats.queueFull, ++, request->is_kernel());
 	}
 }
 
@@ -359,7 +375,7 @@ bool CPUController::queue_access_cb(void *arg)
 
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
-	if(queueEntry == null) {
+	if(queueEntry == NULL) {
 		memoryHierarchy_->add_event(&queueAccess_, 1, request);
 		return true;
 	}
@@ -370,7 +386,7 @@ bool CPUController::queue_access_cb(void *arg)
      */
 	if(pendingRequests_.isFull()) {
 		memoryHierarchy_->set_controller_full(this, true);
-		STAT_UPDATE(queueFull++, request->is_kernel());
+		N_STAT_UPDATE(stats.queueFull, ++, request->is_kernel());
 	}
 
 	queueEntry->request = request;
@@ -387,16 +403,17 @@ bool CPUController::queue_access_cb(void *arg)
          */
 		memdebug("Dependent entry is: ", *dependentEntry, endl);
 		dependentEntry->depends = queueEntry->idx;
+        queueEntry->waitFor = dependentEntry->idx;
 		queueEntry->cycles = -1;
         bool kernel_req = queueEntry->request->is_kernel();
 		if unlikely(queueEntry->request->is_instruction()) {
-			STAT_UPDATE(cpurequest.stall.read.dependency++, kernel_req);
+			N_STAT_UPDATE(stats.cpurequest.stall.read.dependency, ++, kernel_req);
 		}
 		else  {
 			if(queueEntry->request->get_type() == MEMORY_OP_READ) {
-				STAT_UPDATE(cpurequest.stall.read.dependency++, kernel_req);
+				N_STAT_UPDATE(stats.cpurequest.stall.read.dependency, ++, kernel_req);
             } else {
-				STAT_UPDATE(cpurequest.stall.write.dependency++, kernel_req);
+				N_STAT_UPDATE(stats.cpurequest.stall.write.dependency, ++, kernel_req);
             }
 		}
 	} else {
@@ -432,6 +449,21 @@ void CPUController::print(ostream& os) const
 	os << "---End CPU-Controller: "<< get_name()<< endl;
 }
 
+void CPUController::register_interconnect(Interconnect *interconnect,
+        int type)
+{
+    switch(type) {
+        case INTERCONN_TYPE_I:
+            int_L1_i_ = interconnect;
+            break;
+        case INTERCONN_TYPE_D:
+            int_L1_d_ = interconnect;
+            break;
+        default:
+            assert(0);
+    }
+}
+
 void CPUController::register_interconnect_L1_i(Interconnect *interconnect)
 {
 	int_L1_i_ = interconnect;
@@ -441,3 +473,20 @@ void CPUController::register_interconnect_L1_d(Interconnect *interconnect)
 {
 	int_L1_d_ = interconnect;
 }
+
+/* CPU Controller Builder */
+struct CPUControllerBuilder : public ControllerBuilder
+{
+    CPUControllerBuilder(const char* name) :
+        ControllerBuilder(name)
+    {}
+
+    Controller* get_new_controller(W8 coreid, W8 type,
+            MemoryHierarchy& mem, const char *name) {
+        stringbuf new_name;
+        new_name << name << "_cont";
+        return new CPUController(coreid, new_name, &mem);
+    }
+};
+
+CPUControllerBuilder cpuBuilder("cpu");

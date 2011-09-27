@@ -32,9 +32,12 @@
 #include <superstl.h>
 
 #include <ptlsim.h>
+#include <machine.h>
 #include <memoryRequest.h>
 #include <controller.h>
 #include <interconnect.h>
+
+#include <statsBuilder.h>
 
 #define DEBUG_MEMORY
 //#define DEBUG_WITH_FILE_NAME
@@ -81,16 +84,7 @@
     signal.connect(signal_mem_ptr(*this, cb)); \
 }
 
-namespace OutOfOrderModel {
-  class OutOfOrderMachine;
-  class OutOfOrderCore;
-  class LoadStoreQueueEntry;
-  struct OutOfOrderCoreCacheCallbacks;
-};
-
 namespace Memory {
-
-  using namespace OutOfOrderModel;
 
   class Event : public FixStateListObject
 	{
@@ -101,9 +95,9 @@ namespace Memory {
 
 		public:
 			void init() {
-				signal_ = null;
+				signal_ = NULL;
 				clock_ = -1;
-				arg_ = null;
+				arg_ = NULL;
 			}
 
 			void setup(Signal *signal, W64 clock, void *arg) {
@@ -147,11 +141,32 @@ namespace Memory {
 					return true;
 				return false;
 			}
+
+            bool operator >=(Event &event) {
+                if (clock_ >= event.clock_)
+                    return true;
+                return false;
+            }
 	};
 
-  ostream& operator <<(ostream& os, const Event& event);
-  ostream& operator ,(ostream& os, const Event& event);
+  static inline ostream& operator <<(ostream& os, const Event& event) {
+      return event.print(os);
+  }
 
+  struct MemoryInterlockEntry {
+      W8 ctx_id;
+
+      void reset() {ctx_id = -1;}
+
+      ostream& print(ostream& os, W64 physaddr) const {
+          os << "phys " << (void*)physaddr << ": vcpu " << (int)ctx_id;
+          return os;
+      }
+  };
+
+  struct MemoryInterlockBuffer: public LockableAssociativeArray<W64, MemoryInterlockEntry, 16, 4, 8> { };
+
+  extern MemoryInterlockBuffer interlocks;
 
   //
   // MemoryHierarchy provides interface with core
@@ -159,7 +174,7 @@ namespace Memory {
 
   class MemoryHierarchy {
   public:
-    MemoryHierarchy(OutOfOrderMachine& machine);
+    MemoryHierarchy(BaseMachine& machine);
     ~MemoryHierarchy(); // release memory for pool
 
 	// check L1 availability
@@ -168,9 +183,14 @@ namespace Memory {
     // interface to memory hierarchy
 	bool access_cache(MemoryRequest *request);
 
-	// callback with response
-	void icache_wakeup_wrapper(MemoryRequest *request);
-	void dcache_wakeup_wrapper(MemoryRequest *request);
+    // New Core wakeup function that uses Signal of MemoryRequest
+    // if Signal is not setup, it uses old wrapper functions
+    void core_wakeup(MemoryRequest *request) {
+        if(request->get_coreSignal()) {
+            request->get_coreSignal()->emit((void*)request);
+            return;
+        }
+    }
 
 	// to remove the requests if rob eviction has occured
 	void annul_request(W8 coreid,
@@ -207,14 +227,35 @@ namespace Memory {
 
 	int get_core_pending_offchip_miss(W8 coreid);
 
+    BaseMachine& get_machine() { return machine_; }
+
+    void add_cpu_controller(Controller* cont) {
+        cpuControllers_.push(cont);
+    }
+
+    void add_cache_mem_controller(Controller* cont) {
+        allControllers_.push(cont);
+    }
+
+    void add_interconnect(Interconnect* conn) {
+        allInterconnects_.push(conn);
+    }
+
+    void setup_full_flags() {
+        // Setup the full flags
+        cpuFullFlags_.resize(cpuControllers_.count(), false);
+        controllersFullFlags_.resize(allControllers_.count(), false);
+        interconnectsFullFlags_.resize(allInterconnects_.count(), false);
+    }
+
+    bool grab_lock(W64 lockaddr, W8 ctx_id);
+    bool probe_lock(W64 lockaddr, W8 ctx_id);
+    void invalidate_lock(W64 lockaddr, W8 ctx_id);
+
   private:
 
-    void setup_topology();
-    void shared_L2_configuration();
-    void private_L2_configuration();
-
     // machine
-    OutOfOrderMachine &machine_;
+    BaseMachine &machine_;
 
 	// array of caches and memory
 	dynarray<Controller*> cpuControllers_;
@@ -239,9 +280,13 @@ namespace Memory {
 	FixStateList<Message, 128> messageQueue_;
 
 	// Event Queue
-	FixStateList<Event, 1024> eventQueue_;
+	FixStateList<Event, 2048> eventQueue_;
 
 	void sort_event_queue(Event *event);
+	void sort_event_queue_tail(Event *event);
+
+    // Temp Stats
+    Stats *stats;
 
   };
 

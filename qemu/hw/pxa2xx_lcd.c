@@ -796,9 +796,9 @@ static void pxa2xx_update_display(void *opaque)
 
     if (miny >= 0) {
         if (s->orientation)
-            dpy_update(s->ds, miny, 0, maxy, s->xres);
+            dpy_update(s->ds, miny, 0, maxy - miny, s->xres);
         else
-            dpy_update(s->ds, 0, miny, s->xres, maxy);
+            dpy_update(s->ds, 0, miny, s->xres, maxy - miny);
     }
     pxa2xx_lcdc_int_update(s);
 
@@ -929,7 +929,7 @@ PXA2xxLCDState *pxa2xx_lcdc_init(target_phys_addr_t base, qemu_irq irq)
     pxa2xx_lcdc_orientation(s, graphic_rotate);
 
     iomemtype = cpu_register_io_memory(pxa2xx_lcdc_readfn,
-                    pxa2xx_lcdc_writefn, s);
+                    pxa2xx_lcdc_writefn, s, DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x00100000, iomemtype);
 
     s->ds = graphic_console_init(pxa2xx_update_display,
@@ -970,7 +970,7 @@ PXA2xxLCDState *pxa2xx_lcdc_init(target_phys_addr_t base, qemu_irq irq)
         exit(1);
     }
 
-    register_savevm("pxa2xx_lcdc", 0, 0,
+    register_savevm(NULL, "pxa2xx_lcdc", 0, 0,
                     pxa2xx_lcdc_save, pxa2xx_lcdc_load, s);
 
     return s;

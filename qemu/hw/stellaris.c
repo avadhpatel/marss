@@ -348,13 +348,15 @@ static int stellaris_gptm_init(SysBusDevice *dev)
     qdev_init_gpio_out(&dev->qdev, &s->trigger, 1);
 
     iomemtype = cpu_register_io_memory(gptm_readfn,
-                                       gptm_writefn, s);
+                                       gptm_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
 
     s->opaque[0] = s->opaque[1] = s;
     s->timer[0] = qemu_new_timer(vm_clock, gptm_tick, &s->opaque[0]);
     s->timer[1] = qemu_new_timer(vm_clock, gptm_tick, &s->opaque[1]);
-    register_savevm("stellaris_gptm", -1, 1, gptm_save, gptm_load, s);
+    register_savevm(&dev->qdev, "stellaris_gptm", -1, 1,
+                    gptm_save, gptm_load, s);
     return 0;
 }
 
@@ -670,10 +672,11 @@ static int stellaris_sys_init(uint32_t base, qemu_irq irq,
     s->user1 = macaddr[3] | (macaddr[4] << 8) | (macaddr[5] << 16);
 
     iomemtype = cpu_register_io_memory(ssys_readfn,
-                                       ssys_writefn, s);
+                                       ssys_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x00001000, iomemtype);
     ssys_reset(s);
-    register_savevm("stellaris_sys", -1, 1, ssys_save, ssys_load, s);
+    register_savevm(NULL, "stellaris_sys", -1, 1, ssys_save, ssys_load, s);
     return 0;
 }
 
@@ -883,11 +886,12 @@ static int stellaris_i2c_init(SysBusDevice * dev)
     s->bus = bus;
 
     iomemtype = cpu_register_io_memory(stellaris_i2c_readfn,
-                                       stellaris_i2c_writefn, s);
+                                       stellaris_i2c_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
     /* ??? For now we only implement the master interface.  */
     stellaris_i2c_reset(s);
-    register_savevm("stellaris_i2c", -1, 1,
+    register_savevm(&dev->qdev, "stellaris_i2c", -1, 1,
                     stellaris_i2c_save, stellaris_i2c_load, s);
     return 0;
 }
@@ -1192,11 +1196,12 @@ static int stellaris_adc_init(SysBusDevice *dev)
     }
 
     iomemtype = cpu_register_io_memory(stellaris_adc_readfn,
-                                       stellaris_adc_writefn, s);
+                                       stellaris_adc_writefn, s,
+                                       DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, 0x1000, iomemtype);
     stellaris_adc_reset(s);
     qdev_init_gpio_in(&dev->qdev, stellaris_adc_trigger, 1);
-    register_savevm("stellaris_adc", -1, 1,
+    register_savevm(&dev->qdev, "stellaris_adc", -1, 1,
                     stellaris_adc_save, stellaris_adc_load, s);
     return 0;
 }
@@ -1256,7 +1261,7 @@ static int stellaris_ssi_bus_init(SSISlave *dev)
     s->bus[1] = ssi_create_bus(&dev->qdev, "ssi1");
     qdev_init_gpio_in(&dev->qdev, stellaris_ssi_bus_select, 1);
 
-    register_savevm("stellaris_ssi_bus", -1, 1,
+    register_savevm(&dev->qdev, "stellaris_ssi_bus", -1, 1,
                     stellaris_ssi_bus_save, stellaris_ssi_bus_load, s);
     return 0;
 }
@@ -1367,7 +1372,7 @@ static void stellaris_init(const char *kernel_filename, const char *cpu_model,
             gpio_out[GPIO_D][0] = qdev_get_gpio_in(mux, 0);
 
             bus = qdev_get_child_bus(mux, "ssi0");
-            dev = ssi_create_slave(bus, "ssi-sd");
+            ssi_create_slave(bus, "ssi-sd");
 
             bus = qdev_get_child_bus(mux, "ssi1");
             dev = ssi_create_slave(bus, "ssd0323");

@@ -54,7 +54,7 @@ static const int NUMBER_OF_CORES_PER_L2 = 1;
 
 // #define SINGLE_CORE_MEM_CONFIG
 // Enable/Disable L3 cache
-// #define ENABLE_L3_ACHE
+//#define ENABLE_L3_ACHE
 
 typedef __SIZE_TYPE__ size_t;
 typedef unsigned long long W64;
@@ -69,7 +69,6 @@ typedef signed char W8s;
 #ifndef NULL
 #define NULL 0
 #endif
-#define null NULL
 
 #ifdef __x86_64__
 typedef W64 Waddr;
@@ -120,11 +119,12 @@ static inline void assert_fail_trap(const char *__assertion, const char *__file,
 
 #define __CONCAT(x,y)	x ## y
 #define __STRING(x)	#x
-#define assert(expr) (__ASSERT_VOID_CAST ((unlikely(expr)) ? 0 : (assert_fail (__STRING(expr), __FILE__, __LINE__, __PRETTY_FUNCTION__), 0)))
 
 #ifdef DISABLE_ASSERT
 #undef assert
 #define assert(expr) (expr)
+#else
+#define assert(expr) (__ASSERT_VOID_CAST ((unlikely(expr)) ? 0 : (assert_fail (__STRING(expr), __FILE__, __LINE__, __PRETTY_FUNCTION__), 0)))
 #endif
 
 #define nan NAN
@@ -172,8 +172,8 @@ template <typename T> struct ispointer_t<T*> { static const bool pointer = 1; };
 
 #ifndef offsetof_t
 // Null pointer to the specified object type, for computing field offsets
-template <typename T> static inline T* nullptr() { return (T*)(Waddr)0; }
-#define offsetof_t(T, field) ((Waddr)(&(nullptr<T>()->field)) - ((Waddr)nullptr<T>()))
+template <typename T> static inline T* NULLptr() { return (T*)(Waddr)0; }
+#define offsetof_t(T, field) ((Waddr)(&(NULLptr<T>()->field)) - ((Waddr)NULLptr<T>()))
 #endif
 #define baseof(T, field, ptr) ((T*)(((byte*)(ptr)) - offsetof_t(T, field)))
 // Restricted (non-aliased) pointers:

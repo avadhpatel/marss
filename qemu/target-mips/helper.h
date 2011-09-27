@@ -2,7 +2,6 @@
 
 DEF_HELPER_2(raise_exception_err, void, i32, int)
 DEF_HELPER_1(raise_exception, void, i32)
-DEF_HELPER_0(interrupt_restart, void)
 
 #ifdef TARGET_MIPS64
 DEF_HELPER_3(ldl, tl, tl, tl, int)
@@ -155,11 +154,20 @@ DEF_HELPER_2(mttlo, void, tl, i32)
 DEF_HELPER_2(mtthi, void, tl, i32)
 DEF_HELPER_2(mttacx, void, tl, i32)
 DEF_HELPER_1(mttdsp, void, tl)
-DEF_HELPER_1(dmt, tl, tl)
-DEF_HELPER_1(emt, tl, tl)
-DEF_HELPER_1(dvpe, tl, tl)
-DEF_HELPER_1(evpe, tl, tl)
+DEF_HELPER_0(dmt, tl)
+DEF_HELPER_0(emt, tl)
+DEF_HELPER_0(dvpe, tl)
+DEF_HELPER_0(evpe, tl)
 #endif /* !CONFIG_USER_ONLY */
+
+/* microMIPS functions */
+DEF_HELPER_3(lwm, void, tl, tl, i32);
+DEF_HELPER_3(swm, void, tl, tl, i32);
+#ifdef TARGET_MIPS64
+DEF_HELPER_3(ldm, void, tl, tl, i32);
+DEF_HELPER_3(sdm, void, tl, tl, i32);
+#endif
+
 DEF_HELPER_2(fork, void, tl, tl)
 DEF_HELPER_1(yield, tl, tl)
 

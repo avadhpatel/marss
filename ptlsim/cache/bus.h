@@ -42,7 +42,7 @@ struct BusQueueEntry : public FixStateListObject
 	bool annuled;
 
 	void init() {
-		request = null;
+		request = NULL;
 		hasData = false;
 		annuled = false;
 	}
@@ -81,7 +81,7 @@ class BusInterconnect : public Interconnect
 		BusQueueEntry *arbitrate_round_robin();
 
 	public:
-		BusInterconnect(char *name, MemoryHierarchy *memoryHierarchy);
+		BusInterconnect(const char *name, MemoryHierarchy *memoryHierarchy);
 		bool is_busy(){ return busBusy_; }
 		void set_bus_busy(bool flag){
 			busBusy_ = flag;

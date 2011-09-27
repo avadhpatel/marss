@@ -3,7 +3,10 @@
 /* Definitions for mips board emulation.  */
 
 /* gt64xxx.c */
-PCIBus *pci_gt64120_init(qemu_irq *pic);
+PCIBus *gt64120_register(qemu_irq *pic);
+
+/* bonito.c */
+PCIBus *bonito_init(qemu_irq *pic);
 
 /* ds1225y.c */
 void *ds1225y_init(target_phys_addr_t mem_base, const char *filename);
@@ -18,13 +21,7 @@ int g364fb_mm_init(target_phys_addr_t vram_base,
 void mipsnet_init(int base, qemu_irq irq, NICInfo *nd);
 
 /* jazz_led.c */
-extern void jazz_led_init(target_phys_addr_t base);
-
-/* mips_int.c */
-extern void cpu_mips_irq_init_cpu(CPUState *env);
-
-/* mips_timer.c */
-extern void cpu_mips_clock_init(CPUState *);
+void jazz_led_init(target_phys_addr_t base);
 
 /* rc4030.c */
 typedef struct rc4030DMAState *rc4030_dma;

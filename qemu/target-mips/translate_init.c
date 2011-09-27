@@ -45,10 +45,6 @@
  (0 << CP0C3_VEIC) | (0 << CP0C3_VInt) | (0 << CP0C3_SP) |        \
  (0 << CP0C3_SM) | (0 << CP0C3_TL))
 
-/* Define a implementation number of 1.
-   Define a major version 1, minor version 0. */
-#define MIPS_FCR0 ((0 << FCR0_S) | (0x1 << FCR0_PRID) | (0x10 << FCR0_REV))
-
 /* MMU types, the first four entries have the same layout as the
    CP0C0_MT field.  */
 enum mips_mmu_types {
@@ -104,7 +100,8 @@ static const mips_def_t mips_defs[] =
         .CP0_Config0 = MIPS_CONFIG0 | (MMU_TYPE_R4000 << CP0C0_MT),
         .CP0_Config1 = MIPS_CONFIG1 | (15 << CP0C1_MMU) |
                        (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
-                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
+                       (0 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
         .CP0_LLAddr_rw_bitmask = 0,
@@ -114,7 +111,7 @@ static const mips_def_t mips_defs[] =
         .CP0_Status_rw_bitmask = 0x1278FF17,
         .SEGBITS = 32,
         .PABITS = 32,
-        .insn_flags = CPU_MIPS32 | ASE_MIPS16,
+        .insn_flags = CPU_MIPS32,
         .mmu_type = MMU_TYPE_R4000,
     },
     {
@@ -125,7 +122,8 @@ static const mips_def_t mips_defs[] =
         .CP0_Config0 = MIPS_CONFIG0 | (MMU_TYPE_FMT << CP0C0_MT),
         .CP0_Config1 = MIPS_CONFIG1 |
                        (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
-                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
+                       (1 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
         .CP0_LLAddr_rw_bitmask = 0,
@@ -144,7 +142,8 @@ static const mips_def_t mips_defs[] =
         .CP0_Config0 = MIPS_CONFIG0 | (MMU_TYPE_R4000 << CP0C0_MT),
         .CP0_Config1 = MIPS_CONFIG1 | (15 << CP0C1_MMU) |
                        (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
-                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
+                       (0 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
         .CP0_LLAddr_rw_bitmask = 0,
@@ -154,7 +153,7 @@ static const mips_def_t mips_defs[] =
         .CP0_Status_rw_bitmask = 0x1278FF17,
         .SEGBITS = 32,
         .PABITS = 32,
-        .insn_flags = CPU_MIPS32 | ASE_MIPS16,
+        .insn_flags = CPU_MIPS32,
         .mmu_type = MMU_TYPE_R4000,
     },
     {
@@ -163,7 +162,8 @@ static const mips_def_t mips_defs[] =
         .CP0_Config0 = MIPS_CONFIG0 | (MMU_TYPE_FMT << CP0C0_MT),
         .CP0_Config1 = MIPS_CONFIG1 |
                        (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
-                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
+                       (1 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
         .CP0_LLAddr_rw_bitmask = 0,
@@ -183,7 +183,8 @@ static const mips_def_t mips_defs[] =
                     (MMU_TYPE_R4000 << CP0C0_MT),
         .CP0_Config1 = MIPS_CONFIG1 | (15 << CP0C1_MMU) |
                        (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
-                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
+                       (0 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt),
         .CP0_LLAddr_rw_bitmask = 0,
@@ -193,7 +194,7 @@ static const mips_def_t mips_defs[] =
         .CP0_Status_rw_bitmask = 0x1278FF17,
         .SEGBITS = 32,
         .PABITS = 32,
-        .insn_flags = CPU_MIPS32R2 | ASE_MIPS16,
+        .insn_flags = CPU_MIPS32R2,
         .mmu_type = MMU_TYPE_R4000,
     },
     {
@@ -203,7 +204,8 @@ static const mips_def_t mips_defs[] =
                        (MMU_TYPE_FMT << CP0C0_MT),
         .CP0_Config1 = MIPS_CONFIG1 |
                        (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
-                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
+                       (1 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
         .CP0_LLAddr_rw_bitmask = 0,
@@ -223,7 +225,8 @@ static const mips_def_t mips_defs[] =
                        (MMU_TYPE_R4000 << CP0C0_MT),
         .CP0_Config1 = MIPS_CONFIG1 | (15 << CP0C1_MMU) |
                        (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
-                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
+                       (1 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt),
         .CP0_LLAddr_rw_bitmask = 0,
@@ -244,7 +247,8 @@ static const mips_def_t mips_defs[] =
                     (MMU_TYPE_R4000 << CP0C0_MT),
         .CP0_Config1 = MIPS_CONFIG1 | (1 << CP0C1_FP) | (15 << CP0C1_MMU) |
                        (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
-                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
+                       (1 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt),
         .CP0_LLAddr_rw_bitmask = 0,
@@ -267,7 +271,8 @@ static const mips_def_t mips_defs[] =
                        (MMU_TYPE_R4000 << CP0C0_MT),
         .CP0_Config1 = MIPS_CONFIG1 | (1 << CP0C1_FP) | (15 << CP0C1_MMU) |
                        (0 << CP0C1_IS) | (3 << CP0C1_IL) | (1 << CP0C1_IA) |
-                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
+                       (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
+                       (1 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt) | (1 << CP0C3_MT),
         .CP0_LLAddr_rw_bitmask = 0,
@@ -445,6 +450,41 @@ static const mips_def_t mips_defs[] =
         .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D,
         .mmu_type = MMU_TYPE_R4000,
     },
+    {
+        .name = "Loongson-2E",
+        .CP0_PRid = 0x6302,
+        /*64KB I-cache and d-cache. 4 way with 32 bit cache line size*/
+        .CP0_Config0 = (0x1<<17) | (0x1<<16) | (0x1<<11) | (0x1<<8) | (0x1<<5) |
+                       (0x1<<4) | (0x1<<1),
+        /* Note: Config1 is only used internally, Loongson-2E has only Config0. */
+        .CP0_Config1 = (1 << CP0C1_FP) | (47 << CP0C1_MMU),
+        .SYNCI_Step = 16,
+        .CCRes = 2,
+        .CP0_Status_rw_bitmask = 0x35D0FFFF,
+        .CP1_fcr0 = (0x5 << FCR0_PRID) | (0x1 << FCR0_REV),
+        .SEGBITS = 40,
+        .PABITS = 40,
+        .insn_flags = CPU_LOONGSON2E,
+        .mmu_type = MMU_TYPE_R4000,
+    },
+    {
+      .name = "Loongson-2F",
+      .CP0_PRid = 0x6303,
+      /*64KB I-cache and d-cache. 4 way with 32 bit cache line size*/
+      .CP0_Config0 = (0x1<<17) | (0x1<<16) | (0x1<<11) | (0x1<<8) | (0x1<<5) |
+                     (0x1<<4) | (0x1<<1),
+      /* Note: Config1 is only used internally, Loongson-2F has only Config0. */
+      .CP0_Config1 = (1 << CP0C1_FP) | (47 << CP0C1_MMU),
+      .SYNCI_Step = 16,
+      .CCRes = 2,
+      .CP0_Status_rw_bitmask = 0xF5D0FF1F,   /*bit5:7 not writeable*/
+      .CP1_fcr0 = (0x5 << FCR0_PRID) | (0x1 << FCR0_REV),
+      .SEGBITS = 40,
+      .PABITS = 40,
+      .insn_flags = CPU_LOONGSON2F,
+      .mmu_type = MMU_TYPE_R4000,
+    },
+
 #endif
 };
 
@@ -460,7 +500,7 @@ static const mips_def_t *cpu_mips_find_by_name (const char *name)
     return NULL;
 }
 
-void mips_cpu_list (FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt, ...))
+void mips_cpu_list (FILE *f, fprintf_function cpu_fprintf)
 {
     int i;
 

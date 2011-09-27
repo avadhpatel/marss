@@ -206,7 +206,7 @@ static uint32_t sh7750_mem_readb(void *opaque, target_phys_addr_t addr)
     switch (addr) {
     default:
 	error_access("byte read", addr);
-	assert(0);
+        abort();
     }
 }
 
@@ -240,7 +240,7 @@ static uint32_t sh7750_mem_readw(void *opaque, target_phys_addr_t addr)
 	return 0;
     default:
 	error_access("word read", addr);
-	assert(0);
+        abort();
     }
 }
 
@@ -287,7 +287,7 @@ static uint32_t sh7750_mem_readl(void *opaque, target_phys_addr_t addr)
 	return s->cpu->prr;
     default:
 	error_access("long read", addr);
-	assert(0);
+        abort();
     }
 }
 
@@ -303,7 +303,7 @@ static void sh7750_mem_writeb(void *opaque, target_phys_addr_t addr,
     }
 
     error_access("byte write", addr);
-    assert(0);
+    abort();
 }
 
 static void sh7750_mem_writew(void *opaque, target_phys_addr_t addr,
@@ -349,12 +349,12 @@ static void sh7750_mem_writew(void *opaque, target_phys_addr_t addr,
 	s->gpioic = mem_value;
 	if (mem_value != 0) {
 	    fprintf(stderr, "I/O interrupts not implemented\n");
-	    assert(0);
+            abort();
 	}
 	return;
     default:
 	error_access("word write", addr);
-	assert(0);
+        abort();
     }
 }
 
@@ -396,8 +396,11 @@ static void sh7750_mem_writel(void *opaque, target_phys_addr_t addr,
 	portb_changed(s, temp);
 	return;
     case SH7750_MMUCR_A7:
-	s->cpu->mmucr = mem_value;
-	return;
+        if (mem_value & MMUCR_TI) {
+            cpu_sh4_invalidate_tlb(s->cpu);
+        }
+        s->cpu->mmucr = mem_value & ~MMUCR_TI;
+        return;
     case SH7750_PTEH_A7:
         /* If asid changes, clear all registered tlb entries. */
 	if ((s->cpu->pteh & 0xff) != (mem_value & 0xff))
@@ -430,7 +433,7 @@ static void sh7750_mem_writel(void *opaque, target_phys_addr_t addr,
 	return;
     default:
 	error_access("long write", addr);
-	assert(0);
+        abort();
     }
 }
 
@@ -615,13 +618,14 @@ static struct intc_group groups_irl[] = {
 
 static uint32_t invalid_read(void *opaque, target_phys_addr_t addr)
 {
-    assert(0);
+    abort();
 
     return 0;
 }
 
 static uint32_t sh7750_mmct_readl(void *opaque, target_phys_addr_t addr)
 {
+    SH7750State *s = opaque;
     uint32_t ret = 0;
 
     switch (MM_REGION_TYPE(addr)) {
@@ -630,21 +634,23 @@ static uint32_t sh7750_mmct_readl(void *opaque, target_phys_addr_t addr)
         /* do nothing */
 	break;
     case MM_ITLB_ADDR:
+        ret = cpu_sh4_read_mmaped_itlb_addr(s->cpu, addr);
+        break;
     case MM_ITLB_DATA:
-        /* XXXXX */
-        assert(0);
-	break;
+        ret = cpu_sh4_read_mmaped_itlb_data(s->cpu, addr);
+        break;
     case MM_OCACHE_ADDR:
     case MM_OCACHE_DATA:
         /* do nothing */
 	break;
     case MM_UTLB_ADDR:
+        ret = cpu_sh4_read_mmaped_utlb_addr(s->cpu, addr);
+        break;
     case MM_UTLB_DATA:
-        /* XXXXX */
-        assert(0);
-	break;
+        ret = cpu_sh4_read_mmaped_utlb_data(s->cpu, addr);
+        break;
     default:
-        assert(0);
+        abort();
     }
 
     return ret;
@@ -653,7 +659,7 @@ static uint32_t sh7750_mmct_readl(void *opaque, target_phys_addr_t addr)
 static void invalid_write(void *opaque, target_phys_addr_t addr,
 			  uint32_t mem_value)
 {
-    assert(0);
+    abort();
 }
 
 static void sh7750_mmct_writel(void *opaque, target_phys_addr_t addr,
@@ -667,9 +673,11 @@ static void sh7750_mmct_writel(void *opaque, target_phys_addr_t addr,
         /* do nothing */
 	break;
     case MM_ITLB_ADDR:
+        cpu_sh4_write_mmaped_itlb_addr(s->cpu, addr, mem_value);
+        break;
     case MM_ITLB_DATA:
-        /* XXXXX */
-        assert(0);
+        cpu_sh4_write_mmaped_itlb_data(s->cpu, addr, mem_value);
+        abort();
 	break;
     case MM_OCACHE_ADDR:
     case MM_OCACHE_DATA:
@@ -679,11 +687,10 @@ static void sh7750_mmct_writel(void *opaque, target_phys_addr_t addr,
         cpu_sh4_write_mmaped_utlb_addr(s->cpu, addr, mem_value);
 	break;
     case MM_UTLB_DATA:
-        /* XXXXX */
-        assert(0);
+        cpu_sh4_write_mmaped_utlb_data(s->cpu, addr, mem_value);
 	break;
     default:
-        assert(0);
+        abort();
 	break;
     }
 }
@@ -710,7 +717,8 @@ SH7750State *sh7750_init(CPUSH4State * cpu)
     s->cpu = cpu;
     s->periph_freq = 60000000;	/* 60MHz */
     sh7750_io_memory = cpu_register_io_memory(sh7750_mem_read,
-					      sh7750_mem_write, s);
+					      sh7750_mem_write, s,
+                                              DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory_offset(0x1f000000, 0x1000,
                                         sh7750_io_memory, 0x1f000000);
     cpu_register_physical_memory_offset(0xff000000, 0x1000,
@@ -725,7 +733,8 @@ SH7750State *sh7750_init(CPUSH4State * cpu)
                                         sh7750_io_memory, 0x1fc00000);
 
     sh7750_mm_cache_and_tlb = cpu_register_io_memory(sh7750_mmct_read,
-						     sh7750_mmct_write, s);
+						     sh7750_mmct_write, s,
+                                                     DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(0xf0000000, 0x08000000,
 				 sh7750_mm_cache_and_tlb);
 

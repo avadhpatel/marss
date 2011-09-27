@@ -399,4 +399,23 @@ static inline W64 ptlcall_checkpoint_dummy() {
 
 #endif // PTLCALLS_USERSPACE
 
+//
+// Application Crash Core Dump handling support. We modify the linux kernel's
+// '/proc/sys/kernel/core_pattern' to custom core-dump handler that pass the
+// core dump from VM to Host for debugging crashes. Supported customized core
+// dump handler can be found in 'core-dump-handler.c' file. Set the
+// 'core_pattern' to be '|/bin/core-dump-handler %s %e'.
+//
+#define PTLCALL_CORE_DUMP    4
+
+#ifdef PTLCALLS_USERSPACE
+
+static inline W64 ptlcall_core_dump(const char* dump, const W64 size,
+        const char* name, const int signum) {
+    return ptlcall(PTLCALL_CORE_DUMP, (W64)dump, size,
+            (W64)name, strlen(name), (W64)signum, 0);
+}
+
+#endif // PTLCALLS_USERSPACE
+
 #endif // __PTLCALLS_H__

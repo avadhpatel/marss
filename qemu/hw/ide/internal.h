@@ -7,6 +7,8 @@
  * non-internal declarations are in hw/ide.h
  */
 #include <hw/ide.h>
+#include "block_int.h"
+#include "iorange.h"
 
 /* debug IDE devices */
 //#define DEBUG_IDE
@@ -18,7 +20,8 @@ typedef struct IDEBus IDEBus;
 typedef struct IDEDevice IDEDevice;
 typedef struct IDEDeviceInfo IDEDeviceInfo;
 typedef struct IDEState IDEState;
-typedef struct BMDMAState BMDMAState;
+typedef struct IDEDMA IDEDMA;
+typedef struct IDEDMAOps IDEDMAOps;
 
 /* Bits of HD_STATUS */
 #define ERR_STAT		0x01
@@ -361,15 +364,21 @@ typedef struct BMDMAState BMDMAState;
 #define SMART_DISABLE         0xd9
 #define SMART_STATUS          0xda
 
+typedef enum { IDE_HD, IDE_CD, IDE_CFATA } IDEDriveKind;
+
 typedef void EndTransferFunc(IDEState *);
+
+typedef void DMAStartFunc(IDEDMA *, IDEState *, BlockDriverCompletionFunc *);
+typedef int DMAFunc(IDEDMA *);
+typedef int DMAIntFunc(IDEDMA *, int);
+typedef void DMARestartFunc(void *, int, int);
 
 /* NOTE: IDEState represents in fact one drive */
 struct IDEState {
     IDEBus *bus;
     uint8_t unit;
     /* ide config */
-    int is_cdrom;
-    int is_cf;
+    IDEDriveKind drive_kind;
     int cylinders, heads, sectors;
     int64_t nb_sectors;
     int mult_sectors;
@@ -430,7 +439,6 @@ struct IDEState {
     uint32_t mdata_size;
     uint8_t *mdata_storage;
     int media_changed;
-    /* for pmac */
     int is_read;
     /* SMART */
     uint8_t smart_enabled;
@@ -438,14 +446,36 @@ struct IDEState {
     int smart_errors;
     uint8_t smart_selftest_count;
     uint8_t *smart_selftest_data;
+    /* AHCI */
+    int ncq_queues;
+};
+
+struct IDEDMAOps {
+    DMAStartFunc *start_dma;
+    DMAFunc *start_transfer;
+    DMAIntFunc *prepare_buf;
+    DMAIntFunc *rw_buf;
+    DMAIntFunc *set_unit;
+    DMAIntFunc *add_status;
+    DMAFunc *set_inactive;
+    DMARestartFunc *restart_cb;
+    DMAFunc *reset;
+};
+
+struct IDEDMA {
+    const struct IDEDMAOps *ops;
+    struct iovec iov;
+    QEMUIOVector qiov;
+    BlockDriverAIOCB *aiocb;
 };
 
 struct IDEBus {
     BusState qbus;
     IDEDevice *master;
     IDEDevice *slave;
-    BMDMAState *bmdma;
     IDEState ifs[2];
+    int bus_id;
+    IDEDMA *dma;
     uint8_t unit;
     uint8_t cmd;
     qemu_irq irq;
@@ -454,16 +484,15 @@ struct IDEBus {
 struct IDEDevice {
     DeviceState qdev;
     uint32_t unit;
-    DriveInfo *dinfo;
+    BlockConf conf;
     char *version;
+    char *serial;
 };
 
 typedef int (*ide_qdev_initfn)(IDEDevice *dev);
 struct IDEDeviceInfo {
     DeviceInfo qdev;
     ide_qdev_initfn init;
-    uint32_t unit;
-    DriveInfo *drive;
 };
 
 #define BM_STATUS_DMAING 0x01
@@ -471,51 +500,20 @@ struct IDEDeviceInfo {
 #define BM_STATUS_INT    0x04
 #define BM_STATUS_DMA_RETRY  0x08
 #define BM_STATUS_PIO_RETRY  0x10
-#define BM_STATUS_RETRY_READ 0x20
+#define BM_STATUS_RETRY_READ  0x20
+#define BM_STATUS_RETRY_FLUSH 0x40
 
 #define BM_CMD_START     0x01
 #define BM_CMD_READ      0x08
-
-struct BMDMAState {
-    uint8_t cmd;
-    uint8_t status;
-    uint32_t addr;
-
-    struct PCIIDEState *pci_dev;
-    IDEBus *bus;
-    /* current transfer state */
-    uint32_t cur_addr;
-    uint32_t cur_prd_last;
-    uint32_t cur_prd_addr;
-    uint32_t cur_prd_len;
-    uint8_t unit;
-    BlockDriverCompletionFunc *dma_cb;
-    BlockDriverAIOCB *aiocb;
-    struct iovec iov;
-    QEMUIOVector qiov;
-    int64_t sector_num;
-    uint32_t nsector;
-    QEMUBH *bh;
-};
 
 static inline IDEState *idebus_active_if(IDEBus *bus)
 {
     return bus->ifs + bus->unit;
 }
 
-static inline IDEState *bmdma_active_if(BMDMAState *bmdma)
-{
-    assert(bmdma->unit != (uint8_t)-1);
-    return bmdma->bus->ifs + bmdma->unit;
-}
-
 static inline void ide_set_irq(IDEBus *bus)
 {
-    BMDMAState *bm = bus->bmdma;
     if (!(bus->cmd & IDE_CMD_DISABLE_IRQ)) {
-        if (bm) {
-            bm->status |= BM_STATUS_INT;
-        }
         qemu_irq_raise(bus->irq);
     }
 }
@@ -538,10 +536,7 @@ void ide_bus_reset(IDEBus *bus);
 int64_t ide_get_sector(IDEState *s);
 void ide_set_sector(IDEState *s, int64_t sector_num);
 
-void ide_dma_cancel(BMDMAState *bm);
-void ide_dma_restart_cb(void *opaque, int running, int reason);
 void ide_dma_error(IDEState *s);
-void ide_dma_reset(BMDMAState *bm);
 
 void ide_atapi_cmd_ok(IDEState *s);
 void ide_atapi_cmd_error(IDEState *s, int sense_key, int asc);
@@ -556,13 +551,21 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr);
 void ide_data_writel(void *opaque, uint32_t addr, uint32_t val);
 uint32_t ide_data_readl(void *opaque, uint32_t addr);
 
-void ide_init_drive(IDEState *s, DriveInfo *dinfo, const char *version);
-void ide_init2(IDEBus *bus, DriveInfo *hd0, DriveInfo *hd1,
-               qemu_irq irq);
+int ide_init_drive(IDEState *s, BlockDriverState *bs,
+                   const char *version, const char *serial);
+void ide_init2(IDEBus *bus, qemu_irq irq);
+void ide_init2_with_non_qdev_drives(IDEBus *bus, DriveInfo *hd0,
+                                    DriveInfo *hd1, qemu_irq irq);
 void ide_init_ioport(IDEBus *bus, int iobase, int iobase2);
 
+void ide_exec_cmd(IDEBus *bus, uint32_t val);
+void ide_dma_cb(void *opaque, int ret);
+void ide_sector_write(IDEState *s);
+void ide_sector_read(IDEState *s);
+void ide_flush_cache(IDEState *s);
+
 /* hw/ide/qdev.c */
-void ide_bus_new(IDEBus *idebus, DeviceState *dev);
+void ide_bus_new(IDEBus *idebus, DeviceState *dev, int bus_id);
 IDEDevice *ide_create_drive(IDEBus *bus, int unit, DriveInfo *drive);
 
 #endif /* HW_IDE_INTERNAL_H */

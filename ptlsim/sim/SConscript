@@ -3,10 +3,69 @@
 # Import envrionment
 Import('env')
 
+#########################################
+# Machine Builder function
+#########################################
+
+num_machines_build = 0
+
+def machine_builder_func(env, m_name):
+    '''Build user defined machine configuration'''
+    global num_machines_build
+    config = env['config']
+
+    # First check if min/max number of cpus requirement
+    # for this machine is met or not
+    min_c = 0
+    max_c = env['num_cpus']
+    if config['machine'][m_name].has_key('min_contexts'):
+        min_c = config['machine'][m_name]['min_contexts']
+    if config['machine'][m_name].has_key('max_contexts'):
+        max_c = config['machine'][m_name]['max_contexts']
+
+    if min_c > env['num_cpus']:
+        print("Machine '%s' requires minimum of %d contexts while " \
+                "you are compiling with %d contexts. Skipping this " \
+                "machine '%s'." % (m_name, min_c, env['num_cpus'], m_name))
+        return []
+    elif max_c < env['num_cpus']:
+        print("Machine '%s' requires maximum of %d contexts while " \
+                "you are compiling with %d contexts. Skipping this " \
+                "machine '%s'." % (m_name, max_c, env['num_cpus'], m_name))
+        return []
+
+    num_machines_build += 1
+    m_objs = []
+
+    m_file = "%s_gen.cpp" % m_name
+    m_cpp = env.Command(m_file, env['config_file'],
+            Action("%s -c $SOURCE -t machine -n %s -o $TARGET" %
+                (env['config_gen'], m_name),
+                cmdstr="$CREATECOMSTR"))[0]
+    m_obj = env.Object(m_cpp, CXXFLAGS = "$CXXFLAGS -include %s"
+            % env['cache_type_h'].rfile().abspath)
+    env.Depends(m_obj, env['cache_type_h'])
+
+    m_objs.append(m_obj)
+    return m_objs
+
+env.AddMethod(machine_builder_func, "machine_builder")
+env['machine_builder'] = machine_builder_func
+
 # Now get list of .cpp files
-src_files = Glob('*.cpp')
+src_files = ['config-parser.cpp', 'machine.cpp', 'ptl-qemu.cpp',
+        'ptlsim.cpp', 'syscalls.cpp', 'test.cpp']
 
 objs = env.Object(src_files)
+
+# Generate machine configurations
+for machine in env['config']['machine'].keys():
+    objs += env.machine_builder(machine)
+
+if num_machines_build == 0:
+    print("No machine built. Please provide a machine configuartion " \
+            "that matches the number of cores you are compiling.")
+    Exit(1)
 
 # dstbuild objects
 dst_objs = env.Object(Split("syscalls.cpp config-parser.cpp"))

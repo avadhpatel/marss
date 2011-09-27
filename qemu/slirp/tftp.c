@@ -92,8 +92,8 @@ static int tftp_session_find(Slirp *slirp, struct tftp_t *tp)
   return -1;
 }
 
-static int tftp_read_data(struct tftp_session *spt, u_int16_t block_nr,
-			  u_int8_t *buf, int len)
+static int tftp_read_data(struct tftp_session *spt, uint16_t block_nr,
+                          uint8_t *buf, int len)
 {
   int fd;
   int bytes_read = 0;
@@ -155,13 +155,12 @@ static int tftp_send_oack(struct tftp_session *spt,
 }
 
 static void tftp_send_error(struct tftp_session *spt,
-                            u_int16_t errorcode, const char *msg,
+                            uint16_t errorcode, const char *msg,
                             struct tftp_t *recv_tp)
 {
   struct sockaddr_in saddr, daddr;
   struct mbuf *m;
   struct tftp_t *tp;
-  int nobytes;
 
   m = m_get(spt->slirp);
 
@@ -185,8 +184,6 @@ static void tftp_send_error(struct tftp_session *spt,
   daddr.sin_addr = spt->client_ip;
   daddr.sin_port = spt->client_port;
 
-  nobytes = 2;
-
   m->m_len = sizeof(struct tftp_t) - 514 + 3 + strlen(msg) -
         sizeof(struct ip) - sizeof(struct udphdr);
 
@@ -197,7 +194,7 @@ out:
 }
 
 static int tftp_send_data(struct tftp_session *spt,
-			  u_int16_t block_nr,
+                          uint16_t block_nr,
 			  struct tftp_t *recv_tp)
 {
   struct sockaddr_in saddr, daddr;
@@ -314,7 +311,7 @@ static void tftp_handle_rrq(Slirp *slirp, struct tftp_t *tp, int pktlen)
     return;
   }
 
-  if (memcmp(&tp->x.tp_buf[k], "octet\0", 6) != 0) {
+  if (strcasecmp((const char *)&tp->x.tp_buf[k], "octet") != 0) {
       tftp_send_error(spt, 4, "Unsupported transfer mode", tp);
       return;
   }
@@ -354,7 +351,7 @@ static void tftp_handle_rrq(Slirp *slirp, struct tftp_t *tp, int pktlen)
       value = (const char *)&tp->x.tp_buf[k];
       k += strlen(value) + 1;
 
-      if (strcmp(key, "tsize") == 0) {
+      if (strcasecmp(key, "tsize") == 0) {
 	  int tsize = atoi(value);
 	  struct stat stat_p;
 

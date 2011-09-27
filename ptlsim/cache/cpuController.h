@@ -41,12 +41,14 @@ struct CPUControllerQueueEntry : public FixStateListObject
 	MemoryRequest *request;
 	int cycles;
 	int depends;
+    int waitFor;
 	bool annuled;
 
 	void init() {
-		request = null;
+		request = NULL;
 		cycles = -1;
 		depends = -1;
+        waitFor = -1;
 		annuled = false;
 	}
 
@@ -56,8 +58,10 @@ struct CPUControllerQueueEntry : public FixStateListObject
 			return os;
 		}
 		os << "Request{", *request, "} ";
+        os << "idx[", idx, "] ";
 		os << "cycles[", cycles, "] ";
 		os << "depends[", depends, "] ";
+        os << "waitFor[", waitFor, "] ";
 		os << "annuled[", annuled, "] ";
 		os << endl;
 		return os;
@@ -84,7 +88,7 @@ struct CPUControllerBufferEntry : public FixStateListObject
 	void init() {}
 
 	ostream& print(ostream& os) const {
-		os << "lineAddress[", lineAddress, "] ";
+		os << "lineAddress[", (void*)lineAddress, "] ";
 		return os;
 	}
 };
@@ -103,13 +107,12 @@ class CPUController : public Controller
 		Interconnect *int_L1_d_;
 		int icacheLineBits_;
 		int dcacheLineBits_;
-		CacheStats *userStats_;
-		CacheStats *totalUserStats_;
-		CacheStats *kernelStats_;
-		CacheStats *totalKernelStats_;
 
 		Signal cacheAccess_;
 		Signal queueAccess_;
+
+        // Stats Objects
+        CPUControllerStats stats;
 
 		FixStateList<CPUControllerQueueEntry, \
 			CPU_CONT_PENDING_REQ_SIZE> pendingRequests_;
@@ -133,7 +136,7 @@ class CPUController : public Controller
 		}
 
 	public:
-		CPUController(W8 coreid, char *name,
+		CPUController(W8 coreid, const char *name,
 				MemoryHierarchy *memoryHierarchy);
 
 		bool handle_request_cb(void *arg);
@@ -144,6 +147,7 @@ class CPUController : public Controller
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);
 		void clock();
+        void register_interconnect(Interconnect *interconnect, int type);
 		void register_interconnect_L1_d(Interconnect *interconnect);
 		void register_interconnect_L1_i(Interconnect *interconnect);
 		void print(ostream& os) const;
@@ -152,7 +156,7 @@ class CPUController : public Controller
 		int flush();
 
 		int access(MemoryRequest *request) {
-			return access_fast_path(null, request);
+			return access_fast_path(NULL, request);
 		}
 
 		bool is_full(bool fromInterconnect = false) const {

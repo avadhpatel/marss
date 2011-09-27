@@ -179,7 +179,8 @@ static void mcf5208_sys_init(qemu_irq *pic)
     int i;
 
     iomemtype = cpu_register_io_memory(m5208_sys_readfn,
-                                       m5208_sys_writefn, NULL);
+                                       m5208_sys_writefn, NULL,
+                                       DEVICE_NATIVE_ENDIAN);
     /* SDRAMC.  */
     cpu_register_physical_memory(0xfc0a8000, 0x00004000, iomemtype);
     /* Timers.  */
@@ -188,7 +189,8 @@ static void mcf5208_sys_init(qemu_irq *pic)
         bh = qemu_bh_new(m5208_timer_trigger, s);
         s->timer = ptimer_init(bh);
         iomemtype = cpu_register_io_memory(m5208_timer_readfn,
-                                           m5208_timer_writefn, s);
+                                           m5208_timer_writefn, s,
+                                           DEVICE_NATIVE_ENDIAN);
         cpu_register_physical_memory(0xfc080000 + 0x4000 * i, 0x00004000,
                                      iomemtype);
         s->irq = pic[4 + i];
@@ -220,11 +222,11 @@ static void mcf5208evb_init(ram_addr_t ram_size,
 
     /* DRAM at 0x40000000 */
     cpu_register_physical_memory(0x40000000, ram_size,
-        qemu_ram_alloc(ram_size) | IO_MEM_RAM);
+        qemu_ram_alloc(NULL, "mcf5208.ram", ram_size) | IO_MEM_RAM);
 
     /* Internal SRAM.  */
     cpu_register_physical_memory(0x80000000, 16384,
-        qemu_ram_alloc(16384) | IO_MEM_RAM);
+        qemu_ram_alloc(NULL, "mcf5208.sram", 16384) | IO_MEM_RAM);
 
     /* Internal peripherals.  */
     pic = mcf_intc_init(0xfc048000, env);
@@ -270,8 +272,8 @@ static void mcf5208evb_init(ram_addr_t ram_size,
         exit(1);
     }
 
-    kernel_size = load_elf(kernel_filename, 0, &elf_entry, NULL, NULL,
-                           1, ELF_MACHINE, 0);
+    kernel_size = load_elf(kernel_filename, NULL, NULL, &elf_entry,
+                           NULL, NULL, 1, ELF_MACHINE, 0);
     entry = elf_entry;
     if (kernel_size < 0) {
         kernel_size = load_uimage(kernel_filename, &entry, NULL, NULL);

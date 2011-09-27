@@ -1,0 +1,10 @@
+# SConscript for cache subdirectory
+
+# Import envrionment
+Import('env')
+
+# Now get list of .cpp files
+src_files = Glob('*.cpp')
+env.Append(CCFLAGS = '-fexceptions')
+objs = env.Object(src_files)
+Return('objs')

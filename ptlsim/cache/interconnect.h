@@ -32,22 +32,37 @@
 
 namespace Memory {
 
+enum {
+    INTERCONN_TYPE_UPPER = 0,
+    INTERCONN_TYPE_UPPER2,
+    INTERCONN_TYPE_LOWER,
+    INTERCONN_TYPE_I,
+    INTERCONN_TYPE_D,
+    INTERCONN_TYPE_DIRECTORY,
+};
+
 class Interconnect
 {
 	private:
-		char *name_;
+        stringbuf name_;
 		Signal controller_request_;
 
 	public:
 		MemoryHierarchy *memoryHierarchy_;
-		Interconnect(char *name, MemoryHierarchy *memoryHierarchy) :
+		Interconnect(const char *name, MemoryHierarchy *memoryHierarchy) :
 			memoryHierarchy_(memoryHierarchy)
 			, controller_request_("Controller Request")
 		{
-			name_ = name;
+			name_ << name;
 			controller_request_.connect(signal_mem_ptr(*this,
 						&Interconnect::controller_request_cb));
 		}
+
+        virtual ~Interconnect()
+        {
+            memoryHierarchy_ = NULL;
+        }
+
 		virtual bool controller_request_cb(void *arg)=0;
 		virtual void register_controller(Controller *controller)=0;
 		virtual int access_fast_path(Controller *controller,
@@ -62,7 +77,7 @@ class Interconnect
 		}
 
 		char* get_name() const {
-			return name_;
+			return name_.buf;
 		}
 };
 

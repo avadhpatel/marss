@@ -3,6 +3,7 @@
 import os
 import platform
 import subprocess
+import config_helper
 
 # List of subdirectories where we have source code
 dirs = ['cache', 'core', 'lib', 'sim', 'stats', 'tools', 'x86']
@@ -19,11 +20,7 @@ except:
 # Setup the environment
 # env = Environment()
 
-# Include all the subdirectories into the CCFLAGS
 env['CPPPATH'] = []
-for dir in dirs:
-    env['CPPPATH'].append(os.getcwd() + "/" + dir)
-
 env['CPPPATH'].append(qemu_dir)
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "target-i386"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "fpu"))
@@ -35,16 +32,34 @@ optimization_defs += '-fno-rtti -funroll-loops -fno-strict-aliasing '
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
     env.Append(CCFLAGS = '-g')
-    env.Append(CCFLAGS = '-O')
+
+    # If debugging level is 1 then do optimize
+    if int(debug) == 1:
+        env.Append(CCFLAGS = '-O')
+
+    # Enable tests
+    env.Append(CCFLAGS = '-DENABLE_TESTS')
+    dirs.append('tests')
+    # Add gtest directory in CPPPATH
+    env['CPPPATH'].append(os.getcwd() + "/lib/gtest/include")
+    env['CPPPATH'].append(os.getcwd() + "/lib/gtest")
+    env['tests'] = True
+
 else:
     env.Append(CCFLAGS = '-g3')
     env.Append(CCFLAGS = '-O3 -march=native -mtune=native')
-    # env.Append(CCFLAGS = '-DDISABLE_ASSERT')
+    env.Append(CCFLAGS = '-DDISABLE_ASSERT')
     env.Append(CCFLAGS = '-DDISABLE_LOGGING')
     env.Append(CCFLAGS = optimization_defs)
+    env['tests'] = False
+
+# Include all the subdirectories into the CCFLAGS
+for dir in dirs:
+    env['CPPPATH'].append(os.getcwd() + "/" + dir)
 
 num_sim_cores = ARGUMENTS.get('c', 1)
 env.Append(CCFLAGS = '-DNUM_SIM_CORES=%d' % int(num_sim_cores))
+env['num_cpus'] = int(num_sim_cores)
 if int(num_sim_cores) == 1:
     env.Append(CCFLAGS = '-DSINGLE_CORE_MEM_CONFIG')
 
@@ -86,6 +101,9 @@ try:
 except:
     pass
 
+if git_branch == "(no branch)":
+    git_branch = "UNKNOWN"
+
 env.Append(CCFLAGS = "-DGITBRANCH=%s -DGITCOMMIT=%s -DGITDATE='%s'" %
         (git_branch, git_comm, git_date))
 
@@ -97,10 +115,13 @@ Export('env')
 # print("\tCPPPATH:%s" % env['CPPPATH'])
 
 # Setup the build directory
+# Save configuration to build/config.yaml
+env['config_file'] = env.File('build/config')
+env['config_gen'] = env.File('tools/config_gen.py')
+config_helper.save_config(str(env['config_file']), env['config'])
 
 # Now call the SConscript in all subdirectories to build object files
 objs = []
-dst_objs = []
 for dir in dirs:
 	# Skip the Tools directory
     if dir == "tools":
@@ -108,49 +129,14 @@ for dir in dirs:
     o = SConscript('%s/SConscript' % dir, variant_dir='build/%s' % dir)
     if type(o) == list:
         objs.append(o[0])
-        dst_objs.append(o[1])
     else:
         objs.append(o)
 
-# Build ptlsim.dst.o
 inc_str = ""
 for i_s in env['CPPPATH']:
     inc_str += " -I%s" % i_s
 env['incstr'] = inc_str
-dst_script = "%s/tools/dstbuild.py" % os.getcwd()
-st_i = env.Command('build/stats.i', 'stats/stats.h',
-        "$CXX $CCFLAGS $incstr -E -C $SOURCE > $TARGET")
-dst_tmp_cpp = env.Command('build/dstbuild.temp.cpp', st_i,
-        "%s $SOURCE PTLsimStats > $TARGET" % dst_script)
-dst_tmp = env.Program('build/dstbuild.temp',
-        dst_objs + ["build/dstbuild.temp.cpp"],
-        CCFLAGS = env['CCFLAGS'] + " -DDSTBUILD -include stats.h")
-ptl_dst = env.Command('build/ptlsim.dst', dst_tmp,
-        "./$SOURCE $TARGET")
-ptl_dst_o = env.Command('build/ptlsim.dst.o', ptl_dst,
-        "objcopy -I binary -O elf64-x86-64 -B i386 --rename-section "+
-        ".data=.dst,alloc,load,readonly,data,contents $SOURCE $TARGET")
 
-# Build Tools
-dst_objs.append(ptl_dst_o)
-Export('dst_objs')
-SConscript('tools/SConscript', variant_dir='build/tools')
-
-Depends(dst_tmp_cpp, dst_script)
-Requires(st_i, '../qemu/config-host.h')
-Requires(st_i, '../qemu/x86_64-softmmu/config-target.h')
-Requires(dst_tmp_cpp, st_i)
-Requires(dst_tmp, dst_tmp_cpp)
-
-dst_bson_script = "%s/tools/dstbuild_bson.py" % os.getcwd()
-dst_bson_tmp_cpp = env.Command('build/bson_stats.cpp', st_i,
-        "%s $SOURCE PTLsimStats > $TARGET" % dst_bson_script)
-dst_bson_obj = env.Object(dst_bson_tmp_cpp,
-        CCFLAGS = env['CCFLAGS'] + " -DDSTBUILD -include stats.h")
-
-Depends(dst_bson_tmp_cpp, [dst_script, st_i])
-
-#lib = env.Library('build/libmptlsim', objs + ptl_dst_o)
-lib = objs + ptl_dst_o + dst_bson_obj
+lib = objs
 
 Return('lib')

@@ -26,6 +26,7 @@
  */
 
 #include "ioport.h"
+#include "trace.h"
 
 /***********************************************************/
 /* IO Port */
@@ -173,6 +174,70 @@ int register_ioport_write(pio_addr_t start, int length, int size,
     return 0;
 }
 
+static uint32_t ioport_readb_thunk(void *opaque, uint32_t addr)
+{
+    IORange *ioport = opaque;
+    uint64_t data;
+
+    ioport->ops->read(ioport, addr - ioport->base, 1, &data);
+    return data;
+}
+
+static uint32_t ioport_readw_thunk(void *opaque, uint32_t addr)
+{
+    IORange *ioport = opaque;
+    uint64_t data;
+
+    ioport->ops->read(ioport, addr - ioport->base, 2, &data);
+    return data;
+}
+
+static uint32_t ioport_readl_thunk(void *opaque, uint32_t addr)
+{
+    IORange *ioport = opaque;
+    uint64_t data;
+
+    ioport->ops->read(ioport, addr - ioport->base, 4, &data);
+    return data;
+}
+
+static void ioport_writeb_thunk(void *opaque, uint32_t addr, uint32_t data)
+{
+    IORange *ioport = opaque;
+
+    ioport->ops->write(ioport, addr - ioport->base, 1, data);
+}
+
+static void ioport_writew_thunk(void *opaque, uint32_t addr, uint32_t data)
+{
+    IORange *ioport = opaque;
+
+    ioport->ops->write(ioport, addr - ioport->base, 2, data);
+}
+
+static void ioport_writel_thunk(void *opaque, uint32_t addr, uint32_t data)
+{
+    IORange *ioport = opaque;
+
+    ioport->ops->write(ioport, addr - ioport->base, 4, data);
+}
+
+void ioport_register(IORange *ioport)
+{
+    register_ioport_read(ioport->base, ioport->len, 1,
+                         ioport_readb_thunk, ioport);
+    register_ioport_read(ioport->base, ioport->len, 2,
+                         ioport_readw_thunk, ioport);
+    register_ioport_read(ioport->base, ioport->len, 4,
+                         ioport_readl_thunk, ioport);
+    register_ioport_write(ioport->base, ioport->len, 1,
+                          ioport_writeb_thunk, ioport);
+    register_ioport_write(ioport->base, ioport->len, 2,
+                          ioport_writew_thunk, ioport);
+    register_ioport_write(ioport->base, ioport->len, 4,
+                          ioport_writel_thunk, ioport);
+}
+
 void isa_unassign_ioport(pio_addr_t start, int length)
 {
     int i;
@@ -195,18 +260,21 @@ void isa_unassign_ioport(pio_addr_t start, int length)
 void cpu_outb(pio_addr_t addr, uint8_t val)
 {
     LOG_IOPORT("outb: %04"FMT_pioaddr" %02"PRIx8"\n", addr, val);
+    trace_cpu_out(addr, val);
     ioport_write(0, addr, val);
 }
 
 void cpu_outw(pio_addr_t addr, uint16_t val)
 {
     LOG_IOPORT("outw: %04"FMT_pioaddr" %04"PRIx16"\n", addr, val);
+    trace_cpu_out(addr, val);
     ioport_write(1, addr, val);
 }
 
 void cpu_outl(pio_addr_t addr, uint32_t val)
 {
     LOG_IOPORT("outl: %04"FMT_pioaddr" %08"PRIx32"\n", addr, val);
+    trace_cpu_out(addr, val);
     ioport_write(2, addr, val);
 }
 
@@ -214,6 +282,7 @@ uint8_t cpu_inb(pio_addr_t addr)
 {
     uint8_t val;
     val = ioport_read(0, addr);
+    trace_cpu_in(addr, val);
     LOG_IOPORT("inb : %04"FMT_pioaddr" %02"PRIx8"\n", addr, val);
     return val;
 }
@@ -222,6 +291,7 @@ uint16_t cpu_inw(pio_addr_t addr)
 {
     uint16_t val;
     val = ioport_read(1, addr);
+    trace_cpu_in(addr, val);
     LOG_IOPORT("inw : %04"FMT_pioaddr" %04"PRIx16"\n", addr, val);
     return val;
 }
@@ -230,6 +300,7 @@ uint32_t cpu_inl(pio_addr_t addr)
 {
     uint32_t val;
     val = ioport_read(2, addr);
+    trace_cpu_in(addr, val);
     LOG_IOPORT("inl : %04"FMT_pioaddr" %08"PRIx32"\n", addr, val);
     return val;
 }

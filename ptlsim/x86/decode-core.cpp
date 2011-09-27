@@ -7,12 +7,11 @@
 
 #include <globals.h>
 #include <ptlsim.h>
-#include <datastore.h>
 #include <decode.h>
-#include <stats.h>
 
 
 BasicBlockCache bbcache[NUM_SIM_CORES];
+W8 BasicBlockCache::cpuid_counter = 0;
 
 struct BasicBlockChunkListHashtableLinkManager {
     static inline BasicBlockChunkList* objof(selflistlink* link) {
@@ -188,12 +187,6 @@ const char* assist_name(assist_func_t assist) {
     return "unknown";
 }
 
-void update_assist_stats(assist_func_t assist) {
-    int idx = assist_index(assist);
-    assert(inrange(idx, 0, ASSIST_COUNT-1));
-    stats->external.assists[idx]++;
-}
-
 const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT] = {
     l_assist_sti,
     l_assist_cli,
@@ -222,10 +215,6 @@ const char* light_assist_name(light_assist_func_t assist) {
     }
 
     return "unknown";
-}
-
-void update_light_assist_stats(int idx) {
-    stats->external.l_assists[idx]++;
 }
 
 void split_unaligned(const TransOp& transop, TransOpBuffer& buf) {
@@ -262,7 +251,7 @@ void split_unaligned(const TransOp& transop, TransOpBuffer& buf) {
     lo.cond = LDST_ALIGN_LO;
     lo.unaligned = 0;
     lo.eom = 0;
-    buf.synthops[idx] = null; // loads and stores are not synthesized
+    buf.synthops[idx] = NULL; // loads and stores are not synthesized
 
     idx = buf.put();
     TransOp& hi = buf.uops[idx];
@@ -273,7 +262,7 @@ void split_unaligned(const TransOp& transop, TransOpBuffer& buf) {
     hi.cond = LDST_ALIGN_HI;
     hi.unaligned = 0;
     hi.som = 0;
-    buf.synthops[idx] = null; // loads and stores are not synthesized
+    buf.synthops[idx] = NULL; // loads and stores are not synthesized
 
     if (ld) {
         // ld rd = [ra+rb]        =>   ld.lo rd = [rt]           and    ld.hi rd = [rt],rd
@@ -563,6 +552,7 @@ TraceDecoder::TraceDecoder(const RIPVirtPhys& rvp) {
     use64 = rvp.use64;
     kernel = rvp.kernel;
     dirflag = rvp.df;
+    cpuid = 0;
 }
 
 TraceDecoder::TraceDecoder(Waddr rip, bool use64, bool kernel, bool df) {
@@ -573,6 +563,7 @@ TraceDecoder::TraceDecoder(Waddr rip, bool use64, bool kernel, bool df) {
     bb.rip.use64 = use64;
     bb.rip.kernel = kernel;
     bb.rip.df = df;
+    cpuid = 0;
     this->rip = rip;
     this->ripstart = rip;
     this->use64 = use64;
@@ -589,6 +580,7 @@ TraceDecoder::TraceDecoder(Context& ctx, Waddr rip) {
     cs_base = ctx.segs[R_CS].base;
     kernel = ctx.kernel_mode;
     dirflag = ((ctx.internal_eflags & FLAG_DF) != 0);
+    cpuid = ctx.cpu_index;
 
     pe = (ctx.hflags >> HF_PE_SHIFT) & 1;
     vm86 = (ctx.eflags >> VM_SHIFT) & 1;
@@ -737,13 +729,13 @@ bool TraceDecoder::flush() {
         if (transop.rc < ARCHREG_COUNT) setbit(bb.usedregs, transop.rc);
     }
 
-    stats->decoder.throughput.uops += transbufcount;
+    DECODERSTAT->throughput.uops += transbufcount;
 
     if (!join_with_prev_insn) {
         bb.user_insn_count++;
         bb.bytes += bytes;
-        stats->decoder.throughput.x86_insns++;
-        stats->decoder.throughput.bytes += bytes;
+        DECODERSTAT->throughput.x86_insns++;
+        DECODERSTAT->throughput.bytes += bytes;
     }
 
     transbufcount = 0;
@@ -1575,8 +1567,9 @@ bool BasicBlockCache::invalidate(BasicBlock* bb, int reason) {
     }
 
     remove(bb);
-    stats->decoder.bbcache.count = bbcache[cpuid].count;
-    stats->decoder.bbcache.invalidates[reason]++;
+    W64 ct = bbcache[cpuid].count;
+    DECODERSTAT->bbcache.count = ct;
+    DECODERSTAT->bbcache.invalidates[reason]++;
 
     bb->free();
     return true;
@@ -1600,6 +1593,18 @@ int BasicBlockCache::get_page_bb_count(Waddr mfn) {
     if unlikely (!pagelist) return 0;
 
     return pagelist->count();
+}
+
+void BasicBlockCache::add_page(BasicBlock* bb)
+{
+    BasicBlockChunkList* pagelist = bbpages.get(bb->rip.mfnlo);
+    if (!pagelist) {
+        pagelist = new BasicBlockChunkList(bb->rip.mfnlo);
+        pagelist->refcount++;
+        bbpages.add(pagelist);
+        pagelist->refcount--;
+    }
+    pagelist->add(bb, bb->mfnlo_loc);
 }
 
 //
@@ -1640,8 +1645,9 @@ bool BasicBlockCache::invalidate_page(Waddr mfn, int reason) {
     //  assert(pagelist->count() == 0);
 
     pagelist->clear();
-    stats->decoder.pagecache.count = bbpages.count;
-    stats->decoder.pagecache.invalidates[reason]++;
+    W64 ct = bbpages.count;
+    DECODERSTAT->pagecache.count = ct;
+    DECODERSTAT->pagecache.invalidates[reason]++;
 
     return true;
 }
@@ -1658,7 +1664,8 @@ int BasicBlockCache::reclaim(size_t bytesreq, int urgency) {
 
     if (DEBUG) ptl_logfile << "Reclaiming cached basic blocks at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits:", endl;
 
-    stats->decoder.reclaim_rounds++;
+    if (DECODERSTAT)
+        DECODERSTAT->reclaim_rounds++;
 
     W64 oldest = limits<W64>::max;
     W64 newest = 0;
@@ -1775,7 +1782,8 @@ void BasicBlockCache::flush(int8_t context_id) {
     if (logable(1))
         ptl_logfile << "Flushing basic block cache at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits:", endl;
 
-    stats->decoder.reclaim_rounds++;
+    if (DECODERSTAT)
+        DECODERSTAT->reclaim_rounds++;
 
     {
         Iterator iter(this);
@@ -1981,6 +1989,7 @@ int TraceDecoder::fillbuf(Context& ctx, byte* insnbytes, int insnbytes_bufsize) 
     use64 = ctx.use64;
     use32 = ctx.use32;
     ss32 = (ctx.hflags >> HF_SS32_SHIFT) & 1;
+    cpuid = ctx.cpu_index;
 
     byteoffset = 0;
     faultaddr = 0;
@@ -2086,10 +2095,10 @@ bool TraceDecoder::translate() {
                     if (iscomplex) rc = decode_complex();
 
                     if unlikely (used_microcode_assist) {
-                        stats->decoder.x86_decode_type[DECODE_TYPE_ASSIST]++;
+                        DECODERSTAT->x86_decode_type[DECODE_TYPE_ASSIST]++;
                     } else {
-                        stats->decoder.x86_decode_type[DECODE_TYPE_FAST] += (!iscomplex);
-                        stats->decoder.x86_decode_type[DECODE_TYPE_COMPLEX] += iscomplex;
+                        DECODERSTAT->x86_decode_type[DECODE_TYPE_FAST] += (!iscomplex);
+                        DECODERSTAT->x86_decode_type[DECODE_TYPE_COMPLEX] += iscomplex;
                     }
 
                     break;
@@ -2098,10 +2107,10 @@ bool TraceDecoder::translate() {
         case 3:
         case 4:
         case 5:
-                stats->decoder.x86_decode_type[DECODE_TYPE_SSE]++;
+                DECODERSTAT->x86_decode_type[DECODE_TYPE_SSE]++;
                 rc = decode_sse(); break;
         case 6:
-                stats->decoder.x86_decode_type[DECODE_TYPE_X87]++;
+                DECODERSTAT->x86_decode_type[DECODE_TYPE_X87]++;
                 rc = decode_x87(); break;
         default: {
                      assert(false);
@@ -2116,8 +2125,8 @@ bool TraceDecoder::translate() {
 
     if (end_of_block) {
         // Block ended with a branch: close the uop and exit
-        stats->decoder.bb_decode_type.all_insns_fast += (!some_insns_complex);
-        stats->decoder.bb_decode_type.some_complex_insns += some_insns_complex;
+        DECODERSTAT->bb_decode_type.all_insns_fast += (!some_insns_complex);
+        DECODERSTAT->bb_decode_type.some_complex_insns += some_insns_complex;
         flush();
         return false;
     } else {
@@ -2134,8 +2143,8 @@ bool TraceDecoder::translate() {
                 this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
             }
             split_after();
-            stats->decoder.bb_decode_type.all_insns_fast += (!some_insns_complex);
-            stats->decoder.bb_decode_type.some_complex_insns += some_insns_complex;
+            DECODERSTAT->bb_decode_type.all_insns_fast += (!some_insns_complex);
+            DECODERSTAT->bb_decode_type.some_complex_insns += some_insns_complex;
             flush();
             return false;
         } else {
@@ -2172,12 +2181,12 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     /*
        if unlikely (smc_isdirty(rvp.mfnlo)) {
        if (logable(5) | log_code_page_ops) ptl_logfile << "Pre-invalidate low mfn for ", rvp, endl;
-       if unlikely (!invalidate_page(rvp.mfnlo, INVALIDATE_REASON_DIRTY)) return null;
+       if unlikely (!invalidate_page(rvp.mfnlo, INVALIDATE_REASON_DIRTY)) return NULL;
        }
 
        if unlikely (smc_isdirty(rvp.mfnhi)) {
        if (logable(5) | log_code_page_ops) ptl_logfile << "Pre-invalidate high mfn for ", rvp, endl;
-       if unlikely (!invalidate_page(rvp.mfnhi, INVALIDATE_REASON_DIRTY)) return null;
+       if unlikely (!invalidate_page(rvp.mfnhi, INVALIDATE_REASON_DIRTY)) return NULL;
        }
        */
 
@@ -2186,7 +2195,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
         return bb;
     }
 
-    bb = null;
+    bb = NULL;
 
     translate_timer.start();
 
@@ -2194,7 +2203,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
 
     TraceDecoder trans(rvp);
     if(trans.fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
-        return null;
+        return NULL;
     }
 
     if (logable(10) | log_code_page_ops) {
@@ -2215,7 +2224,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     }
 
     if(trans.handle_exec_fault) {
-        return null;
+        return NULL;
     }
 
     trans.bb.hitcount = 0;
@@ -2229,10 +2238,10 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     bb->acquire();
 
     add(bb);
-    stats->decoder.bbcache.count = this->count;
-    stats->decoder.bbcache.inserts++;
-
-    stats->decoder.throughput.basic_blocks++;
+    W64 ct = this->count;
+    DECODERSTAT->bbcache.count = ct;
+    DECODERSTAT->bbcache.inserts++;
+    DECODERSTAT->throughput.basic_blocks++;
 
     BasicBlockChunkList* pagelist;
 
@@ -2241,8 +2250,9 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
         pagelist = new BasicBlockChunkList(bb->rip.mfnlo);
         pagelist->refcount++;
         bbpages.add(pagelist);
-        stats->decoder.pagecache.inserts++;
-        stats->decoder.pagecache.count = bbpages.count;
+        W64 ct = bbpages.count;
+        DECODERSTAT->pagecache.count = ct;
+        DECODERSTAT->pagecache.inserts++;
         pagelist->refcount--;
     }
     pagelist->refcount++;
@@ -2264,8 +2274,9 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
             pagelisthi = new BasicBlockChunkList(bb->rip.mfnhi);
             pagelisthi->refcount++;
             bbpages.add(pagelisthi);
-            stats->decoder.pagecache.inserts++;
-            stats->decoder.pagecache.count = bbpages.count;
+            W64 ct = bbpages.count;
+            DECODERSTAT->pagecache.count = ct;
+            DECODERSTAT->pagecache.inserts++;
             pagelisthi->refcount--;
         }
         pagelisthi->refcount++;
@@ -2410,4 +2421,16 @@ void dump_bbcache_to_logfile() {
         }
         ptl_logfile << flush;
     }
+}
+
+/* Decoder Stats */
+
+DecoderStats* decoder_stats[NUM_SIM_CORES] = {NULL};
+
+void set_decoder_stats(Statable *parent, int cpuid)
+{
+    DecoderStats *stat = new DecoderStats(parent);
+    assert(cpuid < NUM_SIM_CORES);
+    decoder_stats[cpuid] = stat;
+    stat->set_default_stats(global_stats);
 }

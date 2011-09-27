@@ -141,6 +141,8 @@ enum mpic_ide_bits {
 #error "Please select which OpenPic implementation is to be emulated"
 #endif
 
+#define OPENPIC_PAGE_SIZE 4096
+
 #define BF_WIDTH(_bits_) \
 (((_bits_) + (sizeof(uint32_t) * 8) - 1) / (sizeof(uint32_t) * 8))
 
@@ -219,20 +221,20 @@ typedef struct openpic_t {
     int nb_cpus;
     /* Timer registers */
     struct {
-	uint32_t ticc;  /* Global timer current count register */
-	uint32_t tibc;  /* Global timer base count register */
+        uint32_t ticc;  /* Global timer current count register */
+        uint32_t tibc;  /* Global timer base count register */
     } timers[MAX_TMR];
 #if MAX_DBL > 0
     /* Doorbell registers */
     uint32_t dar;        /* Doorbell activate register */
     struct {
-	uint32_t dmr;    /* Doorbell messaging register */
+        uint32_t dmr;    /* Doorbell messaging register */
     } doorbells[MAX_DBL];
 #endif
 #if MAX_MBX > 0
     /* Mailbox registers */
     struct {
-	uint32_t mbr;    /* Mailbox register */
+        uint32_t mbr;    /* Mailbox register */
     } mailboxes[MAX_MAILBOXES];
 #endif
     /* IRQ out is used when in bypass mode (not implemented) */
@@ -240,18 +242,9 @@ typedef struct openpic_t {
     int max_irq;
     int irq_ipi0;
     int irq_tim0;
-    int need_swap;
     void (*reset) (void *);
     void (*irq_raise) (struct openpic_t *, int, IRQ_src_t *);
 } openpic_t;
-
-static inline uint32_t openpic_swap32(openpic_t *opp, uint32_t val)
-{
-    if (opp->need_swap)
-        return bswap32(val);
-
-    return val;
-}
 
 static inline void IRQ_setbit (IRQ_queue_t *q, int n_IRQ)
 {
@@ -276,14 +269,14 @@ static void IRQ_check (openpic_t *opp, IRQ_queue_t *q)
     next = -1;
     priority = -1;
     for (i = 0; i < opp->max_irq; i++) {
-	if (IRQ_testbit(q, i)) {
+        if (IRQ_testbit(q, i)) {
             DPRINTF("IRQ_check: irq %d set ipvp_pr=%d pr=%d\n",
                     i, IPVP_PRIORITY(opp->src[i].ipvp), priority);
-	    if (IPVP_PRIORITY(opp->src[i].ipvp) > priority) {
-		next = i;
-		priority = IPVP_PRIORITY(opp->src[i].ipvp);
-	    }
-	}
+            if (IPVP_PRIORITY(opp->src[i].ipvp) > priority) {
+                next = i;
+                priority = IPVP_PRIORITY(opp->src[i].ipvp);
+            }
+        }
     }
     q->next = next;
     q->priority = priority;
@@ -293,7 +286,7 @@ static int IRQ_get_next (openpic_t *opp, IRQ_queue_t *q)
 {
     if (q->next == -1) {
         /* XXX: optimize */
-	IRQ_check(opp, q);
+        IRQ_check(opp, q);
     }
 
     return q->next;
@@ -309,16 +302,16 @@ static void IRQ_local_pipe (openpic_t *opp, int n_CPU, int n_IRQ)
     src = &opp->src[n_IRQ];
     priority = IPVP_PRIORITY(src->ipvp);
     if (priority <= dst->pctp) {
-	/* Too low priority */
+        /* Too low priority */
         DPRINTF("%s: IRQ %d has too low priority on CPU %d\n",
                 __func__, n_IRQ, n_CPU);
-	return;
+        return;
     }
     if (IRQ_testbit(&dst->raised, n_IRQ)) {
-	/* Interrupt miss */
+        /* Interrupt miss */
         DPRINTF("%s: IRQ %d was missed on CPU %d\n",
                 __func__, n_IRQ, n_CPU);
-	return;
+        return;
     }
     set_bit(&src->ipvp, IPVP_ACTIVITY);
     IRQ_setbit(&dst->raised, n_IRQ);
@@ -354,14 +347,14 @@ static void openpic_update_irq(openpic_t *opp, int n_IRQ)
         return;
     }
     if (test_bit(&src->ipvp, IPVP_MASK)) {
-	/* Interrupt source is disabled */
+        /* Interrupt source is disabled */
         DPRINTF("%s: IRQ %d is disabled\n", __func__, n_IRQ);
-	return;
+        return;
     }
     if (IPVP_PRIORITY(src->ipvp) == 0) {
-	/* Priority set to zero */
+        /* Priority set to zero */
         DPRINTF("%s: IRQ %d has 0 priority\n", __func__, n_IRQ);
-	return;
+        return;
     }
     if (test_bit(&src->ipvp, IPVP_ACTIVITY)) {
         /* IRQ already active */
@@ -369,9 +362,9 @@ static void openpic_update_irq(openpic_t *opp, int n_IRQ)
         return;
     }
     if (src->ide == 0x00000000) {
-	/* No target */
+        /* No target */
         DPRINTF("%s: IRQ %d has no target\n", __func__, n_IRQ);
-	return;
+        return;
     }
 
     if (src->ide == (1 << src->last_cpu)) {
@@ -434,32 +427,34 @@ static void openpic_reset (void *opaque)
     opp->micr = 0x00000000;
     /* Initialise IRQ sources */
     for (i = 0; i < opp->max_irq; i++) {
-	opp->src[i].ipvp = 0xA0000000;
-	opp->src[i].ide  = 0x00000000;
+        opp->src[i].ipvp = 0xA0000000;
+        opp->src[i].ide  = 0x00000000;
     }
     /* Initialise IRQ destinations */
     for (i = 0; i < MAX_CPU; i++) {
-	opp->dst[i].pctp      = 0x0000000F;
-	opp->dst[i].pcsr      = 0x00000000;
-	memset(&opp->dst[i].raised, 0, sizeof(IRQ_queue_t));
-	memset(&opp->dst[i].servicing, 0, sizeof(IRQ_queue_t));
+        opp->dst[i].pctp      = 0x0000000F;
+        opp->dst[i].pcsr      = 0x00000000;
+        memset(&opp->dst[i].raised, 0, sizeof(IRQ_queue_t));
+        opp->dst[i].raised.next = -1;
+        memset(&opp->dst[i].servicing, 0, sizeof(IRQ_queue_t));
+        opp->dst[i].servicing.next = -1;
     }
     /* Initialise timers */
     for (i = 0; i < MAX_TMR; i++) {
-	opp->timers[i].ticc = 0x00000000;
-	opp->timers[i].tibc = 0x80000000;
+        opp->timers[i].ticc = 0x00000000;
+        opp->timers[i].tibc = 0x80000000;
     }
     /* Initialise doorbells */
 #if MAX_DBL > 0
     opp->dar = 0x00000000;
     for (i = 0; i < MAX_DBL; i++) {
-	opp->doorbells[i].dmr  = 0x00000000;
+        opp->doorbells[i].dmr  = 0x00000000;
     }
 #endif
     /* Initialise mailboxes */
 #if MAX_MBX > 0
     for (i = 0; i < MAX_MBX; i++) { /* ? */
-	opp->mailboxes[i].mbr   = 0x00000000;
+        opp->mailboxes[i].mbr   = 0x00000000;
     }
 #endif
     /* Go out of RESET state */
@@ -472,11 +467,11 @@ static inline uint32_t read_IRQreg (openpic_t *opp, int n_IRQ, uint32_t reg)
 
     switch (reg) {
     case IRQ_IPVP:
-	retval = opp->src[n_IRQ].ipvp;
-	break;
+        retval = opp->src[n_IRQ].ipvp;
+        break;
     case IRQ_IDE:
-	retval = opp->src[n_IRQ].ide;
-	break;
+        retval = opp->src[n_IRQ].ide;
+        break;
     }
 
     return retval;
@@ -492,95 +487,95 @@ static inline void write_IRQreg (openpic_t *opp, int n_IRQ,
         /* NOTE: not fully accurate for special IRQs, but simple and
            sufficient */
         /* ACTIVITY bit is read-only */
-	opp->src[n_IRQ].ipvp =
+        opp->src[n_IRQ].ipvp =
             (opp->src[n_IRQ].ipvp & 0x40000000) |
             (val & 0x800F00FF);
         openpic_update_irq(opp, n_IRQ);
         DPRINTF("Set IPVP %d to 0x%08x -> 0x%08x\n",
                 n_IRQ, val, opp->src[n_IRQ].ipvp);
-	break;
+        break;
     case IRQ_IDE:
-	tmp = val & 0xC0000000;
+        tmp = val & 0xC0000000;
         tmp |= val & ((1 << MAX_CPU) - 1);
-	opp->src[n_IRQ].ide = tmp;
+        opp->src[n_IRQ].ide = tmp;
         DPRINTF("Set IDE %d to 0x%08x\n", n_IRQ, opp->src[n_IRQ].ide);
-	break;
+        break;
     }
 }
 
 #if 0 // Code provision for Intel model
 #if MAX_DBL > 0
 static uint32_t read_doorbell_register (openpic_t *opp,
-					int n_dbl, uint32_t offset)
+                                        int n_dbl, uint32_t offset)
 {
     uint32_t retval;
 
     switch (offset) {
     case DBL_IPVP_OFFSET:
-	retval = read_IRQreg(opp, IRQ_DBL0 + n_dbl, IRQ_IPVP);
-	break;
+        retval = read_IRQreg(opp, IRQ_DBL0 + n_dbl, IRQ_IPVP);
+        break;
     case DBL_IDE_OFFSET:
-	retval = read_IRQreg(opp, IRQ_DBL0 + n_dbl, IRQ_IDE);
-	break;
+        retval = read_IRQreg(opp, IRQ_DBL0 + n_dbl, IRQ_IDE);
+        break;
     case DBL_DMR_OFFSET:
-	retval = opp->doorbells[n_dbl].dmr;
-	break;
+        retval = opp->doorbells[n_dbl].dmr;
+        break;
     }
 
     return retval;
 }
 
 static void write_doorbell_register (penpic_t *opp, int n_dbl,
-				     uint32_t offset, uint32_t value)
+                                     uint32_t offset, uint32_t value)
 {
     switch (offset) {
     case DBL_IVPR_OFFSET:
-	write_IRQreg(opp, IRQ_DBL0 + n_dbl, IRQ_IPVP, value);
-	break;
+        write_IRQreg(opp, IRQ_DBL0 + n_dbl, IRQ_IPVP, value);
+        break;
     case DBL_IDE_OFFSET:
-	write_IRQreg(opp, IRQ_DBL0 + n_dbl, IRQ_IDE, value);
-	break;
+        write_IRQreg(opp, IRQ_DBL0 + n_dbl, IRQ_IDE, value);
+        break;
     case DBL_DMR_OFFSET:
-	opp->doorbells[n_dbl].dmr = value;
-	break;
+        opp->doorbells[n_dbl].dmr = value;
+        break;
     }
 }
 #endif
 
 #if MAX_MBX > 0
 static uint32_t read_mailbox_register (openpic_t *opp,
-				       int n_mbx, uint32_t offset)
+                                       int n_mbx, uint32_t offset)
 {
     uint32_t retval;
 
     switch (offset) {
     case MBX_MBR_OFFSET:
-	retval = opp->mailboxes[n_mbx].mbr;
-	break;
+        retval = opp->mailboxes[n_mbx].mbr;
+        break;
     case MBX_IVPR_OFFSET:
-	retval = read_IRQreg(opp, IRQ_MBX0 + n_mbx, IRQ_IPVP);
-	break;
+        retval = read_IRQreg(opp, IRQ_MBX0 + n_mbx, IRQ_IPVP);
+        break;
     case MBX_DMR_OFFSET:
-	retval = read_IRQreg(opp, IRQ_MBX0 + n_mbx, IRQ_IDE);
-	break;
+        retval = read_IRQreg(opp, IRQ_MBX0 + n_mbx, IRQ_IDE);
+        break;
     }
 
     return retval;
 }
 
 static void write_mailbox_register (openpic_t *opp, int n_mbx,
-				    uint32_t address, uint32_t value)
+                                    uint32_t address, uint32_t value)
 {
     switch (offset) {
     case MBX_MBR_OFFSET:
-	opp->mailboxes[n_mbx].mbr = value;
-	break;
+        opp->mailboxes[n_mbx].mbr = value;
+        break;
     case MBX_IVPR_OFFSET:
-	write_IRQreg(opp, IRQ_MBX0 + n_mbx, IRQ_IPVP, value);
-	break;
+        write_IRQreg(opp, IRQ_MBX0 + n_mbx, IRQ_IPVP, value);
+        break;
     case MBX_DMR_OFFSET:
-	write_IRQreg(opp, IRQ_MBX0 + n_mbx, IRQ_IDE, value);
-	break;
+        write_IRQreg(opp, IRQ_MBX0 + n_mbx, IRQ_IDE, value);
+        break;
     }
 }
 #endif
@@ -595,9 +590,6 @@ static void openpic_gbl_write (void *opaque, target_phys_addr_t addr, uint32_t v
     DPRINTF("%s: addr " TARGET_FMT_plx " <= %08x\n", __func__, addr, val);
     if (addr & 0xF)
         return;
-#if defined TARGET_WORDS_BIGENDIAN
-    val = openpic_swap32(opp, val);
-#endif
     addr &= 0xFF;
     switch (addr) {
     case 0x00: /* FREP */
@@ -606,9 +598,9 @@ static void openpic_gbl_write (void *opaque, target_phys_addr_t addr, uint32_t v
         if (val & 0x80000000 && opp->reset)
             opp->reset(opp);
         opp->glbc = val & ~0x80000000;
-	break;
+        break;
     case 0x80: /* VENI */
-	break;
+        break;
     case 0x90: /* PINT */
         for (idx = 0; idx < opp->nb_cpus; idx++) {
             if ((val & (1 << idx)) && !(opp->pint & (1 << idx))) {
@@ -622,7 +614,7 @@ static void openpic_gbl_write (void *opaque, target_phys_addr_t addr, uint32_t v
             }
         }
         opp->pint = val;
-	break;
+        break;
 #if MAX_IPI > 0
     case 0xA0: /* IPI_IPVP */
     case 0xB0:
@@ -640,7 +632,7 @@ static void openpic_gbl_write (void *opaque, target_phys_addr_t addr, uint32_t v
         break;
     case 0xF0: /* TIFR */
         opp->tifr = val;
-	break;
+        break;
     default:
         break;
     }
@@ -662,13 +654,13 @@ static uint32_t openpic_gbl_read (void *opaque, target_phys_addr_t addr)
         break;
     case 0x20: /* GLBC */
         retval = opp->glbc;
-	break;
+        break;
     case 0x80: /* VENI */
         retval = opp->veni;
-	break;
+        break;
     case 0x90: /* PINT */
         retval = 0x00000000;
-	break;
+        break;
 #if MAX_IPI > 0
     case 0xA0: /* IPI_IPVP */
     case 0xB0:
@@ -679,21 +671,18 @@ static uint32_t openpic_gbl_read (void *opaque, target_phys_addr_t addr)
             idx = (addr - 0xA0) >> 4;
             retval = read_IRQreg(opp, opp->irq_ipi0 + idx, IRQ_IPVP);
         }
-	break;
+        break;
 #endif
     case 0xE0: /* SPVE */
         retval = opp->spve;
         break;
     case 0xF0: /* TIFR */
         retval = opp->tifr;
-	break;
+        break;
     default:
         break;
     }
     DPRINTF("%s: => %08x\n", __func__, retval);
-#if defined TARGET_WORDS_BIGENDIAN
-    retval = openpic_swap32(opp, retval);
-#endif
 
     return retval;
 }
@@ -706,9 +695,6 @@ static void openpic_timer_write (void *opaque, uint32_t addr, uint32_t val)
     DPRINTF("%s: addr %08x <= %08x\n", __func__, addr, val);
     if (addr & 0xF)
         return;
-#if defined TARGET_WORDS_BIGENDIAN
-    val = openpic_swap32(opp, val);
-#endif
     addr -= 0x1100;
     addr &= 0xFFFF;
     idx = (addr & 0xFFF0) >> 6;
@@ -717,18 +703,18 @@ static void openpic_timer_write (void *opaque, uint32_t addr, uint32_t val)
     case 0x00: /* TICC */
         break;
     case 0x10: /* TIBC */
-	if ((opp->timers[idx].ticc & 0x80000000) != 0 &&
-	    (val & 0x80000000) == 0 &&
+        if ((opp->timers[idx].ticc & 0x80000000) != 0 &&
+            (val & 0x80000000) == 0 &&
             (opp->timers[idx].tibc & 0x80000000) != 0)
-	    opp->timers[idx].ticc &= ~0x80000000;
-	opp->timers[idx].tibc = val;
-	break;
+            opp->timers[idx].ticc &= ~0x80000000;
+        opp->timers[idx].tibc = val;
+        break;
     case 0x20: /* TIVP */
         write_IRQreg(opp, opp->irq_tim0 + idx, IRQ_IPVP, val);
-	break;
+        break;
     case 0x30: /* TIDE */
         write_IRQreg(opp, opp->irq_tim0 + idx, IRQ_IDE, val);
-	break;
+        break;
     }
 }
 
@@ -748,22 +734,19 @@ static uint32_t openpic_timer_read (void *opaque, uint32_t addr)
     addr = addr & 0x30;
     switch (addr) {
     case 0x00: /* TICC */
-	retval = opp->timers[idx].ticc;
+        retval = opp->timers[idx].ticc;
         break;
     case 0x10: /* TIBC */
-	retval = opp->timers[idx].tibc;
-	break;
+        retval = opp->timers[idx].tibc;
+        break;
     case 0x20: /* TIPV */
         retval = read_IRQreg(opp, opp->irq_tim0 + idx, IRQ_IPVP);
-	break;
+        break;
     case 0x30: /* TIDE */
         retval = read_IRQreg(opp, opp->irq_tim0 + idx, IRQ_IDE);
-	break;
+        break;
     }
     DPRINTF("%s: => %08x\n", __func__, retval);
-#if defined TARGET_WORDS_BIGENDIAN
-    retval = openpic_swap32(opp, retval);
-#endif
 
     return retval;
 }
@@ -776,9 +759,6 @@ static void openpic_src_write (void *opaque, uint32_t addr, uint32_t val)
     DPRINTF("%s: addr %08x <= %08x\n", __func__, addr, val);
     if (addr & 0xF)
         return;
-#if defined TARGET_WORDS_BIGENDIAN
-    val = openpic_swap32(opp, val);
-#endif
     addr = addr & 0xFFF0;
     idx = addr >> 5;
     if (addr & 0x10) {
@@ -810,9 +790,6 @@ static uint32_t openpic_src_read (void *opaque, uint32_t addr)
         retval = read_IRQreg(opp, idx, IRQ_IPVP);
     }
     DPRINTF("%s: => %08x\n", __func__, retval);
-#if defined TARGET_WORDS_BIGENDIAN
-    retval = openpic_swap32(opp, retval);
-#endif
 
     return retval;
 }
@@ -827,9 +804,6 @@ static void openpic_cpu_write (void *opaque, target_phys_addr_t addr, uint32_t v
     DPRINTF("%s: addr " TARGET_FMT_plx " <= %08x\n", __func__, addr, val);
     if (addr & 0xF)
         return;
-#if defined TARGET_WORDS_BIGENDIAN
-    val = openpic_swap32(opp, val);
-#endif
     addr &= 0x1FFF0;
     idx = addr / 0x1000;
     dst = &opp->dst[idx];
@@ -847,21 +821,21 @@ static void openpic_cpu_write (void *opaque, target_phys_addr_t addr, uint32_t v
         break;
 #endif
     case 0x80: /* PCTP */
-	dst->pctp = val & 0x0000000F;
-	break;
+        dst->pctp = val & 0x0000000F;
+        break;
     case 0x90: /* WHOAMI */
-	/* Read-only register */
-	break;
+        /* Read-only register */
+        break;
     case 0xA0: /* PIAC */
-	/* Read-only register */
-	break;
+        /* Read-only register */
+        break;
     case 0xB0: /* PEOI */
         DPRINTF("PEOI\n");
-	s_IRQ = IRQ_get_next(opp, &dst->servicing);
-	IRQ_resetbit(&dst->servicing, s_IRQ);
-	dst->servicing.next = -1;
-	/* Set up next servicing IRQ */
-	s_IRQ = IRQ_get_next(opp, &dst->servicing);
+        s_IRQ = IRQ_get_next(opp, &dst->servicing);
+        IRQ_resetbit(&dst->servicing, s_IRQ);
+        dst->servicing.next = -1;
+        /* Set up next servicing IRQ */
+        s_IRQ = IRQ_get_next(opp, &dst->servicing);
         /* Check queued interrupts. */
         n_IRQ = IRQ_get_next(opp, &dst->raised);
         src = &opp->src[n_IRQ];
@@ -872,7 +846,7 @@ static void openpic_cpu_write (void *opaque, target_phys_addr_t addr, uint32_t v
                     idx, n_IRQ);
             opp->irq_raise(opp, idx, src);
         }
-	break;
+        break;
     default:
         break;
     }
@@ -896,46 +870,46 @@ static uint32_t openpic_cpu_read (void *opaque, target_phys_addr_t addr)
     addr &= 0xFF0;
     switch (addr) {
     case 0x80: /* PCTP */
-	retval = dst->pctp;
-	break;
+        retval = dst->pctp;
+        break;
     case 0x90: /* WHOAMI */
-	retval = idx;
-	break;
+        retval = idx;
+        break;
     case 0xA0: /* PIAC */
         DPRINTF("Lower OpenPIC INT output\n");
         qemu_irq_lower(dst->irqs[OPENPIC_OUTPUT_INT]);
-	n_IRQ = IRQ_get_next(opp, &dst->raised);
+        n_IRQ = IRQ_get_next(opp, &dst->raised);
         DPRINTF("PIAC: irq=%d\n", n_IRQ);
-	if (n_IRQ == -1) {
-	    /* No more interrupt pending */
+        if (n_IRQ == -1) {
+            /* No more interrupt pending */
             retval = IPVP_VECTOR(opp->spve);
-	} else {
-	    src = &opp->src[n_IRQ];
-	    if (!test_bit(&src->ipvp, IPVP_ACTIVITY) ||
-		!(IPVP_PRIORITY(src->ipvp) > dst->pctp)) {
-		/* - Spurious level-sensitive IRQ
-		 * - Priorities has been changed
-		 *   and the pending IRQ isn't allowed anymore
-		 */
-		reset_bit(&src->ipvp, IPVP_ACTIVITY);
-		retval = IPVP_VECTOR(opp->spve);
-	    } else {
-		/* IRQ enter servicing state */
-		IRQ_setbit(&dst->servicing, n_IRQ);
-		retval = IPVP_VECTOR(src->ipvp);
-	    }
-	    IRQ_resetbit(&dst->raised, n_IRQ);
-	    dst->raised.next = -1;
-	    if (!test_bit(&src->ipvp, IPVP_SENSE)) {
+        } else {
+            src = &opp->src[n_IRQ];
+            if (!test_bit(&src->ipvp, IPVP_ACTIVITY) ||
+                !(IPVP_PRIORITY(src->ipvp) > dst->pctp)) {
+                /* - Spurious level-sensitive IRQ
+                 * - Priorities has been changed
+                 *   and the pending IRQ isn't allowed anymore
+                 */
+                reset_bit(&src->ipvp, IPVP_ACTIVITY);
+                retval = IPVP_VECTOR(opp->spve);
+            } else {
+                /* IRQ enter servicing state */
+                IRQ_setbit(&dst->servicing, n_IRQ);
+                retval = IPVP_VECTOR(src->ipvp);
+            }
+            IRQ_resetbit(&dst->raised, n_IRQ);
+            dst->raised.next = -1;
+            if (!test_bit(&src->ipvp, IPVP_SENSE)) {
                 /* edge-sensitive IRQ */
-		reset_bit(&src->ipvp, IPVP_ACTIVITY);
+                reset_bit(&src->ipvp, IPVP_ACTIVITY);
                 src->pending = 0;
             }
-	}
-	break;
+        }
+        break;
     case 0xB0: /* PEOI */
-	retval = 0;
-	break;
+        retval = 0;
+        break;
 #if MAX_IPI > 0
     case 0x40: /* IDE */
     case 0x50:
@@ -947,9 +921,6 @@ static uint32_t openpic_cpu_read (void *opaque, target_phys_addr_t addr)
         break;
     }
     DPRINTF("%s: => %08x\n", __func__, retval);
-#if defined TARGET_WORDS_BIGENDIAN
-    retval = openpic_swap32(opp, retval);
-#endif
 
     return retval;
 }
@@ -1047,7 +1018,8 @@ static void openpic_map(PCIDevice *pci_dev, int region_num,
     cpu_register_physical_memory(addr, 0x40000, opp->mem_index);
 #if 0 // Don't implement ISU for now
     opp_io_memory = cpu_register_io_memory(openpic_src_read,
-                                           openpic_src_write);
+                                           openpic_src_write, NULL
+                                           DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(isu_base, 0x20 * (EXT_IRQ + 2),
                                  opp_io_memory);
 #endif
@@ -1206,17 +1178,16 @@ qemu_irq *openpic_init (PCIBus *bus, int *pmem_index, int nb_cpus,
         pci_config_set_vendor_id(pci_conf, PCI_VENDOR_ID_IBM);
         pci_config_set_device_id(pci_conf, PCI_DEVICE_ID_IBM_OPENPIC2);
         pci_config_set_class(pci_conf, PCI_CLASS_SYSTEM_OTHER); // FIXME?
-        pci_conf[PCI_HEADER_TYPE] = PCI_HEADER_TYPE_NORMAL; // header_type
         pci_conf[0x3d] = 0x00; // no interrupt pin
 
         /* Register I/O spaces */
-        pci_register_bar((PCIDevice *)opp, 0, 0x40000,
+        pci_register_bar(&opp->pci_dev, 0, 0x40000,
                                PCI_BASE_ADDRESS_SPACE_MEMORY, &openpic_map);
     } else {
         opp = qemu_mallocz(sizeof(openpic_t));
     }
-    opp->mem_index = cpu_register_io_memory(openpic_read,
-                                            openpic_write, opp);
+    opp->mem_index = cpu_register_io_memory(openpic_read, openpic_write, opp,
+                                            DEVICE_LITTLE_ENDIAN);
 
     //    isu_base &= 0xFFFC0000;
     opp->nb_cpus = nb_cpus;
@@ -1244,9 +1215,9 @@ qemu_irq *openpic_init (PCIBus *bus, int *pmem_index, int nb_cpus,
     for (i = 0; i < nb_cpus; i++)
         opp->dst[i].irqs = irqs[i];
     opp->irq_out = irq_out;
-    opp->need_swap = 1;
 
-    register_savevm("openpic", 0, 2, openpic_save, openpic_load, opp);
+    register_savevm(&opp->pci_dev.qdev, "openpic", 0, 2,
+                    openpic_save, openpic_load, opp);
     qemu_register_reset(openpic_reset, opp);
 
     opp->irq_raise = openpic_irq_raise;
@@ -1382,7 +1353,7 @@ static void mpic_src_ext_write (void *opaque, target_phys_addr_t addr,
     if (addr & 0xF)
         return;
 
-    addr -= MPIC_EXT_REG_START & (TARGET_PAGE_SIZE - 1);
+    addr -= MPIC_EXT_REG_START & (OPENPIC_PAGE_SIZE - 1);
     if (addr < MPIC_EXT_REG_SIZE) {
         idx += (addr & 0xFFF0) >> 5;
         if (addr & 0x10) {
@@ -1406,7 +1377,7 @@ static uint32_t mpic_src_ext_read (void *opaque, target_phys_addr_t addr)
     if (addr & 0xF)
         return retval;
 
-    addr -= MPIC_EXT_REG_START & (TARGET_PAGE_SIZE - 1);
+    addr -= MPIC_EXT_REG_START & (OPENPIC_PAGE_SIZE - 1);
     if (addr < MPIC_EXT_REG_SIZE) {
         idx += (addr & 0xFFF0) >> 5;
         if (addr & 0x10) {
@@ -1432,7 +1403,7 @@ static void mpic_src_int_write (void *opaque, target_phys_addr_t addr,
     if (addr & 0xF)
         return;
 
-    addr -= MPIC_INT_REG_START & (TARGET_PAGE_SIZE - 1);
+    addr -= MPIC_INT_REG_START & (OPENPIC_PAGE_SIZE - 1);
     if (addr < MPIC_INT_REG_SIZE) {
         idx += (addr & 0xFFF0) >> 5;
         if (addr & 0x10) {
@@ -1456,7 +1427,7 @@ static uint32_t mpic_src_int_read (void *opaque, target_phys_addr_t addr)
     if (addr & 0xF)
         return retval;
 
-    addr -= MPIC_INT_REG_START & (TARGET_PAGE_SIZE - 1);
+    addr -= MPIC_INT_REG_START & (OPENPIC_PAGE_SIZE - 1);
     if (addr < MPIC_INT_REG_SIZE) {
         idx += (addr & 0xFFF0) >> 5;
         if (addr & 0x10) {
@@ -1482,7 +1453,7 @@ static void mpic_src_msg_write (void *opaque, target_phys_addr_t addr,
     if (addr & 0xF)
         return;
 
-    addr -= MPIC_MSG_REG_START & (TARGET_PAGE_SIZE - 1);
+    addr -= MPIC_MSG_REG_START & (OPENPIC_PAGE_SIZE - 1);
     if (addr < MPIC_MSG_REG_SIZE) {
         idx += (addr & 0xFFF0) >> 5;
         if (addr & 0x10) {
@@ -1506,7 +1477,7 @@ static uint32_t mpic_src_msg_read (void *opaque, target_phys_addr_t addr)
     if (addr & 0xF)
         return retval;
 
-    addr -= MPIC_MSG_REG_START & (TARGET_PAGE_SIZE - 1);
+    addr -= MPIC_MSG_REG_START & (OPENPIC_PAGE_SIZE - 1);
     if (addr < MPIC_MSG_REG_SIZE) {
         idx += (addr & 0xFFF0) >> 5;
         if (addr & 0x10) {
@@ -1532,7 +1503,7 @@ static void mpic_src_msi_write (void *opaque, target_phys_addr_t addr,
     if (addr & 0xF)
         return;
 
-    addr -= MPIC_MSI_REG_START & (TARGET_PAGE_SIZE - 1);
+    addr -= MPIC_MSI_REG_START & (OPENPIC_PAGE_SIZE - 1);
     if (addr < MPIC_MSI_REG_SIZE) {
         idx += (addr & 0xFFF0) >> 5;
         if (addr & 0x10) {
@@ -1555,7 +1526,7 @@ static uint32_t mpic_src_msi_read (void *opaque, target_phys_addr_t addr)
     if (addr & 0xF)
         return retval;
 
-    addr -= MPIC_MSI_REG_START & (TARGET_PAGE_SIZE - 1);
+    addr -= MPIC_MSI_REG_START & (OPENPIC_PAGE_SIZE - 1);
     if (addr < MPIC_MSI_REG_SIZE) {
         idx += (addr & 0xFFF0) >> 5;
         if (addr & 0x10) {
@@ -1683,7 +1654,8 @@ qemu_irq *mpic_init (target_phys_addr_t base, int nb_cpus,
     for (i = 0; i < sizeof(list)/sizeof(list[0]); i++) {
         int mem_index;
 
-        mem_index = cpu_register_io_memory(list[i].read, list[i].write, mpp);
+        mem_index = cpu_register_io_memory(list[i].read, list[i].write, mpp,
+                                           DEVICE_BIG_ENDIAN);
         if (mem_index < 0) {
             goto free;
         }
@@ -1699,12 +1671,11 @@ qemu_irq *mpic_init (target_phys_addr_t base, int nb_cpus,
     for (i = 0; i < nb_cpus; i++)
         mpp->dst[i].irqs = irqs[i];
     mpp->irq_out = irq_out;
-    mpp->need_swap = 0;    /* MPIC has the same endian as target */
 
     mpp->irq_raise = mpic_irq_raise;
     mpp->reset = mpic_reset;
 
-    register_savevm("mpic", 0, 2, openpic_save, openpic_load, mpp);
+    register_savevm(NULL, "mpic", 0, 2, openpic_save, openpic_load, mpp);
     qemu_register_reset(mpic_reset, mpp);
 
     return qemu_allocate_irqs(openpic_set_irq, mpp, mpp->max_irq);

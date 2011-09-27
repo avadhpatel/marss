@@ -1,4 +1,4 @@
-# SConscript for cache subdirectory
+# SConscript for stats subdirectory
 
 # Import envrionment
 Import('env')
@@ -7,7 +7,6 @@ Import('env')
 src_files = Glob('*.cpp')
 
 objs = env.Object(src_files)
-dst_objs = env.Object(Split("datastore.cpp"))
 
-ret_objs = [objs, dst_objs]
+ret_objs = objs
 Return('ret_objs')

@@ -192,6 +192,15 @@ void ptl_add_phys_memory_mapping(int8_t cpu_index, uint64_t host_vaddr, uint64_t
  */
 void qemu_take_screenshot(char* filename);
 
+/**
+ * @brief Safe interface to exit the process
+ */
+void ptl_quit(void);
+
+typedef void (*QemuIOCB)(void*);
+
+void add_qemu_io_event(QemuIOCB fn, void* arg, int delay);
+
 /*
  * ptl_start_sim_rip
  * RIP location from where to switch to simulation
@@ -199,6 +208,8 @@ void qemu_take_screenshot(char* filename);
 extern uint64_t ptl_start_sim_rip;
 
 extern uint64_t qemu_ram_size;
+
+uint64_t get_sim_cpu_freq(void);
 
 #ifdef __cplusplus
 }

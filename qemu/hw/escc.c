@@ -65,6 +65,8 @@
  *  2006-Aug-10  Igor Kovalenko :   Renamed KBDQueue to SERIOQueue, implemented
  *                                  serial mouse queue.
  *                                  Implemented serial mouse protocol.
+ *
+ *  2010-May-23  Artyom Tarasenko:  Reworked IUS logic
  */
 
 #ifdef DEBUG_SERIAL
@@ -88,13 +90,13 @@
 
 typedef enum {
     chn_a, chn_b,
-} chn_id_t;
+} ChnID;
 
 #define CHN_C(s) ((s)->chn == chn_b? 'b' : 'a')
 
 typedef enum {
     ser, kbd, mouse,
-} chn_type_t;
+} ChnType;
 
 #define SERIO_QUEUE_SIZE 256
 
@@ -108,8 +110,8 @@ typedef struct ChannelState {
     qemu_irq irq;
     uint32_t reg;
     uint32_t rxint, txint, rxint_under_svc, txint_under_svc;
-    chn_id_t chn; // this channel, A (base+4) or B (base+0)
-    chn_type_t type;
+    ChnID chn; // this channel, A (base+4) or B (base+0)
+    ChnType type;
     struct ChannelState *otherchn;
     uint8_t rx, tx, wregs[SERIAL_REGS], rregs[SERIAL_REGS];
     SERIOQueue queue;
@@ -279,7 +281,7 @@ static uint32_t get_queue(void *opaque)
 
 static int escc_update_irq_chn(ChannelState *s)
 {
-    if ((((s->wregs[W_INTR] & INTR_TXINT) && s->txint == 1) ||
+    if ((((s->wregs[W_INTR] & INTR_TXINT) && (s->txint == 1)) ||
          // tx ints enabled, pending
          ((((s->wregs[W_INTR] & INTR_RXMODEMSK) == INTR_RXINT1ST) ||
            ((s->wregs[W_INTR] & INTR_RXMODEMSK) == INTR_RXINTALL)) &&
@@ -342,24 +344,22 @@ static void escc_reset(DeviceState *d)
 static inline void set_rxint(ChannelState *s)
 {
     s->rxint = 1;
-    if (!s->txint_under_svc) {
-        s->rxint_under_svc = 1;
-        if (s->chn == chn_a) {
-            if (s->wregs[W_MINTR] & MINTR_STATUSHI)
-                s->otherchn->rregs[R_IVEC] = IVEC_HIRXINTA;
-            else
-                s->otherchn->rregs[R_IVEC] = IVEC_LORXINTA;
-        } else {
-            if (s->wregs[W_MINTR] & MINTR_STATUSHI)
-                s->rregs[R_IVEC] = IVEC_HIRXINTB;
-            else
-                s->rregs[R_IVEC] = IVEC_LORXINTB;
-        }
-    }
-    if (s->chn == chn_a)
+    /* XXX: missing daisy chainnig: chn_b rx should have a lower priority
+       than chn_a rx/tx/special_condition service*/
+    s->rxint_under_svc = 1;
+    if (s->chn == chn_a) {
         s->rregs[R_INTR] |= INTR_RXINTA;
-    else
+        if (s->wregs[W_MINTR] & MINTR_STATUSHI)
+            s->otherchn->rregs[R_IVEC] = IVEC_HIRXINTA;
+        else
+            s->otherchn->rregs[R_IVEC] = IVEC_LORXINTA;
+    } else {
         s->otherchn->rregs[R_INTR] |= INTR_RXINTB;
+        if (s->wregs[W_MINTR] & MINTR_STATUSHI)
+            s->rregs[R_IVEC] = IVEC_HIRXINTB;
+        else
+            s->rregs[R_IVEC] = IVEC_LORXINTB;
+    }
     escc_update_irq(s);
 }
 
@@ -369,19 +369,21 @@ static inline void set_txint(ChannelState *s)
     if (!s->rxint_under_svc) {
         s->txint_under_svc = 1;
         if (s->chn == chn_a) {
+            if (s->wregs[W_INTR] & INTR_TXINT) {
+                s->rregs[R_INTR] |= INTR_TXINTA;
+            }
             if (s->wregs[W_MINTR] & MINTR_STATUSHI)
                 s->otherchn->rregs[R_IVEC] = IVEC_HITXINTA;
             else
                 s->otherchn->rregs[R_IVEC] = IVEC_LOTXINTA;
         } else {
             s->rregs[R_IVEC] = IVEC_TXINTB;
+            if (s->wregs[W_INTR] & INTR_TXINT) {
+                s->otherchn->rregs[R_INTR] |= INTR_TXINTB;
+            }
         }
-    }
-    if (s->chn == chn_a)
-        s->rregs[R_INTR] |= INTR_TXINTA;
-    else
-        s->otherchn->rregs[R_INTR] |= INTR_TXINTB;
     escc_update_irq(s);
+    }
 }
 
 static inline void clr_rxint(ChannelState *s)
@@ -417,6 +419,7 @@ static inline void clr_txint(ChannelState *s)
             s->otherchn->rregs[R_IVEC] = IVEC_LONOINT;
         s->rregs[R_INTR] &= ~INTR_TXINTA;
     } else {
+        s->otherchn->rregs[R_INTR] &= ~INTR_TXINTB;
         if (s->wregs[W_MINTR] & MINTR_STATUSHI)
             s->rregs[R_IVEC] = IVEC_HINOINT;
         else
@@ -515,10 +518,15 @@ static void escc_mem_writeb(void *opaque, target_phys_addr_t addr, uint32_t val)
                 clr_txint(s);
                 break;
             case CMD_CLR_IUS:
-                if (s->rxint_under_svc)
-                    clr_rxint(s);
-                else if (s->txint_under_svc)
-                    clr_txint(s);
+                if (s->rxint_under_svc) {
+                    s->rxint_under_svc = 0;
+                    if (s->txint) {
+                        set_txint(s);
+                    }
+                } else if (s->txint_under_svc) {
+                    s->txint_under_svc = 0;
+                }
+                escc_update_irq(s);
                 break;
             default:
                 break;
@@ -910,7 +918,8 @@ static int escc_init1(SysBusDevice *dev)
     s->chn[0].otherchn = &s->chn[1];
     s->chn[1].otherchn = &s->chn[0];
 
-    io = cpu_register_io_memory(escc_mem_read, escc_mem_write, s);
+    io = cpu_register_io_memory(escc_mem_read, escc_mem_write, s,
+                                DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, ESCC_SIZE << s->it_shift, io);
     s->mmio_index = io;
 

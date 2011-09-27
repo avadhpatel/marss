@@ -56,11 +56,6 @@ int cpu_cris_handle_mmu_fault(CPUState * env, target_ulong address, int rw,
 	return 1;
 }
 
-target_phys_addr_t cpu_get_phys_page_debug(CPUState * env, target_ulong addr)
-{
-	return addr;
-}
-
 #else /* !CONFIG_USER_ONLY */
 
 
@@ -83,14 +78,14 @@ int cpu_cris_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
 
 	D(printf ("%s addr=%x pc=%x rw=%x\n", __func__, address, env->pc, rw));
 	miss = cris_mmu_translate(&res, env, address & TARGET_PAGE_MASK,
-				  rw, mmu_idx);
+				  rw, mmu_idx, 0);
 	if (miss)
 	{
 		if (env->exception_index == EXCP_BUSFAULT)
-			cpu_abort(env, 
+			cpu_abort(env,
 				  "CRIS: Illegal recursive bus fault."
-				  "addr=%x rw=%d\n",
-				  address, rw);
+				 "addr=%x rw=%d\n",
+				 address, rw);
 
 		env->pregs[PR_EDA] = address;
 		env->exception_index = EXCP_BUSFAULT;
@@ -105,8 +100,9 @@ int cpu_cris_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
 		 */
 		phy = res.phy & ~0x80000000;
 		prot = res.prot;
-		r = tlb_set_page(env, address & TARGET_PAGE_MASK,
-				 phy, prot, mmu_idx, is_softmmu);
+		tlb_set_page(env, address & TARGET_PAGE_MASK, phy,
+                             prot, mmu_idx, TARGET_PAGE_SIZE);
+                r = 0;
 	}
 	if (r > 0)
 		D_LOG("%s returns %d irqreq=%x addr=%x"
@@ -116,9 +112,67 @@ int cpu_cris_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
 	return r;
 }
 
+static void do_interruptv10(CPUState *env)
+{
+	int ex_vec = -1;
+
+	D_LOG( "exception index=%d interrupt_req=%d\n",
+		   env->exception_index,
+		   env->interrupt_request);
+
+	assert(!(env->pregs[PR_CCS] & PFIX_FLAG));
+	switch (env->exception_index)
+	{
+		case EXCP_BREAK:
+			/* These exceptions are genereated by the core itself.
+			   ERP should point to the insn following the brk.  */
+			ex_vec = env->trap_vector;
+			env->pregs[PR_ERP] = env->pc;
+			break;
+
+		case EXCP_NMI:
+			/* NMI is hardwired to vector zero.  */
+			ex_vec = 0;
+			env->pregs[PR_CCS] &= ~M_FLAG;
+			env->pregs[PR_NRP] = env->pc;
+			break;
+
+		case EXCP_BUSFAULT:
+                        cpu_abort(env, "Unhandled busfault");
+			break;
+
+		default:
+			/* The interrupt controller gives us the vector.  */
+			ex_vec = env->interrupt_vector;
+			/* Normal interrupts are taken between
+			   TB's.  env->pc is valid here.  */
+			env->pregs[PR_ERP] = env->pc;
+			break;
+	}
+
+	if (env->pregs[PR_CCS] & U_FLAG) {
+		/* Swap stack pointers.  */
+		env->pregs[PR_USP] = env->regs[R_SP];
+		env->regs[R_SP] = env->ksp;
+	}
+
+	/* Now that we are in kernel mode, load the handlers address.  */
+	env->pc = ldl_code(env->pregs[PR_EBP] + ex_vec * 4);
+	env->locked_irq = 1;
+
+	qemu_log_mask(CPU_LOG_INT, "%s isr=%x vec=%x ccs=%x pid=%d erp=%x\n",
+		      __func__, env->pc, ex_vec,
+		      env->pregs[PR_CCS],
+		      env->pregs[PR_PID],
+		      env->pregs[PR_ERP]);
+}
+
 void do_interrupt(CPUState *env)
 {
 	int ex_vec = -1;
+
+	if (env->pregs[PR_VR] < 32)
+		return do_interruptv10(env);
 
 	D_LOG( "exception index=%d interrupt_req=%d\n",
 		   env->exception_index,
@@ -181,11 +235,17 @@ void do_interrupt(CPUState *env)
 	/* Apply the CRIS CCS shift. Clears U if set.  */
 	cris_shift_ccs(env);
 
-	/* Now that we are in kernel mode, load the handlers address.  */
+	/* Now that we are in kernel mode, load the handlers address.
+	   This load may not fault, real hw leaves that behaviour as
+	   undefined.  */
 	env->pc = ldl_code(env->pregs[PR_EBP] + ex_vec * 4);
 
-	D_LOG("%s isr=%x vec=%x ccs=%x pid=%d erp=%x\n", 
-		   __func__, env->pc, ex_vec, 
+	/* Clear the excption_index to avoid spurios hw_aborts for recursive
+	   bus faults.  */
+	env->exception_index = -1;
+
+	D_LOG("%s isr=%x vec=%x ccs=%x pid=%d erp=%x\n",
+		   __func__, env->pc, ex_vec,
 		   env->pregs[PR_CCS],
 		   env->pregs[PR_PID], 
 		   env->pregs[PR_ERP]);
@@ -196,7 +256,13 @@ target_phys_addr_t cpu_get_phys_page_debug(CPUState * env, target_ulong addr)
 	uint32_t phy = addr;
 	struct cris_mmu_result res;
 	int miss;
-	miss = cris_mmu_translate(&res, env, addr, 0, 0);
+
+	miss = cris_mmu_translate(&res, env, addr, 0, 0, 1);
+	/* If D TLB misses, try I TLB.  */
+	if (miss) {
+		miss = cris_mmu_translate(&res, env, addr, 2, 0, 1);
+	}
+
 	if (!miss)
 		phy = res.phy;
 	D(fprintf(stderr, "%s %x -> %x\n", __func__, addr, phy));

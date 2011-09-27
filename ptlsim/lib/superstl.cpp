@@ -23,8 +23,8 @@ struct assert_cb_t {
     assert_cb_t *next;
 };
 
-static assert_cb_t *assert_cb_head = null;
-static assert_cb_t *assert_cb = null;
+static assert_cb_t *assert_cb_head = NULL;
+static assert_cb_t *assert_cb = NULL;
 
 /*
  * Register an assert callback function
@@ -33,9 +33,9 @@ void register_assert_cb(void (*fn)())
 {
     assert_cb_t *tmp_cb = new assert_cb_t;
     tmp_cb->function = fn;
-    tmp_cb->next = null;
+    tmp_cb->next = NULL;
 
-    if(assert_cb_head == null) {
+    if(assert_cb_head == NULL) {
         assert_cb_head = tmp_cb;
     } else {
         assert_cb->next = tmp_cb;
@@ -45,6 +45,7 @@ void register_assert_cb(void (*fn)())
 
 extern "C" void assert_fail(const char *__assertion, const char *__file, unsigned int __line, const char *__function) {
   stringbuf sb;
+  assert_cb_t *tmp_cb = NULL;
   sb << "Assert ", __assertion, " failed in ", __file, ":", __line, " (", __function, ")", endl;
 
   sb << "Calling Assert Callback functions\n";
@@ -52,12 +53,12 @@ extern "C" void assert_fail(const char *__assertion, const char *__file, unsigne
   /* To avoid infinite recursion of assert in assert callback functions */
   static bool in_assert_fail = 0;
   if(in_assert_fail) {
-      return;
+      goto abort;
   }
   in_assert_fail = 1;
 
-  assert_cb_t *tmp_cb = assert_cb_head;
-  while(tmp_cb != null) {
+  tmp_cb = assert_cb_head;
+  while(tmp_cb != NULL) {
       (*tmp_cb->function)();
       tmp_cb = tmp_cb->next;
   }
@@ -80,6 +81,7 @@ extern "C" void assert_fail(const char *__assertion, const char *__file, unsigne
 
 	free (strings);
 
+abort:
   cerr << sb;
   cerr.flush();
   cout.flush();
@@ -218,22 +220,22 @@ namespace superstl {
 
   void stringbuf::split(dynarray<stringbuf*>& bufArray,
 		  const char *chr) {
-	  stringbuf* tmp = null;
+	  stringbuf* tmp = NULL;
 	  char *pch;
 	  pch = strtok(buf, chr);
-	  while(pch != null) {
+	  while(pch != NULL) {
 		  tmp = new stringbuf();
 		  *tmp << pch;
 		  bufArray.push(tmp);
-		  pch = strtok(null, chr);
+		  pch = strtok(NULL, chr);
 	  }
   }
 
   stringbuf::~stringbuf() {
     if (buf && (buf != smallbuf))
-      delete[] buf;
-    buf = null;
-    p = null;
+      delete buf;
+    buf = NULL;
+    p = NULL;
     length = 0;
   }
 
@@ -241,7 +243,7 @@ namespace superstl {
   // Writers
   //
   stringbuf& operator <<(stringbuf& os, const char* v) {
-    if unlikely (!v) v = "<null>";
+    if unlikely (!v) v = "<NULL>";
     int bytes = strlen(v) + 1;
     os.reserve(bytes);
     memcpy(os.p, v, bytes);
@@ -913,7 +915,7 @@ int format_integer(char* buf, int bufsize, W64s v, int size, int flags, int base
   if (size < 0) size = bufsize-1;
   if ((v < 0) & (base == 10)) flags ^= FMT_SIGN;
   char* end = format_number(buf, buf + bufsize - 2, v, base, min(bufsize-1, size), precision, flags);
-  // null terminate
+  // NULL terminate
   *end = 0;
   return (end - buf);
 }
@@ -1424,14 +1426,14 @@ const W64 expand_8bit_to_64bit_lut[256] alignto(8) = {
 
 Signal::Signal()
 {
-	name_ = null;
-	func = null;
+	// name_ = NULL;
+	func = NULL;
 }
 
 Signal::Signal(const char* name)
 {
-	name_ = name;
-	func = null;
+	name_ << name;
+	func = NULL;
 }
 
 void Signal::connect(TFunctor* _func) {
@@ -1439,6 +1441,7 @@ void Signal::connect(TFunctor* _func) {
 }
 
 bool Signal::emit(void *arg) {
+    assert(name_.size() != 0);
 	bool ret_val = (*func)(arg);
 	return ret_val;
 }
