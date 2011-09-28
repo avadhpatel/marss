@@ -260,8 +260,7 @@ namespace Memory {
                         // We keep some free entries for interconnect
                         // so if the queue is 100% full then only
                         // return false else return true
-                        return (pendingRequests_.count() >= (
-                                    pendingRequests_.size() - 4));
+                        return pendingRequests_.isFull();
                     }
                     // Otherwise we keep 10 entries free for interconnect
                     // or some internal requests (for example, memory update

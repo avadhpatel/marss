@@ -538,6 +538,13 @@ bool CacheController::cache_hit_cb(void *arg)
     bool kernel_req = queueEntry->request->is_kernel();
 
     if(queueEntry->isSnoop) {
+        if (is_full()) {
+            /* Snoop hit can cause eviction in local cache and if we dont have
+             * free queue entries we delay this by 2 cycles */
+            memoryHierarchy_->add_event(&cacheHit_, 2, queueEntry);
+        } else {
+            coherence_logic_->handle_interconn_hit(queueEntry);
+        }
         coherence_logic_->handle_interconn_hit(queueEntry);
     } else {
         coherence_logic_->handle_local_hit(queueEntry);
