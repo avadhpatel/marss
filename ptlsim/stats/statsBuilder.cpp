@@ -1,4 +1,13 @@
 
+/*
+ * MARSSx86 : A Full System Computer-Architecture Simulator
+ *
+ * This code is released under GPL.
+ *
+ * Copyright 2011 Avadh Patel <apatel@cs.binghamton.edu>
+ *
+ */
+
 #include "statsBuilder.h"
 
 #include <ptlsim.h>

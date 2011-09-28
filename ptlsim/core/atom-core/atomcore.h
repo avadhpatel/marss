@@ -1,4 +1,13 @@
 
+/*
+ * MARSSx86 : A Full System Computer-Architecture Simulator
+ *
+ * This code is released under GPL.
+ *
+ * Copyright 2011 Avadh Patel <apatel@cs.binghamton.edu>
+ *
+ */
+
 #ifndef MARSS_ATOM_CORE_H
 #define MARSS_ATOM_CORE_H
 

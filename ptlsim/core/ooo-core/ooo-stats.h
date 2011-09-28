@@ -1,4 +1,13 @@
 
+/*
+ * MARSSx86 : A Full System Computer-Architecture Simulator
+ *
+ * This code is released under GPL.
+ *
+ * Copyright 2011 Avadh Patel <apatel@cs.binghamton.edu>
+ *
+ */
+
 #ifndef OOOCORE_STATS_H
 #define OOOCORE_STATS_H
 
