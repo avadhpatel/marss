@@ -1077,8 +1077,6 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
     switch(uop.cond) {
         case LDST_ALIGN_NORMAL:
         case LDST_ALIGN_LO:
-            bytemask = ((1 << (1 << uop.size))-1);
-            break;
         case LDST_ALIGN_HI:
             bytemask = ((1 << (1 << uop.size))-1);
             break;
@@ -2287,8 +2285,6 @@ bool AtomThread::issue()
                 st_issue.insns++;
             }
 
-            // inst_in_pipe = true;
-
             if(issue_result == ISSUE_OK_BLOCK) {
                 issue_disabled = true;
                 break;
@@ -2296,24 +2292,6 @@ bool AtomThread::issue()
                 break;
             }
         }
-        // if(issue_result == ISSUE_OK_BLOCK) {
-            // add_to_commitbuf(buf_entry.op);
-            // dispatchq.pophead();
-            // issue_disabled = true;
-            // break;
-        // } else if(issue_result == ISSUE_FAIL) {
-            // break;
-        // } else if(issue_result == ISSUE_CACHE_MISS) {
-            // ready = false;
-            // return false;
-        // } else if(issue_result == ISSUE_OK_SKIP) {
-            // add_to_commitbuf(buf_entry.op);
-            // dispatchq.pophead();
-            // break;
-        // }
-        
-        // add_to_commitbuf(buf_entry.op);
-        // dispatchq.pophead();
     }
 
     st_issue.width[num_issues]++;
@@ -2665,14 +2643,6 @@ bool AtomThread::commit_queue()
         return handle_exception();
     }
 
-    // if(itlb_exception) {
-        // ctx.exception = EXCEPTION_PageFaultOnExec;
-        // ctx.error_code = 0;
-        // ctx.page_fault_addr = itlb_exception_addr;
-
-        // return handle_exception();
-    // }
-
     foreach_forward(commitbuf, i) {
         BufferEntry& buf = commitbuf[i];
 
@@ -2735,7 +2705,6 @@ bool AtomThread::handle_exception()
 
     flush_pipeline();
 
-    // TODO : Handle EXCEPTION_SkipBlock
     if(ctx.exception == EXCEPTION_SkipBlock) {
         ctx.eip = chk_recovery_rip;
         flush_pipeline();
