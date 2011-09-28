@@ -1183,8 +1183,6 @@ extern "C" uint8_t ptl_simulate() {
 
     flush_stats();
 
-    flush_stats();
-
 	if(config.kill || config.kill_after_run) {
         kill_simulation();
 	}
