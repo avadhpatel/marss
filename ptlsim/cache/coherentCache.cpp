@@ -545,7 +545,6 @@ bool CacheController::cache_hit_cb(void *arg)
         } else {
             coherence_logic_->handle_interconn_hit(queueEntry);
         }
-        coherence_logic_->handle_interconn_hit(queueEntry);
     } else {
         coherence_logic_->handle_local_hit(queueEntry);
         OP_TYPE type = queueEntry->request->get_type();
