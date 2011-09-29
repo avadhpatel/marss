@@ -369,7 +369,8 @@ void CacheController::handle_cache_insert(CacheQueueEntry *queueEntry,
 bool CacheController::complete_request(Message &message,
         CacheQueueEntry *queueEntry)
 {
-    if (is_full(true)) {
+    if (pendingRequests_.count() >= (
+                pendingRequests_.size() - 4)) {
         return false;
     }
 
