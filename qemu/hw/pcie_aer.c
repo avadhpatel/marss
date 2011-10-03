@@ -38,6 +38,9 @@
 #define PCIE_DEV_PRINTF(dev, fmt, ...)                                  \
     PCIE_DPRINTF("%s:%x "fmt, (dev)->name, (dev)->devfn, ## __VA_ARGS__)
 
+#define PCI_ERR_SRC_COR_OFFS    0
+#define PCI_ERR_SRC_UNCOR_OFFS  2
+
 /* From 6.2.7 Error Listing and Rules. Table 6-2, 6-3 and 6-4 */
 static uint32_t pcie_aer_uncor_default_severity(uint32_t status)
 {
@@ -320,7 +323,8 @@ static void pcie_aer_msg_root_port(PCIDevice *dev, const PCIEAERMsg *msg)
         if (root_status & PCI_ERR_ROOT_COR_RCV) {
             root_status |= PCI_ERR_ROOT_MULTI_COR_RCV;
         } else {
-            pci_set_word(aer_cap + PCI_ERR_ROOT_COR_SRC, msg->source_id);
+            pci_set_word(aer_cap + PCI_ERR_ROOT_ERR_SRC + PCI_ERR_SRC_COR_OFFS,
+                         msg->source_id);
         }
         root_status |= PCI_ERR_ROOT_COR_RCV;
         break;
@@ -341,7 +345,8 @@ static void pcie_aer_msg_root_port(PCIDevice *dev, const PCIEAERMsg *msg)
         if (root_status & PCI_ERR_ROOT_UNCOR_RCV) {
             root_status |= PCI_ERR_ROOT_MULTI_UNCOR_RCV;
         } else {
-            pci_set_word(aer_cap + PCI_ERR_ROOT_SRC, msg->source_id);
+            pci_set_word(aer_cap + PCI_ERR_ROOT_ERR_SRC +
+                         PCI_ERR_SRC_UNCOR_OFFS, msg->source_id);
         }
         root_status |= PCI_ERR_ROOT_UNCOR_RCV;
     }
@@ -612,7 +617,7 @@ static bool pcie_aer_inject_uncor_error(PCIEAERInject *inj, bool is_fatal)
 /*
  * non-Function specific error must be recorded in all functions.
  * It is the responsibility of the caller of this function.
- * It is also caller's responsiblity to determine which function should
+ * It is also caller's responsibility to determine which function should
  * report the rerror.
  *
  * 6.2.4 Error Logging
@@ -785,16 +790,6 @@ static const VMStateDescription vmstate_pcie_aer_err = {
     }
 };
 
-#define VMSTATE_PCIE_AER_ERRS(_field, _state, _field_num, _vmsd, _type) { \
-    .name       = (stringify(_field)),                                    \
-    .version_id = 0,                                                      \
-    .num_offset = vmstate_offset_value(_state, _field_num, uint16_t),     \
-    .size       = sizeof(_type),                                          \
-    .vmsd       = &(_vmsd),                                               \
-    .flags      = VMS_POINTER | VMS_VARRAY_UINT16 | VMS_STRUCT,           \
-    .offset     = vmstate_offset_pointer(_state, _field, _type),          \
-}
-
 const VMStateDescription vmstate_pcie_aer_log = {
     .name = "PCIE_AER_ERROR_LOG",
     .version_id = 1,
@@ -803,7 +798,7 @@ const VMStateDescription vmstate_pcie_aer_log = {
     .fields     = (VMStateField[]) {
         VMSTATE_UINT16(log_num, PCIEAERLog),
         VMSTATE_UINT16(log_max, PCIEAERLog),
-        VMSTATE_PCIE_AER_ERRS(log, PCIEAERLog, log_num,
+        VMSTATE_STRUCT_VARRAY_POINTER_UINT16(log, PCIEAERLog, log_num,
                               vmstate_pcie_aer_err, PCIEAERErr),
         VMSTATE_END_OF_LIST()
     }

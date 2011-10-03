@@ -39,6 +39,7 @@
 #define BLOCK_OPT_CLUSTER_SIZE  "cluster_size"
 #define BLOCK_OPT_TABLE_SIZE    "table_size"
 #define BLOCK_OPT_PREALLOC      "preallocation"
+#define BLOCK_OPT_SUBFMT        "subformat"
 
 typedef struct AIOPool {
     void (*cancel)(BlockDriverAIOCB *acb);
@@ -85,6 +86,7 @@ struct BlockDriver {
     const char *protocol_name;
     int (*bdrv_truncate)(BlockDriverState *bs, int64_t offset);
     int64_t (*bdrv_getlength)(BlockDriverState *bs);
+    int64_t (*bdrv_get_allocated_file_size)(BlockDriverState *bs);
     int (*bdrv_write_compressed)(BlockDriverState *bs, int64_t sector_num,
                                  const uint8_t *buf, int nb_sectors);
 
@@ -194,7 +196,6 @@ struct BlockDriverState {
     /* NOTE: the following infos are only hints for real hardware
        drivers. They are not used by the block driver */
     int cyls, heads, secs, translation;
-    int type;
     BlockErrorAction on_read_error, on_write_error;
     char device_name[32];
     unsigned long *dirty_bitmap;
@@ -204,8 +205,8 @@ struct BlockDriverState {
     void *private;
 };
 
-#define CHANGE_MEDIA	0x01
-#define CHANGE_SIZE	0x02
+#define CHANGE_MEDIA    0x01
+#define CHANGE_SIZE     0x02
 
 struct BlockDriverAIOCB {
     AIOPool *pool;

@@ -18,6 +18,7 @@
  */
 
 #include "virtio-net.h"
+#include "virtio-serial.h"
 
 #define VIRTIO_DEV_OFFS_TYPE		0	/* 8 bits */
 #define VIRTIO_DEV_OFFS_NUM_VQ		1	/* 8 bits */
@@ -32,7 +33,7 @@
 #define VIRTIO_VQCONFIG_LEN		24
 
 #define VIRTIO_RING_LEN			(TARGET_PAGE_SIZE * 3)
-#define S390_DEVICE_PAGES		256
+#define S390_DEVICE_PAGES		512
 
 typedef struct VirtIOS390Device {
     DeviceState qdev;
@@ -41,10 +42,10 @@ typedef struct VirtIOS390Device {
     uint8_t feat_len;
     VirtIODevice *vdev;
     BlockConf block;
+    char *block_serial;
     NICConf nic;
     uint32_t host_features;
-    /* Max. number of ports we can have for a the virtio-serial device */
-    uint32_t max_virtserial_ports;
+    virtio_serial_conf serial;
     virtio_net_conf net;
 } VirtIOS390Device;
 

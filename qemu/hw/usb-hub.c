@@ -119,6 +119,7 @@ static const USBDescDevice desc_device_hub = {
             .bNumInterfaces        = 1,
             .bConfigurationValue   = 1,
             .bmAttributes          = 0xe0,
+            .nif = 1,
             .ifs = &desc_iface_hub,
         },
     },
@@ -135,74 +136,6 @@ static const USBDesc desc_hub = {
     },
     .full = &desc_device_hub,
     .str  = desc_strings,
-};
-
-static const uint8_t qemu_hub_dev_descriptor[] = {
-	0x12,       /*  u8 bLength; */
-	0x01,       /*  u8 bDescriptorType; Device */
-	0x10, 0x01, /*  u16 bcdUSB; v1.1 */
-
-	0x09,	    /*  u8  bDeviceClass; HUB_CLASSCODE */
-	0x00,	    /*  u8  bDeviceSubClass; */
-	0x00,       /*  u8  bDeviceProtocol; [ low/full speeds only ] */
-	0x08,       /*  u8  bMaxPacketSize0; 8 Bytes */
-
-	0x00, 0x00, /*  u16 idVendor; */
- 	0x00, 0x00, /*  u16 idProduct; */
-	0x01, 0x01, /*  u16 bcdDevice */
-
-	0x03,       /*  u8  iManufacturer; */
-	0x02,       /*  u8  iProduct; */
-	0x01,       /*  u8  iSerialNumber; */
-	0x01        /*  u8  bNumConfigurations; */
-};
-
-/* XXX: patch interrupt size */
-static const uint8_t qemu_hub_config_descriptor[] = {
-
-	/* one configuration */
-	0x09,       /*  u8  bLength; */
-	0x02,       /*  u8  bDescriptorType; Configuration */
-	0x19, 0x00, /*  u16 wTotalLength; */
-	0x01,       /*  u8  bNumInterfaces; (1) */
-	0x01,       /*  u8  bConfigurationValue; */
-	0x00,       /*  u8  iConfiguration; */
-	0xe0,       /*  u8  bmAttributes;
-				 Bit 7: must be set,
-				     6: Self-powered,
-				     5: Remote wakeup,
-				     4..0: resvd */
-	0x00,       /*  u8  MaxPower; */
-
-	/* USB 1.1:
-	 * USB 2.0, single TT organization (mandatory):
-	 *	one interface, protocol 0
-	 *
-	 * USB 2.0, multiple TT organization (optional):
-	 *	two interfaces, protocols 1 (like single TT)
-	 *	and 2 (multiple TT mode) ... config is
-	 *	sometimes settable
-	 *	NOT IMPLEMENTED
-	 */
-
-	/* one interface */
-	0x09,       /*  u8  if_bLength; */
-	0x04,       /*  u8  if_bDescriptorType; Interface */
-	0x00,       /*  u8  if_bInterfaceNumber; */
-	0x00,       /*  u8  if_bAlternateSetting; */
-	0x01,       /*  u8  if_bNumEndpoints; */
-	0x09,       /*  u8  if_bInterfaceClass; HUB_CLASSCODE */
-	0x00,       /*  u8  if_bInterfaceSubClass; */
-	0x00,       /*  u8  if_bInterfaceProtocol; [usb1.1 or single tt] */
-	0x00,       /*  u8  if_iInterface; */
-
-	/* one endpoint (status change endpoint) */
-	0x07,       /*  u8  ep_bLength; */
-	0x05,       /*  u8  ep_bDescriptorType; Endpoint */
-	0x81,       /*  u8  ep_bEndpointAddress; IN Endpoint 1 */
- 	0x03,       /*  u8  ep_bmAttributes; Interrupt */
- 	0x02, 0x00, /*  u16 ep_wMaxPacketSize; 1 + (MAX_ROOT_PORTS / 8) */
-	0xff        /*  u8  ep_bInterval; (255ms -- usb 2.0 spec) */
 };
 
 static const uint8_t qemu_hub_hub_descriptor[] =
@@ -237,6 +170,9 @@ static void usb_hub_detach(USBPort *port1)
     USBHubState *s = port1->opaque;
     USBHubPort *port = &s->ports[port1->index];
 
+    /* Let upstream know the device on this port is gone */
+    s->dev.port->ops->child_detach(s->dev.port, port1->dev);
+
     port->wPortStatus &= ~PORT_STAT_CONNECTION;
     port->wPortChange |= PORT_STAT_C_CONNECTION;
     if (port->wPortStatus & PORT_STAT_ENABLE) {
@@ -245,15 +181,36 @@ static void usb_hub_detach(USBPort *port1)
     }
 }
 
-static void usb_hub_wakeup(USBDevice *dev)
+static void usb_hub_child_detach(USBPort *port1, USBDevice *child)
 {
-    USBHubState *s = dev->port->opaque;
-    USBHubPort *port = &s->ports[dev->port->index];
+    USBHubState *s = port1->opaque;
+
+    /* Pass along upstream */
+    s->dev.port->ops->child_detach(s->dev.port, child);
+}
+
+static void usb_hub_wakeup(USBPort *port1)
+{
+    USBHubState *s = port1->opaque;
+    USBHubPort *port = &s->ports[port1->index];
 
     if (port->wPortStatus & PORT_STAT_SUSPEND) {
         port->wPortChange |= PORT_STAT_C_SUSPEND;
         usb_wakeup(&s->dev);
     }
+}
+
+static void usb_hub_complete(USBPort *port, USBPacket *packet)
+{
+    USBHubState *s = port->opaque;
+
+    /*
+     * Just pass it along upstream for now.
+     *
+     * If we ever inplement usb 2.0 split transactions this will
+     * become a little more complicated ...
+     */
+    usb_packet_complete(&s->dev, packet);
 }
 
 static void usb_hub_handle_attach(USBDevice *dev)
@@ -271,13 +228,13 @@ static void usb_hub_handle_reset(USBDevice *dev)
     /* XXX: do it */
 }
 
-static int usb_hub_handle_control(USBDevice *dev, int request, int value,
-                                  int index, int length, uint8_t *data)
+static int usb_hub_handle_control(USBDevice *dev, USBPacket *p,
+               int request, int value, int index, int length, uint8_t *data)
 {
     USBHubState *s = (USBHubState *)dev;
     int ret;
 
-    ret = usb_desc_handle_control(dev, request, value, index, length, data);
+    ret = usb_desc_handle_control(dev, p, request, value, index, length, data);
     if (ret >= 0) {
         return ret;
     }
@@ -481,7 +438,7 @@ static int usb_hub_broadcast_packet(USBHubState *s, USBPacket *p)
         port = &s->ports[i];
         dev = port->port.dev;
         if (dev && (port->wPortStatus & PORT_STAT_ENABLE)) {
-            ret = dev->info->handle_packet(dev, p);
+            ret = usb_handle_packet(dev, p);
             if (ret != USB_RET_NODEV) {
                 return ret;
             }
@@ -523,7 +480,9 @@ static void usb_hub_handle_destroy(USBDevice *dev)
 static USBPortOps usb_hub_port_ops = {
     .attach = usb_hub_attach,
     .detach = usb_hub_detach,
+    .child_detach = usb_hub_child_detach,
     .wakeup = usb_hub_wakeup,
+    .complete = usb_hub_complete,
 };
 
 static int usb_hub_initfn(USBDevice *dev)

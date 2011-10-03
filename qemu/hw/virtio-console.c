@@ -11,6 +11,8 @@
  */
 
 #include "qemu-char.h"
+#include "qemu-error.h"
+#include "trace.h"
 #include "virtio-serial.h"
 
 typedef struct VirtConsole {
@@ -23,8 +25,42 @@ typedef struct VirtConsole {
 static ssize_t flush_buf(VirtIOSerialPort *port, const uint8_t *buf, size_t len)
 {
     VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
+    ssize_t ret;
 
-    return qemu_chr_write(vcon->chr, buf, len);
+    ret = qemu_chr_write(vcon->chr, buf, len);
+    trace_virtio_console_flush_buf(port->id, len, ret);
+
+    if (ret < 0) {
+        /*
+         * Ideally we'd get a better error code than just -1, but
+         * that's what the chardev interface gives us right now.  If
+         * we had a finer-grained message, like -EPIPE, we could close
+         * this connection.  Absent such error messages, the most we
+         * can do is to return 0 here.
+         *
+         * This will prevent stray -1 values to go to
+         * virtio-serial-bus.c and cause abort()s in
+         * do_flush_queued_data().
+         */
+        ret = 0;
+    }
+    return ret;
+}
+
+/* Callback function that's called when the guest opens the port */
+static void guest_open(VirtIOSerialPort *port)
+{
+    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
+
+    qemu_chr_guest_open(vcon->chr);
+}
+
+/* Callback function that's called when the guest closes the port */
+static void guest_close(VirtIOSerialPort *port)
+{
+    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
+
+    qemu_chr_guest_close(vcon->chr);
 }
 
 /* Readiness of the guest to accept data on a port */
@@ -40,6 +76,7 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
 {
     VirtConsole *vcon = opaque;
 
+    trace_virtio_console_chr_read(vcon->port.id, size);
     virtio_serial_write(&vcon->port, buf, size);
 }
 
@@ -47,6 +84,7 @@ static void chr_event(void *opaque, int event)
 {
     VirtConsole *vcon = opaque;
 
+    trace_virtio_console_chr_event(vcon->port.id, event);
     switch (event) {
     case CHR_EVENT_OPENED:
         virtio_serial_open(&vcon->port);
@@ -57,36 +95,38 @@ static void chr_event(void *opaque, int event)
     }
 }
 
-static int generic_port_init(VirtConsole *vcon, VirtIOSerialDevice *dev)
+static int virtconsole_initfn(VirtIOSerialPort *port)
 {
-    vcon->port.info = dev->info;
+    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
+    VirtIOSerialPortInfo *info = DO_UPCAST(VirtIOSerialPortInfo, qdev,
+                                           vcon->port.dev.info);
+
+    if (port->id == 0 && !info->is_console) {
+        error_report("Port number 0 on virtio-serial devices reserved for virtconsole devices for backward compatibility.");
+        return -1;
+    }
 
     if (vcon->chr) {
         qemu_chr_add_handlers(vcon->chr, chr_can_read, chr_read, chr_event,
                               vcon);
-        vcon->port.info->have_data = flush_buf;
+        info->have_data = flush_buf;
+        info->guest_open = guest_open;
+        info->guest_close = guest_close;
     }
+
     return 0;
 }
 
-/* Virtio Console Ports */
-static int virtconsole_initfn(VirtIOSerialDevice *dev)
+static int virtconsole_exitfn(VirtIOSerialPort *port)
 {
-    VirtIOSerialPort *port = DO_UPCAST(VirtIOSerialPort, dev, &dev->qdev);
-    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
-
-    port->is_console = true;
-    return generic_port_init(vcon, dev);
-}
-
-static int virtconsole_exitfn(VirtIOSerialDevice *dev)
-{
-    VirtIOSerialPort *port = DO_UPCAST(VirtIOSerialPort, dev, &dev->qdev);
     VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
 
     if (vcon->chr) {
-        port->info->have_data = NULL;
-        qemu_chr_close(vcon->chr);
+	/*
+	 * Instead of closing the chardev, free it so it can be used
+	 * for other purposes.
+	 */
+	qemu_chr_add_handlers(vcon->chr, NULL, NULL, NULL, NULL);
     }
 
     return 0;
@@ -95,13 +135,11 @@ static int virtconsole_exitfn(VirtIOSerialDevice *dev)
 static VirtIOSerialPortInfo virtconsole_info = {
     .qdev.name     = "virtconsole",
     .qdev.size     = sizeof(VirtConsole),
+    .is_console    = true,
     .init          = virtconsole_initfn,
     .exit          = virtconsole_exitfn,
     .qdev.props = (Property[]) {
-        DEFINE_PROP_UINT8("is_console", VirtConsole, port.is_console, 1),
-        DEFINE_PROP_UINT32("nr", VirtConsole, port.id, VIRTIO_CONSOLE_BAD_ID),
         DEFINE_PROP_CHR("chardev", VirtConsole, chr),
-        DEFINE_PROP_STRING("name", VirtConsole, port.name),
         DEFINE_PROP_END_OF_LIST(),
     },
 };
@@ -112,24 +150,13 @@ static void virtconsole_register(void)
 }
 device_init(virtconsole_register)
 
-/* Generic Virtio Serial Ports */
-static int virtserialport_initfn(VirtIOSerialDevice *dev)
-{
-    VirtIOSerialPort *port = DO_UPCAST(VirtIOSerialPort, dev, &dev->qdev);
-    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
-
-    return generic_port_init(vcon, dev);
-}
-
 static VirtIOSerialPortInfo virtserialport_info = {
     .qdev.name     = "virtserialport",
     .qdev.size     = sizeof(VirtConsole),
-    .init          = virtserialport_initfn,
+    .init          = virtconsole_initfn,
     .exit          = virtconsole_exitfn,
     .qdev.props = (Property[]) {
-        DEFINE_PROP_UINT32("nr", VirtConsole, port.id, VIRTIO_CONSOLE_BAD_ID),
         DEFINE_PROP_CHR("chardev", VirtConsole, chr),
-        DEFINE_PROP_STRING("name", VirtConsole, port.name),
         DEFINE_PROP_END_OF_LIST(),
     },
 };

@@ -27,13 +27,28 @@ STEXI
 Display version information and exit
 ETEXI
 
-DEF("M", HAS_ARG, QEMU_OPTION_M,
-    "-M machine      select emulated machine (-M ? for list)\n", QEMU_ARCH_ALL)
+DEF("machine", HAS_ARG, QEMU_OPTION_machine, \
+    "-machine [type=]name[,prop[=value][,...]]\n"
+    "                selects emulated machine (-machine ? for list)\n"
+    "                property accel=accel1[:accel2[:...]] selects accelerator\n"
+    "                supported accelerators are kvm, xen, tcg (default: tcg)\n",
+    QEMU_ARCH_ALL)
 STEXI
-@item -M @var{machine}
-@findex -M
-Select the emulated @var{machine} (@code{-M ?} for list)
+@item -machine [type=]@var{name}[,prop=@var{value}[,...]]
+@findex -machine
+Select the emulated machine by @var{name}. Use @code{-machine ?} to list
+available machines. Supported machine properties are:
+@table @option
+@item accel=@var{accels1}[:@var{accels2}[:...]]
+This is used to enable an accelerator. Depending on the target architecture,
+kvm, xen, or tcg can be available. By default, tcg is used. If there is more
+than one accelerator specified, the next one is used if the previous one fails
+to initialize.
+@end table
 ETEXI
+
+HXCOMM Deprecated by -machine
+DEF("M", HAS_ARG, QEMU_OPTION_M, "", QEMU_ARCH_ALL)
 
 DEF("cpu", HAS_ARG, QEMU_OPTION_cpu,
     "-cpu cpu        select CPU (-cpu ? for list)\n", QEMU_ARCH_ALL)
@@ -168,6 +183,14 @@ an untrusted format header.
 This option specifies the serial number to assign to the device.
 @item addr=@var{addr}
 Specify the controller's PCI address (if=virtio only).
+@item werror=@var{action},rerror=@var{action}
+Specify which @var{action} to take on write and read errors. Valid actions are:
+"ignore" (ignore the error and try to continue), "stop" (pause QEMU),
+"report" (report the error to the guest), "enospc" (pause QEMU only if the
+host disk is full; report the error to the guest otherwise).
+The default setting is @option{werror=enospc} and @option{rerror=report}.
+@item readonly
+Open drive @option{file} as read-only. Guest write attempts will fail.
 @end table
 
 By default, writethrough caching is used for all block device.  This means that
@@ -598,6 +621,37 @@ STEXI
 @table @option
 ETEXI
 
+DEF("display", HAS_ARG, QEMU_OPTION_display,
+    "-display sdl[,frame=on|off][,alt_grab=on|off][,ctrl_grab=on|off]\n"
+    "            [,window_close=on|off]|curses|none|\n"
+    "            vnc=<display>[,<optargs>]\n"
+    "                select display type\n", QEMU_ARCH_ALL)
+STEXI
+@item -display @var{type}
+@findex -display
+Select type of display to use. This option is a replacement for the
+old style -sdl/-curses/... options. Valid values for @var{type} are
+@table @option
+@item sdl
+Display video output via SDL (usually in a separate graphics
+window; see the SDL documentation for other possibilities).
+@item curses
+Display video output via curses. For graphics device models which
+support a text mode, QEMU can display this output using a
+curses/ncurses interface. Nothing is displayed when the graphics
+device is in graphical mode or if the graphics device does not support
+a text mode. Generally only the VGA device models support text mode.
+@item none
+Do not display video output. The guest will still see an emulated
+graphics card, but its output will not be displayed to the QEMU
+user. This option differs from the -nographic option in that it
+only affects what is done with video output; -nographic also changes
+the destination of the serial and parallel port data.
+@item vnc
+Start a VNC server on display <arg>
+@end table
+ETEXI
+
 DEF("nographic", 0, QEMU_OPTION_nographic,
     "-nographic      disable graphical output and redirect serial I/Os to console\n",
     QEMU_ARCH_ALL)
@@ -611,11 +665,9 @@ the console. Therefore, you can still use QEMU to debug a Linux kernel
 with a serial console.
 ETEXI
 
-#ifdef CONFIG_CURSES
 DEF("curses", 0, QEMU_OPTION_curses,
     "-curses         use a curses/ncurses interface instead of SDL\n",
     QEMU_ARCH_ALL)
-#endif
 STEXI
 @item -curses
 @findex curses
@@ -624,11 +676,9 @@ QEMU can display the VGA output when in text mode using a
 curses/ncurses interface.  Nothing is displayed in graphical mode.
 ETEXI
 
-#ifdef CONFIG_SDL
 DEF("no-frame", 0, QEMU_OPTION_no_frame,
     "-no-frame       open SDL window without a frame and window decorations\n",
     QEMU_ARCH_ALL)
-#endif
 STEXI
 @item -no-frame
 @findex -no-frame
@@ -637,42 +687,36 @@ available screen space. This makes the using QEMU in a dedicated desktop
 workspace more convenient.
 ETEXI
 
-#ifdef CONFIG_SDL
 DEF("alt-grab", 0, QEMU_OPTION_alt_grab,
     "-alt-grab       use Ctrl-Alt-Shift to grab mouse (instead of Ctrl-Alt)\n",
     QEMU_ARCH_ALL)
-#endif
 STEXI
 @item -alt-grab
 @findex -alt-grab
-Use Ctrl-Alt-Shift to grab mouse (instead of Ctrl-Alt).
+Use Ctrl-Alt-Shift to grab mouse (instead of Ctrl-Alt). Note that this also
+affects the special keys (for fullscreen, monitor-mode switching, etc).
 ETEXI
 
-#ifdef CONFIG_SDL
 DEF("ctrl-grab", 0, QEMU_OPTION_ctrl_grab,
     "-ctrl-grab      use Right-Ctrl to grab mouse (instead of Ctrl-Alt)\n",
     QEMU_ARCH_ALL)
-#endif
 STEXI
 @item -ctrl-grab
 @findex -ctrl-grab
-Use Right-Ctrl to grab mouse (instead of Ctrl-Alt).
+Use Right-Ctrl to grab mouse (instead of Ctrl-Alt). Note that this also
+affects the special keys (for fullscreen, monitor-mode switching, etc).
 ETEXI
 
-#ifdef CONFIG_SDL
 DEF("no-quit", 0, QEMU_OPTION_no_quit,
     "-no-quit        disable SDL window close capability\n", QEMU_ARCH_ALL)
-#endif
 STEXI
 @item -no-quit
 @findex -no-quit
 Disable SDL window close capability.
 ETEXI
 
-#ifdef CONFIG_SDL
 DEF("sdl", 0, QEMU_OPTION_sdl,
     "-sdl            enable SDL\n", QEMU_ARCH_ALL)
-#endif
 STEXI
 @item -sdl
 @findex -sdl
@@ -701,8 +745,24 @@ Force using the specified IP version.
 @item password=<secret>
 Set the password you need to authenticate.
 
+@item sasl
+Require that the client use SASL to authenticate with the spice.
+The exact choice of authentication method used is controlled from the
+system / user's SASL configuration file for the 'qemu' service. This
+is typically found in /etc/sasl2/qemu.conf. If running QEMU as an
+unprivileged user, an environment variable SASL_CONF_PATH can be used
+to make it search alternate locations for the service config.
+While some SASL auth methods can also provide data encryption (eg GSSAPI),
+it is recommended that SASL always be combined with the 'tls' and
+'x509' settings to enable use of SSL and server certificates. This
+ensures a data encryption preventing compromise of authentication
+credentials.
+
 @item disable-ticketing
 Allow client connects without authentication.
+
+@item disable-copy-paste
+Disable copy paste between the client and the guest.
 
 @item tls-port=<nr>
 Set the TCP port spice is listening on for encrypted channels.
@@ -756,6 +816,15 @@ STEXI
 @item -portrait
 @findex -portrait
 Rotate graphical output 90 deg left (only PXA LCD).
+ETEXI
+
+DEF("rotate", HAS_ARG, QEMU_OPTION_rotate,
+    "-rotate <deg>   rotate graphical output some deg left (only PXA LCD)\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -rotate
+@findex -rotate
+Rotate graphical output some deg left (only PXA LCD).
 ETEXI
 
 DEF("vga", HAS_ARG, QEMU_OPTION_vga,
@@ -921,6 +990,15 @@ option is set, VNC client may receive lossy framebuffer updates
 depending on its encoding settings. Enabling this option can save
 a lot of bandwidth at the expense of quality.
 
+@item non-adaptive
+
+Disable adaptive encodings. Adaptive encodings are enabled by default.
+An adaptive encoding will try to detect frequently updated screen regions,
+and send updates in these regions using a lossy encoding (like JPEG).
+This can be really helpful to save bandwidth when playing videos. Disabling
+adaptive encodings allows to restore the original static behavior of encodings
+like Tight.
+
 @end table
 ETEXI
 
@@ -1045,7 +1123,7 @@ DEF("net", HAS_ARG, QEMU_OPTION_net,
     "-net nic[,vlan=n][,macaddr=mac][,model=type][,name=str][,addr=str][,vectors=v]\n"
     "                create a new Network Interface Card and connect it to VLAN 'n'\n"
 #ifdef CONFIG_SLIRP
-    "-net user[,vlan=n][,name=str][,net=addr[/mask]][,host=addr][,restrict=y|n]\n"
+    "-net user[,vlan=n][,name=str][,net=addr[/mask]][,host=addr][,restrict=on|off]\n"
     "         [,hostname=host][,dhcpstart=addr][,dns=addr][,tftp=dir][,bootfile=f]\n"
     "         [,hostfwd=rule][,guestfwd=rule]"
 #ifndef _WIN32
@@ -1132,23 +1210,23 @@ Assign symbolic name for use in monitor commands.
 @item net=@var{addr}[/@var{mask}]
 Set IP network address the guest will see. Optionally specify the netmask,
 either in the form a.b.c.d or as number of valid top-most bits. Default is
-10.0.2.0/8.
+10.0.2.0/24.
 
 @item host=@var{addr}
 Specify the guest-visible address of the host. Default is the 2nd IP in the
 guest network, i.e. x.x.x.2.
 
-@item restrict=y|yes|n|no
-If this options is enabled, the guest will be isolated, i.e. it will not be
+@item restrict=on|off
+If this option is enabled, the guest will be isolated, i.e. it will not be
 able to contact the host and no guest IP packets will be routed over the host
-to the outside. This option does not affect explicitly set forwarding rule.
+to the outside. This option does not affect any explicitly set forwarding rules.
 
 @item hostname=@var{name}
 Specifies the client hostname reported by the builtin DHCP server.
 
 @item dhcpstart=@var{addr}
 Specify the first of the 16 IPs the built-in DHCP server can assign. Default
-is the 16th to 31st IP in the guest network, i.e. x.x.x.16 to x.x.x.31.
+is the 15th to 31st IP in the guest network, i.e. x.x.x.15 to x.x.x.31.
 
 @item dns=@var{addr}
 Specify the guest-visible address of the virtual nameserver. The address must
@@ -1967,6 +2045,15 @@ STEXI
 @item -d
 @findex -d
 Output log in /tmp/qemu.log
+ETEXI
+
+DEF("D", HAS_ARG, QEMU_OPTION_D, \
+    "-D logfile      output log to logfile (instead of the default /tmp/qemu.log)\n",
+    QEMU_ARCH_ALL)
+STEXI
+@item -D
+@findex -D
+Output log in logfile instead of /tmp/qemu.log
 ETEXI
 
 DEF("hdachs", HAS_ARG, QEMU_OPTION_hdachs, \

@@ -240,14 +240,6 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
     int ret;
 
     translation = BIOS_ATA_TRANSLATION_AUTO;
-
-    if (default_to_scsi) {
-        type = IF_SCSI;
-        pstrcpy(devname, sizeof(devname), "scsi");
-    } else {
-        type = IF_IDE;
-        pstrcpy(devname, sizeof(devname), "ide");
-    }
     media = MEDIA_DISK;
 
     /* extract parameters */
@@ -273,7 +265,11 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
             error_report("unsupported bus type '%s'", buf);
             return NULL;
 	}
+    } else {
+        type = default_to_scsi ? IF_SCSI : IF_IDE;
+        pstrcpy(devname, sizeof(devname), if_name[type]);
     }
+
     max_devs = if_max_devs[type];
 
     if (cyls || heads || secs) {
@@ -293,7 +289,7 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
 
     if ((buf = qemu_opt_get(opts, "trans")) != NULL) {
         if (!cyls) {
-            error_report("'%s' trans must be used with cyls,heads and secs",
+            error_report("'%s' trans must be used with cyls, heads and secs",
                          buf);
             return NULL;
         }
@@ -314,7 +310,7 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
 	    media = MEDIA_DISK;
 	} else if (!strcmp(buf, "cdrom")) {
             if (cyls || secs || heads) {
-                error_report("'%s' invalid physical CHS format", buf);
+                error_report("CHS can't be set with media=%s", buf);
 	        return NULL;
             }
 	    media = MEDIA_CDROM;
@@ -326,7 +322,7 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
 
     if ((buf = qemu_opt_get(opts, "cache")) != NULL) {
         if (!strcmp(buf, "off") || !strcmp(buf, "none")) {
-            bdrv_flags |= BDRV_O_NOCACHE;
+            bdrv_flags |= BDRV_O_NOCACHE | BDRV_O_CACHE_WB;
         } else if (!strcmp(buf, "writeback")) {
             bdrv_flags |= BDRV_O_CACHE_WB;
         } else if (!strcmp(buf, "unsafe")) {
@@ -487,7 +483,8 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
             }
 	    break;
 	case MEDIA_CDROM:
-            bdrv_set_type_hint(dinfo->bdrv, BDRV_TYPE_CDROM);
+            bdrv_set_removable(dinfo->bdrv, 1);
+            dinfo->media_cd = 1;
 	    break;
 	}
         break;
@@ -495,7 +492,7 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
         /* FIXME: This isn't really a floppy, but it's a reasonable
            approximation.  */
     case IF_FLOPPY:
-        bdrv_set_type_hint(dinfo->bdrv, BDRV_TYPE_FLOPPY);
+        bdrv_set_removable(dinfo->bdrv, 1);
         break;
     case IF_PFLASH:
     case IF_MTD:
@@ -503,7 +500,7 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
     case IF_VIRTIO:
         /* add virtio block device */
         opts = qemu_opts_create(qemu_find_opts("device"), NULL, 0);
-        qemu_opt_set(opts, "driver", "virtio-blk-pci");
+        qemu_opt_set(opts, "driver", "virtio-blk");
         qemu_opt_set(opts, "drive", dinfo->id);
         if (devaddr)
             qemu_opt_set(opts, "addr", devaddr);
@@ -571,15 +568,16 @@ void do_commit(Monitor *mon, const QDict *qdict)
 int do_snapshot_blkdev(Monitor *mon, const QDict *qdict, QObject **ret_data)
 {
     const char *device = qdict_get_str(qdict, "device");
-    const char *filename = qdict_get_try_str(qdict, "snapshot_file");
+    const char *filename = qdict_get_try_str(qdict, "snapshot-file");
     const char *format = qdict_get_try_str(qdict, "format");
     BlockDriverState *bs;
-    BlockDriver *drv, *proto_drv;
+    BlockDriver *drv, *old_drv, *proto_drv;
     int ret = 0;
     int flags;
+    char old_filename[1024];
 
     if (!filename) {
-        qerror_report(QERR_MISSING_PARAMETER, "snapshot_file");
+        qerror_report(QERR_MISSING_PARAMETER, "snapshot-file");
         ret = -1;
         goto out;
     }
@@ -590,6 +588,11 @@ int do_snapshot_blkdev(Monitor *mon, const QDict *qdict, QObject **ret_data)
         ret = -1;
         goto out;
     }
+
+    pstrcpy(old_filename, sizeof(old_filename), bs->filename);
+
+    old_drv = bs->drv;
+    flags = bs->open_flags;
 
     if (!format) {
         format = "qcow2";
@@ -610,7 +613,7 @@ int do_snapshot_blkdev(Monitor *mon, const QDict *qdict, QObject **ret_data)
     }
 
     ret = bdrv_img_create(filename, format, bs->filename,
-                          bs->drv->format_name, NULL, -1, bs->open_flags);
+                          bs->drv->format_name, NULL, -1, flags);
     if (ret) {
         goto out;
     }
@@ -618,15 +621,20 @@ int do_snapshot_blkdev(Monitor *mon, const QDict *qdict, QObject **ret_data)
     qemu_aio_flush();
     bdrv_flush(bs);
 
-    flags = bs->open_flags;
     bdrv_close(bs);
     ret = bdrv_open(bs, filename, flags, drv);
     /*
-     * If reopening the image file we just created fails, we really
-     * are in trouble :(
+     * If reopening the image file we just created fails, fall back
+     * and try to re-open the original image. If that fails too, we
+     * are in serious trouble.
      */
     if (ret != 0) {
-        abort();
+        ret = bdrv_open(bs, old_filename, flags, old_drv);
+        if (ret != 0) {
+            qerror_report(QERR_OPEN_FILE_FAILED, old_filename);
+        } else {
+            qerror_report(QERR_OPEN_FILE_FAILED, filename);
+        }
     }
 out:
     if (ret) {

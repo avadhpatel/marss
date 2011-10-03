@@ -126,6 +126,13 @@ static void pci_change_irq_level(PCIDevice *pci_dev, int irq_num, int change)
     bus->set_irq(bus->irq_opaque, irq_num, bus->irq_count[irq_num] != 0);
 }
 
+int pci_bus_get_irq_level(PCIBus *bus, int irq_num)
+{
+    assert(irq_num >= 0);
+    assert(irq_num < bus->nirq);
+    return !!bus->irq_count[irq_num];
+}
+
 /* Update interrupt status bit in config space on interrupt
  * state change. */
 static void pci_update_irq_status(PCIDevice *dev)
@@ -161,7 +168,7 @@ void pci_device_reset(PCIDevice *dev)
     dev->irq_state = 0;
     pci_update_irq_status(dev);
     pci_device_deassert_intx(dev);
-    /* Clear all writeable bits */
+    /* Clear all writable bits */
     pci_word_test_and_clear_mask(dev->config + PCI_COMMAND,
                                  pci_get_word(dev->wmask + PCI_COMMAND) |
                                  pci_get_word(dev->w1cmask + PCI_COMMAND));
@@ -256,7 +263,7 @@ int pci_find_domain(const PCIBus *bus)
 }
 
 void pci_bus_new_inplace(PCIBus *bus, DeviceState *parent,
-                         const char *name, int devfn_min)
+                         const char *name, uint8_t devfn_min)
 {
     qbus_create_inplace(&bus->qbus, &pci_bus_info, parent, name);
     assert(PCI_FUNC(devfn_min) == 0);
@@ -269,7 +276,7 @@ void pci_bus_new_inplace(PCIBus *bus, DeviceState *parent,
     vmstate_register(NULL, -1, &vmstate_pcibus, bus);
 }
 
-PCIBus *pci_bus_new(DeviceState *parent, const char *name, int devfn_min)
+PCIBus *pci_bus_new(DeviceState *parent, const char *name, uint8_t devfn_min)
 {
     PCIBus *bus;
 
@@ -303,7 +310,7 @@ void pci_bus_set_mem_base(PCIBus *bus, target_phys_addr_t base)
 
 PCIBus *pci_register_bus(DeviceState *parent, const char *name,
                          pci_set_irq_fn set_irq, pci_map_irq_fn map_irq,
-                         void *irq_opaque, int devfn_min, int nirq)
+                         void *irq_opaque, uint8_t devfn_min, int nirq)
 {
     PCIBus *bus;
 
@@ -558,7 +565,7 @@ PCIBus *pci_get_bus_devfn(int *devfnp, const char *devaddr)
         return NULL;
     }
 
-    *devfnp = slot << 3;
+    *devfnp = PCI_DEVFN(slot, 0);
     return pci_find_bus(pci_find_root_bus(dom), bus);
 }
 
@@ -719,10 +726,11 @@ static void pci_config_free(PCIDevice *pci_dev)
 /* -1 for devfn means auto assign */
 static PCIDevice *do_pci_register_device(PCIDevice *pci_dev, PCIBus *bus,
                                          const char *name, int devfn,
-                                         PCIConfigReadFunc *config_read,
-                                         PCIConfigWriteFunc *config_write,
-                                         bool is_bridge)
+                                         const PCIDeviceInfo *info)
 {
+    PCIConfigReadFunc *config_read = info->config_read;
+    PCIConfigWriteFunc *config_write = info->config_write;
+
     if (devfn < 0) {
         for(devfn = bus->devfn_min ; devfn < ARRAY_SIZE(bus->devices);
             devfn += PCI_FUNC_MAX) {
@@ -743,13 +751,29 @@ static PCIDevice *do_pci_register_device(PCIDevice *pci_dev, PCIBus *bus,
     pci_dev->irq_state = 0;
     pci_config_alloc(pci_dev);
 
-    if (!is_bridge) {
-        pci_set_default_subsystem_id(pci_dev);
+    pci_config_set_vendor_id(pci_dev->config, info->vendor_id);
+    pci_config_set_device_id(pci_dev->config, info->device_id);
+    pci_config_set_revision(pci_dev->config, info->revision);
+    pci_config_set_class(pci_dev->config, info->class_id);
+
+    if (!info->is_bridge) {
+        if (info->subsystem_vendor_id || info->subsystem_id) {
+            pci_set_word(pci_dev->config + PCI_SUBSYSTEM_VENDOR_ID,
+                         info->subsystem_vendor_id);
+            pci_set_word(pci_dev->config + PCI_SUBSYSTEM_ID,
+                         info->subsystem_id);
+        } else {
+            pci_set_default_subsystem_id(pci_dev);
+        }
+    } else {
+        /* subsystem_vendor_id/subsystem_id are only for header type 0 */
+        assert(!info->subsystem_vendor_id);
+        assert(!info->subsystem_id);
     }
     pci_init_cmask(pci_dev);
     pci_init_wmask(pci_dev);
     pci_init_w1cmask(pci_dev);
-    if (is_bridge) {
+    if (info->is_bridge) {
         pci_init_wmask_bridge(pci_dev);
     }
     if (pci_init_multifunction(bus, pci_dev)) {
@@ -776,17 +800,20 @@ static void do_pci_unregister_device(PCIDevice *pci_dev)
     pci_config_free(pci_dev);
 }
 
+/* TODO: obsolete. eliminate this once all pci devices are qdevifed. */
 PCIDevice *pci_register_device(PCIBus *bus, const char *name,
                                int instance_size, int devfn,
                                PCIConfigReadFunc *config_read,
                                PCIConfigWriteFunc *config_write)
 {
     PCIDevice *pci_dev;
+    PCIDeviceInfo info = {
+        .config_read = config_read,
+        .config_write = config_write,
+    };
 
     pci_dev = qemu_mallocz(instance_size);
-    pci_dev = do_pci_register_device(pci_dev, bus, name, devfn,
-                                     config_read, config_write,
-                                     PCI_HEADER_TYPE_NORMAL);
+    pci_dev = do_pci_register_device(pci_dev, bus, name, devfn, &info);
     if (pci_dev == NULL) {
         hw_error("PCI: can't register device\n");
     }
@@ -859,11 +886,12 @@ void pci_register_bar(PCIDevice *pci_dev, int region_num,
     r->filtered_size = size;
     r->type = type;
     r->map_func = map_func;
+    r->ram_addr = IO_MEM_UNASSIGNED;
 
     wmask = ~(size - 1);
     addr = pci_bar(pci_dev, region_num);
     if (region_num == PCI_ROM_SLOT) {
-        /* ROM enable bit is writeable */
+        /* ROM enable bit is writable */
         wmask |= PCI_ROM_ADDRESS_ENABLE;
     }
     pci_set_long(pci_dev->config + addr, type);
@@ -875,6 +903,22 @@ void pci_register_bar(PCIDevice *pci_dev, int region_num,
         pci_set_long(pci_dev->wmask + addr, wmask & 0xffffffff);
         pci_set_long(pci_dev->cmask + addr, 0xffffffff);
     }
+}
+
+static void pci_simple_bar_mapfunc(PCIDevice *pci_dev, int region_num,
+                                   pcibus_t addr, pcibus_t size, int type)
+{
+    cpu_register_physical_memory(addr, size,
+                                 pci_dev->io_regions[region_num].ram_addr);
+}
+
+void pci_register_bar_simple(PCIDevice *pci_dev, int region_num,
+                             pcibus_t size,  uint8_t attr, ram_addr_t ram_addr)
+{
+    pci_register_bar(pci_dev, region_num, size,
+                     PCI_BASE_ADDRESS_SPACE_MEMORY | attr,
+                     pci_simple_bar_mapfunc);
+    pci_dev->io_regions[region_num].ram_addr = ram_addr;
 }
 
 static void pci_bridge_filter(PCIDevice *d, pcibus_t *addr, pcibus_t *size,
@@ -1145,6 +1189,7 @@ static const pci_class_desc pci_class_descriptions[] =
     { 0x0400, "Video controller", "video"},
     { 0x0401, "Audio controller", "sound"},
     { 0x0402, "Phone"},
+    { 0x0403, "Audio controller", "sound"},
     { 0x0480, "Multimedia controller"},
     { 0x0500, "RAM controller", "memory"},
     { 0x0501, "Flash controller", "flash"},
@@ -1603,14 +1648,14 @@ PCIBus *pci_find_bus(PCIBus *bus, int bus_num)
     return NULL;
 }
 
-PCIDevice *pci_find_device(PCIBus *bus, int bus_num, int slot, int function)
+PCIDevice *pci_find_device(PCIBus *bus, int bus_num, uint8_t devfn)
 {
     bus = pci_find_bus(bus, bus_num);
 
     if (!bus)
         return NULL;
 
-    return bus->devices[PCI_DEVFN(slot, function)];
+    return bus->devices[devfn];
 }
 
 static int pci_qdev_init(DeviceState *qdev, DeviceInfo *base)
@@ -1618,7 +1663,7 @@ static int pci_qdev_init(DeviceState *qdev, DeviceInfo *base)
     PCIDevice *pci_dev = (PCIDevice *)qdev;
     PCIDeviceInfo *info = container_of(base, PCIDeviceInfo, qdev);
     PCIBus *bus;
-    int devfn, rc;
+    int rc;
     bool is_default_rom;
 
     /* initialize cap_present for pci_is_express() and pci_config_size() */
@@ -1627,10 +1672,8 @@ static int pci_qdev_init(DeviceState *qdev, DeviceInfo *base)
     }
 
     bus = FROM_QBUS(PCIBus, qdev_get_parent_bus(qdev));
-    devfn = pci_dev->devfn;
-    pci_dev = do_pci_register_device(pci_dev, bus, base->name, devfn,
-                                     info->config_read, info->config_write,
-                                     info->is_bridge);
+    pci_dev = do_pci_register_device(pci_dev, bus, base->name,
+                                     pci_dev->devfn, info);
     if (pci_dev == NULL)
         return -1;
     if (qdev->hotplugged && info->no_hotplug) {
@@ -1638,10 +1681,12 @@ static int pci_qdev_init(DeviceState *qdev, DeviceInfo *base)
         do_pci_unregister_device(pci_dev);
         return -1;
     }
-    rc = info->init(pci_dev);
-    if (rc != 0) {
-        do_pci_unregister_device(pci_dev);
-        return rc;
+    if (info->init) {
+        rc = info->init(pci_dev);
+        if (rc != 0) {
+            do_pci_unregister_device(pci_dev);
+            return rc;
+        }
     }
 
     /* rom loading */
@@ -1708,6 +1753,21 @@ PCIDevice *pci_create_multifunction(PCIBus *bus, int devfn, bool multifunction,
     return DO_UPCAST(PCIDevice, qdev, dev);
 }
 
+PCIDevice *pci_try_create_multifunction(PCIBus *bus, int devfn,
+                                        bool multifunction,
+                                        const char *name)
+{
+    DeviceState *dev;
+
+    dev = qdev_try_create(&bus->qbus, name);
+    if (!dev) {
+        return NULL;
+    }
+    qdev_prop_set_uint32(dev, "addr", devfn);
+    qdev_prop_set_bit(dev, "multifunction", multifunction);
+    return DO_UPCAST(PCIDevice, qdev, dev);
+}
+
 PCIDevice *pci_create_simple_multifunction(PCIBus *bus, int devfn,
                                            bool multifunction,
                                            const char *name)
@@ -1725,6 +1785,11 @@ PCIDevice *pci_create(PCIBus *bus, int devfn, const char *name)
 PCIDevice *pci_create_simple(PCIBus *bus, int devfn, const char *name)
 {
     return pci_create_simple_multifunction(bus, devfn, false, name);
+}
+
+PCIDevice *pci_try_create(PCIBus *bus, int devfn, const char *name)
+{
+    return pci_try_create_multifunction(bus, devfn, false, name);
 }
 
 static int pci_find_space(PCIDevice *pdev, uint8_t size)
@@ -1855,6 +1920,7 @@ static int pci_add_option_rom(PCIDevice *pdev, bool is_default_rom)
     if (size < 0) {
         error_report("%s: failed to find romfile \"%s\"",
                      __FUNCTION__, pdev->romfile);
+        qemu_free(path);
         return -1;
     }
     if (size & (size - 1)) {
@@ -1875,6 +1941,8 @@ static int pci_add_option_rom(PCIDevice *pdev, bool is_default_rom)
         /* Only the default rom images will be patched (if needed). */
         pci_patch_ids(pdev, ptr, size);
     }
+
+    qemu_put_ram_ptr(ptr);
 
     pci_register_bar(pdev, PCI_ROM_SLOT, size,
                      0, pci_map_option_rom);
@@ -1929,7 +1997,7 @@ void pci_del_capability(PCIDevice *pdev, uint8_t cap_id, uint8_t size)
     if (!offset)
         return;
     pdev->config[prev] = pdev->config[offset + PCI_CAP_LIST_NEXT];
-    /* Make capability writeable again */
+    /* Make capability writable again */
     memset(pdev->wmask + offset, 0xff, size);
     memset(pdev->w1cmask + offset, 0, size);
     /* Clear cmask as device-specific registers can't be checked */

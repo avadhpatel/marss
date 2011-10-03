@@ -9,6 +9,7 @@
 #include <hw/ide.h>
 #include "block_int.h"
 #include "iorange.h"
+#include "dma.h"
 
 /* debug IDE devices */
 //#define DEBUG_IDE
@@ -61,7 +62,11 @@ typedef struct IDEDMAOps IDEDMAOps;
  */
 #define CFA_REQ_EXT_ERROR_CODE		0x03 /* CFA Request Extended Error Code */
 /*
- *	0x04->0x07 Reserved
+ *      0x04->0x05 Reserved
+ */
+#define WIN_DSM                         0x06
+/*
+ *      0x07 Reserved
  */
 #define WIN_SRST			0x08 /* ATAPI soft reset command */
 #define WIN_DEVICE_RESET		0x08
@@ -188,6 +193,9 @@ typedef struct IDEDMAOps IDEDMAOps;
 #define MAX_MULT_SECTORS 16
 
 #define IDE_DMA_BUF_SECTORS 256
+
+/* feature values for Data Set Management */
+#define DSM_TRIM                        0x01
 
 #if (IDE_DMA_BUF_SECTORS < MAX_MULT_SECTORS)
 #error "IDE_DMA_BUF_SECTORS must be bigger or equal to MAX_MULT_SECTORS"
@@ -373,6 +381,20 @@ typedef int DMAFunc(IDEDMA *);
 typedef int DMAIntFunc(IDEDMA *, int);
 typedef void DMARestartFunc(void *, int, int);
 
+struct unreported_events {
+    bool eject_request;
+    bool new_media;
+};
+
+enum ide_dma_cmd {
+    IDE_DMA_READ,
+    IDE_DMA_WRITE,
+    IDE_DMA_TRIM,
+};
+
+#define ide_cmd_is_read(s) \
+	((s)->dma_cmd == IDE_DMA_READ)
+
 /* NOTE: IDEState represents in fact one drive */
 struct IDEState {
     IDEBus *bus;
@@ -408,6 +430,7 @@ struct IDEState {
     BlockDriverState *bs;
     char version[9];
     /* ATAPI specific */
+    struct unreported_events events;
     uint8_t sense_key;
     uint8_t asc;
     uint8_t cdrom_changed;
@@ -439,7 +462,7 @@ struct IDEState {
     uint32_t mdata_size;
     uint8_t *mdata_storage;
     int media_changed;
-    int is_read;
+    enum ide_dma_cmd dma_cmd;
     /* SMART */
     uint8_t smart_enabled;
     uint8_t smart_autosave;
@@ -479,6 +502,8 @@ struct IDEBus {
     uint8_t unit;
     uint8_t cmd;
     qemu_irq irq;
+
+    int error_status;
 };
 
 struct IDEDevice {
@@ -498,10 +523,17 @@ struct IDEDeviceInfo {
 #define BM_STATUS_DMAING 0x01
 #define BM_STATUS_ERROR  0x02
 #define BM_STATUS_INT    0x04
+
+/* FIXME These are not status register bits */
 #define BM_STATUS_DMA_RETRY  0x08
 #define BM_STATUS_PIO_RETRY  0x10
 #define BM_STATUS_RETRY_READ  0x20
 #define BM_STATUS_RETRY_FLUSH 0x40
+#define BM_STATUS_RETRY_TRIM 0x80
+
+#define BM_MIGRATION_COMPAT_STATUS_BITS \
+        (BM_STATUS_DMA_RETRY | BM_STATUS_PIO_RETRY | \
+        BM_STATUS_RETRY_READ | BM_STATUS_RETRY_FLUSH)
 
 #define BM_CMD_START     0x01
 #define BM_CMD_READ      0x08
@@ -551,7 +583,7 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr);
 void ide_data_writel(void *opaque, uint32_t addr, uint32_t val);
 uint32_t ide_data_readl(void *opaque, uint32_t addr);
 
-int ide_init_drive(IDEState *s, BlockDriverState *bs,
+int ide_init_drive(IDEState *s, BlockDriverState *bs, IDEDriveKind kind,
                    const char *version, const char *serial);
 void ide_init2(IDEBus *bus, qemu_irq irq);
 void ide_init2_with_non_qdev_drives(IDEBus *bus, DriveInfo *hd0,
@@ -563,6 +595,18 @@ void ide_dma_cb(void *opaque, int ret);
 void ide_sector_write(IDEState *s);
 void ide_sector_read(IDEState *s);
 void ide_flush_cache(IDEState *s);
+
+void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
+                        EndTransferFunc *end_transfer_func);
+void ide_transfer_stop(IDEState *s);
+void ide_set_inactive(IDEState *s);
+BlockDriverAIOCB *ide_issue_trim(BlockDriverState *bs,
+        int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
+        BlockDriverCompletionFunc *cb, void *opaque);
+
+/* hw/ide/atapi.c */
+void ide_atapi_cmd(IDEState *s);
+void ide_atapi_cmd_reply_end(IDEState *s);
 
 /* hw/ide/qdev.c */
 void ide_bus_new(IDEBus *idebus, DeviceState *dev, int bus_id);

@@ -56,7 +56,7 @@
 #include "json-streamer.h"
 #include "json-parser.h"
 #include "osdep.h"
-#include "exec-all.h"
+#include "cpu.h"
 #ifdef CONFIG_SIMPLE_TRACE
 #include "trace.h"
 #endif
@@ -904,6 +904,9 @@ static void print_cpu_iter(QObject *obj, void *opaque)
         monitor_printf(mon, " (halted)");
     }
 
+    monitor_printf(mon, " thread_id=%" PRId64 " ",
+                   qdict_get_int(cpu, "thread_id"));
+
     monitor_printf(mon, "\n");
 }
 
@@ -948,6 +951,7 @@ static void do_info_cpus(Monitor *mon, QObject **ret_data)
 #elif defined(TARGET_MIPS)
         qdict_put(cpu, "PC", qint_from_int(env->active_tc.PC));
 #endif
+        qdict_put(cpu, "thread_id", qint_from_int(env->thread_id));
 
         qlist_append(cpu_list, cpu);
     }
@@ -1023,6 +1027,7 @@ static int do_quit(Monitor *mon, const QDict *qdict, QObject **ret_data)
     return 0;
 }
 
+#ifdef CONFIG_VNC
 static int change_vnc_password(const char *password)
 {
     if (!password || !password[0]) {
@@ -1069,6 +1074,13 @@ static int do_change_vnc(Monitor *mon, const char *target, const char *arg)
 
     return 0;
 }
+#else
+static int do_change_vnc(Monitor *mon, const char *target, const char *arg)
+{
+    qerror_report(QERR_FEATURE_DISABLED, "vnc");
+    return -ENODEV;
+}
+#endif
 
 /**
  * do_change(): Change a removable medium, or VNC configuration
@@ -1134,12 +1146,7 @@ static int set_password(Monitor *mon, const QDict *qdict, QObject **ret_data)
         }
         /* Note that setting an empty password will not disable login through
          * this interface. */
-        rc = vnc_display_password(NULL, password);
-        if (rc != 0) {
-            qerror_report(QERR_SET_PASSWD_FAILED);
-            return -1;
-        }
-        return 0;
+        return vnc_display_password(NULL, password);
     }
 
     qerror_report(QERR_INVALID_PARAMETER, "protocol");
@@ -1178,12 +1185,39 @@ static int expire_password(Monitor *mon, const QDict *qdict, QObject **ret_data)
     }
 
     if (strcmp(protocol, "vnc") == 0) {
-        rc = vnc_display_pw_expire(NULL, when);
-        if (rc != 0) {
-            qerror_report(QERR_SET_PASSWD_FAILED);
+        return vnc_display_pw_expire(NULL, when);
+    }
+
+    qerror_report(QERR_INVALID_PARAMETER, "protocol");
+    return -1;
+}
+
+static int add_graphics_client(Monitor *mon, const QDict *qdict, QObject **ret_data)
+{
+    const char *protocol  = qdict_get_str(qdict, "protocol");
+    const char *fdname = qdict_get_str(qdict, "fdname");
+    int skipauth = qdict_get_try_bool(qdict, "skipauth", 0);
+    CharDriverState *s;
+
+    if (strcmp(protocol, "spice") == 0) {
+        if (!using_spice) {
+            /* correct one? spice isn't a device ,,, */
+            qerror_report(QERR_DEVICE_NOT_ACTIVE, "spice");
             return -1;
         }
-        return 0;
+	qerror_report(QERR_ADD_CLIENT_FAILED);
+	return -1;
+    } else if (strcmp(protocol, "vnc") == 0) {
+	int fd = monitor_get_fd(mon, fdname);
+	vnc_display_add_client(NULL, fd, skipauth);
+	return 0;
+    } else if ((s = qemu_chr_find(protocol)) != NULL) {
+	int fd = monitor_get_fd(mon, fdname);
+	if (qemu_chr_add_client(s, fd) < 0) {
+	    qerror_report(QERR_ADD_CLIENT_FAILED);
+	    return -1;
+	}
+	return 0;
     }
 
     qerror_report(QERR_INVALID_PARAMETER, "protocol");
@@ -1262,7 +1296,7 @@ static void do_singlestep(Monitor *mon, const QDict *qdict)
  */
 static int do_stop(Monitor *mon, const QDict *qdict, QObject **ret_data)
 {
-    vm_stop(EXCP_INTERRUPT);
+    vm_stop(VMSTOP_USER);
     return 0;
 }
 
@@ -1444,7 +1478,7 @@ static void memory_dump(Monitor *mon, int count, int format, int wsize,
         if (l > line_size)
             l = line_size;
         if (is_physical) {
-            cpu_physical_memory_rw(addr, buf, l, 0);
+            cpu_physical_memory_read(addr, buf, l);
         } else {
             env = mon_get_cpu();
             if (cpu_memory_rw_debug(env, addr, buf, l, 0) < 0) {
@@ -1620,7 +1654,7 @@ static int do_physical_memory_save(Monitor *mon, const QDict *qdict,
         l = sizeof(buf);
         if (l > size)
             l = size;
-        cpu_physical_memory_rw(addr, buf, l, 0);
+        cpu_physical_memory_read(addr, buf, l);
         if (fwrite(buf, 1, l, f) != l) {
             monitor_printf(mon, "fwrite() error in do_physical_memory_save\n");
             goto exit;
@@ -1640,17 +1674,16 @@ exit:
 static void do_sum(Monitor *mon, const QDict *qdict)
 {
     uint32_t addr;
-    uint8_t buf[1];
     uint16_t sum;
     uint32_t start = qdict_get_int(qdict, "start");
     uint32_t size = qdict_get_int(qdict, "size");
 
     sum = 0;
     for(addr = start; addr < (start + size); addr++) {
-        cpu_physical_memory_rw(addr, buf, 1, 0);
+        uint8_t val = ldub_phys(addr);
         /* BSD sum algorithm ('sum' Unix command) */
         sum = (sum >> 1) | (sum << 15);
-        sum += buf[0];
+        sum += val;
     }
     monitor_printf(mon, "%05d\n", sum);
 }
@@ -1890,7 +1923,7 @@ static void do_sendkey(Monitor *mon, const QDict *qdict)
         kbd_put_keycode(keycode & 0x7f);
     }
     /* delayed key up events */
-    qemu_mod_timer(key_timer, qemu_get_clock(vm_clock) +
+    qemu_mod_timer(key_timer, qemu_get_clock_ns(vm_clock) +
                    muldiv64(get_ticks_per_sec(), hold_time, 1000));
 }
 
@@ -2041,7 +2074,7 @@ static void tlb_info_32(Monitor *mon, CPUState *env)
 
     pgd = env->cr[3] & ~0xfff;
     for(l1 = 0; l1 < 1024; l1++) {
-        cpu_physical_memory_read(pgd + l1 * 4, (uint8_t *)&pde, 4);
+        cpu_physical_memory_read(pgd + l1 * 4, &pde, 4);
         pde = le32_to_cpu(pde);
         if (pde & PG_PRESENT_MASK) {
             if ((pde & PG_PSE_MASK) && (env->cr[4] & CR4_PSE_MASK)) {
@@ -2049,8 +2082,7 @@ static void tlb_info_32(Monitor *mon, CPUState *env)
                 print_pte(mon, (l1 << 22), pde, ~((1 << 21) - 1));
             } else {
                 for(l2 = 0; l2 < 1024; l2++) {
-                    cpu_physical_memory_read((pde & ~0xfff) + l2 * 4,
-                                             (uint8_t *)&pte, 4);
+                    cpu_physical_memory_read((pde & ~0xfff) + l2 * 4, &pte, 4);
                     pte = le32_to_cpu(pte);
                     if (pte & PG_PRESENT_MASK) {
                         print_pte(mon, (l1 << 22) + (l2 << 12),
@@ -2071,13 +2103,12 @@ static void tlb_info_pae32(Monitor *mon, CPUState *env)
 
     pdp_addr = env->cr[3] & ~0x1f;
     for (l1 = 0; l1 < 4; l1++) {
-        cpu_physical_memory_read(pdp_addr + l1 * 8, (uint8_t *)&pdpe, 8);
+        cpu_physical_memory_read(pdp_addr + l1 * 8, &pdpe, 8);
         pdpe = le64_to_cpu(pdpe);
         if (pdpe & PG_PRESENT_MASK) {
             pd_addr = pdpe & 0x3fffffffff000ULL;
             for (l2 = 0; l2 < 512; l2++) {
-                cpu_physical_memory_read(pd_addr + l2 * 8,
-                                         (uint8_t *)&pde, 8);
+                cpu_physical_memory_read(pd_addr + l2 * 8, &pde, 8);
                 pde = le64_to_cpu(pde);
                 if (pde & PG_PRESENT_MASK) {
                     if (pde & PG_PSE_MASK) {
@@ -2087,8 +2118,7 @@ static void tlb_info_pae32(Monitor *mon, CPUState *env)
                     } else {
                         pt_addr = pde & 0x3fffffffff000ULL;
                         for (l3 = 0; l3 < 512; l3++) {
-                            cpu_physical_memory_read(pt_addr + l3 * 8,
-                                                     (uint8_t *)&pte, 8);
+                            cpu_physical_memory_read(pt_addr + l3 * 8, &pte, 8);
                             pte = le64_to_cpu(pte);
                             if (pte & PG_PRESENT_MASK) {
                                 print_pte(mon, (l1 << 30 ) + (l2 << 21)
@@ -2113,13 +2143,12 @@ static void tlb_info_64(Monitor *mon, CPUState *env)
 
     pml4_addr = env->cr[3] & 0x3fffffffff000ULL;
     for (l1 = 0; l1 < 512; l1++) {
-        cpu_physical_memory_read(pml4_addr + l1 * 8, (uint8_t *)&pml4e, 8);
+        cpu_physical_memory_read(pml4_addr + l1 * 8, &pml4e, 8);
         pml4e = le64_to_cpu(pml4e);
         if (pml4e & PG_PRESENT_MASK) {
             pdp_addr = pml4e & 0x3fffffffff000ULL;
             for (l2 = 0; l2 < 512; l2++) {
-                cpu_physical_memory_read(pdp_addr + l2 * 8, (uint8_t *)&pdpe,
-                                         8);
+                cpu_physical_memory_read(pdp_addr + l2 * 8, &pdpe, 8);
                 pdpe = le64_to_cpu(pdpe);
                 if (pdpe & PG_PRESENT_MASK) {
                     if (pdpe & PG_PSE_MASK) {
@@ -2129,8 +2158,7 @@ static void tlb_info_64(Monitor *mon, CPUState *env)
                     } else {
                         pd_addr = pdpe & 0x3fffffffff000ULL;
                         for (l3 = 0; l3 < 512; l3++) {
-                            cpu_physical_memory_read(pd_addr + l3 * 8,
-                                                     (uint8_t *)&pde, 8);
+                            cpu_physical_memory_read(pd_addr + l3 * 8, &pde, 8);
                             pde = le64_to_cpu(pde);
                             if (pde & PG_PRESENT_MASK) {
                                 if (pde & PG_PSE_MASK) {
@@ -2143,8 +2171,7 @@ static void tlb_info_64(Monitor *mon, CPUState *env)
                                     for (l4 = 0; l4 < 512; l4++) {
                                         cpu_physical_memory_read(pt_addr
                                                                  + l4 * 8,
-                                                                 (uint8_t *)&pte,
-                                                                 8);
+                                                                 &pte, 8);
                                         pte = le64_to_cpu(pte);
                                         if (pte & PG_PRESENT_MASK) {
                                             print_pte(mon, (l1 << 39) +
@@ -2222,7 +2249,7 @@ static void mem_info_32(Monitor *mon, CPUState *env)
     last_prot = 0;
     start = -1;
     for(l1 = 0; l1 < 1024; l1++) {
-        cpu_physical_memory_read(pgd + l1 * 4, (uint8_t *)&pde, 4);
+        cpu_physical_memory_read(pgd + l1 * 4, &pde, 4);
         pde = le32_to_cpu(pde);
         end = l1 << 22;
         if (pde & PG_PRESENT_MASK) {
@@ -2231,8 +2258,7 @@ static void mem_info_32(Monitor *mon, CPUState *env)
                 mem_print(mon, &start, &last_prot, end, prot);
             } else {
                 for(l2 = 0; l2 < 1024; l2++) {
-                    cpu_physical_memory_read((pde & ~0xfff) + l2 * 4,
-                                             (uint8_t *)&pte, 4);
+                    cpu_physical_memory_read((pde & ~0xfff) + l2 * 4, &pte, 4);
                     pte = le32_to_cpu(pte);
                     end = (l1 << 22) + (l2 << 12);
                     if (pte & PG_PRESENT_MASK) {
@@ -2261,14 +2287,13 @@ static void mem_info_pae32(Monitor *mon, CPUState *env)
     last_prot = 0;
     start = -1;
     for (l1 = 0; l1 < 4; l1++) {
-        cpu_physical_memory_read(pdp_addr + l1 * 8, (uint8_t *)&pdpe, 8);
+        cpu_physical_memory_read(pdp_addr + l1 * 8, &pdpe, 8);
         pdpe = le64_to_cpu(pdpe);
         end = l1 << 30;
         if (pdpe & PG_PRESENT_MASK) {
             pd_addr = pdpe & 0x3fffffffff000ULL;
             for (l2 = 0; l2 < 512; l2++) {
-                cpu_physical_memory_read(pd_addr + l2 * 8,
-                                         (uint8_t *)&pde, 8);
+                cpu_physical_memory_read(pd_addr + l2 * 8, &pde, 8);
                 pde = le64_to_cpu(pde);
                 end = (l1 << 30) + (l2 << 21);
                 if (pde & PG_PRESENT_MASK) {
@@ -2279,8 +2304,7 @@ static void mem_info_pae32(Monitor *mon, CPUState *env)
                     } else {
                         pt_addr = pde & 0x3fffffffff000ULL;
                         for (l3 = 0; l3 < 512; l3++) {
-                            cpu_physical_memory_read(pt_addr + l3 * 8,
-                                                     (uint8_t *)&pte, 8);
+                            cpu_physical_memory_read(pt_addr + l3 * 8, &pte, 8);
                             pte = le64_to_cpu(pte);
                             end = (l1 << 30) + (l2 << 21) + (l3 << 12);
                             if (pte & PG_PRESENT_MASK) {
@@ -2317,14 +2341,13 @@ static void mem_info_64(Monitor *mon, CPUState *env)
     last_prot = 0;
     start = -1;
     for (l1 = 0; l1 < 512; l1++) {
-        cpu_physical_memory_read(pml4_addr + l1 * 8, (uint8_t *)&pml4e, 8);
+        cpu_physical_memory_read(pml4_addr + l1 * 8, &pml4e, 8);
         pml4e = le64_to_cpu(pml4e);
         end = l1 << 39;
         if (pml4e & PG_PRESENT_MASK) {
             pdp_addr = pml4e & 0x3fffffffff000ULL;
             for (l2 = 0; l2 < 512; l2++) {
-                cpu_physical_memory_read(pdp_addr + l2 * 8, (uint8_t *)&pdpe,
-                                         8);
+                cpu_physical_memory_read(pdp_addr + l2 * 8, &pdpe, 8);
                 pdpe = le64_to_cpu(pdpe);
                 end = (l1 << 39) + (l2 << 30);
                 if (pdpe & PG_PRESENT_MASK) {
@@ -2335,8 +2358,7 @@ static void mem_info_64(Monitor *mon, CPUState *env)
                     } else {
                         pd_addr = pdpe & 0x3fffffffff000ULL;
                         for (l3 = 0; l3 < 512; l3++) {
-                            cpu_physical_memory_read(pd_addr + l3 * 8,
-                                                     (uint8_t *)&pde, 8);
+                            cpu_physical_memory_read(pd_addr + l3 * 8, &pde, 8);
                             pde = le64_to_cpu(pde);
                             end = (l1 << 39) + (l2 << 30) + (l3 << 21);
                             if (pde & PG_PRESENT_MASK) {
@@ -2349,8 +2371,7 @@ static void mem_info_64(Monitor *mon, CPUState *env)
                                     for (l4 = 0; l4 < 512; l4++) {
                                         cpu_physical_memory_read(pt_addr
                                                                  + l4 * 8,
-                                                                 (uint8_t *)&pte,
-                                                                 8);
+                                                                 &pte, 8);
                                         pte = le64_to_cpu(pte);
                                         end = (l1 << 39) + (l2 << 30) +
                                             (l3 << 21) + (l4 << 12);
@@ -2572,16 +2593,21 @@ static void do_wav_capture(Monitor *mon, const QDict *qdict)
 #endif
 
 #if defined(TARGET_I386)
-static void do_inject_nmi(Monitor *mon, const QDict *qdict)
+static int do_inject_nmi(Monitor *mon, const QDict *qdict, QObject **ret_data)
 {
     CPUState *env;
-    int cpu_index = qdict_get_int(qdict, "cpu_index");
 
-    for (env = first_cpu; env != NULL; env = env->next_cpu)
-        if (env->cpu_index == cpu_index) {
-            cpu_interrupt(env, CPU_INTERRUPT_NMI);
-            break;
-        }
+    for (env = first_cpu; env != NULL; env = env->next_cpu) {
+        cpu_interrupt(env, CPU_INTERRUPT_NMI);
+    }
+
+    return 0;
+}
+#else
+static int do_inject_nmi(Monitor *mon, const QDict *qdict, QObject **ret_data)
+{
+    qerror_report(QERR_UNSUPPORTED);
+    return -1;
 }
 #endif
 
@@ -2726,12 +2752,15 @@ static void do_inject_mce(Monitor *mon, const QDict *qdict)
     uint64_t mcg_status = qdict_get_int(qdict, "mcg_status");
     uint64_t addr = qdict_get_int(qdict, "addr");
     uint64_t misc = qdict_get_int(qdict, "misc");
-    int broadcast = qdict_get_try_bool(qdict, "broadcast", 0);
+    int flags = MCE_INJECT_UNCOND_AO;
 
+    if (qdict_get_try_bool(qdict, "broadcast", 0)) {
+        flags |= MCE_INJECT_BROADCAST;
+    }
     for (cenv = first_cpu; cenv != NULL; cenv = cenv->next_cpu) {
-        if (cenv->cpu_index == cpu_index && cenv->mcg_cap) {
-            cpu_inject_x86_mce(cenv, bank, status, mcg_status, addr, misc,
-                               broadcast);
+        if (cenv->cpu_index == cpu_index) {
+            cpu_x86_inject_mce(mon, cenv, bank, status, mcg_status, addr, misc,
+                               flags);
             break;
         }
     }
@@ -2800,7 +2829,7 @@ static void do_loadvm(Monitor *mon, const QDict *qdict)
     int saved_vm_running  = vm_running;
     const char *name = qdict_get_str(qdict, "name");
 
-    vm_stop(0);
+    vm_stop(VMSTOP_LOADVM);
 
     if (load_vmstate(name) == 0 && saved_vm_running) {
         vm_start();
@@ -3483,7 +3512,7 @@ static const MonitorDef monitor_defs[] = {
     { "asr", offsetof(CPUState, asr) },
 #endif
     /* Segment registers */
-    { "sdr1", offsetof(CPUState, sdr1) },
+    { "sdr1", offsetof(CPUState, spr[SPR_SDR1]) },
     { "sr0", offsetof(CPUState, sr[0]) },
     { "sr1", offsetof(CPUState, sr[1]) },
     { "sr2", offsetof(CPUState, sr[2]) },
@@ -3500,7 +3529,76 @@ static const MonitorDef monitor_defs[] = {
     { "sr13", offsetof(CPUState, sr[13]) },
     { "sr14", offsetof(CPUState, sr[14]) },
     { "sr15", offsetof(CPUState, sr[15]) },
-    /* Too lazy to put BATs and SPRs ... */
+    /* Too lazy to put BATs... */
+    { "pvr", offsetof(CPUState, spr[SPR_PVR]) },
+
+    { "srr0", offsetof(CPUState, spr[SPR_SRR0]) },
+    { "srr1", offsetof(CPUState, spr[SPR_SRR1]) },
+    { "sprg0", offsetof(CPUState, spr[SPR_SPRG0]) },
+    { "sprg1", offsetof(CPUState, spr[SPR_SPRG1]) },
+    { "sprg2", offsetof(CPUState, spr[SPR_SPRG2]) },
+    { "sprg3", offsetof(CPUState, spr[SPR_SPRG3]) },
+    { "sprg4", offsetof(CPUState, spr[SPR_SPRG4]) },
+    { "sprg5", offsetof(CPUState, spr[SPR_SPRG5]) },
+    { "sprg6", offsetof(CPUState, spr[SPR_SPRG6]) },
+    { "sprg7", offsetof(CPUState, spr[SPR_SPRG7]) },
+    { "pid", offsetof(CPUState, spr[SPR_BOOKE_PID]) },
+    { "csrr0", offsetof(CPUState, spr[SPR_BOOKE_CSRR0]) },
+    { "csrr1", offsetof(CPUState, spr[SPR_BOOKE_CSRR1]) },
+    { "esr", offsetof(CPUState, spr[SPR_BOOKE_ESR]) },
+    { "dear", offsetof(CPUState, spr[SPR_BOOKE_DEAR]) },
+    { "mcsr", offsetof(CPUState, spr[SPR_BOOKE_MCSR]) },
+    { "tsr", offsetof(CPUState, spr[SPR_BOOKE_TSR]) },
+    { "tcr", offsetof(CPUState, spr[SPR_BOOKE_TCR]) },
+    { "vrsave", offsetof(CPUState, spr[SPR_VRSAVE]) },
+    { "pir", offsetof(CPUState, spr[SPR_BOOKE_PIR]) },
+    { "mcsrr0", offsetof(CPUState, spr[SPR_BOOKE_MCSRR0]) },
+    { "mcsrr1", offsetof(CPUState, spr[SPR_BOOKE_MCSRR1]) },
+    { "decar", offsetof(CPUState, spr[SPR_BOOKE_DECAR]) },
+    { "ivpr", offsetof(CPUState, spr[SPR_BOOKE_IVPR]) },
+    { "epcr", offsetof(CPUState, spr[SPR_BOOKE_EPCR]) },
+    { "sprg8", offsetof(CPUState, spr[SPR_BOOKE_SPRG8]) },
+    { "ivor0", offsetof(CPUState, spr[SPR_BOOKE_IVOR0]) },
+    { "ivor1", offsetof(CPUState, spr[SPR_BOOKE_IVOR1]) },
+    { "ivor2", offsetof(CPUState, spr[SPR_BOOKE_IVOR2]) },
+    { "ivor3", offsetof(CPUState, spr[SPR_BOOKE_IVOR3]) },
+    { "ivor4", offsetof(CPUState, spr[SPR_BOOKE_IVOR4]) },
+    { "ivor5", offsetof(CPUState, spr[SPR_BOOKE_IVOR5]) },
+    { "ivor6", offsetof(CPUState, spr[SPR_BOOKE_IVOR6]) },
+    { "ivor7", offsetof(CPUState, spr[SPR_BOOKE_IVOR7]) },
+    { "ivor8", offsetof(CPUState, spr[SPR_BOOKE_IVOR8]) },
+    { "ivor9", offsetof(CPUState, spr[SPR_BOOKE_IVOR9]) },
+    { "ivor10", offsetof(CPUState, spr[SPR_BOOKE_IVOR10]) },
+    { "ivor11", offsetof(CPUState, spr[SPR_BOOKE_IVOR11]) },
+    { "ivor12", offsetof(CPUState, spr[SPR_BOOKE_IVOR12]) },
+    { "ivor13", offsetof(CPUState, spr[SPR_BOOKE_IVOR13]) },
+    { "ivor14", offsetof(CPUState, spr[SPR_BOOKE_IVOR14]) },
+    { "ivor15", offsetof(CPUState, spr[SPR_BOOKE_IVOR15]) },
+    { "ivor32", offsetof(CPUState, spr[SPR_BOOKE_IVOR32]) },
+    { "ivor33", offsetof(CPUState, spr[SPR_BOOKE_IVOR33]) },
+    { "ivor34", offsetof(CPUState, spr[SPR_BOOKE_IVOR34]) },
+    { "ivor35", offsetof(CPUState, spr[SPR_BOOKE_IVOR35]) },
+    { "ivor36", offsetof(CPUState, spr[SPR_BOOKE_IVOR36]) },
+    { "ivor37", offsetof(CPUState, spr[SPR_BOOKE_IVOR37]) },
+    { "mas0", offsetof(CPUState, spr[SPR_BOOKE_MAS0]) },
+    { "mas1", offsetof(CPUState, spr[SPR_BOOKE_MAS1]) },
+    { "mas2", offsetof(CPUState, spr[SPR_BOOKE_MAS2]) },
+    { "mas3", offsetof(CPUState, spr[SPR_BOOKE_MAS3]) },
+    { "mas4", offsetof(CPUState, spr[SPR_BOOKE_MAS4]) },
+    { "mas6", offsetof(CPUState, spr[SPR_BOOKE_MAS6]) },
+    { "mas7", offsetof(CPUState, spr[SPR_BOOKE_MAS7]) },
+    { "mmucfg", offsetof(CPUState, spr[SPR_MMUCFG]) },
+    { "tlb0cfg", offsetof(CPUState, spr[SPR_BOOKE_TLB0CFG]) },
+    { "tlb1cfg", offsetof(CPUState, spr[SPR_BOOKE_TLB1CFG]) },
+    { "epr", offsetof(CPUState, spr[SPR_BOOKE_EPR]) },
+    { "eplc", offsetof(CPUState, spr[SPR_BOOKE_EPLC]) },
+    { "epsc", offsetof(CPUState, spr[SPR_BOOKE_EPSC]) },
+    { "svr", offsetof(CPUState, spr[SPR_E500_SVR]) },
+    { "mcar", offsetof(CPUState, spr[SPR_Exxx_MCAR]) },
+    { "pid1", offsetof(CPUState, spr[SPR_BOOKE_PID1]) },
+    { "pid2", offsetof(CPUState, spr[SPR_BOOKE_PID2]) },
+    { "hid0", offsetof(CPUState, spr[SPR_HID0]) },
+
 #elif defined(TARGET_SPARC)
     { "g0", offsetof(CPUState, gregs[0]) },
     { "g1", offsetof(CPUState, gregs[1]) },
@@ -5194,7 +5292,7 @@ void monitor_init(CharDriverState *chr, int flags)
     Monitor *mon;
 
     if (is_first_init) {
-        key_timer = qemu_new_timer(vm_clock, release_keys, NULL);
+        key_timer = qemu_new_timer_ns(vm_clock, release_keys, NULL);
         is_first_init = 0;
     }
 

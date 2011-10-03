@@ -106,13 +106,13 @@ typedef void (* vga_update_retrace_info_fn)(struct VGACommonState *s);
 typedef struct VGACommonState {
     uint8_t *vram_ptr;
     ram_addr_t vram_offset;
+    target_phys_addr_t lfb_addr;
+    target_phys_addr_t lfb_end;
+    target_phys_addr_t map_addr;
+    target_phys_addr_t map_end;
     uint32_t vram_size;
-    uint32_t lfb_addr;
-    uint32_t lfb_end;
-    uint32_t map_addr;
-    uint32_t map_end;
-    uint32_t lfb_vram_mapped; /* whether 0xa0000 is mapped as ram */
     uint32_t latch;
+    uint32_t lfb_vram_mapped; /* whether 0xa0000 is mapped as ram */
     uint8_t sr_index;
     uint8_t sr[256];
     uint8_t gr_index;
@@ -191,6 +191,7 @@ static inline int c6_to_8(int v)
 
 void vga_common_init(VGACommonState *s, int vga_ram_size);
 void vga_init(VGACommonState *s);
+int vga_init_io(VGACommonState *s);
 void vga_common_reset(VGACommonState *s);
 
 void vga_dirty_log_start(VGACommonState *s);

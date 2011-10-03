@@ -104,7 +104,7 @@ static void set_next_tick(rc4030State *s)
 
     tm_hz = 1000 / (s->itr + 1);
 
-    qemu_mod_timer(s->periodic_timer, qemu_get_clock(vm_clock) +
+    qemu_mod_timer(s->periodic_timer, qemu_get_clock_ns(vm_clock) +
                    get_ticks_per_sec() / tm_hz);
 }
 
@@ -307,7 +307,7 @@ static void rc4030_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
         if (s->cache_ltag == 0x80000001 && s->cache_bmask == 0xf0f0f0f) {
             target_phys_addr_t dest = s->cache_ptag & ~0x1;
             dest += (s->cache_maint & 0x3) << 3;
-            cpu_physical_memory_rw(dest, (uint8_t*)&val, 4, 1);
+            cpu_physical_memory_write(dest, &val, 4);
         }
         break;
     /* Remote Speed Registers */
@@ -704,7 +704,7 @@ void rc4030_dma_memory_rw(void *opaque, target_phys_addr_t addr, uint8_t *buf, i
         entry_addr = s->dma_tl_base + index * sizeof(dma_pagetable_entry);
         /* XXX: not sure. should we really use only lowest bits? */
         entry_addr &= 0x7fffffff;
-        cpu_physical_memory_rw(entry_addr, (uint8_t *)&entry, sizeof(entry), 0);
+        cpu_physical_memory_read(entry_addr, &entry, sizeof(entry));
 
         /* Read/write data at right place */
         phys_addr = entry.frame + (addr & (DMA_PAGESIZE - 1));
@@ -811,7 +811,7 @@ void *rc4030_init(qemu_irq timer, qemu_irq jazz_bus,
     *irqs = qemu_allocate_irqs(rc4030_irq_jazz_request, s, 16);
     *dmas = rc4030_allocate_dmas(s, 4);
 
-    s->periodic_timer = qemu_new_timer(vm_clock, rc4030_periodic_timer, s);
+    s->periodic_timer = qemu_new_timer_ns(vm_clock, rc4030_periodic_timer, s);
     s->timer_irq = timer;
     s->jazz_bus_irq = jazz_bus;
 

@@ -4,7 +4,7 @@
  * Copyright (c) 2005-2007 CodeSourcery.
  * Written by Paul Brook
  *
- * This code is licenced under the GPL.
+ * This code is licensed under the GPL.
  */
 
 #include "sysbus.h"
@@ -223,7 +223,7 @@ static void versatile_init(ram_addr_t ram_size,
     for(n = 0; n < nb_nics; n++) {
         nd = &nd_table[n];
 
-        if ((!nd->model && !done_smc) || strcmp(nd->model, "smc91c111") == 0) {
+        if (!done_smc && (!nd->model || strcmp(nd->model, "smc91c111") == 0)) {
             smc91c111_init(nd, 0x10010000, sic[25]);
             done_smc = 1;
         } else {

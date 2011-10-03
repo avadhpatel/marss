@@ -37,6 +37,7 @@
 #include "loader.h"
 #include "mc146818rtc.h"
 #include "blockdev.h"
+#include "sysbus.h"
 
 enum jazz_model_e
 {
@@ -115,7 +116,9 @@ void mips_jazz_init (ram_addr_t ram_size,
     void* rc4030_opaque;
     int s_rtc, s_dma_dummy;
     NICInfo *nd;
-    PITState *pit;
+    DeviceState *dev;
+    SysBusDevice *sysbus;
+    ISADevice *pit;
     DriveInfo *fds[MAX_FD];
     qemu_irq esp_reset, dma_enable;
     qemu_irq *cpu_exit_irq;
@@ -181,7 +184,7 @@ void mips_jazz_init (ram_addr_t ram_size,
     isa_bus_irqs(i8259);
     cpu_exit_irq = qemu_allocate_irqs(cpu_request_exit, NULL, 1);
     DMA_init(0, cpu_exit_irq);
-    pit = pit_init(0x40, i8259[0]);
+    pit = pit_init(0x40, 0);
     pcspk_init(pit);
 
     /* ISA IO space at 0x90000000 */
@@ -266,8 +269,11 @@ void mips_jazz_init (ram_addr_t ram_size,
     /* FIXME: missing Jazz sound at 0x8000c000, rc4030[2] */
     audio_init(i8259, NULL);
 
-    /* NVRAM: Unprotected at 0x9000, Protected at 0xa000, Read only at 0xb000 */
-    ds1225y_init(0x80009000, "nvram");
+    /* NVRAM */
+    dev = qdev_create(NULL, "ds1225y");
+    qdev_init_nofail(dev);
+    sysbus = sysbus_from_qdev(dev);
+    sysbus_mmio_map(sysbus, 0, 0x80009000);
 
     /* LED indicator */
     jazz_led_init(0x8000f000);

@@ -1080,25 +1080,6 @@ static void gt64120_reset(void *opaque)
     gt64120_pci_mapping(s);
 }
 
-static void gt64120_save(QEMUFile* f, void *opaque)
-{
-    PCIDevice *d = opaque;
-    pci_device_save(d, f);
-}
-
-static int gt64120_load(QEMUFile* f, void *opaque, int version_id)
-{
-    PCIDevice *d = opaque;
-    int ret;
-
-    if (version_id != 1)
-        return -EINVAL;
-    ret = pci_device_load(d, f);
-    if (ret < 0)
-        return ret;
-    return 0;
-}
-
 PCIBus *gt64120_register(qemu_irq *pic)
 {
     SysBusDevice *s;
@@ -1131,22 +1112,16 @@ static int gt64120_init(SysBusDevice *dev)
        does not fully work. */
     isa_mem_base = 0x10000000;
     qemu_register_reset(gt64120_reset, s);
-    register_savevm(&dev->qdev, "GT64120 PCI Bus", 0, 1,
-                    gt64120_save, gt64120_load, &s->pci);
     return 0;
 }
 
 static int gt64120_pci_init(PCIDevice *d)
 {
     /* FIXME: Malta specific hw assumptions ahead */
-    pci_config_set_vendor_id(d->config, PCI_VENDOR_ID_MARVELL);
-    pci_config_set_device_id(d->config, PCI_DEVICE_ID_MARVELL_GT6412X);
     pci_set_word(d->config + PCI_COMMAND, 0);
     pci_set_word(d->config + PCI_STATUS,
                  PCI_STATUS_FAST_BACK | PCI_STATUS_DEVSEL_MEDIUM);
-    pci_set_byte(d->config + PCI_CLASS_REVISION, 0x10);
     pci_config_set_prog_interface(d->config, 0);
-    pci_config_set_class(d->config, PCI_CLASS_BRIDGE_HOST);
     pci_set_long(d->config + PCI_BASE_ADDRESS_0, 0x00000008);
     pci_set_long(d->config + PCI_BASE_ADDRESS_1, 0x01000008);
     pci_set_long(d->config + PCI_BASE_ADDRESS_2, 0x1c000000);
@@ -1162,6 +1137,10 @@ static PCIDeviceInfo gt64120_pci_info = {
     .qdev.name = "gt64120_pci",
     .qdev.size = sizeof(PCIDevice),
     .init      = gt64120_pci_init,
+    .vendor_id = PCI_VENDOR_ID_MARVELL,
+    .device_id = PCI_DEVICE_ID_MARVELL_GT6412X,
+    .revision  = 0x10,
+    .class_id  = PCI_CLASS_BRIDGE_HOST,
 };
 
 static void gt64120_pci_register_devices(void)

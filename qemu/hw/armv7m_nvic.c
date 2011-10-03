@@ -4,7 +4,7 @@
  * Copyright (c) 2006-2007 CodeSourcery.
  * Written by Paul Brook
  *
- * This code is licenced under the GPL.
+ * This code is licensed under the GPL.
  *
  * The ARMv7M System controller is fairly tightly tied in with the
  * NVIC.  Much of that is also implemented here.
@@ -64,7 +64,7 @@ static inline int64_t systick_scale(nvic_state *s)
 static void systick_reload(nvic_state *s, int reset)
 {
     if (reset)
-        s->systick.tick = qemu_get_clock(vm_clock);
+        s->systick.tick = qemu_get_clock_ns(vm_clock);
     s->systick.tick += (s->systick.reload + 1) * systick_scale(s);
     qemu_mod_timer(s->systick.timer, s->systick.tick);
 }
@@ -136,7 +136,7 @@ static uint32_t nvic_readl(void *opaque, uint32_t offset)
             int64_t t;
             if ((s->systick.control & SYSTICK_ENABLE) == 0)
                 return 0;
-            t = qemu_get_clock(vm_clock);
+            t = qemu_get_clock_ns(vm_clock);
             if (t >= s->systick.tick)
                 return 0;
             val = ((s->systick.tick - (t + 1)) / systick_scale(s)) + 1;
@@ -273,7 +273,7 @@ static void nvic_writel(void *opaque, uint32_t offset, uint32_t value)
         s->systick.control &= 0xfffffff8;
         s->systick.control |= value & 7;
         if ((oldval ^ value) & SYSTICK_ENABLE) {
-            int64_t now = qemu_get_clock(vm_clock);
+            int64_t now = qemu_get_clock_ns(vm_clock);
             if (value & SYSTICK_ENABLE) {
                 if (s->systick.tick) {
                     s->systick.tick += now;
@@ -365,30 +365,19 @@ static void nvic_writel(void *opaque, uint32_t offset, uint32_t value)
     }
 }
 
-static void nvic_save(QEMUFile *f, void *opaque)
-{
-    nvic_state *s = (nvic_state *)opaque;
-
-    qemu_put_be32(f, s->systick.control);
-    qemu_put_be32(f, s->systick.reload);
-    qemu_put_be64(f, s->systick.tick);
-    qemu_put_timer(f, s->systick.timer);
-}
-
-static int nvic_load(QEMUFile *f, void *opaque, int version_id)
-{
-    nvic_state *s = (nvic_state *)opaque;
-
-    if (version_id != 1)
-        return -EINVAL;
-
-    s->systick.control = qemu_get_be32(f);
-    s->systick.reload = qemu_get_be32(f);
-    s->systick.tick = qemu_get_be64(f);
-    qemu_get_timer(f, s->systick.timer);
-
-    return 0;
-}
+static const VMStateDescription vmstate_nvic = {
+    .name = "armv7m_nvic",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .minimum_version_id_old = 1,
+    .fields      = (VMStateField[]) {
+        VMSTATE_UINT32(systick.control, nvic_state),
+        VMSTATE_UINT32(systick.reload, nvic_state),
+        VMSTATE_INT64(systick.tick, nvic_state),
+        VMSTATE_TIMER(systick.timer, nvic_state),
+        VMSTATE_END_OF_LIST()
+    }
+};
 
 static int armv7m_nvic_init(SysBusDevice *dev)
 {
@@ -396,8 +385,8 @@ static int armv7m_nvic_init(SysBusDevice *dev)
 
     gic_init(&s->gic);
     cpu_register_physical_memory(0xe000e000, 0x1000, s->gic.iomemtype);
-    s->systick.timer = qemu_new_timer(vm_clock, systick_timer_tick, s);
-    register_savevm(&dev->qdev, "armv7m_nvic", -1, 1, nvic_save, nvic_load, s);
+    s->systick.timer = qemu_new_timer_ns(vm_clock, systick_timer_tick, s);
+    vmstate_register(&dev->qdev, -1, &vmstate_nvic, s);
     return 0;
 }
 

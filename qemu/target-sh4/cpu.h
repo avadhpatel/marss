@@ -184,7 +184,7 @@ typedef struct CPUSH4State {
     uint32_t cvr;		/* Cache Version Register */
 
     void *intc_handle;
-    int intr_at_halt;		/* SR_BL ignored during sleep */
+    int in_sleep;		/* SR_BL ignored during sleep */
     memory_content *movcal_backup;
     memory_content **movcal_backup_tail;
 } CPUSH4State;
@@ -359,6 +359,19 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
             | (env->sr & (SR_MD | SR_RB))                      /* Bits 29-30 */
             | (env->sr & SR_FD)                                /* Bit 15 */
             | (env->movcal_backup ? TB_FLAG_PENDING_MOVCA : 0); /* Bit 4 */
+}
+
+static inline bool cpu_has_work(CPUState *env)
+{
+    return env->interrupt_request & CPU_INTERRUPT_HARD;
+}
+
+#include "exec-all.h"
+
+static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
+{
+    env->pc = tb->pc;
+    env->flags = tb->flags;
 }
 
 #endif				/* _CPU_SH4_H */

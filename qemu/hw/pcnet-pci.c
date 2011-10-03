@@ -214,19 +214,6 @@ static CPUReadMemoryFunc * const pcnet_mmio_read[] = {
     &pcnet_mmio_readl
 };
 
-static void pcnet_mmio_map(PCIDevice *pci_dev, int region_num,
-                            pcibus_t addr, pcibus_t size, int type)
-{
-    PCIPCNetState *d = DO_UPCAST(PCIPCNetState, pci_dev, pci_dev);
-
-#ifdef PCNET_DEBUG_IO
-    printf("pcnet_mmio_map addr=0x%08"FMT_PCIBUS" 0x%08"FMT_PCIBUS"\n",
-           addr, size);
-#endif
-
-    cpu_register_physical_memory(addr, PCNET_PNPMMIO_SIZE, d->state.mmio_index);
-}
-
 static void pci_physical_memory_write(void *dma_opaque, target_phys_addr_t addr,
                                       uint8_t *buf, int len, int do_bswap)
 {
@@ -278,12 +265,8 @@ static int pci_pcnet_init(PCIDevice *pci_dev)
 
     pci_conf = pci_dev->config;
 
-    pci_config_set_vendor_id(pci_conf, PCI_VENDOR_ID_AMD);
-    pci_config_set_device_id(pci_conf, PCI_DEVICE_ID_AMD_LANCE);
     pci_set_word(pci_conf + PCI_STATUS,
                  PCI_STATUS_FAST_BACK | PCI_STATUS_DEVSEL_MEDIUM);
-    pci_conf[PCI_REVISION_ID] = 0x10;
-    pci_config_set_class(pci_conf, PCI_CLASS_NETWORK_ETHERNET);
 
     pci_set_word(pci_conf + PCI_SUBSYSTEM_VENDOR_ID, 0x0);
     pci_set_word(pci_conf + PCI_SUBSYSTEM_ID, 0x0);
@@ -300,8 +283,7 @@ static int pci_pcnet_init(PCIDevice *pci_dev)
     pci_register_bar(pci_dev, 0, PCNET_IOPORT_SIZE,
                            PCI_BASE_ADDRESS_SPACE_IO, pcnet_ioport_map);
 
-    pci_register_bar(pci_dev, 1, PCNET_PNPMMIO_SIZE,
-                           PCI_BASE_ADDRESS_SPACE_MEMORY, pcnet_mmio_map);
+    pci_register_bar_simple(pci_dev, 1, PCNET_PNPMMIO_SIZE, 0, s->mmio_index);
 
     s->irq = pci_dev->irq[0];
     s->phys_mem_read = pci_physical_memory_read;
@@ -310,7 +292,7 @@ static int pci_pcnet_init(PCIDevice *pci_dev)
     if (!pci_dev->qdev.hotplugged) {
         static int loaded = 0;
         if (!loaded) {
-            rom_add_option("pxe-pcnet.bin", -1);
+            rom_add_option("pxe-pcnet.rom", -1);
             loaded = 1;
         }
     }
@@ -332,6 +314,10 @@ static PCIDeviceInfo pcnet_info = {
     .qdev.vmsd  = &vmstate_pci_pcnet,
     .init       = pci_pcnet_init,
     .exit       = pci_pcnet_uninit,
+    .vendor_id  = PCI_VENDOR_ID_AMD,
+    .device_id  = PCI_DEVICE_ID_AMD_LANCE,
+    .revision   = 0x10,
+    .class_id   = PCI_CLASS_NETWORK_ETHERNET,
     .qdev.props = (Property[]) {
         DEFINE_NIC_PROPERTIES(PCIPCNetState, state.conf),
         DEFINE_PROP_END_OF_LIST(),

@@ -11,7 +11,6 @@
 #include "hw.h"
 #include "pxa.h"
 #include "arm-misc.h"
-#include "sysemu.h"
 #include "devices.h"
 #include "sharpsl.h"
 #include "pcmcia.h"
@@ -25,6 +24,7 @@
 #define TOSA_RAM    0x04000000
 #define TOSA_ROM	0x00800000
 
+#define TOSA_GPIO_USB_IN		(5)
 #define TOSA_GPIO_nSD_DETECT	(9)
 #define TOSA_GPIO_ON_RESET		(19)
 #define TOSA_GPIO_CF_IRQ		(21)	/* CF slot0 Ready */
@@ -115,6 +115,9 @@ static void tosa_gpio_setup(PXA2xxState *cpu,
     qdev_connect_gpio_out(scp1, TOSA_GPIO_WLAN_LED, outsignals[3]);
 
     qdev_connect_gpio_out(scp1, TOSA_GPIO_TC6393XB_L3V_ON, tc6393xb_l3v_get(tmio));
+
+    /* UDC Vbus */
+    qemu_irq_raise(qdev_get_gpio_in(cpu->gpio, TOSA_GPIO_USB_IN));
 }
 
 static uint32_t tosa_ssp_tansfer(SSISlave *dev, uint32_t value)

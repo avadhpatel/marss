@@ -44,7 +44,7 @@ void helper_raise_exception_err (uint32_t exception, uint32_t error_code)
 #endif
     env->exception_index = exception;
     env->error_code = error_code;
-    cpu_loop_exit();
+    cpu_loop_exit(env);
 }
 
 void helper_raise_exception (uint32_t exception)
@@ -85,6 +85,13 @@ target_ulong helper_load_atbu (void)
 {
     return cpu_ppc_load_atbu(env);
 }
+
+#if defined(TARGET_PPC64) && !defined(CONFIG_USER_ONLY)
+target_ulong helper_load_purr (void)
+{
+    return (target_ulong)cpu_ppc_load_purr(env);
+}
+#endif
 
 target_ulong helper_load_601_rtcl (void)
 {
@@ -355,7 +362,6 @@ void helper_icbi(target_ulong addr)
      * do the load "by hand".
      */
     ldl(addr);
-    tb_invalidate_page_range(addr, addr + env->icache_line_size);
 }
 
 // XXX: to be tested
@@ -492,6 +498,38 @@ target_ulong helper_srad (target_ulong value, target_ulong shift)
 }
 #endif
 
+#if defined(TARGET_PPC64)
+target_ulong helper_popcntb (target_ulong val)
+{
+    val = (val & 0x5555555555555555ULL) + ((val >>  1) &
+                                           0x5555555555555555ULL);
+    val = (val & 0x3333333333333333ULL) + ((val >>  2) &
+                                           0x3333333333333333ULL);
+    val = (val & 0x0f0f0f0f0f0f0f0fULL) + ((val >>  4) &
+                                           0x0f0f0f0f0f0f0f0fULL);
+    return val;
+}
+
+target_ulong helper_popcntw (target_ulong val)
+{
+    val = (val & 0x5555555555555555ULL) + ((val >>  1) &
+                                           0x5555555555555555ULL);
+    val = (val & 0x3333333333333333ULL) + ((val >>  2) &
+                                           0x3333333333333333ULL);
+    val = (val & 0x0f0f0f0f0f0f0f0fULL) + ((val >>  4) &
+                                           0x0f0f0f0f0f0f0f0fULL);
+    val = (val & 0x00ff00ff00ff00ffULL) + ((val >>  8) &
+                                           0x00ff00ff00ff00ffULL);
+    val = (val & 0x0000ffff0000ffffULL) + ((val >> 16) &
+                                           0x0000ffff0000ffffULL);
+    return val;
+}
+
+target_ulong helper_popcntd (target_ulong val)
+{
+    return ctpop64(val);
+}
+#else
 target_ulong helper_popcntb (target_ulong val)
 {
     val = (val & 0x55555555) + ((val >>  1) & 0x55555555);
@@ -500,12 +538,13 @@ target_ulong helper_popcntb (target_ulong val)
     return val;
 }
 
-#if defined(TARGET_PPC64)
-target_ulong helper_popcntb_64 (target_ulong val)
+target_ulong helper_popcntw (target_ulong val)
 {
-    val = (val & 0x5555555555555555ULL) + ((val >>  1) & 0x5555555555555555ULL);
-    val = (val & 0x3333333333333333ULL) + ((val >>  2) & 0x3333333333333333ULL);
-    val = (val & 0x0f0f0f0f0f0f0f0fULL) + ((val >>  4) & 0x0f0f0f0f0f0f0f0fULL);
+    val = (val & 0x55555555) + ((val >>  1) & 0x55555555);
+    val = (val & 0x33333333) + ((val >>  2) & 0x33333333);
+    val = (val & 0x0f0f0f0f) + ((val >>  4) & 0x0f0f0f0f);
+    val = (val & 0x00ff00ff) + ((val >>  8) & 0x00ff00ff);
+    val = (val & 0x0000ffff) + ((val >> 16) & 0x0000ffff);
     return val;
 }
 #endif
@@ -932,7 +971,6 @@ void helper_store_fpscr (uint64_t arg, uint32_t mask)
 
 void helper_float_check_status (void)
 {
-#ifdef CONFIG_SOFTFLOAT
     if (env->exception_index == POWERPC_EXCP_PROGRAM &&
         (env->error_code & POWERPC_EXCP_FP)) {
         /* Differred floating-point exception after target FPR update */
@@ -950,22 +988,12 @@ void helper_float_check_status (void)
             float_inexact_excp();
         }
     }
-#else
-    if (env->exception_index == POWERPC_EXCP_PROGRAM &&
-        (env->error_code & POWERPC_EXCP_FP)) {
-        /* Differred floating-point exception after target FPR update */
-        if (msr_fe0 != 0 || msr_fe1 != 0)
-            helper_raise_exception_err(env->exception_index, env->error_code);
-    }
-#endif
 }
 
-#ifdef CONFIG_SOFTFLOAT
 void helper_reset_fpstatus (void)
 {
     set_float_exception_flags(0, &env->fp_status);
 }
-#endif
 
 /* fadd - fadd. */
 uint64_t helper_fadd (uint64_t arg1, uint64_t arg2)
@@ -1247,7 +1275,6 @@ uint64_t helper_fmadd (uint64_t arg1, uint64_t arg2, uint64_t arg3)
             /* sNaN operation */
             fload_invalid_op_excp(POWERPC_EXCP_FP_VXSNAN);
         }
-#ifdef FLOAT128
         /* This is the way the PowerPC specification defines it */
         float128 ft0_128, ft1_128;
 
@@ -1263,10 +1290,6 @@ uint64_t helper_fmadd (uint64_t arg1, uint64_t arg2, uint64_t arg3)
             ft0_128 = float128_add(ft0_128, ft1_128, &env->fp_status);
             farg1.d = float128_to_float64(ft0_128, &env->fp_status);
         }
-#else
-        /* This is OK on x86 hosts */
-        farg1.d = (farg1.d * farg2.d) + farg3.d;
-#endif
     }
 
     return farg1.ll;
@@ -1292,7 +1315,6 @@ uint64_t helper_fmsub (uint64_t arg1, uint64_t arg2, uint64_t arg3)
             /* sNaN operation */
             fload_invalid_op_excp(POWERPC_EXCP_FP_VXSNAN);
         }
-#ifdef FLOAT128
         /* This is the way the PowerPC specification defines it */
         float128 ft0_128, ft1_128;
 
@@ -1308,10 +1330,6 @@ uint64_t helper_fmsub (uint64_t arg1, uint64_t arg2, uint64_t arg3)
             ft0_128 = float128_sub(ft0_128, ft1_128, &env->fp_status);
             farg1.d = float128_to_float64(ft0_128, &env->fp_status);
         }
-#else
-        /* This is OK on x86 hosts */
-        farg1.d = (farg1.d * farg2.d) - farg3.d;
-#endif
     }
     return farg1.ll;
 }
@@ -1336,7 +1354,6 @@ uint64_t helper_fnmadd (uint64_t arg1, uint64_t arg2, uint64_t arg3)
             /* sNaN operation */
             fload_invalid_op_excp(POWERPC_EXCP_FP_VXSNAN);
         }
-#ifdef FLOAT128
         /* This is the way the PowerPC specification defines it */
         float128 ft0_128, ft1_128;
 
@@ -1352,10 +1369,6 @@ uint64_t helper_fnmadd (uint64_t arg1, uint64_t arg2, uint64_t arg3)
             ft0_128 = float128_add(ft0_128, ft1_128, &env->fp_status);
             farg1.d = float128_to_float64(ft0_128, &env->fp_status);
         }
-#else
-        /* This is OK on x86 hosts */
-        farg1.d = (farg1.d * farg2.d) + farg3.d;
-#endif
         if (likely(!float64_is_any_nan(farg1.d))) {
             farg1.d = float64_chs(farg1.d);
         }
@@ -1383,7 +1396,6 @@ uint64_t helper_fnmsub (uint64_t arg1, uint64_t arg2, uint64_t arg3)
             /* sNaN operation */
             fload_invalid_op_excp(POWERPC_EXCP_FP_VXSNAN);
         }
-#ifdef FLOAT128
         /* This is the way the PowerPC specification defines it */
         float128 ft0_128, ft1_128;
 
@@ -1399,10 +1411,6 @@ uint64_t helper_fnmsub (uint64_t arg1, uint64_t arg2, uint64_t arg3)
             ft0_128 = float128_sub(ft0_128, ft1_128, &env->fp_status);
             farg1.d = float128_to_float64(ft0_128, &env->fp_status);
         }
-#else
-        /* This is OK on x86 hosts */
-        farg1.d = (farg1.d * farg2.d) - farg3.d;
-#endif
         if (likely(!float64_is_any_nan(farg1.d))) {
             farg1.d = float64_chs(farg1.d);
         }
@@ -3323,7 +3331,7 @@ HELPER_SPE_VECTOR_ARITH(fsmul);
 HELPER_SPE_VECTOR_ARITH(fsdiv);
 
 /* Single-precision floating-point comparisons */
-static inline uint32_t efststlt(uint32_t op1, uint32_t op2)
+static inline uint32_t efscmplt(uint32_t op1, uint32_t op2)
 {
     CPU_FloatU u1, u2;
     u1.l = op1;
@@ -3331,7 +3339,7 @@ static inline uint32_t efststlt(uint32_t op1, uint32_t op2)
     return float32_lt(u1.f, u2.f, &env->vec_status) ? 4 : 0;
 }
 
-static inline uint32_t efststgt(uint32_t op1, uint32_t op2)
+static inline uint32_t efscmpgt(uint32_t op1, uint32_t op2)
 {
     CPU_FloatU u1, u2;
     u1.l = op1;
@@ -3339,7 +3347,7 @@ static inline uint32_t efststgt(uint32_t op1, uint32_t op2)
     return float32_le(u1.f, u2.f, &env->vec_status) ? 0 : 4;
 }
 
-static inline uint32_t efststeq(uint32_t op1, uint32_t op2)
+static inline uint32_t efscmpeq(uint32_t op1, uint32_t op2)
 {
     CPU_FloatU u1, u2;
     u1.l = op1;
@@ -3347,22 +3355,22 @@ static inline uint32_t efststeq(uint32_t op1, uint32_t op2)
     return float32_eq(u1.f, u2.f, &env->vec_status) ? 4 : 0;
 }
 
-static inline uint32_t efscmplt(uint32_t op1, uint32_t op2)
+static inline uint32_t efststlt(uint32_t op1, uint32_t op2)
 {
-    /* XXX: TODO: test special values (NaN, infinites, ...) */
-    return efststlt(op1, op2);
+    /* XXX: TODO: ignore special values (NaN, infinites, ...) */
+    return efscmplt(op1, op2);
 }
 
-static inline uint32_t efscmpgt(uint32_t op1, uint32_t op2)
+static inline uint32_t efststgt(uint32_t op1, uint32_t op2)
 {
-    /* XXX: TODO: test special values (NaN, infinites, ...) */
-    return efststgt(op1, op2);
+    /* XXX: TODO: ignore special values (NaN, infinites, ...) */
+    return efscmpgt(op1, op2);
 }
 
-static inline uint32_t efscmpeq(uint32_t op1, uint32_t op2)
+static inline uint32_t efststeq(uint32_t op1, uint32_t op2)
 {
-    /* XXX: TODO: test special values (NaN, infinites, ...) */
-    return efststeq(op1, op2);
+    /* XXX: TODO: ignore special values (NaN, infinites, ...) */
+    return efscmpeq(op1, op2);
 }
 
 #define HELPER_SINGLE_SPE_CMP(name)                                           \
@@ -3658,7 +3666,7 @@ uint32_t helper_efdtsteq (uint64_t op1, uint64_t op2)
     CPU_DoubleU u1, u2;
     u1.ll = op1;
     u2.ll = op2;
-    return float64_eq(u1.d, u2.d, &env->vec_status) ? 4 : 0;
+    return float64_eq_quiet(u1.d, u2.d, &env->vec_status) ? 4 : 0;
 }
 
 uint32_t helper_efdcmplt (uint64_t op1, uint64_t op2)
@@ -3721,7 +3729,7 @@ void tlb_fill (target_ulong addr, int is_write, int mmu_idx, void *retaddr)
             if (likely(tb)) {
                 /* the PC is inside the translated code. It means that we have
                    a virtual CPU fault */
-                cpu_restore_state(tb, env, pc, NULL);
+                cpu_restore_state(tb, env, pc);
             }
         }
         helper_raise_exception_err(env->exception_index, env->error_code);
@@ -3746,14 +3754,31 @@ void helper_store_sr (target_ulong sr_num, target_ulong val)
 
 /* SLB management */
 #if defined(TARGET_PPC64)
-target_ulong helper_load_slb (target_ulong slb_nr)
-{
-    return ppc_load_slb(env, slb_nr);
-}
-
 void helper_store_slb (target_ulong rb, target_ulong rs)
 {
-    ppc_store_slb(env, rb, rs);
+    if (ppc_store_slb(env, rb, rs) < 0) {
+        helper_raise_exception_err(POWERPC_EXCP_PROGRAM, POWERPC_EXCP_INVAL);
+    }
+}
+
+target_ulong helper_load_slb_esid (target_ulong rb)
+{
+    target_ulong rt;
+
+    if (ppc_load_slb_esid(env, rb, &rt) < 0) {
+        helper_raise_exception_err(POWERPC_EXCP_PROGRAM, POWERPC_EXCP_INVAL);
+    }
+    return rt;
+}
+
+target_ulong helper_load_slb_vsid (target_ulong rb)
+{
+    target_ulong rt;
+
+    if (ppc_load_slb_vsid(env, rb, &rt) < 0) {
+        helper_raise_exception_err(POWERPC_EXCP_PROGRAM, POWERPC_EXCP_INVAL);
+    }
+    return rt;
 }
 
 void helper_slbia (void)
@@ -3934,7 +3959,7 @@ target_ulong helper_4xx_tlbre_hi (target_ulong entry)
     int size;
 
     entry &= PPC4XX_TLB_ENTRY_MASK;
-    tlb = &env->tlb[entry].tlbe;
+    tlb = &env->tlb.tlbe[entry];
     ret = tlb->EPN;
     if (tlb->prot & PAGE_VALID) {
         ret |= PPC4XX_TLBHI_V;
@@ -3954,7 +3979,7 @@ target_ulong helper_4xx_tlbre_lo (target_ulong entry)
     target_ulong ret;
 
     entry &= PPC4XX_TLB_ENTRY_MASK;
-    tlb = &env->tlb[entry].tlbe;
+    tlb = &env->tlb.tlbe[entry];
     ret = tlb->RPN;
     if (tlb->prot & PAGE_EXEC) {
         ret |= PPC4XX_TLBLO_EX;
@@ -3973,7 +3998,7 @@ void helper_4xx_tlbwe_hi (target_ulong entry, target_ulong val)
     LOG_SWTLB("%s entry %d val " TARGET_FMT_lx "\n", __func__, (int)entry,
               val);
     entry &= PPC4XX_TLB_ENTRY_MASK;
-    tlb = &env->tlb[entry].tlbe;
+    tlb = &env->tlb.tlbe[entry];
     /* Invalidate previous TLB (if it's valid) */
     if (tlb->prot & PAGE_VALID) {
         end = tlb->EPN + tlb->size;
@@ -4031,7 +4056,7 @@ void helper_4xx_tlbwe_lo (target_ulong entry, target_ulong val)
     LOG_SWTLB("%s entry %i val " TARGET_FMT_lx "\n", __func__, (int)entry,
               val);
     entry &= PPC4XX_TLB_ENTRY_MASK;
-    tlb = &env->tlb[entry].tlbe;
+    tlb = &env->tlb.tlbe[entry];
     tlb->attr = val & PPC4XX_TLBLO_ATTR_MASK;
     tlb->RPN = val & PPC4XX_TLBLO_RPN_MASK;
     tlb->prot = PAGE_READ;
@@ -4066,7 +4091,7 @@ void helper_440_tlbwe (uint32_t word, target_ulong entry, target_ulong value)
               __func__, word, (int)entry, value);
     do_flush_tlbs = 0;
     entry &= 0x3F;
-    tlb = &env->tlb[entry].tlbe;
+    tlb = &env->tlb.tlbe[entry];
     switch (word) {
     default:
         /* Just here to please gcc */
@@ -4125,7 +4150,7 @@ target_ulong helper_440_tlbre (uint32_t word, target_ulong entry)
     int size;
 
     entry &= 0x3F;
-    tlb = &env->tlb[entry].tlbe;
+    tlb = &env->tlb.tlbe[entry];
     switch (word) {
     default:
         /* Just here to please gcc */
@@ -4167,6 +4192,218 @@ target_ulong helper_440_tlbre (uint32_t word, target_ulong entry)
 target_ulong helper_440_tlbsx (target_ulong address)
 {
     return ppcemb_tlb_search(env, address, env->spr[SPR_440_MMUCR] & 0xFF);
+}
+
+/* PowerPC BookE 2.06 TLB management */
+
+static ppcmas_tlb_t *booke206_cur_tlb(CPUState *env)
+{
+    uint32_t tlbncfg = 0;
+    int esel = (env->spr[SPR_BOOKE_MAS0] & MAS0_ESEL_MASK) >> MAS0_ESEL_SHIFT;
+    int ea = (env->spr[SPR_BOOKE_MAS2] & MAS2_EPN_MASK);
+    int tlb;
+
+    tlb = (env->spr[SPR_BOOKE_MAS0] & MAS0_TLBSEL_MASK) >> MAS0_TLBSEL_SHIFT;
+    tlbncfg = env->spr[SPR_BOOKE_TLB0CFG + tlb];
+
+    if ((tlbncfg & TLBnCFG_HES) && (env->spr[SPR_BOOKE_MAS0] & MAS0_HES)) {
+        cpu_abort(env, "we don't support HES yet\n");
+    }
+
+    return booke206_get_tlbm(env, tlb, ea, esel);
+}
+
+void helper_booke_setpid(uint32_t pidn, target_ulong pid)
+{
+    env->spr[pidn] = pid;
+    /* changing PIDs mean we're in a different address space now */
+    tlb_flush(env, 1);
+}
+
+void helper_booke206_tlbwe(void)
+{
+    uint32_t tlbncfg, tlbn;
+    ppcmas_tlb_t *tlb;
+
+    switch (env->spr[SPR_BOOKE_MAS0] & MAS0_WQ_MASK) {
+    case MAS0_WQ_ALWAYS:
+        /* good to go, write that entry */
+        break;
+    case MAS0_WQ_COND:
+        /* XXX check if reserved */
+        if (0) {
+            return;
+        }
+        break;
+    case MAS0_WQ_CLR_RSRV:
+        /* XXX clear entry */
+        return;
+    default:
+        /* no idea what to do */
+        return;
+    }
+
+    if (((env->spr[SPR_BOOKE_MAS0] & MAS0_ATSEL) == MAS0_ATSEL_LRAT) &&
+         !msr_gs) {
+        /* XXX we don't support direct LRAT setting yet */
+        fprintf(stderr, "cpu: don't support LRAT setting yet\n");
+        return;
+    }
+
+    tlbn = (env->spr[SPR_BOOKE_MAS0] & MAS0_TLBSEL_MASK) >> MAS0_TLBSEL_SHIFT;
+    tlbncfg = env->spr[SPR_BOOKE_TLB0CFG + tlbn];
+
+    tlb = booke206_cur_tlb(env);
+
+    if (msr_gs) {
+        cpu_abort(env, "missing HV implementation\n");
+    }
+    tlb->mas7_3 = ((uint64_t)env->spr[SPR_BOOKE_MAS7] << 32) |
+                  env->spr[SPR_BOOKE_MAS3];
+    tlb->mas1 = env->spr[SPR_BOOKE_MAS1];
+    /* XXX needs to change when supporting 64-bit e500 */
+    tlb->mas2 = env->spr[SPR_BOOKE_MAS2] & 0xffffffff;
+
+    if (!(tlbncfg & TLBnCFG_IPROT)) {
+        /* no IPROT supported by TLB */
+        tlb->mas1 &= ~MAS1_IPROT;
+    }
+
+    if (booke206_tlb_to_page_size(env, tlb) == TARGET_PAGE_SIZE) {
+        tlb_flush_page(env, tlb->mas2 & MAS2_EPN_MASK);
+    } else {
+        tlb_flush(env, 1);
+    }
+}
+
+static inline void booke206_tlb_to_mas(CPUState *env, ppcmas_tlb_t *tlb)
+{
+    int tlbn = booke206_tlbm_to_tlbn(env, tlb);
+    int way = booke206_tlbm_to_way(env, tlb);
+
+    env->spr[SPR_BOOKE_MAS0] = tlbn << MAS0_TLBSEL_SHIFT;
+    env->spr[SPR_BOOKE_MAS0] |= way << MAS0_ESEL_SHIFT;
+    env->spr[SPR_BOOKE_MAS0] |= env->last_way << MAS0_NV_SHIFT;
+
+    env->spr[SPR_BOOKE_MAS1] = tlb->mas1;
+    env->spr[SPR_BOOKE_MAS2] = tlb->mas2;
+    env->spr[SPR_BOOKE_MAS3] = tlb->mas7_3;
+    env->spr[SPR_BOOKE_MAS7] = tlb->mas7_3 >> 32;
+}
+
+void helper_booke206_tlbre(void)
+{
+    ppcmas_tlb_t *tlb = NULL;
+
+    tlb = booke206_cur_tlb(env);
+    booke206_tlb_to_mas(env, tlb);
+}
+
+void helper_booke206_tlbsx(target_ulong address)
+{
+    ppcmas_tlb_t *tlb = NULL;
+    int i, j;
+    target_phys_addr_t raddr;
+    uint32_t spid, sas;
+
+    spid = (env->spr[SPR_BOOKE_MAS6] & MAS6_SPID_MASK) >> MAS6_SPID_SHIFT;
+    sas = env->spr[SPR_BOOKE_MAS6] & MAS6_SAS;
+
+    for (i = 0; i < BOOKE206_MAX_TLBN; i++) {
+        int ways = booke206_tlb_ways(env, i);
+
+        for (j = 0; j < ways; j++) {
+            tlb = booke206_get_tlbm(env, i, address, j);
+
+            if (ppcmas_tlb_check(env, tlb, &raddr, address, spid)) {
+                continue;
+            }
+
+            if (sas != ((tlb->mas1 & MAS1_TS) >> MAS1_TS_SHIFT)) {
+                continue;
+            }
+
+            booke206_tlb_to_mas(env, tlb);
+            return;
+        }
+    }
+
+    /* no entry found, fill with defaults */
+    env->spr[SPR_BOOKE_MAS0] = env->spr[SPR_BOOKE_MAS4] & MAS4_TLBSELD_MASK;
+    env->spr[SPR_BOOKE_MAS1] = env->spr[SPR_BOOKE_MAS4] & MAS4_TSIZED_MASK;
+    env->spr[SPR_BOOKE_MAS2] = env->spr[SPR_BOOKE_MAS4] & MAS4_WIMGED_MASK;
+    env->spr[SPR_BOOKE_MAS3] = 0;
+    env->spr[SPR_BOOKE_MAS7] = 0;
+
+    if (env->spr[SPR_BOOKE_MAS6] & MAS6_SAS) {
+        env->spr[SPR_BOOKE_MAS1] |= MAS1_TS;
+    }
+
+    env->spr[SPR_BOOKE_MAS1] |= (env->spr[SPR_BOOKE_MAS6] >> 16)
+                                << MAS1_TID_SHIFT;
+
+    /* next victim logic */
+    env->spr[SPR_BOOKE_MAS0] |= env->last_way << MAS0_ESEL_SHIFT;
+    env->last_way++;
+    env->last_way &= booke206_tlb_ways(env, 0) - 1;
+    env->spr[SPR_BOOKE_MAS0] |= env->last_way << MAS0_NV_SHIFT;
+}
+
+static inline void booke206_invalidate_ea_tlb(CPUState *env, int tlbn,
+                                              uint32_t ea)
+{
+    int i;
+    int ways = booke206_tlb_ways(env, tlbn);
+    target_ulong mask;
+
+    for (i = 0; i < ways; i++) {
+        ppcmas_tlb_t *tlb = booke206_get_tlbm(env, tlbn, ea, i);
+        mask = ~(booke206_tlb_to_page_size(env, tlb) - 1);
+        if (((tlb->mas2 & MAS2_EPN_MASK) == (ea & mask)) &&
+            !(tlb->mas1 & MAS1_IPROT)) {
+            tlb->mas1 &= ~MAS1_VALID;
+        }
+    }
+}
+
+void helper_booke206_tlbivax(target_ulong address)
+{
+    if (address & 0x4) {
+        /* flush all entries */
+        if (address & 0x8) {
+            /* flush all of TLB1 */
+            booke206_flush_tlb(env, BOOKE206_FLUSH_TLB1, 1);
+        } else {
+            /* flush all of TLB0 */
+            booke206_flush_tlb(env, BOOKE206_FLUSH_TLB0, 0);
+        }
+        return;
+    }
+
+    if (address & 0x8) {
+        /* flush TLB1 entries */
+        booke206_invalidate_ea_tlb(env, 1, address);
+        tlb_flush(env, 1);
+    } else {
+        /* flush TLB0 entries */
+        booke206_invalidate_ea_tlb(env, 0, address);
+        tlb_flush_page(env, address & MAS2_EPN_MASK);
+    }
+}
+
+void helper_booke206_tlbflush(uint32_t type)
+{
+    int flags = 0;
+
+    if (type & 2) {
+        flags |= BOOKE206_FLUSH_TLB1;
+    }
+
+    if (type & 4) {
+        flags |= BOOKE206_FLUSH_TLB0;
+    }
+
+    booke206_flush_tlb(env, flags, 1);
 }
 
 #endif /* !CONFIG_USER_ONLY */

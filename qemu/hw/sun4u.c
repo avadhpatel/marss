@@ -298,6 +298,7 @@ static void cpu_kick_irq(CPUState *env)
 {
     env->halted = 0;
     cpu_check_irqs(env);
+    qemu_cpu_kick(env);
 }
 
 static void cpu_set_irq(void *opaque, int irq, int level)
@@ -306,9 +307,8 @@ static void cpu_set_irq(void *opaque, int irq, int level)
 
     if (level) {
         CPUIRQ_DPRINTF("Raise CPU IRQ %d\n", irq);
-        env->halted = 0;
         env->pil_in |= 1 << irq;
-        cpu_check_irqs(env);
+        cpu_kick_irq(env);
     } else {
         CPUIRQ_DPRINTF("Lower CPU IRQ %d\n", irq);
         env->pil_in &= ~(1 << irq);
@@ -352,9 +352,9 @@ static CPUTimer* cpu_timer_create(const char* name, CPUState *env,
     timer->disabled_mask = disabled_mask;
 
     timer->disabled = 1;
-    timer->clock_offset = qemu_get_clock(vm_clock);
+    timer->clock_offset = qemu_get_clock_ns(vm_clock);
 
-    timer->qtimer = qemu_new_timer(vm_clock, cb, env);
+    timer->qtimer = qemu_new_timer_ns(vm_clock, cb, env);
 
     return timer;
 }
@@ -362,7 +362,7 @@ static CPUTimer* cpu_timer_create(const char* name, CPUState *env,
 static void cpu_timer_reset(CPUTimer *timer)
 {
     timer->disabled = 1;
-    timer->clock_offset = qemu_get_clock(vm_clock);
+    timer->clock_offset = qemu_get_clock_ns(vm_clock);
 
     qemu_del_timer(timer->qtimer);
 }
@@ -457,7 +457,7 @@ void cpu_tick_set_count(CPUTimer *timer, uint64_t count)
     uint64_t real_count = count & ~timer->disabled_mask;
     uint64_t disabled_bit = count & timer->disabled_mask;
 
-    int64_t vm_clock_offset = qemu_get_clock(vm_clock) -
+    int64_t vm_clock_offset = qemu_get_clock_ns(vm_clock) -
                     cpu_to_timer_ticks(real_count, timer->frequency);
 
     TIMER_DPRINTF("%s set_count count=0x%016lx (%s) p=%p\n",
@@ -471,7 +471,7 @@ void cpu_tick_set_count(CPUTimer *timer, uint64_t count)
 uint64_t cpu_tick_get_count(CPUTimer *timer)
 {
     uint64_t real_count = timer_to_cpu_ticks(
-                    qemu_get_clock(vm_clock) - timer->clock_offset,
+                    qemu_get_clock_ns(vm_clock) - timer->clock_offset,
                     timer->frequency);
 
     TIMER_DPRINTF("%s get_count count=0x%016lx (%s) p=%p\n",
@@ -486,7 +486,7 @@ uint64_t cpu_tick_get_count(CPUTimer *timer)
 
 void cpu_tick_set_limit(CPUTimer *timer, uint64_t limit)
 {
-    int64_t now = qemu_get_clock(vm_clock);
+    int64_t now = qemu_get_clock_ns(vm_clock);
 
     uint64_t real_limit = limit & ~timer->disabled_mask;
     timer->disabled = (limit & timer->disabled_mask) ? 1 : 0;
@@ -553,15 +553,11 @@ pci_ebus_init1(PCIDevice *s)
 {
     isa_bus_new(&s->qdev);
 
-    pci_config_set_vendor_id(s->config, PCI_VENDOR_ID_SUN);
-    pci_config_set_device_id(s->config, PCI_DEVICE_ID_SUN_EBUS);
     s->config[0x04] = 0x06; // command = bus master, pci mem
     s->config[0x05] = 0x00;
     s->config[0x06] = 0xa0; // status = fast back-to-back, 66MHz, no error
     s->config[0x07] = 0x03; // status = medium devsel
-    s->config[0x08] = 0x01; // revision
     s->config[0x09] = 0x00; // programming i/f
-    pci_config_set_class(s->config, PCI_CLASS_BRIDGE_OTHER);
     s->config[0x0D] = 0x0a; // latency_timer
 
     pci_register_bar(s, 0, 0x1000000, PCI_BASE_ADDRESS_SPACE_MEMORY,
@@ -575,6 +571,10 @@ static PCIDeviceInfo ebus_info = {
     .qdev.name = "ebus",
     .qdev.size = sizeof(PCIDevice),
     .init = pci_ebus_init1,
+    .vendor_id = PCI_VENDOR_ID_SUN,
+    .device_id = PCI_DEVICE_ID_SUN_EBUS,
+    .revision = 0x01,
+    .class_id = PCI_CLASS_BRIDGE_OTHER,
 };
 
 static void pci_ebus_register(void)
@@ -793,14 +793,7 @@ static void sun4uv_init(ram_addr_t RAM_size,
     for(i = 0; i < nb_nics; i++)
         pci_nic_init_nofail(&nd_table[i], "ne2k_pci", NULL);
 
-    if (drive_get_max_bus(IF_IDE) >= MAX_IDE_BUS) {
-        fprintf(stderr, "qemu: too many IDE bus\n");
-        exit(1);
-    }
-    for(i = 0; i < MAX_IDE_BUS * MAX_IDE_DEVS; i++) {
-        hd[i] = drive_get(IF_IDE, i / MAX_IDE_DEVS,
-                          i % MAX_IDE_DEVS);
-    }
+    ide_drive_get(hd, MAX_IDE_BUS);
 
     pci_cmd646_ide_init(pci_bus, hd, 1);
 

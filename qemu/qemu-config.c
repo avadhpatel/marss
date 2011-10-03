@@ -2,7 +2,6 @@
 #include "qemu-error.h"
 #include "qemu-option.h"
 #include "qemu-config.h"
-#include "sysemu.h"
 #include "hw/qdev.h"
 
 static QemuOptsList qemu_drive_opts = {
@@ -24,6 +23,7 @@ static QemuOptsList qemu_drive_opts = {
         },{
             .name = "index",
             .type = QEMU_OPT_NUMBER,
+            .help = "index number",
         },{
             .name = "cyls",
             .type = QEMU_OPT_NUMBER,
@@ -47,6 +47,7 @@ static QemuOptsList qemu_drive_opts = {
         },{
             .name = "snapshot",
             .type = QEMU_OPT_BOOL,
+            .help = "enable/disable snapshot mode",
         },{
             .name = "file",
             .type = QEMU_OPT_STRING,
@@ -66,12 +67,15 @@ static QemuOptsList qemu_drive_opts = {
         },{
             .name = "serial",
             .type = QEMU_OPT_STRING,
+            .help = "disk serial number",
         },{
             .name = "rerror",
             .type = QEMU_OPT_STRING,
+            .help = "read error action",
         },{
             .name = "werror",
             .type = QEMU_OPT_STRING,
+            .help = "write error action",
         },{
             .name = "addr",
             .type = QEMU_OPT_STRING,
@@ -79,6 +83,7 @@ static QemuOptsList qemu_drive_opts = {
         },{
             .name = "readonly",
             .type = QEMU_OPT_BOOL,
+            .help = "open drive file as read-only",
         },
         { /* end of list */ }
     },
@@ -307,7 +312,7 @@ static QemuOptsList qemu_trace_opts = {
             .name = "file",
             .type = QEMU_OPT_STRING,
         },
-        { /* end if list */ }
+        { /* end of list */ }
     },
 };
 #endif
@@ -386,6 +391,12 @@ QemuOptsList qemu_spice_opts = {
             .name = "disable-ticketing",
             .type = QEMU_OPT_BOOL,
         },{
+            .name = "disable-copy-paste",
+            .type = QEMU_OPT_BOOL,
+        },{
+            .name = "sasl",
+            .type = QEMU_OPT_BOOL,
+        },{
             .name = "x509-dir",
             .type = QEMU_OPT_STRING,
         },{
@@ -431,7 +442,7 @@ QemuOptsList qemu_spice_opts = {
             .name = "playback-compression",
             .type = QEMU_OPT_BOOL,
         },
-        { /* end if list */ }
+        { /* end of list */ }
     },
 };
 
@@ -447,7 +458,25 @@ QemuOptsList qemu_option_rom_opts = {
             .name = "romfile",
             .type = QEMU_OPT_STRING,
         },
-        { /* end if list */ }
+        { /* end of list */ }
+    },
+};
+
+static QemuOptsList qemu_machine_opts = {
+    .name = "machine",
+    .implied_opt_name = "type",
+    .head = QTAILQ_HEAD_INITIALIZER(qemu_machine_opts.head),
+    .desc = {
+        {
+            .name = "type",
+            .type = QEMU_OPT_STRING,
+            .help = "emulated machine"
+        }, {
+            .name = "accel",
+            .type = QEMU_OPT_STRING,
+            .help = "accelerator list",
+        },
+        { /* End of list */ }
     },
 };
 
@@ -465,6 +494,7 @@ static QemuOptsList *vm_config_groups[32] = {
     &qemu_trace_opts,
 #endif
     &qemu_option_rom_opts,
+    &qemu_machine_opts,
     NULL,
 };
 

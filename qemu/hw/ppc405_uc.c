@@ -51,39 +51,42 @@ ram_addr_t ppc405_set_bootinfo (CPUState *env, ppc4xx_bd_info_t *bd,
         bdloc = 0x01000000UL - sizeof(struct ppc4xx_bd_info_t);
     else
         bdloc = bd->bi_memsize - sizeof(struct ppc4xx_bd_info_t);
-    stl_phys(bdloc + 0x00, bd->bi_memstart);
-    stl_phys(bdloc + 0x04, bd->bi_memsize);
-    stl_phys(bdloc + 0x08, bd->bi_flashstart);
-    stl_phys(bdloc + 0x0C, bd->bi_flashsize);
-    stl_phys(bdloc + 0x10, bd->bi_flashoffset);
-    stl_phys(bdloc + 0x14, bd->bi_sramstart);
-    stl_phys(bdloc + 0x18, bd->bi_sramsize);
-    stl_phys(bdloc + 0x1C, bd->bi_bootflags);
-    stl_phys(bdloc + 0x20, bd->bi_ipaddr);
-    for (i = 0; i < 6; i++)
+    stl_be_phys(bdloc + 0x00, bd->bi_memstart);
+    stl_be_phys(bdloc + 0x04, bd->bi_memsize);
+    stl_be_phys(bdloc + 0x08, bd->bi_flashstart);
+    stl_be_phys(bdloc + 0x0C, bd->bi_flashsize);
+    stl_be_phys(bdloc + 0x10, bd->bi_flashoffset);
+    stl_be_phys(bdloc + 0x14, bd->bi_sramstart);
+    stl_be_phys(bdloc + 0x18, bd->bi_sramsize);
+    stl_be_phys(bdloc + 0x1C, bd->bi_bootflags);
+    stl_be_phys(bdloc + 0x20, bd->bi_ipaddr);
+    for (i = 0; i < 6; i++) {
         stb_phys(bdloc + 0x24 + i, bd->bi_enetaddr[i]);
-    stw_phys(bdloc + 0x2A, bd->bi_ethspeed);
-    stl_phys(bdloc + 0x2C, bd->bi_intfreq);
-    stl_phys(bdloc + 0x30, bd->bi_busfreq);
-    stl_phys(bdloc + 0x34, bd->bi_baudrate);
-    for (i = 0; i < 4; i++)
+    }
+    stw_be_phys(bdloc + 0x2A, bd->bi_ethspeed);
+    stl_be_phys(bdloc + 0x2C, bd->bi_intfreq);
+    stl_be_phys(bdloc + 0x30, bd->bi_busfreq);
+    stl_be_phys(bdloc + 0x34, bd->bi_baudrate);
+    for (i = 0; i < 4; i++) {
         stb_phys(bdloc + 0x38 + i, bd->bi_s_version[i]);
+    }
     for (i = 0; i < 32; i++) {
         stb_phys(bdloc + 0x3C + i, bd->bi_r_version[i]);
     }
-    stl_phys(bdloc + 0x5C, bd->bi_plb_busfreq);
-    stl_phys(bdloc + 0x60, bd->bi_pci_busfreq);
-    for (i = 0; i < 6; i++)
+    stl_be_phys(bdloc + 0x5C, bd->bi_plb_busfreq);
+    stl_be_phys(bdloc + 0x60, bd->bi_pci_busfreq);
+    for (i = 0; i < 6; i++) {
         stb_phys(bdloc + 0x64 + i, bd->bi_pci_enetaddr[i]);
+    }
     n = 0x6A;
     if (flags & 0x00000001) {
         for (i = 0; i < 6; i++)
             stb_phys(bdloc + n++, bd->bi_pci_enetaddr2[i]);
     }
-    stl_phys(bdloc + n, bd->bi_opbfreq);
+    stl_be_phys(bdloc + n, bd->bi_opbfreq);
     n += 4;
     for (i = 0; i < 2; i++) {
-        stl_phys(bdloc + n, bd->bi_iic_fast[i]);
+        stl_be_phys(bdloc + n, bd->bi_iic_fast[i]);
         n += 4;
     }
 
@@ -1347,7 +1350,7 @@ static uint32_t ppc4xx_gpt_readl (void *opaque, target_phys_addr_t addr)
     switch (addr) {
     case 0x00:
         /* Time base counter */
-        ret = muldiv64(qemu_get_clock(vm_clock) + gpt->tb_offset,
+        ret = muldiv64(qemu_get_clock_ns(vm_clock) + gpt->tb_offset,
                        gpt->tb_freq, get_ticks_per_sec());
         break;
     case 0x10:
@@ -1404,7 +1407,7 @@ static void ppc4xx_gpt_writel (void *opaque,
     case 0x00:
         /* Time base counter */
         gpt->tb_offset = muldiv64(value, get_ticks_per_sec(), gpt->tb_freq)
-            - qemu_get_clock(vm_clock);
+            - qemu_get_clock_ns(vm_clock);
         ppc4xx_gpt_compute_timer(gpt);
         break;
     case 0x10:
@@ -1501,7 +1504,7 @@ static void ppc4xx_gpt_init(target_phys_addr_t base, qemu_irq irqs[5])
     for (i = 0; i < 5; i++) {
         gpt->irqs[i] = irqs[i];
     }
-    gpt->timer = qemu_new_timer(vm_clock, &ppc4xx_gpt_cb, gpt);
+    gpt->timer = qemu_new_timer_ns(vm_clock, &ppc4xx_gpt_cb, gpt);
 #ifdef DEBUG_GPT
     printf("%s: offset " TARGET_FMT_plx "\n", __func__, base);
 #endif

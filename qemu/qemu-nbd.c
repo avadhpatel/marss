@@ -238,7 +238,7 @@ int main(int argc, char **argv)
             flags |= BDRV_O_SNAPSHOT;
             break;
         case 'n':
-            flags |= BDRV_O_NOCACHE;
+            flags |= BDRV_O_NOCACHE | BDRV_O_CACHE_WB;
             break;
         case 'b':
             bindto = optarg;
@@ -359,7 +359,7 @@ int main(int argc, char **argv)
 
         if (!verbose) {
             /* detach client and server */
-            if (daemon(0, 0) == -1) {
+            if (qemu_daemon(0, 0) == -1) {
                 err(EXIT_FAILURE, "Failed to daemonize");
             }
         }

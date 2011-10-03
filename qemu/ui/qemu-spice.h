@@ -42,13 +42,21 @@ int qemu_spice_migrate_info(const char *hostname, int port, int tls_port,
 void do_info_spice_print(Monitor *mon, const QObject *data);
 void do_info_spice(Monitor *mon, QObject **ret_data);
 
-CharDriverState *qemu_chr_open_spice(QemuOpts *opts);
+int qemu_chr_open_spice(QemuOpts *opts, CharDriverState **_chr);
 
 #else  /* CONFIG_SPICE */
 
 #define using_spice 0
-#define qemu_spice_set_passwd(_p, _f1, _f2) (-1)
-#define qemu_spice_set_pw_expire(_e) (-1)
+static inline int qemu_spice_set_passwd(const char *passwd,
+                                        bool fail_if_connected,
+                                        bool disconnect_if_connected)
+{
+    return -1;
+}
+static inline int qemu_spice_set_pw_expire(time_t expires)
+{
+    return -1;
+}
 static inline int qemu_spice_migrate_info(const char *h, int p, int t, const char *s)
 { return -1; }
 

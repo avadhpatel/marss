@@ -59,7 +59,7 @@ static void check_mode_change(void)
 
     if (is_absolute != current_is_absolute ||
         has_absolute != current_has_absolute) {
-        notifier_list_notify(&mouse_mode_notifiers);
+        notifier_list_notify(&mouse_mode_notifiers, NULL);
     }
 
     current_is_absolute = is_absolute;
@@ -148,7 +148,7 @@ void kbd_mouse_event(int dx, int dy, int dz, int buttons_state)
     QEMUPutMouseEntry *entry;
     QEMUPutMouseEvent *mouse_event;
     void *mouse_event_opaque;
-    int width;
+    int width, height;
 
     if (QTAILQ_EMPTY(&mouse_handlers)) {
         return;
@@ -160,16 +160,32 @@ void kbd_mouse_event(int dx, int dy, int dz, int buttons_state)
     mouse_event_opaque = entry->qemu_put_mouse_event_opaque;
 
     if (mouse_event) {
-        if (graphic_rotate) {
-            if (entry->qemu_put_mouse_event_absolute)
-                width = 0x7fff;
-            else
-                width = graphic_width - 1;
-            mouse_event(mouse_event_opaque,
-                        width - dy, dx, dz, buttons_state);
-        } else
+        if (entry->qemu_put_mouse_event_absolute) {
+            width = 0x7fff;
+            height = 0x7fff;
+        } else {
+            width = graphic_width - 1;
+            height = graphic_height - 1;
+        }
+
+        switch (graphic_rotate) {
+        case 0:
             mouse_event(mouse_event_opaque,
                         dx, dy, dz, buttons_state);
+            break;
+        case 90:
+            mouse_event(mouse_event_opaque,
+                        width - dy, dx, dz, buttons_state);
+            break;
+        case 180:
+            mouse_event(mouse_event_opaque,
+                        width - dx, height - dy, dz, buttons_state);
+            break;
+        case 270:
+            mouse_event(mouse_event_opaque,
+                        dy, height - dx, dz, buttons_state);
+            break;
+        }
     }
 }
 

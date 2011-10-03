@@ -460,8 +460,8 @@ void sd_set_cb(SDState *sd, qemu_irq readonly, qemu_irq insert)
 {
     sd->readonly_cb = readonly;
     sd->inserted_cb = insert;
-    qemu_set_irq(readonly, bdrv_is_read_only(sd->bdrv));
-    qemu_set_irq(insert, bdrv_is_inserted(sd->bdrv));
+    qemu_set_irq(readonly, sd->bdrv ? bdrv_is_read_only(sd->bdrv) : 0);
+    qemu_set_irq(insert, sd->bdrv ? bdrv_is_inserted(sd->bdrv) : 0);
 }
 
 static void sd_erase(SDState *sd)
@@ -1103,6 +1103,17 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
             break;
         }
         break;
+
+    case 52:
+    case 53:
+        /* CMD52, CMD53: reserved for SDIO cards
+         * (see the SDIO Simplified Specification V2.0)
+         * Handle as illegal command but do not complain
+         * on stderr, as some OSes may use these in their
+         * probing for presence of an SDIO card.
+         */
+        sd->card_status |= ILLEGAL_COMMAND;
+        return sd_r0;
 
     /* Application specific commands (Class 8) */
     case 55:	/* CMD55:  APP_CMD */

@@ -37,7 +37,7 @@ typedef struct {
     uint8_t sample_buf[PCSPK_BUF_LEN];
     QEMUSoundCard card;
     SWVoiceOut *voice;
-    PITState *pit;
+    ISADevice *pit;
     unsigned int pit_count;
     unsigned int samples;
     unsigned int play_pos;
@@ -118,7 +118,7 @@ static uint32_t pcspk_ioport_read(void *opaque, uint32_t addr)
     int out;
 
     s->dummy_refresh_clock ^= (1 << 4);
-    out = pit_get_out(s->pit, 2, qemu_get_clock(vm_clock)) << 5;
+    out = pit_get_out(s->pit, 2, qemu_get_clock_ns(vm_clock)) << 5;
 
     return pit_get_gate(s->pit, 2) | (s->data_on << 1) | s->dummy_refresh_clock | out;
 }
@@ -137,7 +137,7 @@ static void pcspk_ioport_write(void *opaque, uint32_t addr, uint32_t val)
     }
 }
 
-void pcspk_init(PITState *pit)
+void pcspk_init(ISADevice *pit)
 {
     PCSpkState *s = &pcspk_state;
 

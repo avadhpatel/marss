@@ -439,13 +439,7 @@ static int bdrv_open_common(BlockDriverState *bs, const char *filename,
     bs->drv = drv;
     bs->opaque = qemu_mallocz(drv->instance_size);
 
-    /*
-     * Yes, BDRV_O_NOCACHE aka O_DIRECT means we have to present a
-     * write cache to the guest.  We do need the fdatasync to flush
-     * out transactions for block allocations, and we maybe have a
-     * volatile write cache in our backing device to deal with.
-     */
-    if (flags & (BDRV_O_CACHE_WB|BDRV_O_NOCACHE))
+    if (flags & BDRV_O_CACHE_WB)
         bs->enable_write_cache = 1;
 
     /*
@@ -455,7 +449,7 @@ static int bdrv_open_common(BlockDriverState *bs, const char *filename,
     open_flags = flags & ~(BDRV_O_SNAPSHOT | BDRV_O_NO_BACKING);
 
     /*
-     * Snapshots should be writeable.
+     * Snapshots should be writable.
      */
     if (bs->is_temporary) {
         open_flags |= BDRV_O_RDWR;
@@ -747,7 +741,7 @@ DeviceState *bdrv_get_attached(BlockDriverState *bs)
  * Run consistency checks on an image
  *
  * Returns 0 if the check could be completed (it doesn't mean that the image is
- * free of errors) or -errno when an internal error occured. The results of the
+ * free of errors) or -errno when an internal error occurred. The results of the
  * check are stored in res.
  */
 int bdrv_check(BlockDriverState *bs, BdrvCheckResult *res)
@@ -1153,6 +1147,25 @@ int bdrv_truncate(BlockDriverState *bs, int64_t offset)
 }
 
 /**
+ * Length of a allocated file in bytes. Sparse files are counted by actual
+ * allocated space. Return < 0 if error or unknown.
+ */
+int64_t bdrv_get_allocated_file_size(BlockDriverState *bs)
+{
+    BlockDriver *drv = bs->drv;
+    if (!drv) {
+        return -ENOMEDIUM;
+    }
+    if (drv->bdrv_get_allocated_file_size) {
+        return drv->bdrv_get_allocated_file_size(bs);
+    }
+    if (bs->file) {
+        return bdrv_get_allocated_file_size(bs->file);
+    }
+    return -ENOTSUP;
+}
+
+/**
  * Length of a file in bytes. Return < 0 if error or unknown.
  */
 int64_t bdrv_getlength(BlockDriverState *bs)
@@ -1161,14 +1174,12 @@ int64_t bdrv_getlength(BlockDriverState *bs)
     if (!drv)
         return -ENOMEDIUM;
 
-    /* Fixed size devices use the total_sectors value for speed instead of
-       issuing a length query (like lseek) on each call.  Also, legacy block
-       drivers don't provide a bdrv_getlength function and must use
-       total_sectors. */
-    if (!bs->growable || !drv->bdrv_getlength) {
-        return bs->total_sectors * BDRV_SECTOR_SIZE;
+    if (bs->growable || bs->removable) {
+        if (drv->bdrv_getlength) {
+            return drv->bdrv_getlength(bs);
+        }
     }
-    return drv->bdrv_getlength(bs);
+    return bs->total_sectors * BDRV_SECTOR_SIZE;
 }
 
 /* return 0 as number of sectors if no device present or error */
@@ -1307,13 +1318,6 @@ void bdrv_set_geometry_hint(BlockDriverState *bs,
     bs->secs = secs;
 }
 
-void bdrv_set_type_hint(BlockDriverState *bs, int type)
-{
-    bs->type = type;
-    bs->removable = ((type == BDRV_TYPE_CDROM ||
-                      type == BDRV_TYPE_FLOPPY));
-}
-
 void bdrv_set_translation_hint(BlockDriverState *bs, int translation)
 {
     bs->translation = translation;
@@ -1327,9 +1331,107 @@ void bdrv_get_geometry_hint(BlockDriverState *bs,
     *psecs = bs->secs;
 }
 
-int bdrv_get_type_hint(BlockDriverState *bs)
+/* Recognize floppy formats */
+typedef struct FDFormat {
+    FDriveType drive;
+    uint8_t last_sect;
+    uint8_t max_track;
+    uint8_t max_head;
+} FDFormat;
+
+static const FDFormat fd_formats[] = {
+    /* First entry is default format */
+    /* 1.44 MB 3"1/2 floppy disks */
+    { FDRIVE_DRV_144, 18, 80, 1, },
+    { FDRIVE_DRV_144, 20, 80, 1, },
+    { FDRIVE_DRV_144, 21, 80, 1, },
+    { FDRIVE_DRV_144, 21, 82, 1, },
+    { FDRIVE_DRV_144, 21, 83, 1, },
+    { FDRIVE_DRV_144, 22, 80, 1, },
+    { FDRIVE_DRV_144, 23, 80, 1, },
+    { FDRIVE_DRV_144, 24, 80, 1, },
+    /* 2.88 MB 3"1/2 floppy disks */
+    { FDRIVE_DRV_288, 36, 80, 1, },
+    { FDRIVE_DRV_288, 39, 80, 1, },
+    { FDRIVE_DRV_288, 40, 80, 1, },
+    { FDRIVE_DRV_288, 44, 80, 1, },
+    { FDRIVE_DRV_288, 48, 80, 1, },
+    /* 720 kB 3"1/2 floppy disks */
+    { FDRIVE_DRV_144,  9, 80, 1, },
+    { FDRIVE_DRV_144, 10, 80, 1, },
+    { FDRIVE_DRV_144, 10, 82, 1, },
+    { FDRIVE_DRV_144, 10, 83, 1, },
+    { FDRIVE_DRV_144, 13, 80, 1, },
+    { FDRIVE_DRV_144, 14, 80, 1, },
+    /* 1.2 MB 5"1/4 floppy disks */
+    { FDRIVE_DRV_120, 15, 80, 1, },
+    { FDRIVE_DRV_120, 18, 80, 1, },
+    { FDRIVE_DRV_120, 18, 82, 1, },
+    { FDRIVE_DRV_120, 18, 83, 1, },
+    { FDRIVE_DRV_120, 20, 80, 1, },
+    /* 720 kB 5"1/4 floppy disks */
+    { FDRIVE_DRV_120,  9, 80, 1, },
+    { FDRIVE_DRV_120, 11, 80, 1, },
+    /* 360 kB 5"1/4 floppy disks */
+    { FDRIVE_DRV_120,  9, 40, 1, },
+    { FDRIVE_DRV_120,  9, 40, 0, },
+    { FDRIVE_DRV_120, 10, 41, 1, },
+    { FDRIVE_DRV_120, 10, 42, 1, },
+    /* 320 kB 5"1/4 floppy disks */
+    { FDRIVE_DRV_120,  8, 40, 1, },
+    { FDRIVE_DRV_120,  8, 40, 0, },
+    /* 360 kB must match 5"1/4 better than 3"1/2... */
+    { FDRIVE_DRV_144,  9, 80, 0, },
+    /* end */
+    { FDRIVE_DRV_NONE, -1, -1, 0, },
+};
+
+void bdrv_get_floppy_geometry_hint(BlockDriverState *bs, int *nb_heads,
+                                   int *max_track, int *last_sect,
+                                   FDriveType drive_in, FDriveType *drive)
 {
-    return bs->type;
+    const FDFormat *parse;
+    uint64_t nb_sectors, size;
+    int i, first_match, match;
+
+    bdrv_get_geometry_hint(bs, nb_heads, max_track, last_sect);
+    if (*nb_heads != 0 && *max_track != 0 && *last_sect != 0) {
+        /* User defined disk */
+    } else {
+        bdrv_get_geometry(bs, &nb_sectors);
+        match = -1;
+        first_match = -1;
+        for (i = 0; ; i++) {
+            parse = &fd_formats[i];
+            if (parse->drive == FDRIVE_DRV_NONE) {
+                break;
+            }
+            if (drive_in == parse->drive ||
+                drive_in == FDRIVE_DRV_NONE) {
+                size = (parse->max_head + 1) * parse->max_track *
+                    parse->last_sect;
+                if (nb_sectors == size) {
+                    match = i;
+                    break;
+                }
+                if (first_match == -1) {
+                    first_match = i;
+                }
+            }
+        }
+        if (match == -1) {
+            if (first_match == -1) {
+                match = 1;
+            } else {
+                match = first_match;
+            }
+            parse = &fd_formats[match];
+        }
+        *nb_heads = parse->max_head + 1;
+        *max_track = parse->max_track;
+        *last_sect = parse->last_sect;
+        *drive = parse->drive;
+    }
 }
 
 int bdrv_get_translation_hint(BlockDriverState *bs)
@@ -1603,9 +1705,8 @@ static void bdrv_print_dict(QObject *obj, void *opaque)
 
     bs_dict = qobject_to_qdict(obj);
 
-    monitor_printf(mon, "%s: type=%s removable=%d",
+    monitor_printf(mon, "%s: removable=%d",
                         qdict_get_str(bs_dict, "device"),
-                        qdict_get_str(bs_dict, "type"),
                         qdict_get_bool(bs_dict, "removable"));
 
     if (qdict_get_bool(bs_dict, "removable")) {
@@ -1646,23 +1747,10 @@ void bdrv_info(Monitor *mon, QObject **ret_data)
 
     QTAILQ_FOREACH(bs, &bdrv_states, list) {
         QObject *bs_obj;
-        const char *type = "unknown";
 
-        switch(bs->type) {
-        case BDRV_TYPE_HD:
-            type = "hd";
-            break;
-        case BDRV_TYPE_CDROM:
-            type = "cdrom";
-            break;
-        case BDRV_TYPE_FLOPPY:
-            type = "floppy";
-            break;
-        }
-
-        bs_obj = qobject_from_jsonf("{ 'device': %s, 'type': %s, "
+        bs_obj = qobject_from_jsonf("{ 'device': %s, 'type': 'unknown', "
                                     "'removable': %i, 'locked': %i }",
-                                    bs->device_name, type, bs->removable,
+                                    bs->device_name, bs->removable,
                                     bs->locked);
 
         if (bs->drv) {
@@ -2390,6 +2478,8 @@ BlockDriverAIOCB *bdrv_aio_flush(BlockDriverState *bs,
 {
     BlockDriver *drv = bs->drv;
 
+    trace_bdrv_aio_flush(bs, opaque);
+
     if (bs->open_flags & BDRV_O_NO_FLUSH) {
         return bdrv_aio_noop_em(bs, cb, opaque);
     }
@@ -2712,6 +2802,8 @@ void bdrv_set_locked(BlockDriverState *bs, int locked)
 {
     BlockDriver *drv = bs->drv;
 
+    trace_bdrv_set_locked(bs, locked);
+
     bs->locked = locked;
     if (drv && drv->bdrv_set_locked) {
         drv->bdrv_set_locked(bs, locked);
@@ -2808,7 +2900,7 @@ int bdrv_img_create(const char *filename, const char *fmt,
                     char *options, uint64_t img_size, int flags)
 {
     QEMUOptionParameter *param = NULL, *create_options = NULL;
-    QEMUOptionParameter *backing_fmt, *backing_file;
+    QEMUOptionParameter *backing_fmt, *backing_file, *size;
     BlockDriverState *bs = NULL;
     BlockDriver *drv, *proto_drv;
     BlockDriver *backing_drv = NULL;
@@ -2891,7 +2983,8 @@ int bdrv_img_create(const char *filename, const char *fmt,
 
     // The size for the image must always be specified, with one exception:
     // If we are using a backing file, we can obtain the size from there
-    if (get_option_parameter(param, BLOCK_OPT_SIZE)->value.n == -1) {
+    size = get_option_parameter(param, BLOCK_OPT_SIZE);
+    if (size && size->value.n == -1) {
         if (backing_file && backing_file->value.s) {
             uint64_t size;
             char buf[32];

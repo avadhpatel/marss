@@ -76,7 +76,7 @@ static void net_socket_send(void *opaque)
     uint8_t buf1[4096];
     const uint8_t *buf;
 
-    size = recv(s->fd, (void *)buf1, sizeof(buf1), 0);
+    size = qemu_recv(s->fd, buf1, sizeof(buf1), 0);
     if (size < 0) {
         err = socket_error();
         if (err != EWOULDBLOCK)
@@ -138,7 +138,7 @@ static void net_socket_send_dgram(void *opaque)
     NetSocketState *s = opaque;
     int size;
 
-    size = recv(s->fd, (void *)s->buf, sizeof(s->buf), 0);
+    size = qemu_recv(s->fd, s->buf, sizeof(s->buf), 0);
     if (size < 0)
         return;
     if (size == 0) {
@@ -457,7 +457,7 @@ static int net_socket_connect_init(VLANState *vlan,
             } else if (err == EINPROGRESS) {
                 break;
 #ifdef _WIN32
-            } else if (err == WSAEALREADY) {
+            } else if (err == WSAEALREADY || err == WSAEINVAL) {
                 break;
 #endif
             } else {
@@ -530,7 +530,7 @@ int net_init_socket(QemuOpts *opts,
             qemu_opt_get(opts, "connect") ||
             qemu_opt_get(opts, "mcast") ||
             qemu_opt_get(opts, "localaddr")) {
-            error_report("listen=, connect=, mcast= and localaddr= is invalid with fd=\n");
+            error_report("listen=, connect=, mcast= and localaddr= is invalid with fd=");
             return -1;
         }
 
@@ -550,7 +550,7 @@ int net_init_socket(QemuOpts *opts,
             qemu_opt_get(opts, "connect") ||
             qemu_opt_get(opts, "mcast") ||
             qemu_opt_get(opts, "localaddr")) {
-            error_report("fd=, connect=, mcast= and localaddr= is invalid with listen=\n");
+            error_report("fd=, connect=, mcast= and localaddr= is invalid with listen=");
             return -1;
         }
 
@@ -566,7 +566,7 @@ int net_init_socket(QemuOpts *opts,
             qemu_opt_get(opts, "listen") ||
             qemu_opt_get(opts, "mcast") ||
             qemu_opt_get(opts, "localaddr")) {
-            error_report("fd=, listen=, mcast= and localaddr= is invalid with connect=\n");
+            error_report("fd=, listen=, mcast= and localaddr= is invalid with connect=");
             return -1;
         }
 

@@ -4,13 +4,12 @@
  * Copyright (c) 2005-2007 CodeSourcery.
  * Written by Paul Brook
  *
- * This code is licenced under the GPL
+ * This code is licensed under the GPL
  */
 
 #include "sysbus.h"
 #include "primecell.h"
 #include "devices.h"
-#include "sysemu.h"
 #include "boards.h"
 #include "arm-misc.h"
 #include "net.h"

@@ -2,15 +2,19 @@
 #define QEMU_TIMER_H
 
 #include "qemu-common.h"
+#include "notify.h"
 #include <time.h>
 #include <sys/time.h>
 
 #ifdef _WIN32
 #include <windows.h>
-#include <mmsystem.h>
 #endif
 
 /* timers */
+
+#define SCALE_MS 1000000
+#define SCALE_US 1000
+#define SCALE_NS 1
 
 typedef struct QEMUClock QEMUClock;
 typedef void QEMUTimerCB(void *opaque);
@@ -33,11 +37,16 @@ extern QEMUClock *vm_clock;
    the virtual clock. */
 extern QEMUClock *host_clock;
 
-int64_t qemu_get_clock(QEMUClock *clock);
 int64_t qemu_get_clock_ns(QEMUClock *clock);
 void qemu_clock_enable(QEMUClock *clock, int enabled);
+void qemu_clock_warp(QEMUClock *clock);
 
-QEMUTimer *qemu_new_timer(QEMUClock *clock, QEMUTimerCB *cb, void *opaque);
+void qemu_register_clock_reset_notifier(QEMUClock *clock, Notifier *notifier);
+void qemu_unregister_clock_reset_notifier(QEMUClock *clock,
+                                          Notifier *notifier);
+
+QEMUTimer *qemu_new_timer(QEMUClock *clock, int scale,
+                          QEMUTimerCB *cb, void *opaque);
 void qemu_free_timer(QEMUTimer *ts);
 void qemu_del_timer(QEMUTimer *ts);
 void qemu_mod_timer(QEMUTimer *ts, int64_t expire_time);
@@ -46,13 +55,34 @@ int qemu_timer_expired(QEMUTimer *timer_head, int64_t current_time);
 
 void qemu_run_all_timers(void);
 int qemu_alarm_pending(void);
-int64_t qemu_next_deadline(void);
+int64_t qemu_next_icount_deadline(void);
 void configure_alarms(char const *opt);
 void configure_icount(const char *option);
 int qemu_calculate_timeout(void);
 void init_clocks(void);
 int init_timer_alarm(void);
 void quit_timers(void);
+
+int64_t cpu_get_ticks(void);
+void cpu_enable_ticks(void);
+void cpu_disable_ticks(void);
+
+static inline QEMUTimer *qemu_new_timer_ns(QEMUClock *clock, QEMUTimerCB *cb,
+                                           void *opaque)
+{
+    return qemu_new_timer(clock, SCALE_NS, cb, opaque);
+}
+
+static inline QEMUTimer *qemu_new_timer_ms(QEMUClock *clock, QEMUTimerCB *cb,
+                                           void *opaque)
+{
+    return qemu_new_timer(clock, SCALE_MS, cb, opaque);
+}
+
+static inline int64_t qemu_get_clock_ms(QEMUClock *clock)
+{
+    return qemu_get_clock_ns(clock) / SCALE_MS;
+}
 
 static inline int64_t get_ticks_per_sec(void)
 {
@@ -118,8 +148,6 @@ uint64_t ptimer_get_count(ptimer_state *s);
 void ptimer_set_count(ptimer_state *s, uint64_t count);
 void ptimer_run(ptimer_state *s, int oneshot);
 void ptimer_stop(ptimer_state *s);
-void qemu_put_ptimer(QEMUFile *f, ptimer_state *s);
-void qemu_get_ptimer(QEMUFile *f, ptimer_state *s);
 
 /* icount */
 int64_t qemu_icount_round(int64_t count);

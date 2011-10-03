@@ -103,13 +103,13 @@ enum {
 
 typedef target_ulong    target_elf_greg_t;
 #ifdef USE_UID16
-typedef uint16_t        target_uid_t;
-typedef uint16_t        target_gid_t;
+typedef target_ushort   target_uid_t;
+typedef target_ushort   target_gid_t;
 #else
-typedef uint32_t        target_uid_t;
-typedef uint32_t        target_gid_t;
+typedef target_uint     target_uid_t;
+typedef target_uint     target_gid_t;
 #endif
-typedef int32_t         target_pid_t;
+typedef target_int      target_pid_t;
 
 #ifdef TARGET_I386
 
@@ -339,11 +339,86 @@ enum
 
 #endif
 
+#ifdef TARGET_UNICORE32
+
+#define ELF_START_MMAP          0x80000000
+
+#define elf_check_arch(x)       ((x) == EM_UNICORE32)
+
+#define ELF_CLASS               ELFCLASS32
+#define ELF_DATA                ELFDATA2LSB
+#define ELF_ARCH                EM_UNICORE32
+
+static inline void init_thread(struct target_pt_regs *regs,
+        struct image_info *infop)
+{
+    abi_long stack = infop->start_stack;
+    memset(regs, 0, sizeof(*regs));
+    regs->UC32_REG_asr = 0x10;
+    regs->UC32_REG_pc = infop->entry & 0xfffffffe;
+    regs->UC32_REG_sp = infop->start_stack;
+    /* FIXME - what to for failure of get_user()? */
+    get_user_ual(regs->UC32_REG_02, stack + 8); /* envp */
+    get_user_ual(regs->UC32_REG_01, stack + 4); /* envp */
+    /* XXX: it seems that r0 is zeroed after ! */
+    regs->UC32_REG_00 = 0;
+}
+
+#define ELF_NREG    34
+typedef target_elf_greg_t  target_elf_gregset_t[ELF_NREG];
+
+static void elf_core_copy_regs(target_elf_gregset_t *regs, const CPUState *env)
+{
+    (*regs)[0] = env->regs[0];
+    (*regs)[1] = env->regs[1];
+    (*regs)[2] = env->regs[2];
+    (*regs)[3] = env->regs[3];
+    (*regs)[4] = env->regs[4];
+    (*regs)[5] = env->regs[5];
+    (*regs)[6] = env->regs[6];
+    (*regs)[7] = env->regs[7];
+    (*regs)[8] = env->regs[8];
+    (*regs)[9] = env->regs[9];
+    (*regs)[10] = env->regs[10];
+    (*regs)[11] = env->regs[11];
+    (*regs)[12] = env->regs[12];
+    (*regs)[13] = env->regs[13];
+    (*regs)[14] = env->regs[14];
+    (*regs)[15] = env->regs[15];
+    (*regs)[16] = env->regs[16];
+    (*regs)[17] = env->regs[17];
+    (*regs)[18] = env->regs[18];
+    (*regs)[19] = env->regs[19];
+    (*regs)[20] = env->regs[20];
+    (*regs)[21] = env->regs[21];
+    (*regs)[22] = env->regs[22];
+    (*regs)[23] = env->regs[23];
+    (*regs)[24] = env->regs[24];
+    (*regs)[25] = env->regs[25];
+    (*regs)[26] = env->regs[26];
+    (*regs)[27] = env->regs[27];
+    (*regs)[28] = env->regs[28];
+    (*regs)[29] = env->regs[29];
+    (*regs)[30] = env->regs[30];
+    (*regs)[31] = env->regs[31];
+
+    (*regs)[32] = cpu_asr_read((CPUState *)env);
+    (*regs)[33] = env->regs[0]; /* XXX */
+}
+
+#define USE_ELF_CORE_DUMP
+#define ELF_EXEC_PAGESIZE               4096
+
+#define ELF_HWCAP                       (UC32_HWCAP_CMOV | UC32_HWCAP_UCF64)
+
+#endif
+
 #ifdef TARGET_SPARC
 #ifdef TARGET_SPARC64
 
 #define ELF_START_MMAP 0x80000000
-
+#define ELF_HWCAP  (HWCAP_SPARC_FLUSH | HWCAP_SPARC_STBAR | HWCAP_SPARC_SWAP \
+                    | HWCAP_SPARC_MULDIV | HWCAP_SPARC_V9)
 #ifndef TARGET_ABI32
 #define elf_check_arch(x) ( (x) == EM_SPARCV9 || (x) == EM_SPARC32PLUS )
 #else
@@ -376,7 +451,8 @@ static inline void init_thread(struct target_pt_regs *regs,
 
 #else
 #define ELF_START_MMAP 0x80000000
-
+#define ELF_HWCAP  (HWCAP_SPARC_FLUSH | HWCAP_SPARC_STBAR | HWCAP_SPARC_SWAP \
+                    | HWCAP_SPARC_MULDIV)
 #define elf_check_arch(x) ( (x) == EM_SPARC )
 
 #define ELF_CLASS   ELFCLASS32
@@ -793,6 +869,25 @@ static inline void init_thread(struct target_pt_regs *regs,
 
 #endif /* TARGET_ALPHA */
 
+#ifdef TARGET_S390X
+
+#define ELF_START_MMAP (0x20000000000ULL)
+
+#define elf_check_arch(x) ( (x) == ELF_ARCH )
+
+#define ELF_CLASS	ELFCLASS64
+#define ELF_DATA	ELFDATA2MSB
+#define ELF_ARCH	EM_S390
+
+static inline void init_thread(struct target_pt_regs *regs, struct image_info *infop)
+{
+    regs->psw.addr = infop->entry;
+    regs->psw.mask = PSW_MASK_64 | PSW_MASK_32;
+    regs->gprs[15] = infop->start_stack;
+}
+
+#endif /* TARGET_S390X */
+
 #ifndef ELF_PLATFORM
 #define ELF_PLATFORM (NULL)
 #endif
@@ -834,7 +929,7 @@ struct exec
 #define TARGET_ELF_PAGESTART(_v) ((_v) & ~(unsigned long)(TARGET_ELF_EXEC_PAGESIZE-1))
 #define TARGET_ELF_PAGEOFFSET(_v) ((_v) & (TARGET_ELF_EXEC_PAGESIZE-1))
 
-#define DLINFO_ITEMS 12
+#define DLINFO_ITEMS 13
 
 static inline void memcpy_fromfs(void * to, const void * from, unsigned long n)
 {
@@ -1075,6 +1170,33 @@ static void zero_bss(abi_ulong elf_bss, abi_ulong last_bss, int prot)
     }
 }
 
+#ifdef CONFIG_USE_FDPIC
+static abi_ulong loader_build_fdpic_loadmap(struct image_info *info, abi_ulong sp)
+{
+    uint16_t n;
+    struct elf32_fdpic_loadseg *loadsegs = info->loadsegs;
+
+    /* elf32_fdpic_loadseg */
+    n = info->nsegs;
+    while (n--) {
+        sp -= 12;
+        put_user_u32(loadsegs[n].addr, sp+0);
+        put_user_u32(loadsegs[n].p_vaddr, sp+4);
+        put_user_u32(loadsegs[n].p_memsz, sp+8);
+    }
+
+    /* elf32_fdpic_loadmap */
+    sp -= 4;
+    put_user_u16(0, sp+0); /* version */
+    put_user_u16(info->nsegs, sp+2); /* nsegs */
+
+    info->personality = PER_LINUX_FDPIC;
+    info->loadmap_addr = sp;
+
+    return sp;
+}
+#endif
+
 static abi_ulong create_elf_tables(abi_ulong p, int argc, int envc,
                                    struct elfhdr *exec,
                                    struct image_info *info,
@@ -1082,11 +1204,29 @@ static abi_ulong create_elf_tables(abi_ulong p, int argc, int envc,
 {
     abi_ulong sp;
     int size;
+    int i;
+    abi_ulong u_rand_bytes;
+    uint8_t k_rand_bytes[16];
     abi_ulong u_platform;
     const char *k_platform;
     const int n = sizeof(elf_addr_t);
 
     sp = p;
+
+#ifdef CONFIG_USE_FDPIC
+    /* Needs to be before we load the env/argc/... */
+    if (elf_is_fdpic(exec)) {
+        /* Need 4 byte alignment for these structs */
+        sp &= ~3;
+        sp = loader_build_fdpic_loadmap(info, sp);
+        info->other_info = interp_info;
+        if (interp_info) {
+            interp_info->other_info = info;
+            sp = loader_build_fdpic_loadmap(interp_info, sp);
+        }
+    }
+#endif
+
     u_platform = 0;
     k_platform = ELF_PLATFORM;
     if (k_platform) {
@@ -1096,6 +1236,20 @@ static abi_ulong create_elf_tables(abi_ulong p, int argc, int envc,
         /* FIXME - check return value of memcpy_to_target() for failure */
         memcpy_to_target(sp, k_platform, len);
     }
+
+    /*
+     * Generate 16 random bytes for userspace PRNG seeding (not
+     * cryptically secure but it's not the aim of QEMU).
+     */
+    srand((unsigned int) time(NULL));
+    for (i = 0; i < 16; i++) {
+        k_rand_bytes[i] = rand();
+    }
+    sp -= 16;
+    u_rand_bytes = sp;
+    /* FIXME - check return value of memcpy_to_target() for failure */
+    memcpy_to_target(sp, k_rand_bytes, 16);
+
     /*
      * Force 16 byte _final_ alignment here for generality.
      */
@@ -1136,6 +1290,8 @@ static abi_ulong create_elf_tables(abi_ulong p, int argc, int envc,
     NEW_AUX_ENT(AT_EGID, (abi_ulong) getegid());
     NEW_AUX_ENT(AT_HWCAP, (abi_ulong) ELF_HWCAP);
     NEW_AUX_ENT(AT_CLKTCK, (abi_ulong) sysconf(_SC_CLK_TCK));
+    NEW_AUX_ENT(AT_RANDOM, (abi_ulong) u_rand_bytes);
+
     if (k_platform)
         NEW_AUX_ENT(AT_PLATFORM, u_platform);
 #ifdef ARCH_DLINFO
@@ -1152,6 +1308,78 @@ static abi_ulong create_elf_tables(abi_ulong p, int argc, int envc,
     sp = loader_build_argptr(envc, argc, sp, p, 0);
     return sp;
 }
+
+static void probe_guest_base(const char *image_name,
+                             abi_ulong loaddr, abi_ulong hiaddr)
+{
+    /* Probe for a suitable guest base address, if the user has not set
+     * it explicitly, and set guest_base appropriately.
+     * In case of error we will print a suitable message and exit.
+     */
+#if defined(CONFIG_USE_GUEST_BASE)
+    const char *errmsg;
+    if (!have_guest_base && !reserved_va) {
+        unsigned long host_start, real_start, host_size;
+
+        /* Round addresses to page boundaries.  */
+        loaddr &= qemu_host_page_mask;
+        hiaddr = HOST_PAGE_ALIGN(hiaddr);
+
+        if (loaddr < mmap_min_addr) {
+            host_start = HOST_PAGE_ALIGN(mmap_min_addr);
+        } else {
+            host_start = loaddr;
+            if (host_start != loaddr) {
+                errmsg = "Address overflow loading ELF binary";
+                goto exit_errmsg;
+            }
+        }
+        host_size = hiaddr - loaddr;
+        while (1) {
+            /* Do not use mmap_find_vma here because that is limited to the
+               guest address space.  We are going to make the
+               guest address space fit whatever we're given.  */
+            real_start = (unsigned long)
+                mmap((void *)host_start, host_size, PROT_NONE,
+                     MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+            if (real_start == (unsigned long)-1) {
+                goto exit_perror;
+            }
+            if (real_start == host_start) {
+                break;
+            }
+            /* That address didn't work.  Unmap and try a different one.
+               The address the host picked because is typically right at
+               the top of the host address space and leaves the guest with
+               no usable address space.  Resort to a linear search.  We
+               already compensated for mmap_min_addr, so this should not
+               happen often.  Probably means we got unlucky and host
+               address space randomization put a shared library somewhere
+               inconvenient.  */
+            munmap((void *)real_start, host_size);
+            host_start += qemu_host_page_size;
+            if (host_start == loaddr) {
+                /* Theoretically possible if host doesn't have any suitably
+                   aligned areas.  Normally the first mmap will fail.  */
+                errmsg = "Unable to find space for application";
+                goto exit_errmsg;
+            }
+        }
+        qemu_log("Relocating guest address space from 0x"
+                 TARGET_ABI_FMT_lx " to 0x%lx\n",
+                 loaddr, real_start);
+        guest_base = real_start - loaddr;
+    }
+    return;
+
+exit_perror:
+    errmsg = strerror(errno);
+exit_errmsg:
+    fprintf(stderr, "%s: %s\n", image_name, errmsg);
+    exit(-1);
+#endif
+}
+
 
 /* Load an ELF image into the address space.
 
@@ -1197,6 +1425,11 @@ static void load_elf_image(const char *image_name, int image_fd,
     }
     bswap_phdr(phdr, ehdr->e_phnum);
 
+#ifdef CONFIG_USE_FDPIC
+    info->nsegs = 0;
+    info->pt_dynamic_addr = 0;
+#endif
+
     /* Find the maximum size of the image and allocate an appropriate
        amount of memory to handle that.  */
     loaddr = -1, hiaddr = 0;
@@ -1210,6 +1443,9 @@ static void load_elf_image(const char *image_name, int image_fd,
             if (a > hiaddr) {
                 hiaddr = a;
             }
+#ifdef CONFIG_USE_FDPIC
+            ++info->nsegs;
+#endif
         }
     }
 
@@ -1230,65 +1466,30 @@ static void load_elf_image(const char *image_name, int image_fd,
         /* This is the main executable.  Make sure that the low
            address does not conflict with MMAP_MIN_ADDR or the
            QEMU application itself.  */
-#if defined(CONFIG_USE_GUEST_BASE)
-        /*
-         * In case where user has not explicitly set the guest_base, we
-         * probe here that should we set it automatically.
-         */
-        if (!have_guest_base && !reserved_va) {
-            unsigned long host_start, real_start, host_size;
-
-            /* Round addresses to page boundaries.  */
-            loaddr &= qemu_host_page_mask;
-            hiaddr = HOST_PAGE_ALIGN(hiaddr);
-
-            if (loaddr < mmap_min_addr) {
-                host_start = HOST_PAGE_ALIGN(mmap_min_addr);
-            } else {
-                host_start = loaddr;
-                if (host_start != loaddr) {
-                    errmsg = "Address overflow loading ELF binary";
-                    goto exit_errmsg;
-                }
-            }
-            host_size = hiaddr - loaddr;
-            while (1) {
-                /* Do not use mmap_find_vma here because that is limited to the
-                   guest address space.  We are going to make the
-                   guest address space fit whatever we're given.  */
-                real_start = (unsigned long)
-                    mmap((void *)host_start, host_size, PROT_NONE,
-                         MAP_ANONYMOUS | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-                if (real_start == (unsigned long)-1) {
-                    goto exit_perror;
-                }
-                if (real_start == host_start) {
-                    break;
-                }
-                /* That address didn't work.  Unmap and try a different one.
-                   The address the host picked because is typically right at
-                   the top of the host address space and leaves the guest with
-                   no usable address space.  Resort to a linear search.  We
-                   already compensated for mmap_min_addr, so this should not
-                   happen often.  Probably means we got unlucky and host
-                   address space randomization put a shared library somewhere
-                   inconvenient.  */
-                munmap((void *)real_start, host_size);
-                host_start += qemu_host_page_size;
-                if (host_start == loaddr) {
-                    /* Theoretically possible if host doesn't have any suitably
-                       aligned areas.  Normally the first mmap will fail.  */
-                    errmsg = "Unable to find space for application";
-                    goto exit_errmsg;
-                }
-            }
-            qemu_log("Relocating guest address space from 0x"
-                     TARGET_ABI_FMT_lx " to 0x%lx\n", loaddr, real_start);
-            guest_base = real_start - loaddr;
-        }
-#endif
+        probe_guest_base(image_name, loaddr, hiaddr);
     }
     load_bias = load_addr - loaddr;
+
+#ifdef CONFIG_USE_FDPIC
+    {
+        struct elf32_fdpic_loadseg *loadsegs = info->loadsegs =
+            qemu_malloc(sizeof(*loadsegs) * info->nsegs);
+
+        for (i = 0; i < ehdr->e_phnum; ++i) {
+            switch (phdr[i].p_type) {
+            case PT_DYNAMIC:
+                info->pt_dynamic_addr = phdr[i].p_vaddr + load_bias;
+                break;
+            case PT_LOAD:
+                loadsegs->addr = phdr[i].p_vaddr + load_bias;
+                loadsegs->p_vaddr = phdr[i].p_vaddr;
+                loadsegs->p_memsz = phdr[i].p_memsz;
+                ++loadsegs;
+                break;
+            }
+        }
+    }
+#endif
 
     info->load_bias = load_bias;
     info->load_addr = load_addr;
@@ -1479,9 +1680,9 @@ static void load_symbols(struct elfhdr *hdr, int fd, abi_ulong load_bias)
 {
     int i, shnum, nsyms, sym_idx = 0, str_idx = 0;
     struct elf_shdr *shdr;
-    char *strings;
-    struct syminfo *s;
-    struct elf_sym *syms, *new_syms;
+    char *strings = NULL;
+    struct syminfo *s = NULL;
+    struct elf_sym *new_syms, *syms = NULL;
 
     shnum = hdr->e_shnum;
     i = shnum * sizeof(struct elf_shdr);
@@ -1506,24 +1707,19 @@ static void load_symbols(struct elfhdr *hdr, int fd, abi_ulong load_bias)
     /* Now know where the strtab and symtab are.  Snarf them.  */
     s = malloc(sizeof(*s));
     if (!s) {
-        return;
+        goto give_up;
     }
 
     i = shdr[str_idx].sh_size;
     s->disas_strtab = strings = malloc(i);
     if (!strings || pread(fd, strings, i, shdr[str_idx].sh_offset) != i) {
-        free(s);
-        free(strings);
-        return;
+        goto give_up;
     }
 
     i = shdr[sym_idx].sh_size;
     syms = malloc(i);
     if (!syms || pread(fd, syms, i, shdr[sym_idx].sh_offset) != i) {
-        free(s);
-        free(strings);
-        free(syms);
-        return;
+        goto give_up;
     }
 
     nsyms = i / sizeof(struct elf_sym);
@@ -1546,16 +1742,18 @@ static void load_symbols(struct elfhdr *hdr, int fd, abi_ulong load_bias)
         }
     }
 
+    /* No "useful" symbol.  */
+    if (nsyms == 0) {
+        goto give_up;
+    }
+
     /* Attempt to free the storage associated with the local symbols
        that we threw away.  Whether or not this has any effect on the
        memory allocation depends on the malloc implementation and how
        many symbols we managed to discard.  */
     new_syms = realloc(syms, nsyms * sizeof(*syms));
     if (new_syms == NULL) {
-        free(s);
-        free(syms);
-        free(strings);
-        return;
+        goto give_up;
     }
     syms = new_syms;
 
@@ -1570,6 +1768,13 @@ static void load_symbols(struct elfhdr *hdr, int fd, abi_ulong load_bias)
     s->lookup_symbol = lookup_symbolxx;
     s->next = syminfos;
     syminfos = s;
+
+    return;
+
+give_up:
+    free(s);
+    free(strings);
+    free(syms);
 }
 
 int load_elf_binary(struct linux_binprm * bprm, struct target_pt_regs * regs,
@@ -1690,19 +1895,20 @@ struct memelfnote {
     size_t     namesz_rounded;
     int        type;
     size_t     datasz;
+    size_t     datasz_rounded;
     void       *data;
     size_t     notesz;
 };
 
 struct target_elf_siginfo {
-    int  si_signo; /* signal number */
-    int  si_code;  /* extra code */
-    int  si_errno; /* errno */
+    target_int  si_signo; /* signal number */
+    target_int  si_code;  /* extra code */
+    target_int  si_errno; /* errno */
 };
 
 struct target_elf_prstatus {
     struct target_elf_siginfo pr_info;      /* Info associated with signal */
-    short              pr_cursig;    /* Current signal */
+    target_short       pr_cursig;    /* Current signal */
     target_ulong       pr_sigpend;   /* XXX */
     target_ulong       pr_sighold;   /* XXX */
     target_pid_t       pr_pid;
@@ -1714,7 +1920,7 @@ struct target_elf_prstatus {
     struct target_timeval pr_cutime; /* XXX Cumulative user time */
     struct target_timeval pr_cstime; /* XXX Cumulative system time */
     target_elf_gregset_t      pr_reg;       /* GP registers */
-    int                pr_fpvalid;   /* XXX */
+    target_int         pr_fpvalid;   /* XXX */
 };
 
 #define ELF_PRARGSZ     (80) /* Number of chars for args */
@@ -1965,7 +2171,9 @@ static void fill_note(struct memelfnote *note, const char *name, int type,
     note->namesz = namesz;
     note->namesz_rounded = roundup(namesz, sizeof (int32_t));
     note->type = type;
-    note->datasz = roundup(sz, sizeof (int32_t));;
+    note->datasz = sz;
+    note->datasz_rounded = roundup(sz, sizeof (int32_t));
+
     note->data = data;
 
     /*
@@ -1973,7 +2181,7 @@ static void fill_note(struct memelfnote *note, const char *name, int type,
      * ELF document.
      */
     note->notesz = sizeof (struct elf_note) +
-        note->namesz_rounded + note->datasz;
+        note->namesz_rounded + note->datasz_rounded;
 }
 
 static void fill_elf_header(struct elfhdr *elf, int segs, uint16_t machine,
@@ -2193,7 +2401,7 @@ static int write_note(struct memelfnote *men, int fd)
         return (-1);
     if (dump_write(fd, men->name, men->namesz_rounded) != 0)
         return (-1);
-    if (dump_write(fd, men->data, men->datasz) != 0)
+    if (dump_write(fd, men->data, men->datasz_rounded) != 0)
         return (-1);
 
     return (0);
@@ -2409,7 +2617,7 @@ static int elf_core_dump(int signr, const CPUState *env)
      * ELF specification wants data to start at page boundary so
      * we align it here.
      */
-    offset = roundup(offset, ELF_EXEC_PAGESIZE);
+    data_offset = offset = roundup(offset, ELF_EXEC_PAGESIZE);
 
     /*
      * Write program headers for memory regions mapped in
@@ -2432,6 +2640,7 @@ static int elf_core_dump(int signr, const CPUState *env)
             phdr.p_flags |= PF_X;
         phdr.p_align = ELF_EXEC_PAGESIZE;
 
+        bswap_phdr(&phdr, 1);
         dump_write(fd, &phdr, sizeof (phdr));
     }
 
@@ -2443,8 +2652,6 @@ static int elf_core_dump(int signr, const CPUState *env)
         goto out;
 
     /* align data to page boundary */
-    data_offset = lseek(fd, 0, SEEK_CUR);
-    data_offset = TARGET_PAGE_ALIGN(data_offset);
     if (lseek(fd, data_offset, SEEK_SET) != data_offset)
         goto out;
 

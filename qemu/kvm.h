@@ -58,9 +58,6 @@ int kvm_init_vcpu(CPUState *env);
 int kvm_cpu_exec(CPUState *env);
 
 #if !defined(CONFIG_USER_ONLY)
-int kvm_log_start(target_phys_addr_t phys_addr, ram_addr_t size);
-int kvm_log_stop(target_phys_addr_t phys_addr, ram_addr_t size);
-
 void kvm_setup_guest_memory(void *start, size_t size);
 
 int kvm_coalesce_mmio_region(target_phys_addr_t start, ram_addr_t size);
@@ -81,10 +78,14 @@ int kvm_set_signal_mask(CPUState *env, const sigset_t *sigset);
 int kvm_pit_in_kernel(void);
 int kvm_irqchip_in_kernel(void);
 
+int kvm_on_sigbus_vcpu(CPUState *env, int code, void *addr);
+int kvm_on_sigbus(int code, void *addr);
+
 /* internal API */
 
 struct KVMState;
 typedef struct KVMState KVMState;
+extern KVMState *kvm_state;
 
 int kvm_ioctl(KVMState *s, int type, ...);
 
@@ -96,13 +97,12 @@ int kvm_vcpu_ioctl(CPUState *env, int type, ...);
 
 extern const KVMCapabilityInfo kvm_arch_required_capabilities[];
 
-int kvm_arch_post_run(CPUState *env, struct kvm_run *run);
+void kvm_arch_pre_run(CPUState *env, struct kvm_run *run);
+void kvm_arch_post_run(CPUState *env, struct kvm_run *run);
 
 int kvm_arch_handle_exit(CPUState *env, struct kvm_run *run);
 
-int kvm_arch_pre_run(CPUState *env, struct kvm_run *run);
-
-int kvm_arch_process_irqchip_events(CPUState *env);
+int kvm_arch_process_async_events(CPUState *env);
 
 int kvm_arch_get_registers(CPUState *env);
 
@@ -121,8 +121,8 @@ int kvm_arch_init_vcpu(CPUState *env);
 
 void kvm_arch_reset_vcpu(CPUState *env);
 
-int kvm_on_sigbus_vcpu(CPUState *env, int code, void *addr);
-int kvm_on_sigbus(int code, void *addr);
+int kvm_arch_on_sigbus_vcpu(CPUState *env, int code, void *addr);
+int kvm_arch_on_sigbus(int code, void *addr);
 
 struct kvm_guest_debug;
 struct kvm_debug_exit_arch;
@@ -135,8 +135,6 @@ struct kvm_sw_breakpoint {
 };
 
 QTAILQ_HEAD(kvm_sw_breakpoint_head, kvm_sw_breakpoint);
-
-int kvm_arch_debug(struct kvm_debug_exit_arch *arch_info);
 
 struct kvm_sw_breakpoint *kvm_find_sw_breakpoint(CPUState *env,
                                                  target_ulong pc);
@@ -159,7 +157,7 @@ bool kvm_arch_stop_on_emulation_error(CPUState *env);
 
 int kvm_check_extension(KVMState *s, unsigned int extension);
 
-uint32_t kvm_arch_get_supported_cpuid(CPUState *env, uint32_t function,
+uint32_t kvm_arch_get_supported_cpuid(KVMState *env, uint32_t function,
                                       uint32_t index, int reg);
 void kvm_cpu_synchronize_state(CPUState *env);
 void kvm_cpu_synchronize_post_reset(CPUState *env);

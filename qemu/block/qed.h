@@ -78,6 +78,9 @@ enum {
     QED_MIN_TABLE_SIZE = 1,        /* in clusters */
     QED_MAX_TABLE_SIZE = 16,
     QED_DEFAULT_TABLE_SIZE = 4,
+
+    /* Delay to flush and clean image after last allocating write completes */
+    QED_NEED_CHECK_TIMEOUT = 5,    /* in seconds */
 };
 
 typedef struct {
@@ -157,10 +160,15 @@ typedef struct {
 
     /* Allocating write request queue */
     QSIMPLEQ_HEAD(, QEDAIOCB) allocating_write_reqs;
+    bool allocating_write_reqs_plugged;
+
+    /* Periodic flush and clear need check flag */
+    QEMUTimer *need_check_timer;
 } BDRVQEDState;
 
 enum {
     QED_CLUSTER_FOUND,         /* cluster found */
+    QED_CLUSTER_ZERO,          /* zero cluster found */
     QED_CLUSTER_L2,            /* cluster missing in L2 */
     QED_CLUSTER_L1,            /* cluster missing in L1 */
 };
@@ -296,6 +304,31 @@ static inline bool qed_check_table_offset(BDRVQEDState *s, uint64_t offset)
 
     return qed_check_cluster_offset(s, offset) &&
            qed_check_cluster_offset(s, end_offset);
+}
+
+static inline bool qed_offset_is_cluster_aligned(BDRVQEDState *s,
+                                                 uint64_t offset)
+{
+    if (qed_offset_into_cluster(s, offset)) {
+        return false;
+    }
+    return true;
+}
+
+static inline bool qed_offset_is_unalloc_cluster(uint64_t offset)
+{
+    if (offset == 0) {
+        return true;
+    }
+    return false;
+}
+
+static inline bool qed_offset_is_zero_cluster(uint64_t offset)
+{
+    if (offset == 1) {
+        return true;
+    }
+    return false;
 }
 
 #endif /* BLOCK_QED_H */

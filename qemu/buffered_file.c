@@ -14,7 +14,6 @@
 #include "qemu-common.h"
 #include "hw/hw.h"
 #include "qemu-timer.h"
-#include "sysemu.h"
 #include "qemu-char.h"
 #include "buffered_file.h"
 
@@ -238,7 +237,7 @@ static void buffered_rate_tick(void *opaque)
         return;
     }
 
-    qemu_mod_timer(s->timer, qemu_get_clock(rt_clock) + 100);
+    qemu_mod_timer(s->timer, qemu_get_clock_ms(rt_clock) + 100);
 
     if (s->freeze_output)
         return;
@@ -274,9 +273,9 @@ QEMUFile *qemu_fopen_ops_buffered(void *opaque,
                              buffered_set_rate_limit,
 			     buffered_get_rate_limit);
 
-    s->timer = qemu_new_timer(rt_clock, buffered_rate_tick, s);
+    s->timer = qemu_new_timer_ms(rt_clock, buffered_rate_tick, s);
 
-    qemu_mod_timer(s->timer, qemu_get_clock(rt_clock) + 100);
+    qemu_mod_timer(s->timer, qemu_get_clock_ms(rt_clock) + 100);
 
     return s->file;
 }

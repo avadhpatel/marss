@@ -8,8 +8,7 @@
  * This code is licensed under the GNU GPL v2.
  */
 #include "hw.h"
-#include "pxa.h"
-#include "mainstone.h"
+#include "sysbus.h"
 
 /* Mainstone FPGA for extern irqs */
 #define FPGA_GPIO_PIN	0
@@ -27,9 +26,16 @@
 #define MST_PCMCIA0		0xe0
 #define MST_PCMCIA1		0xe4
 
+#define MST_PCMCIAx_READY	(1 << 10)
+#define MST_PCMCIAx_nCD		(1 << 5)
+
+#define MST_PCMCIA_CD0_IRQ	9
+#define MST_PCMCIA_CD1_IRQ	13
+
 typedef struct mst_irq_state{
-	qemu_irq *parent;
-	qemu_irq *pins;
+	SysBusDevice busdev;
+
+	qemu_irq parent;
 
 	uint32_t prev_level;
 	uint32_t leddat1;
@@ -47,33 +53,36 @@ typedef struct mst_irq_state{
 }mst_irq_state;
 
 static void
-mst_fpga_update_gpio(mst_irq_state *s)
-{
-	uint32_t level, diff;
-	int bit;
-	level = s->prev_level ^ s->intsetclr;
-
-	for (diff = s->prev_level ^ level; diff; diff ^= 1 << bit) {
-		bit = ffs(diff) - 1;
-		qemu_set_irq(s->pins[bit], (level >> bit) & 1 );
-	}
-	s->prev_level = level;
-}
-
-static void
 mst_fpga_set_irq(void *opaque, int irq, int level)
 {
 	mst_irq_state *s = (mst_irq_state *)opaque;
+	uint32_t oldint = s->intsetclr & s->intmskena;
 
 	if (level)
 		s->prev_level |= 1u << irq;
 	else
 		s->prev_level &= ~(1u << irq);
 
-	if(s->intmskena & (1u << irq)) {
-		s->intsetclr = 1u << irq;
-		qemu_set_irq(s->parent[0], level);
+	switch(irq) {
+	case MST_PCMCIA_CD0_IRQ:
+		if (level)
+			s->pcmcia0 &= ~MST_PCMCIAx_nCD;
+		else
+			s->pcmcia0 |=  MST_PCMCIAx_nCD;
+		break;
+	case MST_PCMCIA_CD1_IRQ:
+		if (level)
+			s->pcmcia1 &= ~MST_PCMCIAx_nCD;
+		else
+			s->pcmcia1 |=  MST_PCMCIAx_nCD;
+		break;
 	}
+
+	if ((s->intmskena & (1u << irq)) && level)
+		s->intsetclr |= 1u << irq;
+
+	if (oldint != (s->intsetclr & s->intmskena))
+		qemu_set_irq(s->parent, s->intsetclr & s->intmskena);
 }
 
 
@@ -109,7 +118,7 @@ mst_fpga_readb(void *opaque, target_phys_addr_t addr)
 		return s->pcmcia1;
 	default:
 		printf("Mainstone - mst_fpga_readb: Bad register offset "
-			REG_FMT " \n", addr);
+			"0x" TARGET_FMT_plx " \n", addr);
 	}
 	return 0;
 }
@@ -145,22 +154,24 @@ mst_fpga_writeb(void *opaque, target_phys_addr_t addr, uint32_t value)
 	case MST_MSCRD:
 		s->mscrd =  value;
 		break;
-	case MST_INTMSKENA:	/* Mask interupt */
+	case MST_INTMSKENA:	/* Mask interrupt */
 		s->intmskena = (value & 0xFEEFF);
-		mst_fpga_update_gpio(s);
+		qemu_set_irq(s->parent, s->intsetclr & s->intmskena);
 		break;
 	case MST_INTSETCLR:	/* clear or set interrupt */
 		s->intsetclr = (value & 0xFEEFF);
+		qemu_set_irq(s->parent, s->intsetclr & s->intmskena);
 		break;
+		/* For PCMCIAx allow the to change only power and reset */
 	case MST_PCMCIA0:
-		s->pcmcia0 = value;
+		s->pcmcia0 = (value & 0x1f) | (s->pcmcia0 & ~0x1f);
 		break;
 	case MST_PCMCIA1:
-		s->pcmcia1 = value;
+		s->pcmcia1 = (value & 0x1f) | (s->pcmcia1 & ~0x1f);
 		break;
 	default:
 		printf("Mainstone - mst_fpga_writeb: Bad register offset "
-			REG_FMT " \n", addr);
+			"0x" TARGET_FMT_plx " \n", addr);
 	}
 }
 
@@ -175,66 +186,70 @@ static CPUWriteMemoryFunc * const mst_fpga_writefn[] = {
 	mst_fpga_writeb,
 };
 
-static void
-mst_fpga_save(QEMUFile *f, void *opaque)
-{
-	struct mst_irq_state *s = (mst_irq_state *) opaque;
 
-	qemu_put_be32s(f, &s->prev_level);
-	qemu_put_be32s(f, &s->leddat1);
-	qemu_put_be32s(f, &s->leddat2);
-	qemu_put_be32s(f, &s->ledctrl);
-	qemu_put_be32s(f, &s->gpswr);
-	qemu_put_be32s(f, &s->mscwr1);
-	qemu_put_be32s(f, &s->mscwr2);
-	qemu_put_be32s(f, &s->mscwr3);
-	qemu_put_be32s(f, &s->mscrd);
-	qemu_put_be32s(f, &s->intmskena);
-	qemu_put_be32s(f, &s->intsetclr);
-	qemu_put_be32s(f, &s->pcmcia0);
-	qemu_put_be32s(f, &s->pcmcia1);
-}
-
-static int
-mst_fpga_load(QEMUFile *f, void *opaque, int version_id)
+static int mst_fpga_post_load(void *opaque, int version_id)
 {
 	mst_irq_state *s = (mst_irq_state *) opaque;
 
-	qemu_get_be32s(f, &s->prev_level);
-	qemu_get_be32s(f, &s->leddat1);
-	qemu_get_be32s(f, &s->leddat2);
-	qemu_get_be32s(f, &s->ledctrl);
-	qemu_get_be32s(f, &s->gpswr);
-	qemu_get_be32s(f, &s->mscwr1);
-	qemu_get_be32s(f, &s->mscwr2);
-	qemu_get_be32s(f, &s->mscwr3);
-	qemu_get_be32s(f, &s->mscrd);
-	qemu_get_be32s(f, &s->intmskena);
-	qemu_get_be32s(f, &s->intsetclr);
-	qemu_get_be32s(f, &s->pcmcia0);
-	qemu_get_be32s(f, &s->pcmcia1);
+	qemu_set_irq(s->parent, s->intsetclr & s->intmskena);
 	return 0;
 }
 
-qemu_irq *mst_irq_init(PXA2xxState *cpu, uint32_t base, int irq)
+static int mst_fpga_init(SysBusDevice *dev)
 {
 	mst_irq_state *s;
 	int iomemtype;
-	qemu_irq *qi;
 
-	s = (mst_irq_state  *)
-		qemu_mallocz(sizeof(mst_irq_state));
+	s = FROM_SYSBUS(mst_irq_state, dev);
 
-	s->parent = &cpu->pic[irq];
+	s->pcmcia0 = MST_PCMCIAx_READY | MST_PCMCIAx_nCD;
+	s->pcmcia1 = MST_PCMCIAx_READY | MST_PCMCIAx_nCD;
+
+	sysbus_init_irq(dev, &s->parent);
 
 	/* alloc the external 16 irqs */
-	qi  = qemu_allocate_irqs(mst_fpga_set_irq, s, MST_NUM_IRQS);
-	s->pins = qi;
+	qdev_init_gpio_in(&dev->qdev, mst_fpga_set_irq, MST_NUM_IRQS);
 
 	iomemtype = cpu_register_io_memory(mst_fpga_readfn,
 		mst_fpga_writefn, s, DEVICE_NATIVE_ENDIAN);
-	cpu_register_physical_memory(base, 0x00100000, iomemtype);
-	register_savevm(NULL, "mainstone_fpga", 0, 0, mst_fpga_save,
-                        mst_fpga_load, s);
-	return qi;
+	sysbus_init_mmio(dev, 0x00100000, iomemtype);
+	return 0;
 }
+
+static VMStateDescription vmstate_mst_fpga_regs = {
+	.name = "mainstone_fpga",
+	.version_id = 0,
+	.minimum_version_id = 0,
+	.minimum_version_id_old = 0,
+	.post_load = mst_fpga_post_load,
+	.fields = (VMStateField []) {
+		VMSTATE_UINT32(prev_level, mst_irq_state),
+		VMSTATE_UINT32(leddat1, mst_irq_state),
+		VMSTATE_UINT32(leddat2, mst_irq_state),
+		VMSTATE_UINT32(ledctrl, mst_irq_state),
+		VMSTATE_UINT32(gpswr, mst_irq_state),
+		VMSTATE_UINT32(mscwr1, mst_irq_state),
+		VMSTATE_UINT32(mscwr2, mst_irq_state),
+		VMSTATE_UINT32(mscwr3, mst_irq_state),
+		VMSTATE_UINT32(mscrd, mst_irq_state),
+		VMSTATE_UINT32(intmskena, mst_irq_state),
+		VMSTATE_UINT32(intsetclr, mst_irq_state),
+		VMSTATE_UINT32(pcmcia0, mst_irq_state),
+		VMSTATE_UINT32(pcmcia1, mst_irq_state),
+		VMSTATE_END_OF_LIST(),
+	},
+};
+
+static SysBusDeviceInfo mst_fpga_info = {
+	.init = mst_fpga_init,
+	.qdev.name = "mainstone-fpga",
+	.qdev.desc = "Mainstone II FPGA",
+	.qdev.size = sizeof(mst_irq_state),
+	.qdev.vmsd = &vmstate_mst_fpga_regs,
+};
+
+static void mst_fpga_register(void)
+{
+	sysbus_register_withprop(&mst_fpga_info);
+}
+device_init(mst_fpga_register);

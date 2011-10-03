@@ -4,7 +4,7 @@
  * Copyright (c) 2006 CodeSourcery.
  * Written by Paul Brook
  *
- * This code is licenced under the GPL.
+ * This code is licensed under the GPL.
  */
 
 #include "sysbus.h"
@@ -199,10 +199,10 @@ again:
             if (size == 0) {
                 /* Transfer complete.  */
                 if (ch->lli) {
-                    ch->src = ldl_phys(ch->lli);
-                    ch->dest = ldl_phys(ch->lli + 4);
-                    ch->ctrl = ldl_phys(ch->lli + 12);
-                    ch->lli = ldl_phys(ch->lli + 8);
+                    ch->src = ldl_le_phys(ch->lli);
+                    ch->dest = ldl_le_phys(ch->lli + 4);
+                    ch->ctrl = ldl_le_phys(ch->lli + 12);
+                    ch->lli = ldl_le_phys(ch->lli + 8);
                 } else {
                     ch->conf &= ~PL080_CCONF_E;
                 }

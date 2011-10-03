@@ -4,7 +4,7 @@
  * Copyright (c) 2006-2007 CodeSourcery.
  * Written by Paul Brook
  *
- * This code is licenced under the GPL.
+ * This code is licensed under the GPL.
  */
 
 #include "hw.h"
@@ -15,7 +15,7 @@
 
 #define KERNEL_ARGS_ADDR 0x100
 #define KERNEL_LOAD_ADDR 0x00010000
-#define INITRD_LOAD_ADDR 0x00800000
+#define INITRD_LOAD_ADDR 0x00d00000
 
 /* The worlds second smallest bootloader.  Set r0-r2, then jump to kernel.  */
 static uint32_t bootloader[] = {
@@ -49,7 +49,7 @@ static uint32_t smpboot[] = {
     p += 4;                       \
 } while (0)
 
-static void set_kernel_args(struct arm_boot_info *info,
+static void set_kernel_args(const struct arm_boot_info *info,
                 int initrd_size, target_phys_addr_t base)
 {
     target_phys_addr_t p;
@@ -102,7 +102,7 @@ static void set_kernel_args(struct arm_boot_info *info,
     WRITE_WORD(p, 0);
 }
 
-static void set_kernel_args_old(struct arm_boot_info *info,
+static void set_kernel_args_old(const struct arm_boot_info *info,
                 int initrd_size, target_phys_addr_t base)
 {
     target_phys_addr_t p;
@@ -175,10 +175,10 @@ static void set_kernel_args_old(struct arm_boot_info *info,
     }
 }
 
-static void main_cpu_reset(void *opaque)
+static void do_cpu_reset(void *opaque)
 {
     CPUState *env = opaque;
-    struct arm_boot_info *info = env->boot_info;
+    const struct arm_boot_info *info = env->boot_info;
 
     cpu_reset(env);
     if (info) {
@@ -187,16 +187,20 @@ static void main_cpu_reset(void *opaque)
             env->regs[15] = info->entry & 0xfffffffe;
             env->thumb = info->entry & 1;
         } else {
-            env->regs[15] = info->loader_start;
-            if (old_param) {
-                set_kernel_args_old(info, info->initrd_size,
+            if (env == first_cpu) {
+                env->regs[15] = info->loader_start;
+                if (old_param) {
+                    set_kernel_args_old(info, info->initrd_size,
+                                        info->loader_start);
+                } else {
+                    set_kernel_args(info, info->initrd_size,
                                     info->loader_start);
+                }
             } else {
-                set_kernel_args(info, info->initrd_size, info->loader_start);
+                env->regs[15] = info->smp_loader_start;
             }
         }
     }
-    /* TODO:  Reset secondary CPUs.  */
 }
 
 void arm_load_kernel(CPUState *env, struct arm_boot_info *info)
@@ -217,7 +221,6 @@ void arm_load_kernel(CPUState *env, struct arm_boot_info *info)
 
     if (info->nb_cpus == 0)
         info->nb_cpus = 1;
-    env->boot_info = info;
 
 #ifdef TARGET_WORDS_BIGENDIAN
     big_endian = 1;
@@ -279,5 +282,9 @@ void arm_load_kernel(CPUState *env, struct arm_boot_info *info)
         info->initrd_size = initrd_size;
     }
     info->is_linux = is_linux;
-    qemu_register_reset(main_cpu_reset, env);
+
+    for (; env; env = env->next_cpu) {
+        env->boot_info = info;
+        qemu_register_reset(do_cpu_reset, env);
+    }
 }

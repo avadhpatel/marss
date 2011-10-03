@@ -446,7 +446,9 @@ process_tx_desc(E1000State *s, struct e1000_tx_desc *dp)
         return;
     } else if (dtype == (E1000_TXD_CMD_DEXT | E1000_TXD_DTYP_D)) {
         // data descriptor
-        tp->sum_needed = le32_to_cpu(dp->upper.data) >> 8;
+        if (tp->size == 0) {
+            tp->sum_needed = le32_to_cpu(dp->upper.data) >> 8;
+        }
         tp->cptse = ( txd_lower & E1000_TXD_CMD_TSE ) ? 1 : 0;
     } else {
         // legacy descriptor
@@ -515,6 +517,14 @@ txdesc_writeback(target_phys_addr_t base, struct e1000_tx_desc *dp)
     return E1000_ICR_TXDW;
 }
 
+static uint64_t tx_desc_base(E1000State *s)
+{
+    uint64_t bah = s->mac_reg[TDBAH];
+    uint64_t bal = s->mac_reg[TDBAL] & ~0xf;
+
+    return (bah << 32) + bal;
+}
+
 static void
 start_xmit(E1000State *s)
 {
@@ -528,7 +538,7 @@ start_xmit(E1000State *s)
     }
 
     while (s->mac_reg[TDH] != s->mac_reg[TDT]) {
-        base = ((uint64_t)s->mac_reg[TDBAH] << 32) + s->mac_reg[TDBAL] +
+        base = tx_desc_base(s) +
                sizeof(struct e1000_tx_desc) * s->mac_reg[TDH];
         cpu_physical_memory_read(base, (void *)&desc, sizeof(desc));
 
@@ -623,12 +633,38 @@ e1000_set_link_status(VLANClientState *nc)
         set_ics(s, 0, E1000_ICR_LSC);
 }
 
+static bool e1000_has_rxbufs(E1000State *s, size_t total_size)
+{
+    int bufs;
+    /* Fast-path short packets */
+    if (total_size <= s->rxbuf_size) {
+        return s->mac_reg[RDH] != s->mac_reg[RDT] || !s->check_rxov;
+    }
+    if (s->mac_reg[RDH] < s->mac_reg[RDT]) {
+        bufs = s->mac_reg[RDT] - s->mac_reg[RDH];
+    } else if (s->mac_reg[RDH] > s->mac_reg[RDT] || !s->check_rxov) {
+        bufs = s->mac_reg[RDLEN] /  sizeof(struct e1000_rx_desc) +
+            s->mac_reg[RDT] - s->mac_reg[RDH];
+    } else {
+        return false;
+    }
+    return total_size <= bufs * s->rxbuf_size;
+}
+
 static int
 e1000_can_receive(VLANClientState *nc)
 {
     E1000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
 
-    return (s->mac_reg[RCTL] & E1000_RCTL_EN);
+    return (s->mac_reg[RCTL] & E1000_RCTL_EN) && e1000_has_rxbufs(s, 1);
+}
+
+static uint64_t rx_desc_base(E1000State *s)
+{
+    uint64_t bah = s->mac_reg[RDBAH];
+    uint64_t bal = s->mac_reg[RDBAL] & ~0xf;
+
+    return (bah << 32) + bal;
 }
 
 static ssize_t
@@ -642,6 +678,9 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
     uint16_t vlan_special = 0;
     uint8_t vlan_status = 0, vlan_offset = 0;
     uint8_t min_buf[MIN_BUF_SIZE];
+    size_t desc_offset;
+    size_t desc_size;
+    size_t total_size;
 
     if (!(s->mac_reg[RCTL] & E1000_RCTL_EN))
         return -1;
@@ -652,12 +691,6 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
         memset(&min_buf[size], 0, sizeof(min_buf) - size);
         buf = min_buf;
         size = sizeof(min_buf);
-    }
-
-    if (size > s->rxbuf_size) {
-        DBGOUT(RX, "packet too large for buffers (%lu > %d)\n",
-               (unsigned long)size, s->rxbuf_size);
-        return -1;
     }
 
     if (!receive_filter(s, buf, size))
@@ -672,21 +705,40 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
     }
 
     rdh_start = s->mac_reg[RDH];
-    do {
-        if (s->mac_reg[RDH] == s->mac_reg[RDT] && s->check_rxov) {
+    desc_offset = 0;
+    total_size = size + fcs_len(s);
+    if (!e1000_has_rxbufs(s, total_size)) {
             set_ics(s, 0, E1000_ICS_RXO);
             return -1;
+    }
+    do {
+        desc_size = total_size - desc_offset;
+        if (desc_size > s->rxbuf_size) {
+            desc_size = s->rxbuf_size;
         }
-        base = ((uint64_t)s->mac_reg[RDBAH] << 32) + s->mac_reg[RDBAL] +
-               sizeof(desc) * s->mac_reg[RDH];
+        base = rx_desc_base(s) + sizeof(desc) * s->mac_reg[RDH];
         cpu_physical_memory_read(base, (void *)&desc, sizeof(desc));
         desc.special = vlan_special;
         desc.status |= (vlan_status | E1000_RXD_STAT_DD);
         if (desc.buffer_addr) {
-            cpu_physical_memory_write(le64_to_cpu(desc.buffer_addr),
-                                      (void *)(buf + vlan_offset), size);
-            desc.length = cpu_to_le16(size + fcs_len(s));
-            desc.status |= E1000_RXD_STAT_EOP|E1000_RXD_STAT_IXSM;
+            if (desc_offset < size) {
+                size_t copy_size = size - desc_offset;
+                if (copy_size > s->rxbuf_size) {
+                    copy_size = s->rxbuf_size;
+                }
+                cpu_physical_memory_write(le64_to_cpu(desc.buffer_addr),
+                                          (void *)(buf + desc_offset + vlan_offset),
+                                          copy_size);
+            }
+            desc_offset += desc_size;
+            desc.length = cpu_to_le16(desc_size);
+            if (desc_offset >= total_size) {
+                desc.status |= E1000_RXD_STAT_EOP | E1000_RXD_STAT_IXSM;
+            } else {
+                /* Guest zeroing out status is not a hardware requirement.
+                   Clear EOP in case guest didn't do it. */
+                desc.status &= ~E1000_RXD_STAT_EOP;
+            }
         } else { // as per intel docs; skip descriptors with null buf addr
             DBGOUT(RX, "Null RX descriptor!!\n");
         }
@@ -702,7 +754,7 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
             set_ics(s, 0, E1000_ICS_RXO);
             return -1;
         }
-    } while (desc.buffer_addr == 0);
+    } while (desc_offset < total_size);
 
     s->mac_reg[GPRC]++;
     s->mac_reg[TPR]++;
@@ -1112,12 +1164,8 @@ static int pci_e1000_init(PCIDevice *pci_dev)
 
     pci_conf = d->dev.config;
 
-    pci_config_set_vendor_id(pci_conf, PCI_VENDOR_ID_INTEL);
-    pci_config_set_device_id(pci_conf, E1000_DEVID);
     /* TODO: we have no capabilities, so why is this bit set? */
     pci_set_word(pci_conf + PCI_STATUS, PCI_STATUS_CAP_LIST);
-    pci_conf[PCI_REVISION_ID] = 0x03;
-    pci_config_set_class(pci_conf, PCI_CLASS_NETWORK_ETHERNET);
     /* TODO: RST# value should be 0, PCI spec 6.2.4 */
     pci_conf[PCI_CACHE_LINE_SIZE] = 0x10;
 
@@ -1168,7 +1216,11 @@ static PCIDeviceInfo e1000_info = {
     .qdev.vmsd  = &vmstate_e1000,
     .init       = pci_e1000_init,
     .exit       = pci_e1000_uninit,
-    .romfile    = "pxe-e1000.bin",
+    .romfile    = "pxe-e1000.rom",
+    .vendor_id  = PCI_VENDOR_ID_INTEL,
+    .device_id  = E1000_DEVID,
+    .revision   = 0x03,
+    .class_id   = PCI_CLASS_NETWORK_ETHERNET,
     .qdev.props = (Property[]) {
         DEFINE_NIC_PROPERTIES(E1000State, conf),
         DEFINE_PROP_END_OF_LIST(),

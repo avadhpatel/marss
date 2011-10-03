@@ -45,6 +45,11 @@ struct virtio_console_control {
     uint16_t value;		/* Extra information for the key */
 };
 
+struct virtio_serial_conf {
+    /* Max. number of ports we can have for a virtio-serial device */
+    uint32_t max_virtserial_ports;
+};
+
 /* Some events for the internal messages (control packets) */
 #define VIRTIO_CONSOLE_DEVICE_READY	0
 #define VIRTIO_CONSOLE_PORT_ADD		1
@@ -62,11 +67,6 @@ typedef struct VirtIOSerialBus VirtIOSerialBus;
 typedef struct VirtIOSerialPort VirtIOSerialPort;
 typedef struct VirtIOSerialPortInfo VirtIOSerialPortInfo;
 
-typedef struct VirtIOSerialDevice {
-    DeviceState qdev;
-    VirtIOSerialPortInfo *info;
-} VirtIOSerialDevice;
-
 /*
  * This is the state that's shared between all the ports.  Some of the
  * state is configurable via command-line options. Some of it can be
@@ -75,7 +75,6 @@ typedef struct VirtIOSerialDevice {
  */
 struct VirtIOSerialPort {
     DeviceState dev;
-    VirtIOSerialPortInfo *info;
 
     QTAILQ_ENTRY(VirtIOSerialPort) next;
 
@@ -119,8 +118,10 @@ struct VirtIOSerialPort {
     uint32_t iov_idx;
     uint64_t iov_offset;
 
-    /* Identify if this is a port that binds with hvc in the guest */
-    uint8_t is_console;
+    /*
+     * When unthrottling we use a bottom-half to call flush_queued_data.
+     */
+    QEMUBH *bh;
 
     /* Is the corresponding guest device open? */
     bool guest_connected;
@@ -132,16 +133,20 @@ struct VirtIOSerialPort {
 
 struct VirtIOSerialPortInfo {
     DeviceInfo qdev;
+
+    /* Is this a device that binds with hvc in the guest? */
+    bool is_console;
+
     /*
      * The per-port (or per-app) init function that's called when a
      * new device is found on the bus.
      */
-    int (*init)(VirtIOSerialDevice *dev);
+    int (*init)(VirtIOSerialPort *port);
     /*
      * Per-port exit function that's called when a port gets
      * hot-unplugged or removed.
      */
-    int (*exit)(VirtIOSerialDevice *dev);
+    int (*exit)(VirtIOSerialPort *port);
 
     /* Callbacks for guest events */
         /* Guest opened device. */

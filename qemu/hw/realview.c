@@ -4,7 +4,7 @@
  * Copyright (c) 2006-2007 CodeSourcery.
  * Written by Paul Brook
  *
- * This code is licenced under the GPL.
+ * This code is licensed under the GPL.
  */
 
 #include "sysbus.h"
@@ -17,7 +17,6 @@
 #include "sysemu.h"
 #include "boards.h"
 #include "bitbang_i2c.h"
-#include "sysbus.h"
 #include "blockdev.h"
 
 #define SMP_BOOT_ADDR 0xe0000000
@@ -104,17 +103,6 @@ static struct arm_boot_info realview_binfo = {
     .smp_loader_start = SMP_BOOT_ADDR,
 };
 
-static void secondary_cpu_reset(void *opaque)
-{
-  CPUState *env = opaque;
-
-  cpu_reset(env);
-  /* Set entry point for secondary CPUs.  This assumes we're using
-     the init code from arm_boot.c.  Real hardware resets all CPUs
-     the same.  */
-  env->regs[15] = SMP_BOOT_ADDR;
-}
-
 /* The following two lists must be consistent.  */
 enum realview_board_type {
     BOARD_EB,
@@ -138,10 +126,11 @@ static void realview_init(ram_addr_t ram_size,
 {
     CPUState *env = NULL;
     ram_addr_t ram_offset;
-    DeviceState *dev;
+    DeviceState *dev, *sysctl, *gpio2;
     SysBusDevice *busdev;
     qemu_irq *irqp;
     qemu_irq pic[64];
+    qemu_irq mmc_irq[2];
     PCIBus *pci_bus;
     NICInfo *nd;
     i2c_bus *i2c;
@@ -176,9 +165,6 @@ static void realview_init(ram_addr_t ram_size,
         }
         irqp = arm_pic_init_cpu(env);
         cpu_irq[n] = irqp[ARM_PIC_CPU_IRQ];
-        if (n > 0) {
-            qemu_register_reset(secondary_cpu_reset, env);
-        }
     }
     if (arm_feature(env, ARM_FEATURE_V7)) {
         if (is_mpcore) {
@@ -218,7 +204,11 @@ static void realview_init(ram_addr_t ram_size,
     }
 
     sys_id = is_pb ? 0x01780500 : 0xc1400400;
-    arm_sysctl_init(0x10000000, sys_id, proc_id);
+    sysctl = qdev_create(NULL, "realview_sysctl");
+    qdev_prop_set_uint32(sysctl, "sys_id", sys_id);
+    qdev_init_nofail(sysctl);
+    qdev_prop_set_uint32(sysctl, "proc_id", proc_id);
+    sysbus_mmio_map(sysbus_from_qdev(sysctl), 0, 0x10000000);
 
     if (is_mpcore) {
         dev = qdev_create(NULL, is_pb ? "a9mpcore_priv": "realview_mpcore");
@@ -257,9 +247,27 @@ static void realview_init(ram_addr_t ram_size,
     sysbus_create_simple("sp804", 0x10011000, pic[4]);
     sysbus_create_simple("sp804", 0x10012000, pic[5]);
 
+    sysbus_create_simple("pl061", 0x10013000, pic[6]);
+    sysbus_create_simple("pl061", 0x10014000, pic[7]);
+    gpio2 = sysbus_create_simple("pl061", 0x10015000, pic[8]);
+
     sysbus_create_simple("pl110_versatile", 0x10020000, pic[23]);
 
-    sysbus_create_varargs("pl181", 0x10005000, pic[17], pic[18], NULL);
+    dev = sysbus_create_varargs("pl181", 0x10005000, pic[17], pic[18], NULL);
+    /* Wire up MMC card detect and read-only signals. These have
+     * to go to both the PL061 GPIO and the sysctl register.
+     * Note that the PL181 orders these lines (readonly,inserted)
+     * and the PL061 has them the other way about. Also the card
+     * detect line is inverted.
+     */
+    mmc_irq[0] = qemu_irq_split(
+        qdev_get_gpio_in(sysctl, ARM_SYSCTL_GPIO_MMC_WPROT),
+        qdev_get_gpio_in(gpio2, 1));
+    mmc_irq[1] = qemu_irq_split(
+        qdev_get_gpio_in(sysctl, ARM_SYSCTL_GPIO_MMC_CARDIN),
+        qemu_irq_invert(qdev_get_gpio_in(gpio2, 0)));
+    qdev_connect_gpio_out(dev, 0, mmc_irq[0]);
+    qdev_connect_gpio_out(dev, 1, mmc_irq[1]);
 
     sysbus_create_simple("pl031", 0x10017000, pic[10]);
 
@@ -279,8 +287,8 @@ static void realview_init(ram_addr_t ram_size,
     for(n = 0; n < nb_nics; n++) {
         nd = &nd_table[n];
 
-        if ((!nd->model && !done_nic)
-            || strcmp(nd->model, is_pb ? "lan9118" : "smc91c111") == 0) {
+        if (!done_nic && (!nd->model ||
+                    strcmp(nd->model, is_pb ? "lan9118" : "smc91c111") == 0)) {
             if (is_pb) {
                 lan9118_init(nd, 0x4e000000, pic[28]);
             } else {

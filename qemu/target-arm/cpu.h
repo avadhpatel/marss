@@ -55,6 +55,10 @@
 #define ARMV7M_EXCP_PENDSV  14
 #define ARMV7M_EXCP_SYSTICK 15
 
+/* ARM-specific interrupt pending bits.  */
+#define CPU_INTERRUPT_FIQ   CPU_INTERRUPT_TGT_EXT_1
+
+
 typedef void ARMWriteCPFunc(void *opaque, int cp_info,
                             int srcreg, int operand, uint32_t value);
 typedef uint32_t ARMReadCPFunc(void *opaque, int cp_info,
@@ -126,8 +130,15 @@ typedef struct CPUARMState {
         uint32_t c6_region[8]; /* MPU base/size registers.  */
         uint32_t c6_insn; /* Fault address registers.  */
         uint32_t c6_data;
+        uint32_t c7_par;  /* Translation result. */
         uint32_t c9_insn; /* Cache lockdown registers.  */
         uint32_t c9_data;
+        uint32_t c9_pmcr; /* performance monitor control register */
+        uint32_t c9_pmcnten; /* perf monitor counter enables */
+        uint32_t c9_pmovsr; /* perf monitor overflow status */
+        uint32_t c9_pmxevtyper; /* perf monitor event type */
+        uint32_t c9_pmuserenr; /* perf monitor user enable */
+        uint32_t c9_pminten; /* perf monitor interrupt enables */
         uint32_t c13_fcse; /* FCSE PID.  */
         uint32_t c13_context; /* Context ID.  */
         uint32_t c13_tls1; /* User RW Thread register.  */
@@ -156,10 +167,6 @@ typedef struct CPUARMState {
 
     /* Internal CPU feature flags.  */
     uint32_t features;
-
-    /* Callback for vectored interrupt controller.  */
-    int (*get_irq_vector)(struct CPUARMState *);
-    void *irq_opaque;
 
     /* VFP coprocessor state.  */
     struct {
@@ -220,7 +227,7 @@ typedef struct CPUARMState {
         void *opaque;
     } cp[15];
     void *nvic;
-    struct arm_boot_info *boot_info;
+    const struct arm_boot_info *boot_info;
 } CPUARMState;
 
 CPUARMState *cpu_arm_init(const char *cpu_model);
@@ -362,7 +369,12 @@ enum arm_features {
     ARM_FEATURE_DIV,
     ARM_FEATURE_M, /* Microcontroller profile.  */
     ARM_FEATURE_OMAPCP, /* OMAP specific CP15 ops handling.  */
-    ARM_FEATURE_THUMB2EE
+    ARM_FEATURE_THUMB2EE,
+    ARM_FEATURE_V7MP,    /* v7 Multiprocessing Extensions */
+    ARM_FEATURE_V4T,
+    ARM_FEATURE_V5,
+    ARM_FEATURE_STRONGARM,
+    ARM_FEATURE_VAPA, /* cp15 VA to PA lookups */
 };
 
 static inline int arm_feature(CPUARMState *env, int feature)
@@ -393,6 +405,8 @@ void cpu_arm_set_cp_io(CPUARMState *env, int cpnum,
 #define ARM_CPUID_ARM946      0x41059461
 #define ARM_CPUID_TI915T      0x54029152
 #define ARM_CPUID_TI925T      0x54029252
+#define ARM_CPUID_SA1100      0x4401A11B
+#define ARM_CPUID_SA1110      0x6901B119
 #define ARM_CPUID_PXA250      0x69052100
 #define ARM_CPUID_PXA255      0x69052d00
 #define ARM_CPUID_PXA260      0x69052903
@@ -431,7 +445,7 @@ void cpu_arm_set_cp_io(CPUARMState *env, int cpnum,
 #define cpu_signal_handler cpu_arm_signal_handler
 #define cpu_list arm_cpu_list
 
-#define CPU_SAVE_VERSION 2
+#define CPU_SAVE_VERSION 4
 
 /* MMU modes definitions */
 #define MMU_MODE0_SUFFIX _kernel
@@ -503,6 +517,19 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
     if (env->vfp.xregs[ARM_VFP_FPEXC] & (1 << 30)) {
         *flags |= ARM_TBFLAG_VFPEN_MASK;
     }
+}
+
+static inline bool cpu_has_work(CPUState *env)
+{
+    return env->interrupt_request &
+        (CPU_INTERRUPT_FIQ | CPU_INTERRUPT_HARD | CPU_INTERRUPT_EXITTB);
+}
+
+#include "exec-all.h"
+
+static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
+{
+    env->regs[15] = tb->pc;
 }
 
 #endif

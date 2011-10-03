@@ -50,6 +50,8 @@ do {                                               \
 #define DPRINTF(fmt, ...) do { } while (0)
 #endif
 
+#define PFLASH_LAZY_ROMD_THRESHOLD 42
+
 struct pflash_t {
     BlockDriverState *bs;
     target_phys_addr_t base;
@@ -70,6 +72,7 @@ struct pflash_t {
     ram_addr_t off;
     int fl_mem;
     int rom_mode;
+    int read_counter; /* used for lazy switch-back to rom mode */
     void *storage;
 };
 
@@ -112,10 +115,10 @@ static uint32_t pflash_read (pflash_t *pfl, target_phys_addr_t offset,
 
     DPRINTF("%s: offset " TARGET_FMT_plx "\n", __func__, offset);
     ret = -1;
-    if (pfl->rom_mode) {
-        /* Lazy reset of to ROMD mode */
-        if (pfl->wcycle == 0)
-            pflash_register_memory(pfl, 1);
+    /* Lazy reset to ROMD mode after a certain amount of read accesses */
+    if (!pfl->rom_mode && pfl->wcycle == 0 &&
+        ++pfl->read_counter > PFLASH_LAZY_ROMD_THRESHOLD) {
+        pflash_register_memory(pfl, 1);
     }
     offset &= pfl->chip_len - 1;
     boff = offset & 0xFF;
@@ -185,7 +188,7 @@ static uint32_t pflash_read (pflash_t *pfl, target_phys_addr_t offset,
         default:
             goto flash_read;
         }
-        DPRINTF("%s: ID " TARGET_FMT_pld " %x\n", __func__, boff, ret);
+        DPRINTF("%s: ID " TARGET_FMT_plx " %x\n", __func__, boff, ret);
         break;
     case 0xA0:
     case 0x10:
@@ -254,6 +257,7 @@ static void pflash_write (pflash_t *pfl, target_phys_addr_t offset,
         /* Set the device in I/O access mode if required */
         if (pfl->rom_mode)
             pflash_register_memory(pfl, 0);
+        pfl->read_counter = 0;
         /* We're in read mode */
     check_unlock0:
         if (boff == 0x55 && cmd == 0x98) {
@@ -363,7 +367,7 @@ static void pflash_write (pflash_t *pfl, target_phys_addr_t offset,
     case 4:
         switch (pfl->cmd) {
         case 0xA0:
-            /* Ignore writes while flash data write is occuring */
+            /* Ignore writes while flash data write is occurring */
             /* As we suppose write is immediate, this should never happen */
             return;
         case 0x80:
@@ -390,7 +394,7 @@ static void pflash_write (pflash_t *pfl, target_phys_addr_t offset,
             pflash_update(pfl, 0, pfl->chip_len);
             /* Let's wait 5 seconds before chip erase is done */
             qemu_mod_timer(pfl->timer,
-                           qemu_get_clock(vm_clock) + (get_ticks_per_sec() * 5));
+                           qemu_get_clock_ns(vm_clock) + (get_ticks_per_sec() * 5));
             break;
         case 0x30:
             /* Sector erase */
@@ -403,7 +407,7 @@ static void pflash_write (pflash_t *pfl, target_phys_addr_t offset,
             pfl->status = 0x00;
             /* Let's wait 1/2 second before sector erase is done */
             qemu_mod_timer(pfl->timer,
-                           qemu_get_clock(vm_clock) + (get_ticks_per_sec() / 2));
+                           qemu_get_clock_ns(vm_clock) + (get_ticks_per_sec() / 2));
             break;
         default:
             DPRINTF("%s: invalid command %02x (wc 5)\n", __func__, cmd);
@@ -647,7 +651,7 @@ pflash_t *pflash_cfi02_register(target_phys_addr_t base, ram_addr_t off,
 #else
     pfl->ro = 0;
 #endif
-    pfl->timer = qemu_new_timer(vm_clock, pflash_timer, pfl);
+    pfl->timer = qemu_new_timer_ns(vm_clock, pflash_timer, pfl);
     pfl->sector_len = sector_len;
     pfl->width = width;
     pfl->wcycle = 0;

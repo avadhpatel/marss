@@ -51,7 +51,7 @@ static int parse_bit(DeviceState *dev, Property *prop, const char *str)
 
 static int print_bit(DeviceState *dev, Property *prop, char *dest, size_t len)
 {
-    uint8_t *p = qdev_get_prop_ptr(dev, prop);
+    uint32_t *p = qdev_get_prop_ptr(dev, prop);
     return snprintf(dest, len, (*p & qdev_get_prop_mask(prop)) ? "on" : "off");
 }
 
@@ -351,8 +351,13 @@ static int parse_chr(DeviceState *dev, Property *prop, const char *str)
     CharDriverState **ptr = qdev_get_prop_ptr(dev, prop);
 
     *ptr = qemu_chr_find(str);
-    if (*ptr == NULL)
+    if (*ptr == NULL) {
         return -ENOENT;
+    }
+    if ((*ptr)->avail_connections < 1) {
+        return -EEXIST;
+    }
+    --(*ptr)->avail_connections;
     return 0;
 }
 

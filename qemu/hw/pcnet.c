@@ -113,23 +113,23 @@ struct qemu_ether_header {
 #define CSR_XMTRL(S)     ((S)->csr[78])
 #define CSR_MISSC(S)     ((S)->csr[112])
 
-#define CSR_IADR(S)      ((S)->csr[ 1] | ((S)->csr[ 2] << 16))
-#define CSR_CRBA(S)      ((S)->csr[18] | ((S)->csr[19] << 16))
-#define CSR_CXBA(S)      ((S)->csr[20] | ((S)->csr[21] << 16))
-#define CSR_NRBA(S)      ((S)->csr[22] | ((S)->csr[23] << 16))
-#define CSR_BADR(S)      ((S)->csr[24] | ((S)->csr[25] << 16))
-#define CSR_NRDA(S)      ((S)->csr[26] | ((S)->csr[27] << 16))
-#define CSR_CRDA(S)      ((S)->csr[28] | ((S)->csr[29] << 16))
-#define CSR_BADX(S)      ((S)->csr[30] | ((S)->csr[31] << 16))
-#define CSR_NXDA(S)      ((S)->csr[32] | ((S)->csr[33] << 16))
-#define CSR_CXDA(S)      ((S)->csr[34] | ((S)->csr[35] << 16))
-#define CSR_NNRD(S)      ((S)->csr[36] | ((S)->csr[37] << 16))
-#define CSR_NNXD(S)      ((S)->csr[38] | ((S)->csr[39] << 16))
-#define CSR_PXDA(S)      ((S)->csr[60] | ((S)->csr[61] << 16))
-#define CSR_NXBA(S)      ((S)->csr[64] | ((S)->csr[65] << 16))
+#define CSR_IADR(S)      ((S)->csr[ 1] | ((uint32_t)(S)->csr[ 2] << 16))
+#define CSR_CRBA(S)      ((S)->csr[18] | ((uint32_t)(S)->csr[19] << 16))
+#define CSR_CXBA(S)      ((S)->csr[20] | ((uint32_t)(S)->csr[21] << 16))
+#define CSR_NRBA(S)      ((S)->csr[22] | ((uint32_t)(S)->csr[23] << 16))
+#define CSR_BADR(S)      ((S)->csr[24] | ((uint32_t)(S)->csr[25] << 16))
+#define CSR_NRDA(S)      ((S)->csr[26] | ((uint32_t)(S)->csr[27] << 16))
+#define CSR_CRDA(S)      ((S)->csr[28] | ((uint32_t)(S)->csr[29] << 16))
+#define CSR_BADX(S)      ((S)->csr[30] | ((uint32_t)(S)->csr[31] << 16))
+#define CSR_NXDA(S)      ((S)->csr[32] | ((uint32_t)(S)->csr[33] << 16))
+#define CSR_CXDA(S)      ((S)->csr[34] | ((uint32_t)(S)->csr[35] << 16))
+#define CSR_NNRD(S)      ((S)->csr[36] | ((uint32_t)(S)->csr[37] << 16))
+#define CSR_NNXD(S)      ((S)->csr[38] | ((uint32_t)(S)->csr[39] << 16))
+#define CSR_PXDA(S)      ((S)->csr[60] | ((uint32_t)(S)->csr[61] << 16))
+#define CSR_NXBA(S)      ((S)->csr[64] | ((uint32_t)(S)->csr[65] << 16))
 
 #define PHYSADDR(S,A) \
-  (BCR_SSIZE32(S) ? (A) : (A) | ((0xff00 & (uint32_t)(s)->csr[2])<<16))
+  (BCR_SSIZE32(S) ? (A) : (A) | ((0xff00 & (uint32_t)(S)->csr[2])<<16))
 
 struct pcnet_initblk16 {
     uint16_t mode;
@@ -1336,7 +1336,7 @@ static void pcnet_poll_timer(void *opaque)
     pcnet_update_irq(s);
 
     if (!CSR_STOP(s) && !CSR_SPND(s) && !CSR_DPOLL(s)) {
-        uint64_t now = qemu_get_clock(vm_clock) * 33;
+        uint64_t now = qemu_get_clock_ns(vm_clock) * 33;
         if (!s->timer || !now)
             s->timer = now;
         else {
@@ -1348,7 +1348,7 @@ static void pcnet_poll_timer(void *opaque)
                 CSR_POLL(s) = t;
         }
         qemu_mod_timer(s->poll_timer,
-            pcnet_get_next_poll_time(s,qemu_get_clock(vm_clock)));
+            pcnet_get_next_poll_time(s,qemu_get_clock_ns(vm_clock)));
     }
 }
 
@@ -1557,19 +1557,6 @@ uint32_t pcnet_bcr_readw(PCNetState *s, uint32_t rap)
 void pcnet_h_reset(void *opaque)
 {
     PCNetState *s = opaque;
-    int i;
-    uint16_t checksum;
-
-    /* Initialize the PROM */
-
-    memcpy(s->prom, s->conf.macaddr.a, 6);
-    s->prom[12] = s->prom[13] = 0x00;
-    s->prom[14] = s->prom[15] = 0x57;
-
-    for (i = 0,checksum = 0; i < 16; i++)
-        checksum += s->prom[i];
-    *(uint16_t *)&s->prom[12] = cpu_to_le16(checksum);
-
 
     s->bcr[BCR_MSRDA] = 0x0005;
     s->bcr[BCR_MSWRA] = 0x0005;
@@ -1736,13 +1723,43 @@ void pcnet_common_cleanup(PCNetState *d)
 
 int pcnet_common_init(DeviceState *dev, PCNetState *s, NetClientInfo *info)
 {
-    s->poll_timer = qemu_new_timer(vm_clock, pcnet_poll_timer, s);
+    int i;
+    uint16_t checksum;
+
+    s->poll_timer = qemu_new_timer_ns(vm_clock, pcnet_poll_timer, s);
 
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
     s->nic = qemu_new_nic(info, &s->conf, dev->info->name, dev->id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
     add_boot_device_path(s->conf.bootindex, dev, "/ethernet-phy@0");
+
+    /* Initialize the PROM */
+
+    /*
+      Datasheet: http://pdfdata.datasheetsite.com/web/24528/AM79C970A.pdf
+      page 95
+    */
+    memcpy(s->prom, s->conf.macaddr.a, 6);
+    /* Reserved Location: must be 00h */
+    s->prom[6] = s->prom[7] = 0x00;
+    /* Reserved Location: must be 00h */
+    s->prom[8] = 0x00;
+    /* Hardware ID: must be 11h if compatibility to AMD drivers is desired */
+    s->prom[9] = 0x11;
+    /* User programmable space, init with 0 */
+    s->prom[10] = s->prom[11] = 0x00;
+    /* LSByte of two-byte checksum, which is the sum of bytes 00h-0Bh
+       and bytes 0Eh and 0Fh, must therefore be initialized with 0! */
+    s->prom[12] = s->prom[13] = 0x00;
+    /* Must be ASCII W (57h) if compatibility to AMD
+       driver software is desired */
+    s->prom[14] = s->prom[15] = 0x57;
+
+    for (i = 0, checksum = 0; i < 16; i++) {
+        checksum += s->prom[i];
+    }
+    *(uint16_t *)&s->prom[12] = cpu_to_le16(checksum);
 
     return 0;
 }

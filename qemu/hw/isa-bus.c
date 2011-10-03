@@ -17,7 +17,6 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "hw.h"
-#include "sysemu.h"
 #include "monitor.h"
 #include "sysbus.h"
 #include "isa.h"
@@ -133,6 +132,18 @@ ISADevice *isa_create(const char *name)
                  name);
     }
     dev = qdev_create(&isabus->qbus, name);
+    return DO_UPCAST(ISADevice, qdev, dev);
+}
+
+ISADevice *isa_try_create(const char *name)
+{
+    DeviceState *dev;
+
+    if (!isabus) {
+        hw_error("Tried to create isa device %s with no isa bus present.",
+                 name);
+    }
+    dev = qdev_try_create(&isabus->qbus, name);
     return DO_UPCAST(ISADevice, qdev, dev);
 }
 

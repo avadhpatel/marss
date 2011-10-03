@@ -26,7 +26,6 @@
 
 #define NO_CPU_IO_DEFS
 #include "cpu.h"
-#include "exec-all.h"
 #include "disas.h"
 #include "tcg.h"
 #include "qemu-timer.h"
@@ -44,8 +43,6 @@ uint8_t gen_opc_instr_start[OPC_BUF_SIZE];
 void cpu_gen_init(void)
 {
     tcg_context_init(&tcg_ctx); 
-    tcg_set_frame(&tcg_ctx, TCG_AREG0, offsetof(CPUState, temp_buf),
-                  CPU_TEMP_BUF_NLONGS * sizeof(long));
 }
 
 /* return non zero if the very first instruction is invalid so that
@@ -112,8 +109,7 @@ int cpu_gen_code(CPUState *env, TranslationBlock *tb, int *gen_code_size_ptr)
 /* The cpu state corresponding to 'searched_pc' is restored.
  */
 int cpu_restore_state(TranslationBlock *tb,
-                      CPUState *env, unsigned long searched_pc,
-                      void *puc)
+                      CPUState *env, unsigned long searched_pc)
 {
     TCGContext *s = &tcg_ctx;
     int j;
@@ -157,7 +153,7 @@ int cpu_restore_state(TranslationBlock *tb,
         j--;
     env->icount_decr.u16.low -= gen_opc_icount[j];
 
-    gen_pc_load(env, tb, searched_pc, j, puc);
+    restore_state_to_opc(env, tb, j);
 
 #ifdef CONFIG_PROFILER
     s->restore_time += profile_getclock() - ti;
