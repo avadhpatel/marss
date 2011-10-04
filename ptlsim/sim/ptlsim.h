@@ -273,8 +273,6 @@ struct PTLsimConfig {
   stringbuf execute_after_kill;
 
   // Sync Options
-  bool sync_master;
-  W64  sync_machines;
   W64  sync_interval;
 
   void reset();

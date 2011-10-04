@@ -228,7 +228,6 @@ void PTLsimConfig::reset() {
   execute_after_kill = "";
 
   // Sync Options
-  sync_machines = 0;
   sync_interval = 100000;
 
 }
@@ -329,9 +328,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(execute_after_kill,	"execute-after-kill" ,	"Execute a shell command (on the host shell) after simulation receives kill signal");
 
   section("Synchronization Options");
-  add(sync_master, "sync-master", "Specify this simulation instance as master");
-  add(sync_machines, "sync", "Synchronize given number of simulations");
-  add(sync_interval, "sync-interval", "Number of simulation cycles between synchronization");
+  add(sync_interval, "sync", "Number of simulation cycles between synchronization");
 
 };
 
@@ -617,12 +614,39 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
 const int SEM_ID = 3764;
 static int sem_id = -1;
 
-static void sync_set_sem()
+static void sync_op(W16 op)
 {
     int rc;
+    sembuf sem_op;
 
-    rc = semctl(sem_id, 0, SETVAL, config.sync_machines);
-    assert(rc != -1);
+    sem_op.sem_num = 0;
+    sem_op.sem_op = op;
+    sem_op.sem_flg = 0;
+
+    while ((rc = semop(sem_id, &sem_op, 1)) == -1) {
+        if (errno != EINTR && errno != EIDRM) {
+            ptl_logfile << "Error in op " << op << " is: ";
+            switch (errno) {
+                case EACCES: ptl_logfile << "Access\n"; break;
+                case EEXIST: ptl_logfile << "Exists\n"; break;
+                case EINVAL: ptl_logfile << "Invalid\n"; break;
+                case ENOENT: ptl_logfile << "NoEnt\n"; break;
+                case ENOMEM: ptl_logfile << "NoMem\n"; break;
+                case ENOSPC: ptl_logfile << "NoSPC\n"; break;
+            }
+            ptl_logfile << flush;
+        }
+        assert(errno == EINTR || errno == EIDRM);
+        if (errno == EIDRM) {
+            /* Semaphore is removed, so kill simulation */
+            kill_simulation();
+        }
+    }
+}
+
+static void sync_set_sem()
+{
+    sync_op(1);
 }
 
 static void sync_setup()
@@ -646,27 +670,7 @@ static void sync_setup()
         kill_simulation();
     }
 
-    if (config.sync_master) {
-        sync_set_sem();
-    }
-}
-
-static void sync_op(W16 op)
-{
-    int rc;
-    sembuf sem_op;
-
-    sem_op.sem_num = 0;
-    sem_op.sem_op = op;
-    sem_op.sem_flg = 0;
-
-    while ((rc = semop(sem_id, &sem_op, 1)) == -1) {
-        assert(errno == EINTR || errno == EIDRM);
-        if (errno == EIDRM) {
-            /* Semaphore is removed, so kill simulation */
-            kill_simulation();
-        }
-    }
+    sync_set_sem();
 }
 
 static void sync_wait()
@@ -684,9 +688,7 @@ static void sync_wait()
     /* Now wait for all prcoesses to reach to semaphore */
     sync_op(0);
 
-    if (config.sync_master) {
-        sync_set_sem();
-    }
+    sync_set_sem();
 }
 
 static void sync_remove()
@@ -744,7 +746,7 @@ void ptl_reconfigure(char* config_str) {
 	handle_config_change(config, 1, argv);
 	ptl_logfile << "Configuration changed: ", config, endl;
 
-    if (config.sync_machines && sem_id == -1) {
+    if (config.sync_interval && sem_id == -1) {
         sync_setup();
     }
 
@@ -1361,7 +1363,7 @@ extern "C" void update_progress() {
     config.snapshot_now.reset();
   }
 
-  if (config.sync_machines) {
+  if (config.sync_interval) {
       sync_wait();
   }
 }
