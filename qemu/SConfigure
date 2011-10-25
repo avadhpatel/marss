@@ -968,12 +968,9 @@ for target in env['target_list'].split():
     target_darwin_user = False
     target_bsd_user = False
 
-    if not target_user_only and env['check_gfx'] and not env['sdl'] and not cocoa:
-        print("ERROR: QEMU requires SDL or Cocoa for GUI output")
-        print("To build QEMU without graphical output configure with --disable-gfx-check")
-        print("Note this will disable all output from the virtual graphics card")
-        print("except through VNC or curses.")
-        exit_with_error()
+    if not target_user_only and env['check_gfx'] and not env['sdl']:
+        print("Warning: QEMU requires SDL or Cocoa for GUI output.")
+        print("\tcan't find SDL or cocoa support so use VNC or curses interface")
 
     try:
         os.mkdir(target_dir)
