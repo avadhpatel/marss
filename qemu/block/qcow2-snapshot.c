@@ -319,16 +319,28 @@ int qcow2_snapshot_goto(BlockDriverState *bs, const char *snapshot_id)
     QCowSnapshot *sn;
     int i, snapshot_index, l1_size2;
 
+#ifdef MARSS_QEMU
+    if (bs->backing_hd) {
+        return qcow2_snapshot_goto(bs->backing_hd, snapshot_id);
+    }
+#endif
+
     snapshot_index = find_snapshot_by_id_or_name(bs, snapshot_id);
     if (snapshot_index < 0)
         return -ENOENT;
     sn = &s->snapshots[snapshot_index];
 
+#ifdef MARSS_QEMU
+    if (!bs->read_only) {
+#endif
     if (qcow2_update_snapshot_refcount(bs, s->l1_table_offset, s->l1_size, -1) < 0)
         goto fail;
 
     if (qcow2_grow_l1_table(bs, sn->l1_size, true) < 0)
         goto fail;
+#ifdef MARSS_QEMU
+    }
+#endif
 
     s->l1_size = sn->l1_size;
     l1_size2 = s->l1_size * sizeof(uint64_t);
@@ -336,15 +348,29 @@ int qcow2_snapshot_goto(BlockDriverState *bs, const char *snapshot_id)
     if (bdrv_pread(bs->file, sn->l1_table_offset,
                    s->l1_table, l1_size2) != l1_size2)
         goto fail;
+
+#ifdef MARSS_QEMU
+    if (!bs->read_only) {
+#endif
     if (bdrv_pwrite_sync(bs->file, s->l1_table_offset,
                     s->l1_table, l1_size2) < 0)
         goto fail;
+#ifdef MARSS_QEMU
+    }
+#endif
+
     for(i = 0;i < s->l1_size; i++) {
         be64_to_cpus(&s->l1_table[i]);
     }
 
+#ifdef MARSS_QEMU
+    if (!bs->read_only) {
+#endif
     if (qcow2_update_snapshot_refcount(bs, s->l1_table_offset, s->l1_size, 1) < 0)
         goto fail;
+#ifdef MARSS_QEMU
+    }
+#endif
 
 #ifdef DEBUG_ALLOC
     qcow2_check_refcounts(bs);
@@ -395,6 +421,12 @@ int qcow2_snapshot_list(BlockDriverState *bs, QEMUSnapshotInfo **psn_tab)
     QEMUSnapshotInfo *sn_tab, *sn_info;
     QCowSnapshot *sn;
     int i;
+
+#ifdef MARSS_QEMU
+    if (bs->backing_hd) {
+        return qcow2_snapshot_list(bs->backing_hd, psn_tab);
+    }
+#endif
 
     if (!s->nb_snapshots) {
         *psn_tab = NULL;
