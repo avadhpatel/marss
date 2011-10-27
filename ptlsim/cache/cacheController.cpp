@@ -492,7 +492,7 @@ bool CacheController::cache_insert_cb(void *arg)
 		W64 oldTag = InvalidTag<W64>::INVALID;
 		CacheLine *line = cacheLines_->insert(queueEntry->request,
 				oldTag);
-		if(oldTag != InvalidTag<W64>::INVALID || oldTag != -1) {
+		if(oldTag != InvalidTag<W64>::INVALID && oldTag != -1) {
             if(wt_disabled_ && line->state == LINE_MODIFIED) {
 				if(!send_update_message(queueEntry, oldTag))
 					goto retry_insert;
@@ -500,6 +500,8 @@ bool CacheController::cache_insert_cb(void *arg)
 		}
 
         line->state = LINE_VALID;
+        line->init(cacheLines_->tagOf(queueEntry->request->
+                    get_physical_address()));
 
 		queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
 		memoryHierarchy_->add_event(&cacheInsertComplete_,
