@@ -636,9 +636,9 @@ static void sync_op(W16 op)
             }
             ptl_logfile << flush;
         }
-        assert(errno == EINTR || errno == EIDRM);
         if (errno == EIDRM) {
             /* Semaphore is removed, so kill simulation */
+            flush_stats();
             kill_simulation();
         }
     }

@@ -75,16 +75,18 @@ int main(int argc, char** argv)
     int rc;
 
     /* First check if semaphore exists or not */
-    sem_id = semget(SEM_NUM, 1, IPC_CREAT|IPC_EXCL);
+    sem_id = semget(SEM_NUM, 1, IPC_CREAT|IPC_EXCL|0666);
 
     if (sem_id == -1) {
         if (errno == EEXIST) {
-            cout << "Semaphore doesn't exists.\n";
-        } else {
+            sem_id = semget(SEM_NUM, 1, IPC_CREAT|0666);
+        }
+
+        if (sem_id == -1) {
             cout << "Unable to access semaphore.\n";
             perror("sem_id");
+            exit(0);
         }
-        exit(0);
     }
 
     info(sem_id);
