@@ -228,7 +228,7 @@ void PTLsimConfig::reset() {
   execute_after_kill = "";
 
   // Sync Options
-  sync_interval = 100000;
+  sync_interval = 0;
 
 }
 
