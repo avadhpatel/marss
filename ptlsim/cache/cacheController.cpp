@@ -92,6 +92,16 @@ CacheController::CacheController(W8 coreid, const char *name,
 	upperInterconnect_ = NULL;
 	upperInterconnect2_ = NULL;
 	lowerInterconnect_= NULL;
+
+    /* Find cache type from its name */
+    if (( strstr(get_name(), "L2") !=NULL) )
+        type_ = L2_CACHE;
+    else if (( strstr(get_name(), "L3") !=NULL) )
+        type_ = L3_CACHE;
+    else if (( strstr(get_name(), "L1_I") !=NULL) )
+        type_ = L1_I_CACHE;
+    else if (( strstr(get_name(), "L1_D") !=NULL) )
+        type_ = L1_D_CACHE;
 }
 
 CacheController::~CacheController()
@@ -488,14 +498,17 @@ bool CacheController::cache_insert_cb(void *arg)
 
 	queueEntry->eventFlags[CACHE_INSERT_EVENT]--;
 
+    if(pendingRequests_.isFull()) {
+        goto retry_insert;
+    }
+
 	if(cacheLines_->get_port(queueEntry->request)) {
 		W64 oldTag = InvalidTag<W64>::INVALID;
 		CacheLine *line = cacheLines_->insert(queueEntry->request,
 				oldTag);
 		if(oldTag != InvalidTag<W64>::INVALID && oldTag != -1) {
             if(wt_disabled_ && line->state == LINE_MODIFIED) {
-				if(!send_update_message(queueEntry, oldTag))
-					goto retry_insert;
+                send_update_message(queueEntry, oldTag);
 			}
 		}
 
