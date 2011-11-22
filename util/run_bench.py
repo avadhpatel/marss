@@ -14,6 +14,7 @@
 import os
 import subprocess
 import sys
+import copy
 
 from optparse import OptionParser
 from threading import Thread, Lock
@@ -248,7 +249,7 @@ class RunSim(Thread):
 
             sim_file_cmd_name = "/tmp/%s.simconfig" % checkpoint
             sim_file_cmd = open(sim_file_cmd_name, "w")
-            config_args = conf_parser.defaults()
+            config_args = copy.copy(conf_parser.defaults())
             config_args['out_dir'] = os.path.realpath(output_dir)
             config_args['bench'] = checkpoint
             print("simconfig: %s" % simconfig)
