@@ -344,7 +344,7 @@ bool CPUController::cache_access_cb(void *arg)
 {
 	CPUControllerQueueEntry* queueEntry = (CPUControllerQueueEntry*)arg;
 
-	if(queueEntry->cycles > 0)
+	if(queueEntry->annuled || queueEntry->cycles > 0)
 		return true;
 
     /* Send request to corresponding interconnect */
