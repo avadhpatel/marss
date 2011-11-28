@@ -278,6 +278,9 @@ struct PTLsimConfig {
   //Utilities/Tools
   stringbuf execute_after_kill;
 
+  // Sync Options
+  W64  sync_interval;
+
   void reset();
 };
 

@@ -15,6 +15,11 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+
 #include <bson/bson.h>
 #include <bson/mongo.h>
 #include <machine.h>
@@ -73,6 +78,7 @@ ofstream *time_stats_file;
 
 #endif
 
+static void sync_remove();
 static void kill_simulation();
 static void write_mongo_stats();
 static void setup_sim_stats();
@@ -220,6 +226,10 @@ void PTLsimConfig::reset() {
 
   // Utilities/Tools
   execute_after_kill = "";
+
+  // Sync Options
+  sync_interval = 0;
+
 }
 
 template <>
@@ -316,6 +326,10 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   // Utilities/Tools
   section("options for tools/utilities");
   add(execute_after_kill,	"execute-after-kill" ,	"Execute a shell command (on the host shell) after simulation receives kill signal");
+
+  section("Synchronization Options");
+  add(sync_interval, "sync", "Number of simulation cycles between synchronization");
+
 };
 
 #ifndef CONFIG_ONLY
@@ -486,6 +500,8 @@ static void kill_simulation()
     ptl_logfile.flush();
     ptl_logfile.close();
 
+    sync_remove();
+
     ptl_quit();
 }
 
@@ -594,6 +610,95 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
   return true;
 }
 
+/* Synchronization Support using SystemV Semaphores */
+const int SEM_ID = 3764;
+static int sem_id = -1;
+
+static void sync_op(W16 op)
+{
+    int rc;
+    sembuf sem_op;
+
+    sem_op.sem_num = 0;
+    sem_op.sem_op = op;
+    sem_op.sem_flg = 0;
+
+    while ((rc = semop(sem_id, &sem_op, 1)) == -1) {
+        if (errno != EINTR && errno != EIDRM) {
+            ptl_logfile << "Error in op " << op << " is: ";
+            switch (errno) {
+                case EACCES: ptl_logfile << "Access\n"; break;
+                case EEXIST: ptl_logfile << "Exists\n"; break;
+                case EINVAL: ptl_logfile << "Invalid\n"; break;
+                case ENOENT: ptl_logfile << "NoEnt\n"; break;
+                case ENOMEM: ptl_logfile << "NoMem\n"; break;
+                case ENOSPC: ptl_logfile << "NoSPC\n"; break;
+            }
+            ptl_logfile << flush;
+        }
+        if (errno == EIDRM) {
+            /* Semaphore is removed, so kill simulation */
+            flush_stats();
+            kill_simulation();
+        }
+    }
+}
+
+static void sync_set_sem()
+{
+    sync_op(1);
+}
+
+static void sync_setup()
+{
+    /* First we will try to create a new semaphore if it fails
+     * then some other simulation process has already setup the
+     * semaphore and it will act as Master */
+    sem_id = semget(SEM_ID, 1, IPC_CREAT | 0666);
+
+    if (sem_id == -1) {
+        ptl_logfile << "Sempahore setup error: ";
+        switch (errno) {
+            case EACCES: ptl_logfile << "Access\n"; break;
+            case EEXIST: ptl_logfile << "Exists\n"; break;
+            case EINVAL: ptl_logfile << "Invalid\n"; break;
+            case ENOENT: ptl_logfile << "NoEnt\n"; break;
+            case ENOMEM: ptl_logfile << "NoMem\n"; break;
+            case ENOSPC: ptl_logfile << "NoSPC\n"; break;
+        }
+        ptl_logfile << flush;
+        kill_simulation();
+    }
+
+    sync_set_sem();
+}
+
+static void sync_wait()
+{
+    static W64 last_sync_cycle = 0;
+
+    if (sim_cycle - last_sync_cycle < config.sync_interval)
+        return;
+
+    last_sync_cycle = sim_cycle;
+
+    /* Decrement semaphore */
+    sync_op(-1);
+
+    /* Now wait for all prcoesses to reach to semaphore */
+    sync_op(0);
+
+    sync_set_sem();
+}
+
+static void sync_remove()
+{
+    /* We allow any simulation instance to remove the semaphore
+     * so that other instances will kill themselves */
+    if (sem_id != -1)
+        semctl(sem_id, 0, IPC_RMID);
+}
+
 Hashtable<const char*, PTLsimMachine*, 1>* machinetable = NULL;
 
 bool PTLsimMachine::init(PTLsimConfig& config) { return false; }
@@ -640,6 +745,10 @@ void ptl_reconfigure(char* config_str) {
 	configparser.parse(config, config_str);
 	handle_config_change(config, 1, argv);
 	ptl_logfile << "Configuration changed: ", config, endl;
+
+    if (config.sync_interval && sem_id == -1) {
+        sync_setup();
+    }
 
     /*
 	 * set the curr_ptl_machine to NULL so it will be automatically changed to
@@ -1255,6 +1364,9 @@ extern "C" void update_progress() {
     config.snapshot_now.reset();
   }
 
+  if (config.sync_interval) {
+      sync_wait();
+  }
 }
 
 void dump_all_info() {
