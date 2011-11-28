@@ -356,6 +356,11 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_connection_def % (base,
                     int_name))
 
+                if interconn.has_key("option"):
+                    for key,val in interconn["option"].items():
+                        write_option_logic(machine_option_add_i, of, int_name,
+                                key, val)
+
                 for cont,conn_type in conn.items():
                     cont = cont.rstrip('$')
                     conn_type = 'INTERCONN_TYPE_%s' % conn_type
@@ -369,6 +374,11 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_for_each_num_loop_i % 1)
                 of.write(machine_connection_def % (base,
                     int_name))
+
+                if interconn.has_key("option"):
+                    for key,val in interconn["option"].items():
+                        write_option_logic(machine_option_add_i, of, int_name,
+                                key, val)
 
                 for cont, conn_type in conn.items():
                     conn_type = 'INTERCONN_TYPE_%s' % conn_type
@@ -388,6 +398,11 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_for_each_num_loop_i % 1)
                 of.write(machine_connection_def % (base,
                     int_name))
+
+                if interconn.has_key("option"):
+                    for key,val in interconn["option"].items():
+                        write_option_logic(machine_option_add_i, of, int_name,
+                                key, val)
 
                 for cont, conn_type in conn.items():
                     conn_type = 'INTERCONN_TYPE_%s' % conn_type

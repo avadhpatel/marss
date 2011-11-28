@@ -33,6 +33,10 @@
 
 namespace Memory {
 
+// Bus Dealys
+const int BUS_ARBITRATE_DELAY = 1;
+const int BUS_BROADCASTS_DELAY = 6;
+
 namespace SplitPhaseBus {
 
 struct BusControllerQueue;
@@ -139,6 +143,9 @@ class BusInterconnect : public Interconnect
 		Signal dataBroadcastCompleted_;
         BusStats *new_stats;
 
+        int latency_;
+        int arbitrate_latency_;
+
 		BusQueueEntry *arbitrate_round_robin();
 		bool can_broadcast(BusControllerQueue *queue);
 
@@ -159,7 +166,7 @@ class BusInterconnect : public Interconnect
 
 		// Bus delay in sending message is BUS_BROADCASTS_DELAY
 		int get_delay() {
-			return BUS_BROADCASTS_DELAY;
+			return latency_;
 		}
 
 		void print(ostream& os) const {

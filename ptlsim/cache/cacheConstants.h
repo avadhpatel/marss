@@ -99,10 +99,6 @@ namespace Memory{
 	const int MEM_BANKS = 8;
 	const int MEM_LATENCY = 100;
 
-	// Bus Dealys
-	const int BUS_ARBITRATE_DELAY = 1;
-	const int BUS_BROADCASTS_DELAY = 6;
-
 	// Average wait dealy for retrying (general)
 	const int AVG_WAIT_DELAY = 5;
 }
