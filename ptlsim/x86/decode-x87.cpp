@@ -480,7 +480,7 @@ W64 warned_about_x87 = 0;
 
 void check_warned_about_x87() {
   warned_about_x87++;
-  if (warned_about_x87 == 16) {
+  if (warned_about_x87 == 1000) {
     stringbuf sb;
     sb << endl,
       "//", endl,
