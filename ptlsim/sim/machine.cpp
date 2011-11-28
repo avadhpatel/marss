@@ -80,7 +80,7 @@ bool BaseMachine::init(PTLsimConfig& config)
     if(config.machine_config == "") {
         ptl_logfile << "[ERROR] Please provide Machine name in config using -machine\n" << flush;
         cerr << "[ERROR] Please provide Machine name in config using -machine\n" << flush;
-        assert(0);
+        return 0;
     }
 
     machineBuilder.setup_machine(*this, config.machine_config.buf);
