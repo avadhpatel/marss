@@ -50,8 +50,8 @@ bool OooCore::icache_wakeup(void *arg) {
                 thread->itlbwalk();
             }
         }else{
-            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr, " after floor : ",
-                (void*) floor(thread->waiting_for_icache_fill_physaddr, Memory::L1I_LINE_SIZE), " delivered ", (void*) physaddr,endl;
+            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr,
+                " delivered ", (void*) physaddr,endl;
         }
     }
 

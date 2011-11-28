@@ -155,6 +155,14 @@ class CPUController : public Controller
 		void annul_request(MemoryRequest *request);
 		int flush();
 
+        void set_icacheLineBits(int i) {
+            icacheLineBits_ = i;
+        }
+
+        void set_dcacheLineBits(int i) {
+            dcacheLineBits_ = i;
+        }
+
 		int access(MemoryRequest *request) {
 			return access_fast_path(NULL, request);
 		}
