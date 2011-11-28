@@ -131,6 +131,8 @@ namespace SwitchInterconnect {
             Signal send;
             Signal send_complete;
 
+            int latency_;
+
         public:
             Switch(const char *name, MemoryHierarchy *memoryHierarchy);
             ~Switch();
@@ -140,7 +142,7 @@ namespace SwitchInterconnect {
             int  access_fast_path(Controller *controller,
                     MemoryRequest *request);
             void annul_request(MemoryRequest *request);
-            int  get_delay() { return SWITCH_DELAY; }
+            int  get_delay() { return latency_; }
 
             ControllerQueue* get_queue(Controller *cont);
 

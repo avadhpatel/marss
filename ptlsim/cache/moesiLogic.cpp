@@ -276,7 +276,7 @@ void MOESILogic::handle_cache_insert(CacheQueueEntry *queueEntry,
     MOESICacheLineState *state = (MOESICacheLineState*)(&queueEntry->line->state);
     MOESICacheLineState oldState = *state;
 
-    if (oldTag != InvalidTag<W64>::INVALID || oldTag != -1) {
+    if (oldTag != InvalidTag<W64>::INVALID && oldTag != -1) {
         if (oldState != MOESI_INVALID) {
             if (controller->is_lowest_private()) {
                 send_evict(queueEntry, oldTag, 1);

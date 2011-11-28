@@ -366,99 +366,11 @@ int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
      * for the cache info and others
      */
 
-    uint32_t cores_info =
-        (((NUMBER_OF_THREAD_PER_CORE - 1) << 14) & 0x3fc000) |
-        (((NUMBER_OF_CORES - 1) << 26) & 0xfc00000);
-    switch(index) {
-        case 4:
-            /*
-             * Cache info from OS
-             * EAX : Bits		Info
-             *          4-0		0 = Null - no more cache
-             *                     1 = Data cache
-             *                     2 = Instruction cache
-             *                     3 = Unified cache
-             *                     4-31 = reserved
-             *          7-5		Cache Level (starts from 1)
-             *          8			Self initalizing cache
-             *          9			Fully Associative cache
-             *          25-14		Maximum number of IDs of logical
-             *                     Processors sharing this cache
-             *          31-26		Maximum number of cores in package
-             *
-             * EBX : Bits		Info
-             *       11-0		Coherency line size
-             *       21-12		Physical line partition
-             *       31-22		Ways of Associativity
-             *
-             * ECX : Number of Sets
-             * EDX : Bits		Info
-             *          0			Writeback/Invalid on sharing
-             *          1			Inclusive or not of lower caches
-             */
-            switch(count) {
-                case 0: { // L1-D cache info
-                            *eax = 0x121 | cores_info;
-                            *ebx = (L1D_LINE_SIZE & 0xfff |
-                                    (L1D_LINE_SIZE << 12) & 0x3ff000 |
-                                    (L1D_WAY_COUNT << 22) & 0xffc00000 );
-                            *ecx = L1D_SET_COUNT;
-                            *edx = 0x1;
-                            break;
-                        }
-                case 1: { // L1-I cache info
-                            *eax = 0x122 | cores_info;
-                            *ebx = (L1I_LINE_SIZE & 0xfff |
-                                    (L1I_LINE_SIZE << 12) & 0x3ff000 |
-                                    (L1I_WAY_COUNT << 22) & 0xffc00000 );
-                            *ecx = L1I_SET_COUNT;
-                            *edx = 0x1;
-                            break;
-                        }
-                case 2: { // L2 cache info
-                            uint32_t l2_core_info =
-                                (((NUMBER_OF_CORES_PER_L2 - 1) << 14) &
-                                 0x3fc000);
-                            l2_core_info |= ((NUMBER_OF_CORES - 1) << 26) &
-                                0xfc00000;
-                            *eax = 0x143 | l2_core_info;
-                            *ebx = (L2_LINE_SIZE & 0xfff |
-                                    (L2_LINE_SIZE << 12) & 0x3ff000 |
-                                    (L2_WAY_COUNT << 22) & 0xffc00000 );
-                            *ecx = L2_SET_COUNT;
-                            *edx = 0x1;
-                            break;
-                        }
-#ifdef ENABLE_L3_CACHE
-                case 3: { // L3 cache info
-                            uint32_t l3_core_info =
-                                (((NUMBER_OF_CORES - 1) << 14) &
-                                 0x3fc000);
-                            l3_core_info |= ((NUMBER_OF_CORES - 1) << 26) &
-                                0xfc00000;
-                            *eax = 0x163 | l3_core_info;
-                            *ebx = (L3_LINE_SIZE & 0xfff |
-                                    (L3_LINE_SIZE << 12) & 0x3ff000 |
-                                    (L3_WAY_COUNT << 22) & 0xffc00000 );
-                            *ecx = L3_SET_COUNT;
-                            *edx = 0x1;
-                            break;
-                        }
-#endif
-                default: {
-                             *eax = 0;
-                             *ebx = 0;
-                             *ecx = 0;
-                             *edx = 0;
-                         }
-            }
-            break;
-        default:
-            /* unsupported CPUID */
-            return 0;
-    }
+    PTLsimMachine* machine = PTLsimMachine::getmachine(config.core_name);
+    if (machine && machine->handle_cpuid)
+        return machine->handle_cpuid(index, count, eax, ebx, ecx, edx);
 
-    return 1;
+    return 0;
 }
 
 void ptl_check_ptlcall_queue() {
