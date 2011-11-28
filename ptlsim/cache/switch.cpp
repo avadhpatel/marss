@@ -22,6 +22,10 @@ Switch::Switch(const char *name, MemoryHierarchy *memoryHierarchy)
     SET_SIGNAL_CB(name, "_send", send, &Switch::send_cb);
     SET_SIGNAL_CB(name, "_send_complete", send_complete,
             &Switch::send_complete_cb);
+
+    if(!memoryHierarchy_->get_machine().get_option(name, "latency", latency_)) {
+        latency_ = SWITCH_DELAY;
+    }
 }
 
 Switch::~Switch()
@@ -111,7 +115,7 @@ bool Switch::send_cb(void *arg)
     /* Set destination as busy and signal send_complete */
     queueEntry->in_use = 1;
     dest_cq->recv_busy = 1;
-    memoryHierarchy_->add_event(&send_complete, SWITCH_DELAY, cq);
+    memoryHierarchy_->add_event(&send_complete, latency_, cq);
 
     return true;
 }
@@ -128,7 +132,7 @@ bool Switch::send_complete_cb(void *arg)
 
     if (queueEntry->annuled) {
         /* Try to send new packet arrived in queue */
-        memoryHierarchy_->add_event(&send, SWITCH_DELAY, cq);
+        memoryHierarchy_->add_event(&send, latency_, cq);
         return true;
     }
 
@@ -152,7 +156,7 @@ bool Switch::send_complete_cb(void *arg)
         cq->queue.free(queueEntry);
 
         /* Try to send new packet arrived in queue */
-        memoryHierarchy_->add_event(&send, SWITCH_DELAY, cq);
+        memoryHierarchy_->add_event(&send, latency_, cq);
         return true;
     }
 

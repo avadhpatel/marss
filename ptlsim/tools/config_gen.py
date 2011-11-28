@@ -49,6 +49,7 @@ machine_includes = '''
 #include <machine.h>
 #include <basecore.h>
 #include <memoryHierarchy.h>
+#include <cpuController.h>
 
 '''
 
@@ -160,6 +161,137 @@ namespace Memory {
     struct CacheLinesBase;
     CacheLinesBase* get_cachelines(int type);
 };
+'''
+
+core_cont_set_icache_bits = '''
+        Controller** cont = machine.controller_hash.get(core_);
+        assert(cont);
+        CPUController* cpuCont = (CPUController*)((*cont));
+        cpuCont->set_icacheLineBits(log2(%s));
+'''
+
+core_cont_set_dcache_bits = '''
+        Controller** cont = machine.controller_hash.get(core_);
+        assert(cont);
+        CPUController* cpuCont = (CPUController*)((*cont));
+        cpuCont->set_dcacheLineBits(log2(%s));
+'''
+
+handle_cpuid_fn_start = '''
+int %s_handle_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
+        uint32_t *ecx, uint32_t *edx)
+{
+
+'''
+
+set_handle_cpuid_fn_ptr = '''
+    machine.handle_cpuid = &%s_handle_cpuid;
+
+'''
+
+# FIXME : Currently we set only 1 thread per core
+handle_cpuid_core_info = '''
+    uint32_t cores_info =
+        (((0) << 14) & 0x3fc000) |
+        (((NUMBER_OF_CORES - 1) << 26) & 0xfc00000);
+'''
+
+# Use following information to set registers in CPUID instruction
+#
+# Cache info from OS
+# EAX : Bits		Info
+#          4-0		0 = Null - no more cache
+#                     1 = Data cache
+#                     2 = Instruction cache
+#                     3 = Unified cache
+#                     4-31 = reserved
+#          7-5		Cache Level (starts from 1)
+#          8			Self initalizing cache
+#          9			Fully Associative cache
+#          25-14		Maximum number of IDs of logical
+#                     Processors sharing this cache
+#          31-26		Maximum number of cores in package
+#
+# EBX : Bits		Info
+#       11-0		Coherency line size
+#       21-12		Physical line partition
+#       31-22		Ways of Associativity
+#
+# ECX : Number of Sets
+# EDX : Bits		Info
+#          0			Writeback/Invalid on sharing
+#          1			Inclusive or not of lower caches
+#
+handle_cpuid_cache_switch = '''
+    switch (index) {
+        case 4:
+            switch (count) {
+                case 0: { // L1-D cache info
+                            *eax = 0x121 | cores_info;
+                            *ebx = (%(L1D_LINE_SIZE)d & 0xfff |
+                                    (%(L1D_LINE_SIZE)d << 12) & 0x3ff000 |
+                                    (%(L1D_WAY_COUNT)d << 22) & 0xffc00000 );
+                            *ecx = %(L1D_SET_COUNT)d;
+                            *edx = 0x1;
+                            break;
+                        }
+                case 1: { // L1-I cache info
+                            *eax = 0x122 | cores_info;
+                            *ebx = (%(L1I_LINE_SIZE)d & 0xfff |
+                                    (%(L1I_LINE_SIZE)d << 12) & 0x3ff000 |
+                                    (%(L1I_WAY_COUNT)d << 22) & 0xffc00000 );
+                            *ecx = %(L1I_SET_COUNT)d;
+                            *edx = 0x1;
+                            break;
+                        }
+                case 2: { // L2 cache info
+                            uint32_t l2_core_info =
+                                (((%(CORES_PER_L2)s) << 14) &
+                                 0x3fc000);
+                            l2_core_info |= ((NUMBER_OF_CORES - 1) << 26) &
+                                0xfc00000;
+                            *eax = 0x143 | l2_core_info;
+                            *ebx = (%(L2_LINE_SIZE)d & 0xfff |
+                                    (%(L2_LINE_SIZE)d << 12) & 0x3ff000 |
+                                    (%(L2_WAY_COUNT)d << 22) & 0xffc00000 );
+                            *ecx = %(L2_SET_COUNT)d;
+                            *edx = 0x1;
+                            break;
+                        }
+                %(l3_cache_info)s
+                default: {
+                             *eax = 0;
+                             *ebx = 0;
+                             *ecx = 0;
+                             *edx = 0;
+                         }
+            }
+            break;
+        default:
+            /* unsupported CPUID */
+            return 0;
+    }
+
+    return 1;
+}
+
+'''
+
+handle_cpuid_l3_cache_info = '''
+                case 3: { // L3 cache info
+                            uint32_t l3_core_info =
+                                (((NUMBER_OF_CORES) << 14) &
+                                 0x3fc000);
+                            l3_core_info |= ((NUMBER_OF_CORES - 1) << 26) &
+                                0xfc00000;
+                            *eax = 0x163 | l3_core_info;
+                            *ebx = (%(L3_LINE_SIZE)d & 0xfff |
+                                    (%(L3_LINE_SIZE)d << 12) & 0x3ff000 |
+                                    (%(L3_WAY_COUNT)d << 22) & 0xffc00000 );
+                            *ecx = %(L3_SET_COUNT)d;
+                            *edx = 0x1;
+                            break;
+                        }
 '''
 
 def _error(string, parser=None):
@@ -317,6 +449,13 @@ def write_cache_cont_logic(config, m_conf, of):
 def write_mem_cont_logic(config, m_conf, of):
     write_cont_logic(config, m_conf, of, "memory", "memory")
 
+def get_cache_line_size(config, m_conf, cache_name):
+    for cache in m_conf["caches"]:
+        if cache["name_prefix"] in cache_name:
+            cfg = config["cache"][cache["type"]]
+            l_size = cfg["params"]["LINE_SIZE"]
+            return l_size
+
 def write_interconn_logic(config, m_conf, of):
     for interconn in m_conf["interconnects"]:
         base = interconn["type"]
@@ -356,11 +495,32 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_connection_def % (base,
                     int_name))
 
+                if interconn.has_key("option"):
+                    for key,val in interconn["option"].items():
+                        write_option_logic(machine_option_add_i, of, int_name,
+                                key, val)
+
+                # This variables are used to set CPU Controller's icache and
+                # dcache line bits
+                write_core_cache_bits = False
+                core_cont_conn_type = ''
+
                 for cont,conn_type in conn.items():
                     cont = cont.rstrip('$')
                     conn_type = 'INTERCONN_TYPE_%s' % conn_type
                     of.write(machine_add_connection_i % (cont,
                         cont, cont, cont, conn_type))
+                    if 'core' in cont:
+                        write_core_cache_bits = True
+                        core_cont_conn_type = conn_type
+
+                if write_core_cache_bits:
+                    if core_cont_conn_type == 'INTERCONN_TYPE_I':
+                        of.write(core_cont_set_icache_bits % (
+                            get_cache_line_size(config, m_conf, cont)))
+                    elif core_cont_conn_type == 'INTERCONN_TYPE_D':
+                        of.write(core_cont_set_dcache_bits % (
+                            get_cache_line_size(config, m_conf, cont)))
 
                 of.write(machine_loop_end)
 
@@ -369,6 +529,11 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_for_each_num_loop_i % 1)
                 of.write(machine_connection_def % (base,
                     int_name))
+
+                if interconn.has_key("option"):
+                    for key,val in interconn["option"].items():
+                        write_option_logic(machine_option_add_i, of, int_name,
+                                key, val)
 
                 for cont, conn_type in conn.items():
                     conn_type = 'INTERCONN_TYPE_%s' % conn_type
@@ -389,6 +554,11 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_connection_def % (base,
                     int_name))
 
+                if interconn.has_key("option"):
+                    for key,val in interconn["option"].items():
+                        write_option_logic(machine_option_add_i, of, int_name,
+                                key, val)
+
                 for cont, conn_type in conn.items():
                     conn_type = 'INTERCONN_TYPE_%s' % conn_type
                     of.write(machine_add_connection % (cont,
@@ -398,11 +568,60 @@ def write_interconn_logic(config, m_conf, of):
 
             count += 1
 
+def fill_cache_info(cfg, cache_info, pfx):
+    size = get_cache_size(cfg["params"]["SIZE"])
+    assoc = cfg["params"]["ASSOC"]
+    l_size = cfg["params"]["LINE_SIZE"]
+    sets = (size / l_size) / assoc
+
+    cache_info["%s_LINE_SIZE" % pfx] = l_size
+    cache_info["%s_WAY_COUNT" % pfx] = assoc
+    cache_info["%s_SET_COUNT" % pfx] = sets
+
+def gen_handle_cpuid_fn(config, m_conf, m_name, of):
+
+    # Find all levels of cahces from machine configuration
+    cache_info = {}
+    l3_present = False
+
+    cache_info["l3_cache_info"] = ""
+
+    for cache in m_conf["caches"]:
+        cfg = config["cache"][cache["type"]]
+        if "1" in cache["name_prefix"]:
+            if "D" in cache["name_prefix"].upper():
+                fill_cache_info(cfg, cache_info, "L1D")
+            elif "I" in cache["name_prefix"].upper():
+                fill_cache_info(cfg, cache_info, "L1I")
+        elif "2" in cache["name_prefix"]:
+            fill_cache_info(cfg, cache_info, "L2")
+            if cache["insts"] == "$NUMCORES":
+                cache_info["CORES_PER_L2"] = "1"
+            else:
+                num_l2_inst = int(cache["insts"])
+                cache_info["CORES_PER_L2"] = "(NUMBER_OF_CORES)/%d" % (
+                        num_l2_inst)
+        elif "3" in cache["name_prefix"]:
+            fill_cache_info(cfg, cache_info, "L3")
+            cache_info["l3_cache_info"] = handle_cpuid_l3_cache_info
+
+    # Now write the function
+    of.write(handle_cpuid_fn_start % m_name)
+    of.write(handle_cpuid_core_info)
+
+    # We apply string formatting twice to get L3 cache info
+    cache_switch = handle_cpuid_cache_switch % cache_info
+    cache_switch = cache_switch % cache_info
+    of.write(cache_switch)
+
 def generate_machine(config, options):
     with open(options.output, 'w') as of:
         m_conf = config[options.type][options.name]
         of.write(auto_gen_header % m_conf["_file"])
         write_machine_headers(of)
+
+        # Write cpuid handler function
+        gen_handle_cpuid_fn(config, m_conf, options.name, of)
 
         # Write function start
         m_name = options.name
@@ -424,6 +643,9 @@ def generate_machine(config, options):
 
         # Write interconnect and connection logic
         write_interconn_logic(config, m_conf, of)
+
+        # Connect cpuid handler function
+        of.write(set_handle_cpuid_fn_ptr % (m_name))
 
         # Write function end
         of.write(machine_func_end % (m_name, m_name, m_name))

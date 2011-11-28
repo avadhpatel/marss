@@ -1159,7 +1159,8 @@ extern "C" uint8_t ptl_simulate() {
 	if (!machine->initialized) {
 		ptl_logfile << "Initializing core '", machinename, "'", endl;
 		if (!machine->init(config)) {
-			ptl_logfile << "Cannot initialize core model; check its configuration!", endl;
+			ptl_logfile << "Cannot initialize simulation machine; check the configuration!", endl;
+            config.run = 0;
 			return 0;
 		}
 		machine->initialized = 1;
