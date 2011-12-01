@@ -1236,6 +1236,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
         exception = 0;
         exception_index = -1;
         exception_is_int = 0;
+        cr[2] = cr2;
     }
 
     ptl_stable_state = 0;
@@ -1247,7 +1248,6 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
     }
 
     setup_ptlsim_switch_all_ctx(*this);
-    cr[2] = cr2;
     return;
 }
 
