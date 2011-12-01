@@ -1,4 +1,13 @@
 
+/*
+ * MARSSx86 : A Full System Computer-Architecture Simulator
+ *
+ * This code is released under GPL.
+ *
+ * Copyright 2011 Avadh Patel <apatel@cs.binghamton.edu>
+ *
+ */
+
 #include <atomcore.h>
 #include <globals.h>
 #include <ptlsim.h>
@@ -86,22 +95,21 @@ static inline W64 extract_bytes(byte* target, int SIZESHIFT, bool SIGNEXT) {
     return data;
 }
 
-W8 ATOM_CORE_MODEL::first_set_fu_map[1<<FU_COUNT] = {
-   //0     1     2     3     4     5     6     7     8     9     a     b     c     d     e     f
-    0x00, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
-    0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
-    0x20, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
-    0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01,
-};
+static inline W32 first_set(W32 val)
+{
+    return (val & (-val));
+}
 
-W8 ATOM_CORE_MODEL::fu_map_to_fu[1 << FU_COUNT] = {
-  //0   1   2   3   4   5   6   7   8   9   a   b   c   d   e   f
-    0,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
-    4,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
-    5,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
-    4,  0,  1,  0,  2,  0,  1,  0,  3,  0,  1,  0,  2,  0,  1,  0,
-};
+static inline int get_fu_idx(W32 fu)
+{
+    int i = -1;
+    while (fu > 0) {
+        fu >>= 1;
+        i++;
+    }
 
+    return i;
+}
 
 //---------------------------------------------//
 //   AtomOp
@@ -149,6 +157,7 @@ void AtomOp::reset()
 
         stores[i] = NULL;
         rflags[i] = 0;
+        load_requestd[i] = false;
     }
 
     uuid = -1;
@@ -158,6 +167,9 @@ void AtomOp::reset()
     }
 
     cycles_left = 0;
+
+    lock_acquired = false;
+    lock_addr = -1;
 }
 
 /**
@@ -511,19 +523,19 @@ W8 AtomOp::issue(bool first_issue)
         }
     }
 
+
+    /* Set flag in core's fu_used so same FU can't be used in same cycle */
+    W32 fu_available = (thread->core.fu_available) & ~(thread->core.fu_used);
+    W32 fu_selected = first_set((fu_mask & fu_available) & ((1 << FU_COUNT) - 1));
+    thread->core.fu_used |= fu_selected;
+    thread->st_issue.fu_usage[get_fu_idx(fu_selected)]++;
+
     /* If not pipelined then set flag in core's fu_available */
     if(is_nonpipe) {
         thread->core.fu_available &= ~fu_mask;
         thread->st_issue.non_pipelined++;
         return_value = ISSUE_OK_BLOCK;
     }
-
-    /* Set flag in core's fu_used so same FU can't be used in same cycle */
-    W32 fu_available = (thread->core.fu_available) & ~(thread->core.fu_used);
-    W32 fu_selected = first_set_fu_map[(fu_mask & fu_available) & 0x3f];
-    thread->core.fu_used |= fu_selected;
-    thread->st_issue.fu_usage[fu_map_to_fu[fu_selected]]++;
-
     change_state(thread->op_executing_list);
     cycles_left = execution_cycles;
 
@@ -681,11 +693,11 @@ W8 AtomOp::execute_uop(W8 idx)
     ATOMOPLOG2("Executing Uop ", uops[idx]);
     ATOMOPLOG2("radata: ", (void*)radata, " rbdata: ", (void*)rbdata,
             " rcdata: ", (void*)rcdata);
-    ATOMOPLOG2("af: ", (void*)(raflags), " bf: ", (void*)(rbflags),
-            " cf: ", (void*)(rcflags));
+    ATOMOPLOG2("af: ", hexstring(raflags, 8), " bf: ", hexstring(rbflags, 8),
+            " cf: ", hexstring(rcflags, 8));
 
     if(ld) {
-        issue_result = execute_load(uop);
+        issue_result = execute_load(uop, idx);
     } else if(st) {
 
         state.reg.rddata = rcdata;
@@ -722,7 +734,7 @@ W8 AtomOp::execute_uop(W8 idx)
          */
         ATOMOPLOG3("Found exception in executing uop ", uop);
 
-        if(isclass(uop.opcode, OPCLASS_CHECK) &
+        if(isclass(uop.opcode, OPCLASS_CHECK) &&
                 (exception == EXCEPTION_SkipBlock)) {
             thread->chk_recovery_rip = rip + uop.bytes;
         }
@@ -838,6 +850,8 @@ W8 AtomOp::execute_ast(TransOp& uop)
 
     state.reg.rdflags = new_flags;
 
+    thread->lassists[assistid]++;
+
     ATOMOPLOG2("Flags after ast: ", hexstring(new_flags, 16));
 
     return ISSUE_OK;
@@ -850,7 +864,7 @@ W8 AtomOp::execute_ast(TransOp& uop)
  *
  * @return Issue status
  */
-W8 AtomOp::execute_load(TransOp& uop)
+W8 AtomOp::execute_load(TransOp& uop, int idx)
 {
     if(thread->mmio_pending) {
         ATOMOPLOG2("no load cause of mmio");
@@ -875,6 +889,16 @@ W8 AtomOp::execute_load(TransOp& uop)
      */
     if(addr == -1) {
         return ISSUE_FAIL;
+    }
+
+    if(!check_mem_lock(addr)) {
+        return ISSUE_FAIL;
+    }
+
+    if(uop.locked && !lock_acquired) {
+        if(!grab_mem_lock(addr)) {
+            return ISSUE_FAIL;
+        }
     }
 
     bool cache_available = thread->core.memoryHierarchy->is_cache_available(
@@ -909,13 +933,17 @@ W8 AtomOp::execute_load(TransOp& uop)
         return ISSUE_OK;
     }
 
-    /* Access memory */
-    bool L1_miss = !thread->access_dcache(addr, rip,
-            Memory::MEMORY_OP_READ,
-            uuid);
+    if (!load_requestd[idx]) {
+        load_requestd[idx] = true;
 
-    if(L1_miss) {
-        return ISSUE_CACHE_MISS;
+        /* Access memory */
+        bool L1_miss = !thread->access_dcache(addr, rip,
+                Memory::MEMORY_OP_READ,
+                uuid);
+
+        if(L1_miss) {
+            return ISSUE_CACHE_MISS;
+        }
     }
 
     state.reg.rddata = get_load_data(addr, uop);
@@ -989,6 +1017,55 @@ W64 AtomOp::get_load_data(W64 addr, TransOp& uop)
 }
 
 /**
+ * @brief Check for Memory Lock
+ *
+ * @param addr Line address of requested memory access
+ *
+ * @return false if Lock is held by other Context
+ */
+bool AtomOp::check_mem_lock(W64 addr)
+{
+    return thread->core.memoryHierarchy->probe_lock(addr & ~(0x3),
+            thread->ctx.cpu_index);
+}
+
+/**
+ * @brief Try to grab lock for memory cache line
+ *
+ * @param addr Cache line address
+ *
+ * @return true if lock is successfully grabbed
+ */
+bool AtomOp::grab_mem_lock(W64 addr)
+{
+    lock_acquired = thread->core.memoryHierarchy->grab_lock(
+                addr & ~(0x3), thread->ctx.cpu_index);
+    lock_addr = addr;
+    return lock_acquired;
+}
+
+/**
+ * @brief Release Cache line lock
+ *
+ * @param immediately To release lock immediately instead of queing
+ *
+ * By default this function will put the memory lock address into
+ * thread's queue and it will be released when OP_mf uop is committed.
+ * If this AtomOp contains OP_mf opcode then it will flush the locks.
+ */
+void AtomOp::release_mem_lock(bool immediately)
+{
+    if (immediately) {
+        thread->core.memoryHierarchy->invalidate_lock(lock_addr & ~(0x3),
+                thread->ctx.cpu_index);
+        lock_acquired = false;
+    } else {
+        thread->queued_mem_lock_list[
+            thread->queued_mem_lock_count++] = lock_addr;
+    }
+}
+
+/**
 * @brief Execute 'store' uop
 *
 * @param uop A store uop
@@ -1009,8 +1086,6 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
     switch(uop.cond) {
         case LDST_ALIGN_NORMAL:
         case LDST_ALIGN_LO:
-            bytemask = ((1 << (1 << uop.size))-1);
-            break;
         case LDST_ALIGN_HI:
             bytemask = ((1 << (1 << uop.size))-1);
             break;
@@ -1023,6 +1098,10 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
      * Dispatch queue and will be re-issued once its handled.
      */
     if(addr == -1) {
+        return ISSUE_FAIL;
+    }
+
+    if(!check_mem_lock(addr)) {
         return ISSUE_FAIL;
     }
 
@@ -1295,6 +1374,20 @@ void AtomOp::forward()
     }
 }
 
+bool AtomOp::can_commit()
+{
+    foreach (i, num_uops_used) {
+        if (stores[i] != NULL) {
+            StoreBufferEntry* buf = stores[i];
+            if (!check_mem_lock(buf->addr)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 /**
  * @brief Commit/writeback this AtomOp
  *
@@ -1313,7 +1406,22 @@ int AtomOp::writeback()
         reset_checker_stores();
     }
 
+    if (!can_commit()) {
+        return COMMIT_FAILED;
+    }
+
     update_reg_mem();
+
+    if(lock_acquired) {
+        release_mem_lock();
+    }
+
+    foreach (i, num_uops_used) {
+        if (uops[i].opcode == OP_mf && (uops[i].eom || !uops[i].som)) {
+            thread->flush_mem_locks();
+            break;
+        }
+    }
 
     if(eom) {
         writeback_eom();
@@ -1336,6 +1444,25 @@ int AtomOp::writeback()
     }
 
     return COMMIT_OK;
+}
+
+/**
+ * @brief Before 'writeback' check if this AtomOp had any exception or not
+ */
+void AtomOp::check_commit_exception()
+{
+    foreach (i, num_uops_used) {
+        TransOp& uop = uops[i];
+        if unlikely ((uop.is_sse|uop.is_x87) &&
+                ((thread->ctx.cr[0] & CR0_TS_MASK) |
+                 (uop.is_x87 & (thread->ctx.cr[0] & CR0_EM_MASK)))) {
+            had_exception = true;
+            exception = EXCEPTION_FloatingPointNotAvailable;
+            error_code = 0;
+            page_fault_addr = -1;
+            break;
+        }
+    }
 }
 
 /**
@@ -1516,6 +1643,63 @@ void AtomOp::annul()
             thread->branchpred.annulras(predinfo);
         }
     }
+
+    if(lock_acquired) {
+        release_mem_lock(true);
+    }
+}
+
+/**
+ * @brief Print AtomOp's details
+ *
+ * @param os stream to print info
+ *
+ * @return updated stream
+ */
+ostream& AtomOp::print(ostream& os) const
+{
+    stringbuf name;
+
+    if(!current_state_list) {
+        os << " a-op is not valid.";
+        return os;
+    }
+
+    os << " a-op ",
+       " th ", (int)thread->threadid,
+       " uuid ", intstring(uuid, 16),
+       " rip 0x", hexstring(rip, 48), " ",
+       padstring(current_state_list->name, -24), " ";
+
+    os << "[";
+    if(is_branch) os << "br|";
+    if(is_ldst) os << "ldst|";
+    if(is_fp) os << "fp|";
+    if(is_sse) os << "sse|";
+    if(is_nonpipe) os << "nonpipe|";
+    if(is_barrier) os << "barrier|";
+    if(is_ast) os << "ast";
+    os << "] ";
+
+    if(som) os << "SOM ";
+    if(eom) os << "EOM ";
+
+    os << "(", execution_cycles, " cyc)";
+
+    foreach(i, num_uops_used) {
+        const TransOp &op = uops[i];
+        nameof(name, op);
+        os << "\n     ";
+        os << padstring(name, -12), " ";
+        os << padstring(arch_reg_names[dest_registers[i]], -6), " = ";
+
+        os << padstring(arch_reg_names[op.ra], -6) , " ";
+        os << padstring(arch_reg_names[op.rb], -6) , " ";
+        os << padstring(arch_reg_names[op.rc], -6) , " ";
+        name.reset();
+    }
+
+    return os;
 }
 
 //---------------------------------------------//
@@ -1542,10 +1726,15 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
       , st_dcache("dcache", this)
       , st_icache("icache", this)
       , st_cycles("cycles", this)
+      , assists("assists", this, assist_names)
+      , lassists("lassists", this, light_assist_names)
 {
     stringbuf th_name;
     th_name << "thread_" << threadid;
     update_name(th_name.buf);
+
+    // Set decoder stats
+    set_decoder_stats(this, ctx.cpu_index);
 
     // Setup the signals
     stringbuf sig_name;
@@ -1575,6 +1764,16 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
     current_bb = NULL;
 
     reset();
+
+    // Set Stat Equations
+    st_commit.ipc.add_elem(&st_commit.insns);
+    st_commit.ipc.add_elem(&st_cycles);
+
+    st_commit.atomop_pc.add_elem(&st_commit.atomops);
+    st_commit.atomop_pc.add_elem(&st_cycles);
+
+    st_commit.uipc.add_elem(&st_commit.uops);
+    st_commit.uipc.add_elem(&st_cycles);
 }
 
 /**
@@ -1593,6 +1792,7 @@ void AtomThread::reset()
     internal_flags = forwarded_flags;
 
     waiting_for_icache_miss = 0;
+    queued_mem_lock_count = 0;
     current_icache_block = 0;
     icache_miss_addr = 0;
     itlb_walk_level = 0;
@@ -2096,8 +2296,6 @@ bool AtomThread::issue()
                 st_issue.insns++;
             }
 
-            // inst_in_pipe = true;
-
             if(issue_result == ISSUE_OK_BLOCK) {
                 issue_disabled = true;
                 break;
@@ -2105,24 +2303,6 @@ bool AtomThread::issue()
                 break;
             }
         }
-        // if(issue_result == ISSUE_OK_BLOCK) {
-            // add_to_commitbuf(buf_entry.op);
-            // dispatchq.pophead();
-            // issue_disabled = true;
-            // break;
-        // } else if(issue_result == ISSUE_FAIL) {
-            // break;
-        // } else if(issue_result == ISSUE_CACHE_MISS) {
-            // ready = false;
-            // return false;
-        // } else if(issue_result == ISSUE_OK_SKIP) {
-            // add_to_commitbuf(buf_entry.op);
-            // dispatchq.pophead();
-            // break;
-        // }
-        
-        // add_to_commitbuf(buf_entry.op);
-        // dispatchq.pophead();
     }
 
     st_issue.width[num_issues]++;
@@ -2375,6 +2555,14 @@ bool AtomThread::writeback()
     int ins_commited = 0;
     bool ret_value = false;
 
+    if(sim_cycle > (last_commit_cycle + 1024*1024)) {
+        ptl_logfile << "Core has not progressed since cycle ",
+                    last_commit_cycle, " dumping all information\n";
+        core.machine.dump_state(ptl_logfile);
+        ptl_logfile << flush;
+        assert(0);
+    }
+
     /* If commit-buffer is empty and we have itlb_exception or interrupt
      * pending then handle them first. */
     if(commitbuf.empty() || pause_counter > 0) {
@@ -2411,7 +2599,9 @@ bool AtomThread::writeback()
 
             if((buf.op->current_state_list == 
                     &op_ready_to_writeback_list)) {
-                if(buf.op->had_exception) {
+                buf.op->check_commit_exception();
+
+                if(buf.op->had_exception && !exception_op) {
                     exception_op = buf.op;
                 }
 
@@ -2431,6 +2621,8 @@ bool AtomThread::writeback()
             if(!ret_value && handle_interrupt_at_next_eom) {
                 ret_value = handle_interrupt();
             }
+
+            last_commit_cycle = sim_cycle;
 
             break;
         }
@@ -2462,20 +2654,18 @@ bool AtomThread::commit_queue()
         return handle_exception();
     }
 
-    // if(itlb_exception) {
-        // ctx.exception = EXCEPTION_PageFaultOnExec;
-        // ctx.error_code = 0;
-        // ctx.page_fault_addr = itlb_exception_addr;
-
-        // return handle_exception();
-    // }
-
     foreach_forward(commitbuf, i) {
         BufferEntry& buf = commitbuf[i];
 
         assert(buf.op->current_state_list == &op_ready_to_writeback_list);
 
         commit_result = buf.op->writeback();
+
+        if (commit_result == COMMIT_FAILED) {
+            handle_interrupt_at_next_eom = 0;
+            break;
+        }
+
         buf.op->change_state(op_free_list);
 
         commitbuf.commit(&buf);
@@ -2527,7 +2717,6 @@ bool AtomThread::handle_exception()
 
     flush_pipeline();
 
-    // TODO : Handle EXCEPTION_SkipBlock
     if(ctx.exception == EXCEPTION_SkipBlock) {
         ctx.eip = chk_recovery_rip;
         flush_pipeline();
@@ -2614,6 +2803,8 @@ bool AtomThread::handle_barrier()
 
     bool flush_required = assist(ctx);
 
+    assists[assistid]++;
+
     if(flush_required) {
         flush_pipeline();
         if(config.checker_enabled) {
@@ -2638,10 +2829,22 @@ void AtomThread::flush_pipeline()
 {
     ATOMTHLOG1("flush_pipeline()");
 
+    foreach_backward(core.fetchq, i) {
+        core.fetchq[i].annul();
+    }
+
+    foreach_forward(dispatchq, i) {
+        dispatchq[i].annul();
+    }
+
     // Check commitbuf to make sure we dont have partial commit
     if(!commitbuf.empty()) {
         BufferEntry& buf = *commitbuf.peek();
         assert(buf.op->som);
+    }
+
+    foreach_forward(commitbuf, i) {
+        commitbuf[i].annul();
     }
 
     // First reset this thread
@@ -2717,6 +2920,59 @@ W64 AtomThread::get_insns_committed()
     return insns_commited;
 }
 
+
+/**
+ * @brief Release all Memory cache address locks
+ *
+ * This function is called on commit of OP_mf uops.
+ */
+void AtomThread::flush_mem_locks()
+{
+    foreach (i, queued_mem_lock_count) {
+        W64 lock_addr = queued_mem_lock_list[i];
+        core.memoryHierarchy->invalidate_lock(lock_addr & ~(0x3),
+                ctx.cpu_index);
+    }
+
+    queued_mem_lock_count = 0;
+}
+
+ostream& AtomThread::print(ostream& os) const
+{
+    os << "Thread: ", (int)threadid;
+    os << " stats: ";
+
+    if(waiting_for_icache_miss) os << "icache_miss|";
+    if(itlb_exception) os << "itlb_miss(", itlb_walk_level, ")|";
+    if(dtlb_walk_level) os << "dtlb_miss(", dtlb_walk_level, ")|";
+    if(stall_frontend) os << "frontend_stall|";
+    if(pause_counter) os << "pause(", pause_counter, ")|";
+
+    os << "\n";
+
+    os << " Atom-Ops:\n";
+    foreach(i, NUM_ATOM_OPS_PER_THREAD) {
+        os << "[", intstring(i,2), "]", atomOps[i], "\n";
+    }
+
+    os << " Dispatch Queue:\n";
+    foreach_forward(dispatchq, i) {
+        os << "  ", dispatchq[i], endl;
+    }
+
+    os << " Store Buffer:\n";
+    foreach_forward(storebuf, i) {
+        os << "  ", storebuf[i], endl;
+    }
+
+    os << " Commit Buffer:\n";
+    foreach_forward(commitbuf, i) {
+        os << "  ", commitbuf[i], endl;
+    }
+
+    return os;
+}
+
 //---------------------------------------------//
 //   AtomCore
 //---------------------------------------------//
@@ -2728,7 +2984,7 @@ W64 AtomThread::get_insns_committed()
  * @param num_threads Number of Hardware-threads per core
  */
 AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
-    : BaseCore(machine), Statable(name, &machine)
+    : BaseCore(machine, name)
       , threadcount(num_threads)
 {
     int th_count;
@@ -2749,6 +3005,10 @@ AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
     }
 
     reset();
+}
+
+AtomCore::~AtomCore()
+{
 }
 
 /* Pipeline Functions of AtomCore */
@@ -2879,9 +3139,9 @@ bool AtomCore::runcycle()
         running_thread->ctx.check_events();
 
     if(running_thread->ctx.kernel_mode) {
-        running_thread->set_default_stats(n_kernel_stats);
+        running_thread->set_default_stats(kernel_stats);
     } else {
-        running_thread->set_default_stats(n_user_stats);
+        running_thread->set_default_stats(user_stats);
     }
 
     running_thread->st_cycles++;
@@ -3022,27 +3282,11 @@ void AtomCore::flush_tlb_virt(Context& ctx, Waddr virtaddr)
 
 void AtomCore::dump_state(ostream& os)
 {
-    os << "AtomCore " << coreid << " ";
-    os << " [num-threads " << threadcount << "]\n";
+    os << *this;
 }
 
-void AtomCore::update_stats(PTLsimStats* stats)
+void AtomCore::update_stats()
 {
-    Stats* st_t;
-    foreach(i, 3) {
-        st_t = (i == 0) ? n_user_stats : ((i == 1) ? n_kernel_stats : n_global_stats);
-
-        foreach(i, threadcount) {
-            W64 cycles = threads[i]->st_cycles(st_t);
-
-            threads[i]->st_commit.ipc(st_t) = threads[i]->st_commit.insns(st_t) /
-                (double)(cycles);
-            threads[i]->st_commit.atomop_pc(st_t) = threads[i]->st_commit.atomops(st_t) /
-                (double)(cycles);
-            threads[i]->st_commit.uipc(st_t) = threads[i]->st_commit.uops(st_t) /
-                (double)(cycles);
-        }
-    }
 }
 
 /**
@@ -3092,14 +3336,14 @@ void AtomCore::flush_shared_structs(W8 threadid)
 void AtomCore::check_ctx_changes()
 {
     foreach(i, threadcount) {
+        threads[i]->ctx.handle_interrupt = 0;
+
         if(threads[i]->ctx.eip != threads[i]->ctx.old_eip) {
             // IP Address has changed, so flush the pipeline
             ATOMCORELOG("Thread flush old_eip: ",
                     HEXADDR(threads[i]->ctx.old_eip), " new-eip: ",
                     HEXADDR(threads[i]->ctx.eip));
             threads[i]->flush_pipeline();
-
-            threads[i]->ctx.handle_interrupt = 0;
         }
     }
 }
@@ -3118,6 +3362,22 @@ W64 AtomCore::get_insns_committed()
 W8 AtomCore::get_coreid()
 {
     return coreid;
+}
+
+ostream& AtomCore::print(ostream& os) const
+{
+    os << "Atom-Core: ", int(coreid), endl;
+
+    os << " Fetch Queue:\n";
+    foreach_forward(fetchq, i) {
+        os << "  ", fetchq[i], endl;
+    }
+
+    foreach(i, threadcount) {
+        os << *threads[i], endl;
+    }
+
+    return os;
 }
 
 AtomCoreBuilder::AtomCoreBuilder(const char* name)

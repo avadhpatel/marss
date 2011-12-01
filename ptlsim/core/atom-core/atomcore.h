@@ -1,10 +1,20 @@
 
+/*
+ * MARSSx86 : A Full System Computer-Architecture Simulator
+ *
+ * This code is released under GPL.
+ *
+ * Copyright 2011 Avadh Patel <apatel@cs.binghamton.edu>
+ *
+ */
+
 #ifndef MARSS_ATOM_CORE_H
 #define MARSS_ATOM_CORE_H
 
 #include <basecore.h>
 #include <branchpred.h>
 #include <statelist.h>
+#include <decode.h>
 
 #include <statsBuilder.h>
 
@@ -49,7 +59,13 @@ namespace ATOM_CORE_MODEL {
     using namespace Core;
 
     /* Constants */
-    const W8 FU_COUNT = 6;
+    const W8 FU_COUNT = ATOM_MAX_FU_COUNT;
+    const int ALU_FU_COUNT = ATOM_ALU_FU_COUNT;
+    const int FPU_FU_COUNT = ATOM_FPU_FU_COUNT;
+    const int AGU_FU_COUNT = ATOM_AGU_FU_COUNT;
+
+    const int LOADLAT = ATOM_LOADLAT;
+    const int ALULAT = ATOM_ALULAT;
 
     const W8 NUM_ATOM_OPS_PER_THREAD = ATOM_OPS_PER_THREAD;
 
@@ -81,24 +97,34 @@ namespace ATOM_CORE_MODEL {
 
     const W8 COMMIT_BUF_SIZE = ATOM_COMMIT_BUF_SIZE;
 
-    const W8 THREAD_PAUSE_CYCLES = 20;
-
     enum {
-        FU_ALU0     = (1 << 0),
-        FU_ALU1     = (1 << 1),
-        FU_FPU0     = (1 << 2),
-        FU_FPU1     = (1 << 3),
-        FU_AGU0     = (1 << 4),
-        FU_AGU1     = (1 << 5),
+        FU_ALU0 = (1 << 0),
+        FU_ALU1 = (1 << 1),
+        FU_ALU2 = (1 << 2),
+        FU_ALU3 = (1 << 3),
+        FU_FPU0 = (1 << 4),
+        FU_FPU1 = (1 << 5),
+        FU_FPU2 = (1 << 6),
+        FU_FPU3 = (1 << 7),
+        FU_AGU0 = (1 << 8),
+        FU_AGU1 = (1 << 9),
+        FU_AGU2 = (1 << 10),
+        FU_AGU3 = (1 << 11),
     };
 
     static const char* fu_names[FU_COUNT] = {
         "alu0",
         "alu1",
+        "alu2",
+        "alu3",
         "fp0",
         "fp1",
+        "fp2",
+        "fp3",
         "agu0",
         "agu1",
+        "agu2",
+        "agu3",
     };
 
     enum {
@@ -137,32 +163,36 @@ namespace ATOM_CORE_MODEL {
         COMMIT_BARRIER,     // Commit reached a barrier instruction
         COMMIT_INTERRUPT,   // Commit done, but handle pending interrupt
         COMMIT_SMC,         // Commit detected Self Modifying Code
+        COMMIT_FAILED,      // Can't commit
         NUM_COMMIT_RESULTS
     };
 
     static const char* commit_res_names[NUM_COMMIT_RESULTS] = {
-        "ok", "barrier", "interrupt", "smc",
+        "ok", "barrier", "interrupt", "smc", "failed",
     };
-
-    extern W8 first_set_fu_map[1 << FU_COUNT];
-    extern W8 fu_map_to_fu[1 << FU_COUNT];
 
     //
     // Opcodes and properties
     //
-#define ALU0 FU_ALU0
-#define ALU1 FU_ALU1
-#define AGU0 FU_AGU0
-#define AGU1 FU_AGU1
-#define FPU0 FU_FPU0
-#define FPU1 FU_FPU1
-#define A 1 // ALU latency, assuming fast bypass
-#define L 1 
+#define ALU0 (FU_ALU0 * ((ALU_FU_COUNT - 1) >= 0))
+#define ALU1 (FU_ALU1 * ((ALU_FU_COUNT - 2) >= 0))
+#define ALU2 (FU_ALU2 * ((ALU_FU_COUNT - 3) >= 0))
+#define ALU3 (FU_ALU3 * ((ALU_FU_COUNT - 4) >= 0))
+#define AGU0 (FU_AGU0 * ((AGU_FU_COUNT - 1) >= 0))
+#define AGU1 (FU_AGU1 * ((AGU_FU_COUNT - 2) >= 0))
+#define AGU2 (FU_AGU2 * ((AGU_FU_COUNT - 3) >= 0))
+#define AGU3 (FU_AGU3 * ((AGU_FU_COUNT - 4) >= 0))
+#define FPU0 (FU_FPU0 * ((FPU_FU_COUNT - 1) >= 0))
+#define FPU1 (FU_FPU1 * ((FPU_FU_COUNT - 2) >= 0))
+#define FPU2 (FU_FPU2 * ((FPU_FU_COUNT - 3) >= 0))
+#define FPU3 (FU_FPU3 * ((FPU_FU_COUNT - 4) >= 0))
+#define A ALULAT // ALU latency, assuming fast bypass
+#define L LOADLAT
 
-#define ANYALU ALU0|ALU1
-#define ANYLDU AGU0|AGU1
-#define ANYSTU AGU0|AGU1
-#define ANYFPU FPU0|FPU1
+#define ANYALU ALU0|ALU1|ALU2|ALU3
+#define ANYLDU AGU0|AGU1|AGU2|AGU3
+#define ANYSTU AGU0|AGU1|AGU2|AGU3
+#define ANYFPU FPU0|FPU1|FPU2|FPU3
 #define ANYINT ANYALU
 #define ANYFU  ANYALU | ANYLDU | ANYFPU
 
@@ -486,7 +516,7 @@ namespace ATOM_CORE_MODEL {
         W8   execute_ast(TransOp& uop);
         W8   execute_fence(TransOp& uop);
         bool check_execute_exception(int idx);
-        W8   execute_load(TransOp& uop);
+        W8   execute_load(TransOp& uop, int idx);
         W8   execute_store(TransOp& uop, W8 idx);
         W64  get_load_data(W64 addr, TransOp& uop);
         W64  generate_address(TransOp& uop, bool is_st);
@@ -499,11 +529,20 @@ namespace ATOM_CORE_MODEL {
         
         // Writeback/Commit
         int  writeback();
+        bool can_commit();
         void update_reg_mem();
         void writeback_eom();
         void update_checker();
+        void check_commit_exception();
 
         void annul();
+
+        // Cache line lock
+        bool check_mem_lock(W64 addr);
+        bool grab_mem_lock(W64 addr);
+        void release_mem_lock(bool immediately=false);
+
+        ostream& print(ostream& os) const;
 
         // Variables
         AtomThread *thread;
@@ -534,9 +573,13 @@ namespace ATOM_CORE_MODEL {
 
         uopimpl_func_t synthops[MAX_UOPS_PER_ATOMOP];
         TransOp        uops[MAX_UOPS_PER_ATOMOP];
+        bool           load_requestd[MAX_UOPS_PER_ATOMOP];
         W16            rflags[MAX_UOPS_PER_ATOMOP];
         W8             num_uops_used;
         W64            uuid;
+
+        bool lock_acquired;
+        W64  lock_addr;
 
         W8  src_registers[MAX_REG_ACCESS_PER_ATOMOP];
         W8  dest_registers[MAX_UOPS_PER_ATOMOP];
@@ -548,6 +591,11 @@ namespace ATOM_CORE_MODEL {
 
         W8 cycles_left;
     };
+
+    static inline ostream& operator <<(ostream& os, const AtomOp& op)
+    {
+        return op.print(os);
+    }
 
     /**
      * @brief Entry for Store Buffer
@@ -584,6 +632,15 @@ namespace ATOM_CORE_MODEL {
             ctx.storemask_virt(virtaddr, data, bytemask, size);
         }
 
+        ostream& print(ostream& os) const
+        {
+            os << "  [", index_, "] ";
+            os << "a-op uuid: ", op->uuid, " ";
+            os << bytemaskstring((const byte*)&data, bytemask, 8);
+            os << " @ ", hexstring(addr, 48);
+            return os;
+        }
+
         AtomOp* op;
         W16s    index_;
         W64     addr;
@@ -593,6 +650,11 @@ namespace ATOM_CORE_MODEL {
         W8      size;
         bool    mmio;
     };
+
+    static inline ostream& operator <<(ostream& os, const StoreBufferEntry& e)
+    {
+        return e.print(os);
+    }
 
     /**
      * @brief Entry of Fetch-Queue/Dispatch-Queue
@@ -619,9 +681,20 @@ namespace ATOM_CORE_MODEL {
             if(op) op->annul();
         }
 
+        ostream& print(ostream& os) const
+        {
+            os << "a-op uuid: ", op->uuid;
+            return os;
+        }
+
         AtomOp* op;
         W16s    index_;
     };
+
+    static inline ostream& operator <<(ostream& os, const BufferEntry& e)
+    {
+        return e.print(os);
+    }
 
     struct ForwardEntry {
 
@@ -689,6 +762,9 @@ namespace ATOM_CORE_MODEL {
 
         void write_temp_reg(W16 reg, W64 data);
         W64  read_reg(W16 reg);
+        void flush_mem_locks();
+
+        ostream& print(ostream& os) const;
 
         W64  get_insns_committed();
 
@@ -726,6 +802,7 @@ namespace ATOM_CORE_MODEL {
         bool    mmio_pending;
         bool    inst_in_pipe;
         W64     insns_commited;
+        W64     last_commit_cycle;
 
         BranchPredictorInterface branchpred;
 
@@ -765,6 +842,8 @@ namespace ATOM_CORE_MODEL {
         bool    running;
         bool    ready;
 
+        W8  queued_mem_lock_count;
+        W64 queued_mem_lock_list[4];
 
         AtomOp atomOps[NUM_ATOM_OPS_PER_THREAD];
 
@@ -874,9 +953,9 @@ namespace ATOM_CORE_MODEL {
             StatObj<W64> atomops;
             StatObj<W64> uops;
 
-            StatObj<float> ipc;
-            StatObj<float> atomop_pc;
-            StatObj<float> uipc;
+            StatEquation<W64, double, StatObjFormulaDiv> ipc;
+            StatEquation<W64, double, StatObjFormulaDiv> atomop_pc;
+            StatEquation<W64, double, StatObjFormulaDiv> uipc;
 
             st_commit(Statable *parent)
                 : Statable("commit", parent)
@@ -918,7 +997,15 @@ namespace ATOM_CORE_MODEL {
         cache_access st_dcache, st_icache;
 
         StatObj<W64> st_cycles;
+
+        StatArray<W64, ASSIST_COUNT> assists;
+        StatArray<W64, L_ASSIST_COUNT> lassists;
     };
+
+    static inline ostream& operator <<(ostream& os, const AtomThread& th)
+    {
+        return th.print(os);
+    }
 
     /**
      * @brief In-Order Core modeled based on Intel Atom
@@ -927,9 +1014,10 @@ namespace ATOM_CORE_MODEL {
      * multi-threading. In some cases it tries to mimic Intel Atom
      * architecture.
      */
-    struct AtomCore : public BaseCore , Statable {
+    struct AtomCore : public BaseCore {
 
         AtomCore(BaseMachine& machine, int num_threads, const char* name=NULL);
+        ~AtomCore();
         
         void reset();
         bool runcycle();
@@ -937,7 +1025,7 @@ namespace ATOM_CORE_MODEL {
         void flush_tlb(Context& ctx);
         void flush_tlb_virt(Context& ctx, Waddr virtaddr);
         void dump_state(ostream& os);
-        void update_stats(PTLsimStats* stats);
+        void update_stats();
         void flush_pipeline();
         W64  get_insns_committed();
         W8   get_coreid();
@@ -962,6 +1050,8 @@ namespace ATOM_CORE_MODEL {
         void flush_shared_structs(W8 threadid);
 
         void try_thread_switch();
+
+        ostream& print(ostream& os) const;
 
         W8   coreid;
         W8   threadcount;
@@ -1000,6 +1090,11 @@ namespace ATOM_CORE_MODEL {
         W64 fu_available:32, fu_used:32;
         W8  port_available;
     };
+
+    static inline ostream& operator <<(ostream& os, const AtomCore& core)
+    {
+        return core.print(os);
+    }
 
     struct AtomCoreBuilder : public CoreBuilder {
         AtomCoreBuilder(const char* name);

@@ -41,6 +41,7 @@ namespace Memory {
 
         void init(W64 tag_t) {
             tag = tag_t;
+            if (tag == -1) state = 0;
         }
 
         void reset() {
@@ -51,7 +52,7 @@ namespace Memory {
         void invalidate() { reset(); }
 
         void print(ostream& os) const {
-            os << "Cacheline: tag[", tag, "] ";
+            os << "Cacheline: tag[", (void*)tag, "] ";
             os << "state[", state, "] ";
         }
     };

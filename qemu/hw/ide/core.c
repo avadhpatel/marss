@@ -34,6 +34,12 @@
 
 #include <hw/ide/internal.h>
 
+#ifdef MARSS_QEMU
+#include <ptl-qemu.h>
+#endif
+
+//#define MARSS_DELAY_IO
+
 static const int smart_attributes[][5] = {
     /* id,  flags, val, wrst, thrsh */
     { 0x01, 0x03, 0x64, 0x64, 0x06}, /* raw read */
@@ -508,7 +514,15 @@ handle_rw_error:
     /* end of transfer ? */
     if (s->nsector == 0) {
         s->status = READY_STAT | SEEK_STAT;
+#if defined MARSS_QEMU && defined MARSS_DELAY_IO
+        if (in_simulation) {
+            add_qemu_io_event((QemuIOCB)&ide_set_irq, s->bus, 20000);
+        } else {
+            ide_set_irq(s->bus);
+        }
+#else
         ide_set_irq(s->bus);
+#endif
         goto eot;
     }
 

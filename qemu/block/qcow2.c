@@ -1311,6 +1311,12 @@ static int qcow2_load_vmstate(BlockDriverState *bs, uint8_t *buf,
     int growable = bs->growable;
     int ret;
 
+#ifdef MARSS_QEMU
+    if (bs->backing_hd) {
+        return qcow2_load_vmstate(bs->backing_hd, buf, pos, size);
+    }
+#endif
+
     BLKDBG_EVENT(bs->file, BLKDBG_VMSTATE_LOAD);
     bs->growable = 1;
     ret = bdrv_pread(bs, qcow2_vm_state_offset(s) + pos, buf, size);

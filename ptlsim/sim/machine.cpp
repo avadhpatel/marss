@@ -1,15 +1,22 @@
 
+/*
+ * MARSSx86 : A Full System Computer-Architecture Simulator
+ *
+ * This code is released under GPL.
+ *
+ * Copyright 2011 Avadh Patel <apatel@cs.binghamton.edu>
+ *
+ */
+
 #include <machine.h>
 #include <ptlsim.h>
 #include <config.h>
 
 #include <basecore.h>
-#include <stats.h>
 #include <statsBuilder.h>
 #include <memoryHierarchy.h>
 
-#define INSIDE_DEFCORE
-#include <defcore.h>
+#include <ooo.h>
 
 #include <atomcore.h>
 
@@ -73,15 +80,13 @@ bool BaseMachine::init(PTLsimConfig& config)
 {
     int context_idx = 0;
 
-    config.cache_config_type = "auto";
-
     // At the end create a memory hierarchy
     memoryHierarchyPtr = new MemoryHierarchy(*this);
 
     if(config.machine_config == "") {
         ptl_logfile << "[ERROR] Please provide Machine name in config using -machine\n" << flush;
         cerr << "[ERROR] Please provide Machine name in config using -machine\n" << flush;
-        assert(0);
+        return 0;
     }
 
     machineBuilder.setup_machine(*this, config.machine_config.buf);
@@ -91,6 +96,8 @@ bool BaseMachine::init(PTLsimConfig& config)
     }
 
     setup_threads();
+
+    init_qemu_io_events();
 
     return 1;
 }
@@ -224,9 +231,10 @@ int BaseMachine::run(PTLsimConfig& config)
         if unlikely(sim_cycle == 0 && time_stats_file)
             StatsBuilder::get().dump_header(*time_stats_file);
 
-        // TODO: make this a config param?
-        if unlikely(sim_cycle % 10000 == 0 && time_stats_file)
+        if unlikely (time_stats_file && sim_cycle > 0 &&
+                sim_cycle % config.time_stats_period == 0) {
             StatsBuilder::get().dump_periodic(*time_stats_file, sim_cycle);
+        }
 
 
         // limit the ptl_logfile size
@@ -235,6 +243,7 @@ int BaseMachine::run(PTLsimConfig& config)
             backup_and_reopen_logfile();
 
         memoryHierarchyPtr->clock();
+        clock_qemu_io_events();
 
         foreach (cur_core, cores.count()){
             BaseCore& core =* cores[cur_core];
@@ -251,13 +260,12 @@ int BaseMachine::run(PTLsimConfig& config)
             total_user_insns_committed += cores[i]->get_insns_committed();
         }
 
-        global_stats.summary.cycles++;
         sim_cycle++;
         iterations++;
 
-        if unlikely (config.wait_all_finished ||
-                config.stop_at_user_insns <= total_user_insns_committed){
-            ptl_logfile << "Stopping simulation loop at specified limits (", iterations, " iterations, ", total_user_insns_committed, " commits)", endl;
+        if unlikely (config.stop_at_user_insns <= total_user_insns_committed ||
+                config.stop_at_cycle <= sim_cycle) {
+            ptl_logfile << "Stopping simulation loop at specified limits (", sim_cycle, " cycles, ", total_user_insns_committed, " commits)", endl;
             exiting = 1;
             break;
         }
@@ -305,6 +313,7 @@ bool BaseMachine::run_threaded()
             backup_and_reopen_logfile();
 
         memoryHierarchyPtr->clock();
+        clock_qemu_io_events();
 
         // Now send signal to all threads to run one cycle
         pthread_barrier_wait(runcycle_barrier);
@@ -324,12 +333,11 @@ bool BaseMachine::run_threaded()
             total_user_insns_committed += cores[i]->get_insns_committed();
         }
 
-        global_stats.summary.cycles++;
         sim_cycle++;
         iterations++;
 
-        if unlikely (config.wait_all_finished ||
-                config.stop_at_user_insns <= total_user_insns_committed) {
+        if unlikely (config.stop_at_user_insns <= total_user_insns_committed ||
+                config.stop_at_cycle <= sim_cycle) {
             ptl_logfile << "Stopping simulation loop at specified limits (",
                         iterations, " iterations, ", total_user_insns_committed,
                         " commits)", endl;
@@ -428,16 +436,14 @@ void BaseMachine::flush_all_pipelines()
     // TODO
 }
 
-void BaseMachine::update_stats(PTLsimStats* stats)
+void BaseMachine::update_stats()
 {
-    // First add user and kernel stats to global stats
-    global_stats += user_stats + kernel_stats;
-
-    *n_global_stats += *n_user_stats;
-    *n_global_stats += *n_kernel_stats;
+    global_stats->reset();
+    *global_stats += *user_stats;
+    *global_stats += *kernel_stats;
 
     foreach(i, cores.count()) {
-        cores[i]->update_stats(stats);
+        cores[i]->update_stats();
     }
 }
 

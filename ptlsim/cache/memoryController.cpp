@@ -48,8 +48,11 @@ MemoryController::MemoryController(W8 coreid, const char *name,
     memoryHierarchy_->add_cache_mem_controller(this);
 
     if(!memoryHierarchy_->get_machine().get_option(name, "latency", latency_)) {
-        latency_ = 20;
+        latency_ = 50;
     }
+
+    /* Convert latency from ns to cycles */
+    latency_ = ns_to_simcycles(latency_);
 
     SET_SIGNAL_CB(name, "_Access_Completed", accessCompleted_,
             &MemoryController::access_completed_cb);
@@ -104,6 +107,11 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 			MEMORY_OP_UPDATE)
 		return true;
 
+    if (message->request->get_type() == MEMORY_OP_EVICT) {
+        /* We ignore all the evict messages */
+        return true;
+    }
+
 	/*
 	 * if this request is a memory update request then
 	 * first check the pending queue and see if we have a
@@ -153,6 +161,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 	}
 
 	queueEntry->request = message->request;
+	queueEntry->source = (Controller*)message->origin;
 
 	queueEntry->request->incRefCounter();
 	ADD_HISTORY_ADD(queueEntry->request);
@@ -165,7 +174,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 	if(banksUsed_[bank_no] == 0) {
 		banksUsed_[bank_no] = 1;
 		queueEntry->inUse = true;
-		memoryHierarchy_->add_event(&accessCompleted_, MEM_LATENCY,
+		memoryHierarchy_->add_event(&accessCompleted_, latency_,
 				queueEntry);
 	}
 
@@ -223,7 +232,7 @@ bool MemoryController::access_completed_cb(void *arg)
         if(bank_no == bank_no_2 && entry->inUse == false) {
             entry->inUse = true;
             memoryHierarchy_->add_event(&accessCompleted_,
-                    MEM_LATENCY, entry);
+                    latency_, entry);
             banksUsed_[bank_no] = 1;
             break;
         }
@@ -262,6 +271,7 @@ bool MemoryController::wait_interconnect_cb(void *arg)
 	/* First send response of the current request */
 	Message& message = *memoryHierarchy_->get_message();
 	message.sender = this;
+	message.dest = queueEntry->source;
 	message.request = queueEntry->request;
 	message.hasData = true;
 
@@ -291,7 +301,7 @@ void MemoryController::annul_request(MemoryRequest *request)
     MemoryQueueEntry *queueEntry;
     foreach_list_mutable(pendingRequests_.list(), queueEntry,
             entry, nextentry) {
-        if(queueEntry->request == request) {
+        if(queueEntry->request->is_same(request)) {
             queueEntry->annuled = true;
             if(!queueEntry->inUse) {
                 queueEntry->request->decRefCounter();

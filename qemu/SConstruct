@@ -28,16 +28,20 @@ env.Append(CCFLAGS = '-DNUM_SIM_CORES=%d' % int(num_sim_cores))
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
     env.Append(CCFLAGS = '-g')
-    env.Append(CCFLAGS = '-O')
+
+    # If debugging level is 1 then do optimize
+    if int(debug) == 1:
+        env.Append(CCFLAGS = '-O')
 else:
     env.Append(CCFLAGS = '-g3')
     env.Append(CCFLAGS = '-O3 -march=native -mtune=native')
 
 google_perftools = ARGUMENTS.get('gperf', None)
 if google_perftools != None:
-    env.Append(LIBS = 'tcmalloc_minimal')
+    env.Append(LIBS = 'tcmalloc')
     env.Append(LIBPATH = google_perftools)
-    env.Append(LINKFLAGS = '-Wl,-L%s' % google_perftools)
+    env.Append(LINKFLAGS = '-Wl,-rpath')
+    env.Append(LINKFLAGS = '-Wl,%s' % google_perftools)
 
 
 error_str = "failure"

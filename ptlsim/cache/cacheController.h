@@ -40,13 +40,11 @@
 
 namespace Memory {
 
-namespace SimpleWTCache {
-
-    enum CacheLineState {
-        LINE_NOT_VALID = 0, // has to be 0 as its default
-        LINE_VALID,
-        LINE_MODIFIED,
-    };
+enum CacheLineState {
+    LINE_NOT_VALID = 0, // has to be 0 as its default
+    LINE_VALID,
+    LINE_MODIFIED,
+};
 
 // Cache Events enum used for Queue entry flags
 enum {
@@ -74,9 +72,11 @@ struct CacheQueueEntry : public FixStateListObject
 
 		bitvec<CACHE_NO_EVENTS> eventFlags;
 
-		Interconnect *sender;
-		Interconnect *sendTo;
+		Interconnect  *sender;
+		Interconnect  *sendTo;
 		MemoryRequest *request;
+		Controller    *source;
+		Controller    *dest;
 		bool annuled;
 		bool prefetch;
 		bool prefetchCompleted;
@@ -85,6 +85,8 @@ struct CacheQueueEntry : public FixStateListObject
 			request = NULL;
 			sender = NULL;
 			sendTo = NULL;
+			source = NULL;
+			dest = NULL;
 			depends = -1;
             dependsAddr = -1;
 			eventFlags.reset();
@@ -136,11 +138,6 @@ class CacheController : public Controller
 
 		CacheType type_;
 		CacheLinesBase *cacheLines_;
-		CacheStats *userStats_;
-		CacheStats *totalUserStats_;
-		CacheStats *kernelStats_;
-		CacheStats *totalKernelStats_;
-
 
 		// No of bits needed to find Cache Line address
 		int cacheLineBits_;
@@ -202,6 +199,7 @@ class CacheController : public Controller
 	public:
 		CacheController(W8 coreid, const char *name,
 				MemoryHierarchy *memoryHierarchy, CacheType type);
+        ~CacheController();
 		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);
 		int access_fast_path(Interconnect *interconnect,
@@ -258,8 +256,6 @@ class CacheController : public Controller
 			if(lowerInterconnect_)
 				os << "\t\tlower: ",  lowerInterconnect_->get_name(), endl;
 		}
-
-};
 
 };
 

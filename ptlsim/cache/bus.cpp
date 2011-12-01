@@ -55,6 +55,15 @@ BusInterconnect::BusInterconnect(const char *name,
             &BusInterconnect::data_broadcast_completed_cb);
 
 	lastAccessQueue = 0;
+
+    if(!memoryHierarchy_->get_machine().get_option(name, "latency", latency_)) {
+        latency_ = BUS_BROADCASTS_DELAY;
+    }
+
+    if(!memoryHierarchy_->get_machine().get_option(name, "aribtrate_latency",
+                arbitrate_latency_)) {
+        arbitrate_latency_ = BUS_ARBITRATE_DELAY;
+    }
 }
 
 void BusInterconnect::register_controller(Controller *controller)
@@ -166,8 +175,11 @@ bool BusInterconnect::broadcast_cb(void *arg)
 	BusQueueEntry *queueEntry;
 	if(arg != NULL)
 		queueEntry = (BusQueueEntry*)arg;
-	else
+	else {
 		queueEntry = arbitrate_round_robin();
+        memoryHierarchy_->add_event(&broadcast_, arbitrate_latency_, queueEntry);
+        return true;
+    }
 
 	if(queueEntry == NULL) { // nothing to broadcast
 		set_bus_busy(false);
@@ -188,7 +200,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
 	}
 	if(isFull) {
 		memoryHierarchy_->add_event(&broadcast_,
-				BUS_BROADCASTS_DELAY, queueEntry);
+				latency_, queueEntry);
 		return true;
 	}
 
@@ -218,7 +230,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
 	}
 	queueEntry->request->decRefCounter();
 	memoryHierarchy_->add_event(&broadcastCompleted_,
-			BUS_BROADCASTS_DELAY, NULL);
+			latency_, NULL);
 
 	// Free the message
 	memoryHierarchy_->free_message(&message);

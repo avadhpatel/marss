@@ -1,4 +1,13 @@
 
+/*
+ * MARSSx86 : A Full System Computer-Architecture Simulator
+ *
+ * This code is released under GPL.
+ *
+ * Copyright 2011 Avadh Patel <apatel@cs.binghamton.edu>
+ *
+ */
+
 #ifndef STATS_BUILDER_H
 #define STATS_BUILDER_H
 
@@ -8,7 +17,11 @@
 #include <yaml/yaml.h>
 #include <bson/bson.h>
 
-#define STATS_SIZE 1024*1024
+#ifdef ENABLE_TESTS
+#  define STATS_SIZE 1024*1024*10
+#else
+#  define STATS_SIZE 1024*1024
+#endif
 
 class StatObjBase;
 class Stats;
@@ -31,6 +44,7 @@ class Statable {
         dynarray<Statable*> childNodes;
         dynarray<StatObjBase*> leafs;
         bool dump_disabled;
+        bool periodic_enabled;
         Statable *parent;
         stringbuf name;
 
@@ -80,6 +94,14 @@ class Statable {
         Statable(stringbuf &str, Statable *parent);
 
         /**
+         * @brief Default destructor for Statable
+         *
+         * This makes sure that if 'parent' is present then it removes self
+         * from parent's list
+         */
+        virtual ~Statable();
+
+        /**
          * @brief Add a child Statable node into this object
          *
          * @param child Child Statable object to add
@@ -87,6 +109,21 @@ class Statable {
         void add_child_node(Statable *child)
         {
             childNodes.push(child);
+        }
+
+        /**
+         * @brief Remove given child node from tree
+         *
+         * @param child Child node to be removed
+         */
+        void remove_child_node(Statable *child)
+        {
+            childNodes.remove(child);
+        }
+
+        void set_parent(Statable* p)
+        {
+            parent = p;
         }
 
         /**
@@ -137,6 +174,15 @@ class Statable {
          */
         void enable_dump()  { dump_disabled = false; }
 
+        void enable_periodic_dump()
+        {
+            periodic_enabled = true;
+            if(parent) parent->enable_periodic_dump();
+        }
+
+        void disable_dump_periodic() { periodic_enabled = true; }
+        bool is_dump_periodic() { return periodic_enabled; }
+
         /**
          * @brief Dump string representation of  Statable and it childs
          *
@@ -168,12 +214,14 @@ class Statable {
         bson_buffer* dump(bson_buffer *bb, Stats *stats);
 
         void add_stats(Stats& dest_stats, Stats& src_stats);
+        void sub_stats(Stats& dest_stats, Stats& src_stats);
 
-        ostream& dump_periodic(ostream &os) const;
+        void add_periodic_stats(Stats& dest_stats, Stats& src_stats);
+        void sub_periodic_stats(Stats& dest_stats, Stats& src_stats);
+
+        ostream& dump_periodic(ostream &os, Stats *stats) const;
 
         ostream& dump_header(ostream &os) const;
-
-        bool is_dump_periodic_disabled() const;
 
         stringbuf *get_full_stat_string();
 
@@ -191,7 +239,7 @@ class Statable {
  */
 class StatsBuilder {
     private:
-        static StatsBuilder _builder;
+        static StatsBuilder *_builder;
         Statable *rootNode;
         W64 stat_offset;
 
@@ -214,7 +262,9 @@ class StatsBuilder {
          */
         static StatsBuilder& get()
         {
-            return _builder;
+            if (!_builder)
+                _builder = new StatsBuilder();
+            return *_builder;
         }
 
         /**
@@ -227,6 +277,7 @@ class StatsBuilder {
             assert(statable);
             assert(rootNode);
             rootNode->add_child_node(statable);
+            statable->set_parent(rootNode);
         }
 
         /**
@@ -288,14 +339,41 @@ class StatsBuilder {
          */
         bson_buffer* dump(Stats *stats, bson_buffer *bb) const;
 
-        void add_stats(Stats& dest_stats, Stats& src_stats)
+        void init_timer_stats();
+
+        void add_stats(Stats& dest_stats, Stats& src_stats) const
         {
             rootNode->add_stats(dest_stats, src_stats);
         }
 
+        void sub_stats(Stats& dest_stats, Stats& src_stats) const
+        {
+            rootNode->sub_stats(dest_stats, src_stats);
+        }
+
+        void add_periodic_stats(Stats& dest_stats, Stats& src_stats) const
+        {
+            if(rootNode->is_dump_periodic())
+                add_stats(dest_stats, src_stats);
+        }
+
+        void sub_periodic_stats(Stats& dest_stats, Stats& src_stats) const
+        {
+            if(rootNode->is_dump_periodic())
+                sub_stats(dest_stats, src_stats);
+        }
+
+        bool is_dump_periodic() { return rootNode->is_dump_periodic(); }
         ostream& dump_header(ostream &os) const;
         ostream& dump_periodic(ostream &os, W64 cycle) const;
 
+        void delete_nodes()
+        {
+            delete rootNode;
+
+            rootNode = new Statable("", true);
+            stat_offset = 0;
+        }
 };
 
 /**
@@ -312,7 +390,8 @@ class Stats {
 
         Stats()
         {
-            mem = NULL;
+            mem = new W8[STATS_SIZE];
+            reset();
         }
 
     public:
@@ -323,10 +402,20 @@ class Stats {
             return (W64)mem;
         }
 
+        void reset()
+        {
+            memset(mem, 0, sizeof(W8) * STATS_SIZE);
+        }
+
         Stats& operator+=(Stats& rhs_stats)
         {
             (StatsBuilder::get()).add_stats(*this, rhs_stats);
             return *this;
+        }
+
+        Stats& operator=(Stats& rhs_stats)
+        {
+            memcpy(mem, rhs_stats.mem, sizeof(W8) * STATS_SIZE);
         }
 };
 
@@ -335,17 +424,17 @@ class Stats {
  */
 class StatObjBase {
     protected:
-        Stats *time_stats;
         Stats *default_stats;
         Statable *parent;
         stringbuf name;
         bool dump_disabled;
+        bool periodic_enabled;
 
     public:
         StatObjBase(const char *name, Statable *parent)
             : parent(parent)
-              , time_stats(NULL)
               , dump_disabled(false)
+              , periodic_enabled(false)
         {
             this->name = name;
             default_stats = parent->get_default_stats();
@@ -353,7 +442,6 @@ class StatObjBase {
         }
 
         virtual void set_default_stats(Stats *stats);
-        virtual void set_time_stats(Stats *stats);
 
 
         virtual ostream& dump(ostream& os, Stats *stats) const = 0;
@@ -362,15 +450,31 @@ class StatObjBase {
         virtual bson_buffer* dump(bson_buffer* out,
                 Stats *stats) const = 0;
 
-        virtual ostream& dump_periodic(ostream &os) const = 0;
+        virtual ostream& dump_periodic(ostream &os, Stats *stats) const = 0;
 
-        inline bool is_dump_periodic_disabled() const { return time_stats == NULL; }
+        void disable_dump_periodic()
+        {
+            periodic_enabled = false;
+            /* NOTE: We don't disable parent's because other child
+             * might have enabled periodic dump */
+        }
+
+        void enable_periodic_dump()
+        {
+            periodic_enabled = true;
+            parent->enable_periodic_dump();
+        }
+
+        inline bool is_dump_periodic() const { return periodic_enabled; }
 
         stringbuf *get_full_stat_string()
         {
             if (parent){
                 stringbuf *parent_name = parent->get_full_stat_string();
-                (*parent_name) << "." << name;
+                if(parent_name->empty())
+                    (*parent_name) << name;
+                else
+                    (*parent_name) << "." << name;
                 return parent_name;
             } else {
                 stringbuf *s = new stringbuf();
@@ -380,12 +484,9 @@ class StatObjBase {
         }
 
         virtual ostream &dump_header(ostream &os) {
-            if (!is_dump_periodic_disabled()) {
+            if (is_dump_periodic()) {
                 stringbuf *full_string = get_full_stat_string();
                 os << ","<< (*full_string);
-                /* FIXME: this should be deleted, but for some reason libc
-                   does not like that one bit, need to figure out why ...
-                   */
 
                 delete full_string;
             }
@@ -393,7 +494,10 @@ class StatObjBase {
 
 
         virtual void add_stats(Stats& dest_stats, Stats& src_stats) = 0;
+        virtual void sub_stats(Stats& dest_stats, Stats& src_stats) = 0;
 
+        virtual void add_periodic_stats(Stats& dest_stats, Stats& src_stats) = 0;
+        virtual void sub_periodic_stats(Stats& dest_stats, Stats& src_stats) = 0;
 
         void disable_dump() { dump_disabled = true; }
         void enable_dump() { dump_disabled = false; }
@@ -413,7 +517,6 @@ class StatObj : public StatObjBase {
         W64 offset;
 
         T *default_var;
-        T *time_var;
 
         inline void set_default_var_ptr()
         {
@@ -433,7 +536,6 @@ class StatObj : public StatObjBase {
          */
         StatObj(const char *name, Statable *parent)
             : StatObjBase(name, parent)
-            , time_var(NULL)
         {
             StatsBuilder &builder = StatsBuilder::get();
 
@@ -456,12 +558,6 @@ class StatObj : public StatObjBase {
             set_default_var_ptr();
         }
 
-        void set_time_stats(Stats *stats)
-        {
-            StatObjBase::set_time_stats(stats);
-            time_var = (T*)(time_stats->base() + offset);
-        }
-
         /**
          * @brief ++ operator - like a++
          *
@@ -472,10 +568,6 @@ class StatObj : public StatObjBase {
         inline T operator++(int dummy)
         {
             assert(default_var);
-            if (time_var)
-            {
-                (*time_var)++;
-            }
             T ret = (*default_var)++;
             return ret;
         }
@@ -489,11 +581,6 @@ class StatObj : public StatObjBase {
         {
             assert(default_var);
             (*default_var)++;
-            if (time_var)
-            {
-                (*time_var)++;
-            }
-
             return (*default_var);
         }
 
@@ -507,10 +594,6 @@ class StatObj : public StatObjBase {
         inline T operator--(int dummy) {
             assert(default_var);
             T ret = (*default_var)--;
-            if (time_var)
-            {
-                (*time_var)--;
-            }
             return ret;
         }
 
@@ -522,10 +605,24 @@ class StatObj : public StatObjBase {
         inline T operator--() {
             assert(default_var);
             (*default_var)--;
-            if (time_var)
-            {
-                (*time_var)--;
-            }
+            return (*default_var);
+        }
+
+        /**
+         * @brief -= operator
+         *
+         * @param val Amount to decrent
+         *
+         * @return T& with updated value
+         */
+        inline T& operator -= (T& val) {
+            (*default_var) -= val;
+            return (*default_var);
+        }
+
+        inline T& operator=(T& val) {
+            assert(default_var);
+            (*default_var) = val;
             return (*default_var);
         }
 
@@ -566,10 +663,6 @@ class StatObj : public StatObjBase {
         inline T operator +=(const T &b) const {
             assert(default_var);
             *default_var += b;
-            if (time_var)
-            {
-                (*time_var)+= b;
-            }
             return *default_var;;
         }
 
@@ -584,15 +677,6 @@ class StatObj : public StatObjBase {
             assert(default_var);
             assert(statObj.default_var);
             *default_var += (*statObj.default_var);
-            if (time_var && statObj.time_var)
-            {
-                /*XXX: if, for some reason, the dump_periodic is called at
-                  different intervals for the two statObj's, this value is
-                  meaningless, however, this is currently not that case
-                 */
-
-                (*time_var) += *statObj.time_var;
-            }
             return  *default_var;
         }
 
@@ -761,13 +845,32 @@ class StatObj : public StatObjBase {
             dest_var += (*this)(&src_stats);
         }
 
-        ostream &dump_periodic(ostream &os) const
+        void sub_stats(Stats& dest_stats, Stats& src_stats)
         {
-            if (time_var)
+            T& dest_var = (*this)(&dest_stats);
+            dest_var -= (*this)(&src_stats);
+        }
+
+        void add_periodic_stats(Stats& dest_stats, Stats& src_stats)
+        {
+            if(is_dump_periodic()) {
+                add_stats(dest_stats, src_stats);
+            }
+        }
+
+        void sub_periodic_stats(Stats& dest_stats, Stats& src_stats)
+        {
+            if(is_dump_periodic()) {
+                sub_stats(dest_stats, src_stats);
+            }
+        }
+
+        ostream &dump_periodic(ostream &os, Stats *stats) const
+        {
+            if (is_dump_periodic())
             {
-                os << "," << (*time_var);
-                // reset the time var for the next epoch
-                *time_var = 0;
+                T& val = (*this)(stats);
+                os << "," << val;
             }
             return os;
         }
@@ -785,6 +888,7 @@ class StatArray : public StatObjBase {
         W64 offset;
         T* default_var;
         const char** labels;
+        bitvec<size> periodic_flag;
 
         inline void set_default_var_ptr()
         {
@@ -966,9 +1070,90 @@ class StatArray : public StatObjBase {
             }
         }
 
-        ostream &dump_periodic(ostream &os) const
+        void sub_stats(Stats& dest_stats, Stats& src_stats)
         {
+            BaseArr& dest_arr = (*this)(&dest_stats);
+            BaseArr& src_arr = (*this)(&src_stats);
+            foreach(i, size) {
+                dest_arr[i] -= src_arr[i];
+            }
+        }
+
+        void add_periodic_stats(Stats& dest_stats, Stats& src_stats)
+        {
+            if(is_dump_periodic()) {
+                add_stats(dest_stats, src_stats);
+            }
+        }
+
+        void sub_periodic_stats(Stats& dest_stats, Stats& src_stats)
+        {
+            if(is_dump_periodic()) {
+                sub_stats(dest_stats, src_stats);
+            }
+        }
+
+        /**
+         * @brief Enable periodic dump of this StatsArray
+         *
+         * @param id If given, enables only selected element from array
+         */
+        void enable_periodic_dump(int id = -1)
+        {
+            StatObjBase::enable_periodic_dump();
+            if(id == -1) {
+                periodic_flag.setall();
+            } else {
+                assert(id < size);
+                periodic_flag[id] = 1;
+            }
+        }
+
+        ostream &dump_header(ostream &os)
+        {
+            if (!is_dump_periodic()) return os;
+
+            stringbuf *full_string = get_full_stat_string();
+
+            foreach(i, size) {
+                if(periodic_flag[i]) {
+                    os << "," << *full_string;
+
+                    if(labels) {
+                        os << "." << labels[i];
+                    } else {
+                        os << "." << i;
+                    }
+                }
+            }
+
+            delete full_string;
             return os;
+        }
+
+        ostream &dump_periodic(ostream &os, Stats *stats) const
+        {
+            if (!is_dump_periodic()) return os;
+
+            BaseArr& arr = (*this)(stats);
+
+            foreach(i, size) {
+                if(periodic_flag[i]) {
+                    os << "," << arr[i];
+                }
+            }
+
+            return os;
+        }
+
+        /**
+         * @brief Get size of this array
+         *
+         * @return size
+         */
+        int length() const
+        {
+            return size;
         }
 };
 
@@ -1220,11 +1405,182 @@ class StatString : public StatObjBase {
             /* NOTE: We don't do auto addition os stats string */
         }
 
-        ostream &dump_periodic(ostream &os) const
+        void sub_stats(Stats& dest_stats, Stats& src_stats)
+        { }
+
+        void add_periodic_stats(Stats& dest_stats, Stats& src_stats)
+        { }
+
+        void sub_periodic_stats(Stats& dest_stats, Stats& src_stats)
+        { }
+
+        ostream &dump_periodic(ostream &os, Stats *stats) const
         {
             return os;
         }
 
+};
+
+/**
+ * @brief Add given stats counters
+ *
+ * This struct provides computation function to Add stats elements.
+ */
+struct StatObjFormulaAdd {
+    typedef dynarray<StatObj<W64>* > elems_t;
+
+    static W64 compute(Stats* stats, const elems_t& elems)
+    {
+        W64 ret = 0;
+
+        foreach(i, elems.count()) {
+            StatObj<W64>& e = *elems[i];
+            ret += e(stats);
+        }
+
+        return ret;
+    }
+};
+
+/**
+ * @brief Perform Division of given Stats counters
+ */
+struct StatObjFormulaDiv {
+    typedef dynarray<StatObj<W64>* > elems_t;
+
+    static double compute(Stats* stats, const elems_t& elems)
+    {
+        double ret = 0;
+
+        assert(elems.count() == 2);
+        double val1 = double((*elems[0])(stats));
+        double val2 = double((*elems[1])(stats));
+
+        if(val2 == 0)
+            return ret;
+
+        ret = val1/val2;
+
+        return ret;
+    }
+};
+
+/**
+ * @brief Statistics Class that supports User specific Formula's
+ *
+ * @tparam T Type of Stats Objects to perform computation
+ * @tparam K Type of result to store
+ * @tparam F Formula to compute result
+ *
+ * The computation is done when any of the 'dump' function is called. This
+ * class only supports computation over StatObj<T> type objects.
+ */
+template<typename T, typename K, typename F>
+class StatEquation : public StatObj<K> {
+    private:
+        typedef StatObj<K> base_t;
+        typedef dynarray<StatObj<T>* > elems_t;
+        elems_t elems;
+        F formula;
+
+        /**
+         * @brief Perform computation and store result
+         *
+         * @param stats Stats Database used for computation
+         */
+        void compute(Stats* stats) const
+        {
+            K& val = (*this)(stats);
+            val = formula.compute(stats, elems);
+        }
+
+    public:
+
+        /**
+         * @brief Default Constructor
+         *
+         * @param name Name of this object
+         * @param parent Parent Stat object
+         */
+        StatEquation(const char *name, Statable *parent)
+            : StatObj<K>(name, parent)
+        { }
+
+        /**
+         * @brief Add StatObj<T> object for computation
+         *
+         * @param obj element to add to the computation
+         */
+        void add_elem(StatObj<T>* obj)
+        {
+            elems.push(obj);
+        }
+
+        void enable_periodic_dump()
+        {
+            base_t::enable_periodic_dump();
+
+            foreach(i, elems.count())
+                elems[i]->enable_periodic_dump();
+        }
+
+        /**
+         * @brief Print value of this Stats object
+         *
+         * @param os stream to dump into
+         * @param stats Stats Database that holds the value
+         *
+         * @return Updated stream
+         */
+        ostream& dump(ostream& os, Stats *stats) const
+        {
+            compute(stats);
+            return base_t::dump(os, stats);
+        }
+
+        /**
+         * @brief Dump YAML value of this Stats Object
+         *
+         * @param out YAML stream to dump into
+         * @param stats Stats Database that holds the value
+         *
+         * @return Updated YAML stream
+         */
+        YAML::Emitter& dump(YAML::Emitter& out,
+                Stats *stats) const
+        {
+            compute(stats);
+            return base_t::dump(out, stats);
+        }
+
+        /**
+         * @brief Dump BSON value of this Stats Object
+         *
+         * @param out BSON stream to dump into
+         * @param stats Stats Database that holds the value
+         *
+         * @return Update BSON stream
+         */
+        bson_buffer* dump(bson_buffer* out,
+                Stats *stats) const
+        {
+            compute(stats);
+            return base_t::dump(out, stats);
+        }
+
+        /**
+         * @brief Dump Periodic value of this Stats Object
+         *
+         * @param os output stream
+         *
+         * @return Updated output stream
+         */
+        ostream& dump_periodic(ostream &os, Stats *stats) const
+        {
+            compute(stats);
+            base_t::dump_periodic(os, stats);
+            return os;
+        }
 };
 
 #endif // STATS_BUILDER_H

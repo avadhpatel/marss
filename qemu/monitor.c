@@ -1272,7 +1272,6 @@ static void do_simulate(Monitor *mon, const QDict *qdict)
   const char *args = qdict_get_str(qdict, "options");
   monitor_printf(mon, "simulation options received:%s\n", args);
   ptl_machine_configure(args);
-  vm_stop(0);
   simulation_configured = 1;
 }
 #endif

@@ -265,9 +265,9 @@ int sim_cpu_exec(void)
 		CC_OP = CC_OP_EFLAGS;
         env->eflags &= ~(DF_MASK | CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
 		env->exception_index = -1;
+        env->current_tb = NULL;
 	}
 #endif
-
 
 	for(;;) {
 		for(env = first_cpu; env != NULL; env = env->next_cpu) {

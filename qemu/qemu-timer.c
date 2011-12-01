@@ -158,7 +158,6 @@ void cpu_disable_ticks(void)
 }
 
 #ifdef MARSS_QEMU
-#define PTLSIM_FREQ 2.4e9 // 2GHz Frequency of Simulated CPU
 #define freq_to_ns(freq) (1e9/freq)
 
 void cpu_set_sim_ticks(void)
@@ -173,7 +172,7 @@ void cpu_set_sim_ticks(void)
 static int64_t cpu_get_sim_clock(void)
 {
   uint64_t sim_clock_t;
-  sim_clock_t = timers_state.cpu_sim_ticks_offset + (uint64_t)((float)(sim_cycle) * freq_to_ns(PTLSIM_FREQ));
+  sim_clock_t = timers_state.cpu_sim_ticks_offset + (uint64_t)((float)(sim_cycle) * freq_to_ns(get_sim_cpu_freq()));
   return sim_clock_t;
 }
 

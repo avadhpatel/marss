@@ -76,6 +76,7 @@ import smtplib
 import sys
 import time
 import urllib
+import os
 
 
 def SetupOptionParser():
@@ -137,6 +138,10 @@ def SetupOptionParser():
   parser.add_option('--smtp_hostname',
                     default='smtp.googlemail.com',
                     help='hostname of SMTP service')
+  parser.add_option('--output_file',
+                    default='xoauth.txt',
+                    help='output file with xoauth information')
+
   return parser
 
 
@@ -275,6 +280,7 @@ def GenerateRequestToken(consumer, scope, nonce, timestamp,
 
   url = '%s?%s' % (request_url, FormatUrlParams(params))
   response = urllib.urlopen(url).read()
+  print "RESPONSE='",response,"'"
   response_params = ParseUrlParamString(response)
   for param in response_params.items():
     print '%s: %s' % param
@@ -467,16 +473,32 @@ def main(argv):
     if options.test_smtp_authentication:
       TestSmtpAuthentication(options.smtp_hostname, options.user, xoauth_string)
   elif options.generate_oauth_token:
+
+    if os.path.exists(options.output_file):
+      print "WARNING: You already have %s, aborting."%(options.output_file)
+      exit()
+
     request_token = GenerateRequestToken(consumer, options.scope, options.nonce,
                                          options.timestamp,
                                          google_accounts_url_generator)
+
+      
+
     oauth_verifier = raw_input('Enter verification code: ').strip()
     access_token = GetAccessToken(consumer, request_token, oauth_verifier,
                                   google_accounts_url_generator)
+    write_xoauth_data_to_file(options.output_file, options.user, access_token.key, access_token.secret); 
+
   else:
     options_parser.print_help()
     print 'Nothing to do, exiting.'
     return
 
+def write_xoauth_data_to_file(xoauth_filename, user, oauth_token, oauth_token_secret):
+  xoauth_file = open(xoauth_filename,"w"); 
+  xoauth_file.write("%s\n%s\n%s\n"%(user,oauth_token,oauth_token_secret));
+  xoauth_file.close()
+  print "Wrote xoauth credentials to %s"%(xoauth_filename); 
+	
 if __name__ == '__main__':
   main(sys.argv)

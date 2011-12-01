@@ -9,7 +9,6 @@
 //
 
 #include <branchpred.h>
-#include <stats.h>
 
 
 template <int SIZE>
@@ -129,8 +128,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
 #endif
     if (base_t::full()) {
       if (logable(5)) ptl_logfile << "  Return address stack overflow: removing oldest entry to make space", endl;
-      //      stats.ooocore.branchpred.ras.overflows++;
-      per_ooo_core_stats_update(coreid, branchpred.ras.overflows++);
       base_t::pophead();
     }
 
@@ -145,8 +142,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     e.uuid = uuid;
     e.rip = rip;
 
-    //    stats.ooocore.branchpred.ras.pushes++;
-    per_ooo_core_stats_update(coreid, branchpred.ras.pushes++);
 #ifdef DEBUG_RAS
     if (logable(5)) { ptl_logfile << *this; }
 #endif
@@ -157,8 +152,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     if (logable(5)) ptl_logfile << "ReturnAddressStack::pop():", endl;
 #endif
     if (base_t::empty()) {
-      //      stats.ooocore.branchpred.ras.underflows++;
-      per_ooo_core_stats_update(coreid, branchpred.ras.underflows++);
       if (logable(5)) ptl_logfile << "  Return address stack underflow: returning entry with zero fields", endl;
       old.idx = -1;
       old.uuid = 0;
@@ -173,8 +166,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     if (logable(5)) { ptl_logfile << "  Old entry: ", old, endl; ptl_logfile << *this; }
 #endif
 
-    //    stats.ooocore.branchpred.ras.pops++;
-    per_ooo_core_stats_update(coreid, branchpred.ras.pops++);
 
     return e;
   }
@@ -221,8 +212,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     assert(e.index() == base_t::tail);
 #endif
 
-    //    stats.ooocore.branchpred.ras.annuls++;
-    per_ooo_core_stats_update(coreid, branchpred.ras.annuls++);
   }
 
   //
@@ -246,8 +235,6 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     assert(old.index() == base_t::tail);
 #endif
     push(old.uuid, old.rip, dummy);
-    //    stats.ooocore.branchpred.ras.annuls++;
-    per_ooo_core_stats_update(coreid, branchpred.ras.annuls++);
   }
 };
 
@@ -427,7 +414,7 @@ struct CombinedPredictor {
   //
   // Speculative execution can corrupt the RAS, since entries will be pushed
   // as call insns are fetched. If those call insns were along an incorrect
-  // branch path, they must be anNULLed.
+  // branch path, they must be annulled.
   //
   void annulras(const PredictorUpdate& predinfo) {
 #ifdef DEBUG_RAS

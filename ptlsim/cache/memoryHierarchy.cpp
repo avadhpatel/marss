@@ -43,11 +43,6 @@
 #include <statelist.h>
 
 #include <cpuController.h>
-#include <cacheController.h>
-#include <mesiCache.h>
-#include <p2p.h>
-#include <bus.h>
-#include <mesiBus.h>
 #include <memoryController.h>
 
 #include <yaml/yaml.h>
@@ -60,9 +55,8 @@ MemoryHierarchy::MemoryHierarchy(BaseMachine& machine) :
 {
     coreNo_ = machine_.get_num_cores();
 
-	setup_topology();
-
     pthread_mutex_init(&cache_mutex, NULL);
+    pthread_mutex_init(&interlock_mutex, NULL);
 }
 
 MemoryHierarchy::~MemoryHierarchy()
@@ -82,299 +76,6 @@ MemoryHierarchy::~MemoryHierarchy()
         delete allInterconnects_[i];
 	}
     allInterconnects_.clear();
-}
-
-void MemoryHierarchy::setup_topology()
-{
-    if(!strcmp(config.cache_config_type, "shared_L2")){
-      shared_L2_configuration();
-    }else if(!strcmp(config.cache_config_type, "private_L2")){
-      private_L2_configuration();
-    } else if(config.cache_config_type == "auto") {
-        return;
-    }else{
-      ptl_logfile << " unknown cache-config-type: ", config.cache_config_type, endl;
-      assert(0);
-    }
-}
-
-/*
- * A Shared L2 Configuration with Simple WT Cache:
- * --------------   --------------       --------------
- * |    CPU.C   |   |    CPU.C   |       |    CPU.C   |
- * --------------   --------------       --------------
- *   ||      ||       ||      ||           ||      ||
- *   P2P     P2P      P2P     P2P          P2P     P2P
- *   ||      ||       ||      ||    ...    ||      ||
- * ------- ------   ------- ------       ------- ------
- * | L1I | | L1D|   | L1I | | L1D|       | L1I | | L1D|
- * ------- ------   ------- ------       ------- ------
- *   ||      ||       ||      ||           ||      ||
- *   ------------ BUS -------------- ... -------------
- *                     ||
- *                -------------
- *                | Shared L2 |
- *                -------------
- *                     ||
- *                     P2P
- *                     ||
- *               ---------------
- *               | Main Memory |
- *               ---------------
- */
-void MemoryHierarchy::shared_L2_configuration()
-{
-	memdebug("Setting up shared L2 Configuration\n");
-
-	stringbuf cpuName;
-	cpuName << "CPUController";
-
-	//using namespace Memory::SimpleWTCache;
-	using namespace Memory::MESICache;
-
-	GET_STRINGBUF_PTR(bus_name, "Bus");
-	MESICache::BusInterconnect *bus = new
-		MESICache::BusInterconnect(bus_name->buf, this);
-
-	foreach(i, coreNo_) {
-
-		// FIXME this is a memory leak
-		GET_STRINGBUF_PTR(cpuName_t, "CPUController_", i);
-		CPUController *cpuController = new CPUController(i,
-				cpuName_t->buf,
-				this);
-		cpuControllers_.push((Controller*)cpuController);
-		cpuController->set_private(true);
-
-		GET_STRINGBUF_PTR(l1iP2P_t, "L1i-P2p_", i);
-		P2PInterconnect *p2pL1i = new P2PInterconnect(l1iP2P_t->buf,
-				this);
-		allInterconnects_.push((Interconnect*)p2pL1i);
-		p2pL1i->register_controller(cpuController);
-		cpuController->register_interconnect_L1_i((Interconnect*)p2pL1i);
-
-		GET_STRINGBUF_PTR(l1dP2P_t, "L1d-P2p_", i);
-		P2PInterconnect *p2pL1d = new P2PInterconnect(l1dP2P_t->buf,
-				this);
-		allInterconnects_.push((Interconnect*)p2pL1d);
-		p2pL1d->register_controller(cpuController);
-		cpuController->register_interconnect_L1_d((Interconnect*)p2pL1d);
-
-		GET_STRINGBUF_PTR(l1_d_name, "L1-D_", i);
-		CacheController *l1_d = new CacheController(i, l1_d_name->buf,
-				this, L1_D_CACHE);
-		allControllers_.push((Controller*)l1_d);
-		p2pL1d->register_controller(l1_d);
-		l1_d->register_upper_interconnect(p2pL1d);
-		l1_d->register_lower_interconnect(bus);
-		l1_d->set_lowest_private(true);
-		bus->register_controller(l1_d);
-		l1_d->set_private(true);
-
-		GET_STRINGBUF_PTR(l1_i_name, "L1-I_", i);
-		CacheController *l1_i = new CacheController(i, l1_i_name->buf,
-				this, L1_I_CACHE);
-		allControllers_.push((Controller*)l1_i);
-		p2pL1i->register_controller(l1_i);
-		l1_i->register_upper_interconnect(p2pL1i);
-		l1_i->register_lower_interconnect(bus);
-		l1_i->set_lowest_private(true);
-		bus->register_controller(l1_i);
-		l1_i->set_private(true);
-
-	}
-
-	allInterconnects_.push((Interconnect*)bus);
-
-	GET_STRINGBUF_PTR(mem_p2p_name, "MEM-P2P");
-	P2PInterconnect* mem_interconnect = new P2PInterconnect(
-			mem_p2p_name->buf, this);
-	allInterconnects_.push((Interconnect*)mem_interconnect);
-
-	GET_STRINGBUF_PTR(l2_name, "L2");
-    SimpleWTCache::CacheController *l2 = new SimpleWTCache::CacheController(
-            0, l2_name->buf, this,
-			L2_CACHE);
-	allControllers_.push((Controller*)l2);
-	bus->register_controller(l2);
-	l2->register_upper_interconnect(bus);
-	l2->register_lower_interconnect(mem_interconnect);
-	l2->set_wt_disable(true);
-	l2->set_private(false);
-
-	GET_STRINGBUF_PTR(mem_name, "Memory");
-	MemoryController *mem = new MemoryController(0, mem_name->buf,
-			this);
-	allControllers_.push((Controller*)mem);
-	mem->register_cache_interconnect(mem_interconnect);
-	mem->set_private(false);
-	memoryController_ = mem;
-
-	mem_interconnect->register_controller(l2);
-	mem_interconnect->register_controller(mem);
-
-	// Setup the full flags
-	cpuFullFlags_.resize(cpuControllers_.count(), false);
-	controllersFullFlags_.resize(allControllers_.count(), false);
-	interconnectsFullFlags_.resize(allInterconnects_.count(), false);
-}
-
-
-void MemoryHierarchy::private_L2_configuration()
-{
-	memdebug("Setting up private L2 Configuration\n");
-
-	stringbuf cpuName;
-	cpuName << "CPUController";
-
-#ifdef SINGLE_CORE_MEM_CONFIG
-	using namespace Memory::SimpleWTCache;
-#else
-	using namespace Memory::MESICache;
-#endif
-
-#ifdef SINGLE_CORE_MEM_CONFIG
-	GET_STRINGBUF_PTR(l2p2p_name, "L2-p2p");
-	P2PInterconnect *l2p2p = new P2PInterconnect(l2p2p_name->buf, this);
-#else
-	GET_STRINGBUF_PTR(bus_name, "Bus");
-	MESICache::BusInterconnect *bus = new
-		MESICache::BusInterconnect(bus_name->buf, this);
-#endif
-
-	foreach(i, coreNo_) {
-
-		// FIXME this is a memory leak
-		GET_STRINGBUF_PTR(cpuName_t, "CPUController_", i);
-		CPUController *cpuController = new CPUController(i,
-				cpuName_t->buf,
-				this);
-		cpuControllers_.push((Controller*)cpuController);
-		cpuController->set_private(true);
-
-		GET_STRINGBUF_PTR(l1iP2P_t, "L1i-P2p_", i);
-		P2PInterconnect *p2pL1i = new P2PInterconnect(l1iP2P_t->buf,
-				this);
-		allInterconnects_.push((Interconnect*)p2pL1i);
-		p2pL1i->register_controller(cpuController);
-		cpuController->register_interconnect_L1_i((Interconnect*)p2pL1i);
-
-		GET_STRINGBUF_PTR(l1dP2P_t, "L1d-P2p_", i);
-		P2PInterconnect *p2pL1d = new P2PInterconnect(l1dP2P_t->buf,
-				this);
-		allInterconnects_.push((Interconnect*)p2pL1d);
-		p2pL1d->register_controller(cpuController);
-		cpuController->register_interconnect_L1_d((Interconnect*)p2pL1d);
-
-		GET_STRINGBUF_PTR(l1_d_name, "L1-D_", i);
-		CacheController *l1_d = new CacheController(i, l1_d_name->buf,
-				this, L1_D_CACHE);
-		allControllers_.push((Controller*)l1_d);
-		p2pL1d->register_controller(l1_d);
-		l1_d->register_upper_interconnect(p2pL1d);
-		l1_d->set_lowest_private(false);
-		l1_d->set_private(true);
-
-		GET_STRINGBUF_PTR(l1_i_name, "L1-I_", i);
-		CacheController *l1_i = new CacheController(i, l1_i_name->buf,
-				this, L1_I_CACHE);
-		allControllers_.push((Controller*)l1_i);
-		p2pL1i->register_controller(l1_i);
-		l1_i->register_upper_interconnect(p2pL1i);
-		l1_i->set_lowest_private(false);
-		l1_i->set_private(true);
-
-		GET_STRINGBUF_PTR(l2l1dP2P_t, "L2-L1d-P2p_", i);
-		P2PInterconnect *p2pL2L1d = new P2PInterconnect(l2l1dP2P_t->buf,
-				this);
-		allInterconnects_.push((Interconnect*)p2pL2L1d);
-		p2pL2L1d->register_controller(l1_d);
-		l1_d->register_lower_interconnect((Interconnect*)p2pL2L1d);
-
-		GET_STRINGBUF_PTR(l2l1iP2P_t, "L2-L1i-P2p_", i);
-		P2PInterconnect *p2pL2L1i = new P2PInterconnect(l2l1iP2P_t->buf,
-				this);
-		allInterconnects_.push((Interconnect*)p2pL2L1i);
-		p2pL2L1i->register_controller(l1_i);
-		l1_i->register_lower_interconnect((Interconnect*)p2pL2L1i);
-
-		GET_STRINGBUF_PTR(l2_name, "L2_", i);
-		CacheController *l2 = new CacheController(i, l2_name->buf,
-				this, L2_CACHE);
-		allControllers_.push((Controller*)l2);
-		p2pL2L1d->register_controller(l2);
-		p2pL2L1i->register_controller(l2);
-		l2->register_upper_interconnect(p2pL2L1d);
-		l2->register_second_upper_interconnect(p2pL2L1i);
-		l2->set_lowest_private(true);
-#ifdef SINGLE_CORE_MEM_CONFIG
-		l2->register_lower_interconnect(l2p2p);
-		l2p2p->register_controller(l2);
-#else
-		l2->register_lower_interconnect(bus);
-		bus->register_controller(l2);
-#endif
-		l2->set_private(true);
-
-        // Temp Stats
-        // l1_d->set_default_stats(stats);
-        // l1_i->set_default_stats(stats);
-        // l2->set_default_stats(stats);
-	}
-
-#ifdef ENABLE_L3_CACHE
-	GET_STRINGBUF_PTR(l3_name, "L3");
-	SimpleWTCache::CacheController *l3 = new SimpleWTCache::CacheController(
-			0, l3_name->buf, this, L3_CACHE);
-	l3->set_wt_disable(true);
-	allControllers_.push((Controller*)l3);
-#ifdef SINGLE_CORE_MEM_CONFIG
-	l3->register_upper_interconnect(l2p2p);
-	l2p2p->register_controller(l3);
-#else
-	l3->register_upper_interconnect(bus);
-	bus->register_controller(l3);
-#endif
-	l3->set_private(false);
-
-	GET_STRINGBUF_PTR(l3_mem_p2p_name, "L3MemP2P");
-	P2PInterconnect *l3_mem_p2p = new P2PInterconnect(l3_mem_p2p_name->buf,
-			this);
-	allInterconnects_.push((Interconnect*)l3_mem_p2p);
-	l3_mem_p2p->register_controller(l3);
-	l3->register_lower_interconnect(l3_mem_p2p);
-    // l3->set_default_stats(stats);
-#endif
-
-	GET_STRINGBUF_PTR(mem_name, "Memory");
-	MemoryController *mem = new MemoryController(0, mem_name->buf,
-			this);
-	allControllers_.push((Controller*)mem);
-#ifdef ENABLE_L3_CACHE
-	mem->register_cache_interconnect(l3_mem_p2p);
-	l3_mem_p2p->register_controller(mem);
-#else
-#ifdef SINGLE_CORE_MEM_CONFIG
-	mem->register_cache_interconnect(l2p2p);
-	l2p2p->register_controller(mem);
-#else
-	mem->register_cache_interconnect(bus);
-	bus->register_controller(mem);
-#endif
-#endif
-	mem->set_private(false);
-	memoryController_ = mem;
-
-#ifdef SINGLE_CORE_MEM_CONFIG
-	allInterconnects_.push((Interconnect*)l2p2p);
-#else
-	allInterconnects_.push((Interconnect*)bus);
-#endif
-
-	// Setup the full flags
-	cpuFullFlags_.resize(cpuControllers_.count(), false);
-	controllersFullFlags_.resize(allControllers_.count(), false);
-	interconnectsFullFlags_.resize(allInterconnects_.count(), false);
 }
 
 bool MemoryHierarchy::access_cache(MemoryRequest *request)
@@ -578,19 +279,33 @@ void MemoryHierarchy::sort_event_queue(Event *event)
 			eventQueue_.unlink(event);
 			eventQueue_.insert_after(event, (Event*)(entryEvent->prev));
 			return;
-		} else if(*event == *entryEvent) {
-			if(event != entryEvent) {
-				eventQueue_.unlink(event);
-				eventQueue_.insert_after(event, entryEvent);
-			}
-			return;
-		} else {
-			continue;
 		}
 	}
 
 	// Entry is already at the tail of queue, keep it there
 	return;
+}
+
+void MemoryHierarchy::sort_event_queue_tail(Event *event)
+{
+	// First make sure that given event is in tail of queue
+	assert(eventQueue_.tail() == event);
+
+	// No need to sort if only 1 event
+	if (eventQueue_.count() == 1)
+		return;
+
+	Event* entryEvent;
+	foreach_list_mutable_backwards(eventQueue_.list(), entryEvent, entry, preventry) {
+        if (entryEvent == event)
+            continue;
+
+        if (*event >= *entryEvent) {
+            eventQueue_.unlink(event);
+            eventQueue_.insert_after(event, (Event*)(entryEvent));
+            return;
+        }
+    }
 }
 
 void MemoryHierarchy::add_event(Signal *signal, int delay, void *arg)
@@ -613,14 +328,16 @@ void MemoryHierarchy::add_event(Signal *signal, int delay, void *arg)
 
 	memdebug("Adding event:", *event);
 
-	sort_event_queue(event);
+    sort_event_queue(event);
 
 	return;
 }
 
 Message* MemoryHierarchy::get_message()
 {
-	return messageQueue_.alloc();
+    Message* message = messageQueue_.alloc();
+    assert(message);
+    return message;
 }
 
 void MemoryHierarchy::free_message(Message* msg)
@@ -643,10 +360,13 @@ void MemoryHierarchy::annul_request(W8 coreid,
 	memRequest->init(coreid, threadid, physaddr, robid, sim_cycle, is_icache,
 			-1, -1, (is_write ? MEMORY_OP_WRITE : MEMORY_OP_READ));
 	cpuControllers_[coreid]->annul_request(memRequest);
-	foreach(i, allControllers_.count()) {
-		allControllers_[i]->annul_request(memRequest);
-	}
-	memRequest->set_ref_counter(0);
+	//foreach(i, allControllers_.count()) {
+	//	allControllers_[i]->annul_request(memRequest);
+	//}
+    //foreach(i, allInterconnects_.count()) {
+    //    allInterconnects_[i]->annul_request(memRequest);
+    //}
+	//memRequest->set_ref_counter(0);
 /*
  *     foreach_list_mutable(requestPool_.used_list(), memRequest,
  *             entry, nextentry) {
@@ -679,16 +399,86 @@ int MemoryHierarchy::get_core_pending_offchip_miss(W8 coreid)
 		get_no_pending_request(coreid);
 }
 
+/**
+ * @brief Try to grab Cache line lock
+ *
+ * @param lockaddr Cache line address
+ * @param ctx_id CPU Context ID
+ *
+ * @return true if lock is successfuly acquired
+ */
+bool MemoryHierarchy::grab_lock(W64 lockaddr, W8 ctx_id)
+{
+    bool ret = false;
+
+    if(config.threaded_simulation)
+        pthread_mutex_lock(&interlock_mutex);
+
+    MemoryInterlockEntry* lock = interlocks.select_and_lock(lockaddr);
+
+    if(lock && lock->ctx_id == (W8)-1) {
+        lock->ctx_id = ctx_id;
+        ret = true;
+    }
+
+    if(config.threaded_simulation)
+        pthread_mutex_unlock(&interlock_mutex);
+
+    return ret;
+}
+
+/**
+ * @brief Invalidate Cache Line lock
+ *
+ * @param lockaddr Cache line address
+ * @param ctx_id CPU Context ID that held the lock
+ */
+void MemoryHierarchy::invalidate_lock(W64 lockaddr, W8 ctx_id)
+{
+    if(config.threaded_simulation)
+        pthread_mutex_lock(&interlock_mutex);
+
+    MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
+
+    assert(lock);
+    assert(lock->ctx_id == ctx_id);
+    interlocks.invalidate(lockaddr);
+
+    if(config.threaded_simulation)
+        pthread_mutex_unlock(&interlock_mutex);
+}
+
+/**
+ * @brief Proble Cache for Cache Line lock
+ *
+ * @param lockaddr Cache Line address
+ * @param ctx_id CPU Context ID
+ *
+ * @return True if lock is available and held by given ctx_id
+ */
+bool MemoryHierarchy::probe_lock(W64 lockaddr, W8 ctx_id)
+{
+    bool ret = false;
+
+    if(config.threaded_simulation)
+        pthread_mutex_lock(&interlock_mutex);
+
+    MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
+
+    if(!lock) { // If no one has grab the lock
+        ret = true;
+    } else if(lock && lock->ctx_id == ctx_id) {
+        ret = true;
+    }
+
+    if(config.threaded_simulation)
+        pthread_mutex_unlock(&interlock_mutex);
+
+    return ret;
+}
+
 namespace Memory {
 
-ostream& operator <<(ostream& os, const Event& event)
-{
-	return event.print(os);
-}
-
-ostream& operator ,(ostream& os, const Event& event)
-{
-	return event.print(os);
-}
+MemoryInterlockBuffer interlocks;
 
 };

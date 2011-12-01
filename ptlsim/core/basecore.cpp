@@ -1,17 +1,25 @@
 
+/*
+ * MARSSx86 : A Full System Computer-Architecture Simulator
+ *
+ * This code is released under GPL.
+ *
+ * Copyright 2011 Avadh Patel <apatel@cs.binghamton.edu>
+ *
+ */
+
 #include <basecore.h>
 #include <globals.h>
-#include <stats.h>
 
-#define INSIDE_DEFCORE
-#include <defcore.h>
+#include <ooo.h>
 
 #include <atomcore.h>
 
 using namespace Core;
 
-BaseCore::BaseCore(BaseMachine& machine)
-    : machine(machine)
+BaseCore::BaseCore(BaseMachine& machine, const char* name)
+    : Statable(name, &machine)
+      , machine(machine)
 {
 }
 

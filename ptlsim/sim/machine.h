@@ -1,10 +1,20 @@
 
+/*
+ * MARSSx86 : A Full System Computer-Architecture Simulator
+ *
+ * This code is released under GPL.
+ *
+ * Copyright 2011 Avadh Patel <apatel@cs.binghamton.edu>
+ *
+ */
+
 #ifndef MACHINE_H
 #define MACHINE_H
 
 #include <ptlsim.h>
 
 #include <pthread.h>
+#define THREAD_PAUSE_CYCLES 10000
 
 namespace Core {
     struct BaseCore;
@@ -60,12 +70,12 @@ struct BaseMachine: public PTLsimMachine {
     virtual int run(PTLsimConfig& config);
     virtual W8 get_num_cores();
     virtual void dump_state(ostream& os);
-    virtual void update_stats(PTLsimStats* stats);
+    virtual void update_stats();
     virtual void flush_tlb(Context& ctx);
     virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);
     void flush_all_pipelines();
     virtual void reset();
-    ~BaseMachine();
+    virtual ~BaseMachine();
 
     bitvec<NUM_SIM_CORES> context_used;
     W8 context_counter;

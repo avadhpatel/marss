@@ -33,7 +33,6 @@
 #include <ptlhwdef.h>
 #endif
 
-#include <stats.h>
 #include <memoryHierarchy.h>
 #include <cacheController.h>
 
@@ -47,7 +46,6 @@
 //#endif
 
 using namespace Memory;
-using namespace Memory::SimpleWTCache;
 
 
 CacheController::CacheController(W8 coreid, const char *name,
@@ -94,6 +92,21 @@ CacheController::CacheController(W8 coreid, const char *name,
 	upperInterconnect_ = NULL;
 	upperInterconnect2_ = NULL;
 	lowerInterconnect_= NULL;
+
+    /* Find cache type from its name */
+    if (( strstr(get_name(), "L2") !=NULL) )
+        type_ = L2_CACHE;
+    else if (( strstr(get_name(), "L3") !=NULL) )
+        type_ = L3_CACHE;
+    else if (( strstr(get_name(), "L1_I") !=NULL) )
+        type_ = L1_I_CACHE;
+    else if (( strstr(get_name(), "L1_D") !=NULL) )
+        type_ = L1_D_CACHE;
+}
+
+CacheController::~CacheController()
+{
+    delete &new_stats;
 }
 
 CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
@@ -191,6 +204,8 @@ bool CacheController::handle_interconnect_cb(void *arg)
 
 		queueEntry->request = msg->request;
 		queueEntry->sender = sender;
+		queueEntry->source = (Controller*)msg->origin;
+		queueEntry->dest = (Controller*)msg->dest;
 		queueEntry->request->incRefCounter();
 		ADD_HISTORY_ADD(queueEntry->request);
 
@@ -220,12 +235,13 @@ bool CacheController::handle_interconnect_cb(void *arg)
 			/* Found an dependency */
 			memdebug("dependent entry: ", *dependsOn, endl);
 			dependsOn->depends = queueEntry->idx;
+			dependsOn->dependsAddr = queueEntry->request->get_physical_address();
 			OP_TYPE type = queueEntry->request->get_type();
             bool kernel_req = queueEntry->request->is_kernel();
 			if(type == MEMORY_OP_READ) {
-				STAT_UPDATE(cpurequest.stall.read.dependency++, kernel_req);
+				N_STAT_UPDATE(new_stats.cpurequest.stall.read.dependency, ++, kernel_req);
 			} else if(type == MEMORY_OP_WRITE) {
-				STAT_UPDATE(cpurequest.stall.write.dependency++, kernel_req);
+				N_STAT_UPDATE(new_stats.cpurequest.stall.write.dependency, ++, kernel_req);
 			}
 		} else {
 			cache_access_cb(queueEntry);
@@ -301,6 +317,8 @@ bool CacheController::handle_interconnect_cb(void *arg)
 
 					newEntry->request = msg->request;
 					newEntry->sender = sender;
+					newEntry->source = (Controller*)msg->origin;
+					newEntry->dest = (Controller*)msg->dest;
 					newEntry->request->incRefCounter();
 					ADD_HISTORY_ADD(newEntry->request);
 
@@ -361,7 +379,6 @@ int CacheController::access_fast_path(Interconnect *interconnect,
 	if(hit && request->get_type() != MEMORY_OP_WRITE) {
         N_STAT_UPDATE(new_stats.cpurequest.count.hit.read.hit, ++,
                 request->is_kernel());
-		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, request->is_kernel());
 		return cacheLines_->latency();
 	}
 
@@ -415,11 +432,9 @@ bool CacheController::cache_hit_cb(void *arg)
 	OP_TYPE type = queueEntry->request->get_type();
     bool kernel_req = queueEntry->request->is_kernel();
 	if(type == MEMORY_OP_READ) {
-		STAT_UPDATE(cpurequest.count.hit.read.hit.hit++, kernel_req);
 		N_STAT_UPDATE(new_stats.cpurequest.count.hit.read.hit, ++,
                 kernel_req);
 	} else if(type == MEMORY_OP_WRITE) {
-		STAT_UPDATE(cpurequest.count.hit.write.hit.hit++, kernel_req);
 		N_STAT_UPDATE(new_stats.cpurequest.count.hit.write.hit, ++,
                 kernel_req);
 	}
@@ -454,11 +469,6 @@ bool CacheController::cache_miss_cb(void *arg)
 	OP_TYPE type = queueEntry->request->get_type();
     bool kernel_req = queueEntry->request->is_kernel();
 	if(type == MEMORY_OP_READ) {
-		STAT_UPDATE(cpurequest.count.miss.read++, kernel_req);
-	} else if(type == MEMORY_OP_WRITE) {
-		STAT_UPDATE(cpurequest.count.miss.write++, kernel_req);
-	}
-	if(type == MEMORY_OP_READ) {
 		N_STAT_UPDATE(new_stats.cpurequest.count.miss.read, ++, kernel_req);
 	} else if(type == MEMORY_OP_WRITE) {
 		N_STAT_UPDATE(new_stats.cpurequest.count.miss.write, ++, kernel_req);
@@ -488,18 +498,23 @@ bool CacheController::cache_insert_cb(void *arg)
 
 	queueEntry->eventFlags[CACHE_INSERT_EVENT]--;
 
+    if(pendingRequests_.isFull()) {
+        goto retry_insert;
+    }
+
 	if(cacheLines_->get_port(queueEntry->request)) {
 		W64 oldTag = InvalidTag<W64>::INVALID;
 		CacheLine *line = cacheLines_->insert(queueEntry->request,
 				oldTag);
-		if(oldTag != InvalidTag<W64>::INVALID || oldTag != -1) {
+		if(oldTag != InvalidTag<W64>::INVALID && oldTag != -1) {
             if(wt_disabled_ && line->state == LINE_MODIFIED) {
-				if(!send_update_message(queueEntry, oldTag))
-					goto retry_insert;
+                send_update_message(queueEntry, oldTag);
 			}
 		}
 
         line->state = LINE_VALID;
+        line->init(cacheLines_->tagOf(queueEntry->request->
+                    get_physical_address()));
 
 		queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
 		memoryHierarchy_->add_event(&cacheInsertComplete_,
@@ -546,7 +561,7 @@ bool CacheController::cache_access_cb(void *arg)
         //			hit = true;
 
 		OP_TYPE type = queueEntry->request->get_type();
-		Signal *signal;
+		Signal *signal = NULL;
 		int delay;
 		if(hit) {
 			if(type == MEMORY_OP_READ ||
@@ -583,7 +598,18 @@ bool CacheController::cache_access_cb(void *arg)
                         goto retry_cache_access;
                     }
                 }
-			}
+			} else if(type == MEMORY_OP_EVICT) {
+                if(is_private()) {
+                    line->state = LINE_NOT_VALID;
+                }
+                /* Else its an evict message from any coherent cache
+                 * so ignore that. */
+                signal = &clearEntry_;
+                delay = cacheAccessLatency_;
+                queueEntry->eventFlags[CACHE_CLEAR_ENTRY_EVENT]++;
+            } else {
+                assert(0);
+            }
 		} else { // Cache Miss
 			if(type == MEMORY_OP_READ ||
 					type == MEMORY_OP_WRITE) {
@@ -614,9 +640,9 @@ bool CacheController::cache_access_cb(void *arg)
 		OP_TYPE type = queueEntry->request->get_type();
         bool kernel_req = queueEntry->request->is_kernel();
 		if(type == MEMORY_OP_READ) {
-			STAT_UPDATE(cpurequest.stall.read.cache_port++, kernel_req);
+			N_STAT_UPDATE(new_stats.cpurequest.stall.read.cache_port, ++, kernel_req);
 		} else if(type == MEMORY_OP_WRITE) {
-			STAT_UPDATE(cpurequest.stall.write.cache_port++, kernel_req);
+			N_STAT_UPDATE(new_stats.cpurequest.stall.write.cache_port, ++, kernel_req);
 		}
 	}
 
@@ -653,6 +679,7 @@ bool CacheController::wait_interconnect_cb(void *arg)
          * previous request, so mark 'hasData' to true in message
          */
 		message.hasData = true;
+		message.dest = queueEntry->source;
 		memdebug("Sending message: ", message, endl);
 		success = queueEntry->sendTo->get_controller_request_signal()->
 			emit(&message);
@@ -671,6 +698,8 @@ bool CacheController::wait_interconnect_cb(void *arg)
 	} else {
 		if(queueEntry->request->get_type() == MEMORY_OP_UPDATE)
 			message.hasData = true;
+
+		message.dest = queueEntry->dest;
 
 		success = lowerInterconnect_->
 			get_controller_request_signal()->emit(&message);
@@ -763,7 +792,7 @@ void CacheController::annul_request(MemoryRequest *request)
 	CacheQueueEntry *queueEntry;
 	foreach_list_mutable(pendingRequests_.list(), queueEntry,
 			entry, nextentry) {
-		if(queueEntry->request == request) {
+		if(queueEntry->request->is_same(request)) {
             queueEntry->eventFlags.reset();
             clear_entry_cb(queueEntry);
 			queueEntry->annuled = true;

@@ -86,16 +86,7 @@
     signal.connect(signal_mem_ptr(*this, cb)); \
 }
 
-namespace OutOfOrderModel {
-  class OutOfOrderMachine;
-  class OutOfOrderCore;
-  class LoadStoreQueueEntry;
-  struct OutOfOrderCoreCacheCallbacks;
-};
-
 namespace Memory {
-
-  using namespace OutOfOrderModel;
 
   class Event : public FixStateListObject
 	{
@@ -152,11 +143,32 @@ namespace Memory {
 					return true;
 				return false;
 			}
+
+            bool operator >=(Event &event) {
+                if (clock_ >= event.clock_)
+                    return true;
+                return false;
+            }
 	};
 
-  ostream& operator <<(ostream& os, const Event& event);
-  ostream& operator ,(ostream& os, const Event& event);
+  static inline ostream& operator <<(ostream& os, const Event& event) {
+      return event.print(os);
+  }
 
+  struct MemoryInterlockEntry {
+      W8 ctx_id;
+
+      void reset() {ctx_id = -1;}
+
+      ostream& print(ostream& os, W64 physaddr) const {
+          os << "phys " << (void*)physaddr << ": vcpu " << (int)ctx_id;
+          return os;
+      }
+  };
+
+  struct MemoryInterlockBuffer: public LockableAssociativeArray<W64, MemoryInterlockEntry, 16, 4, 8> { };
+
+  extern MemoryInterlockBuffer interlocks;
 
   //
   // MemoryHierarchy provides interface with core
@@ -173,22 +185,12 @@ namespace Memory {
     // interface to memory hierarchy
 	bool access_cache(MemoryRequest *request);
 
-	// callback with response
-	void icache_wakeup_wrapper(MemoryRequest *request);
-	void dcache_wakeup_wrapper(MemoryRequest *request);
-
     // New Core wakeup function that uses Signal of MemoryRequest
     // if Signal is not setup, it uses old wrapper functions
     void core_wakeup(MemoryRequest *request) {
         if(request->get_coreSignal()) {
             request->get_coreSignal()->emit((void*)request);
             return;
-        }
-
-        if(request->is_instruction()) {
-            icache_wakeup_wrapper(request);
-        } else {
-            dcache_wakeup_wrapper(request);
         }
     }
 
@@ -248,11 +250,11 @@ namespace Memory {
         interconnectsFullFlags_.resize(allInterconnects_.count(), false);
     }
 
-  private:
+    bool grab_lock(W64 lockaddr, W8 ctx_id);
+    bool probe_lock(W64 lockaddr, W8 ctx_id);
+    void invalidate_lock(W64 lockaddr, W8 ctx_id);
 
-    void setup_topology();
-    void shared_L2_configuration();
-    void private_L2_configuration();
+  private:
 
     // machine
     BaseMachine &machine_;
@@ -280,14 +282,16 @@ namespace Memory {
 	FixStateList<Message, 128> messageQueue_;
 
 	// Event Queue
-	FixStateList<Event, 1024> eventQueue_;
+	FixStateList<Event, 2048> eventQueue_;
 
 	void sort_event_queue(Event *event);
+	void sort_event_queue_tail(Event *event);
 
     // Temp Stats
     Stats *stats;
 
     pthread_mutex_t cache_mutex;
+    pthread_mutex_t interlock_mutex;
 
   };
 

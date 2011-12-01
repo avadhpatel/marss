@@ -93,8 +93,8 @@ void gen_atom_test_machine(BaseMachine& machine)
     }
 
     foreach(i, 1) {
-        ConnectionDef* connDef = machine.get_new_connection_def("mesi_bus",
-                "mesi_bus_0", i);
+        ConnectionDef* connDef = machine.get_new_connection_def("split_bus",
+                "split_bus_0", i);
         foreach(j, machine.get_num_cores()) {
             stringbuf L2_;
             L2_ << "L2_" << j;
@@ -140,7 +140,7 @@ namespace {
 
                 foreach(i, base_machine->cores.count()) {
                     AtomCore* core = (AtomCore*)base_machine->cores[i];
-                    core->set_default_stats(n_user_stats);
+                    core->set_default_stats(user_stats);
                 }
             }
 
@@ -613,7 +613,7 @@ namespace {
             ASSERT_EQ(op.uops[0].opcode, OP_and);
             ASSERT_TRUE(op.synthops[0]);
             ASSERT_EQ(op.rip, 0x410200);
-            ASSERT_EQ(op.fu_mask, 64-1);
+            ASSERT_EQ(op.fu_mask, 0x333);
             ASSERT_EQ(op.port_mask, 3);
             ASSERT_FALSE(op.is_nonpipe);
             ASSERT_TRUE(op.som);
@@ -625,6 +625,7 @@ namespace {
             ASSERT_EQ(op.src_registers[2], (W8)-1);
             ASSERT_EQ(op.dest_registers[0], REG_temp0);
             ASSERT_EQ(op.dest_registers[1], (W8)-1);
+
         }
 
         {
@@ -692,7 +693,7 @@ namespace {
             ASSERT_EQ(op.uops[0].opcode, OP_mov);
             ASSERT_TRUE(op.synthops[0]);
             ASSERT_EQ(op.rip, 0x41020a);
-            ASSERT_EQ(op.fu_mask, 64-1);
+            ASSERT_EQ(op.fu_mask, 819);
             ASSERT_EQ(op.port_mask, 3);
             ASSERT_FALSE(op.is_nonpipe);
             ASSERT_TRUE(op.som);
@@ -930,12 +931,18 @@ namespace {
 
     TEST(AtomCoreModelTest, CheckFUEnums)
     {
-        ASSERT_EQ(FU_ALU0, 1);
-        ASSERT_EQ(FU_ALU1, 2);
-        ASSERT_EQ(FU_FPU0, 4);
-        ASSERT_EQ(FU_FPU1, 8);
-        ASSERT_EQ(FU_AGU0, 16);
-        ASSERT_EQ(FU_AGU1, 32);
+        ASSERT_EQ(FU_ALU0, 0x1);
+        ASSERT_EQ(FU_ALU1, 0x2);
+        ASSERT_EQ(FU_ALU2, 0x4);
+        ASSERT_EQ(FU_ALU3, 0x8);
+        ASSERT_EQ(FU_FPU0, 0x10);
+        ASSERT_EQ(FU_FPU1, 0x20);
+        ASSERT_EQ(FU_FPU2, 0x40);
+        ASSERT_EQ(FU_FPU3, 0x80);
+        ASSERT_EQ(FU_AGU0, 0x100);
+        ASSERT_EQ(FU_AGU1, 0x200);
+        ASSERT_EQ(FU_AGU2, 0x400);
+        ASSERT_EQ(FU_AGU3, 0x800);
 
         ASSERT_EQ(FU_ALU0 & FU_ALU1, 0);
         ASSERT_EQ(FU_FPU0 & FU_FPU1, 0);
@@ -944,7 +951,7 @@ namespace {
         ASSERT_EQ(FU_ALU0 & FU_ALU1 & FU_FPU0 & FU_FPU1 & FU_AGU0 & FU_AGU1,
                 0);
         ASSERT_EQ(FU_ALU0 | FU_ALU1 | FU_FPU0 | FU_FPU1 | FU_AGU0 | FU_AGU1,
-                63);
+                819);
     }
 
     TEST(AtomCoreModelTest, CheckPortEnums)
@@ -988,7 +995,7 @@ namespace {
     TEST(AtomCoreModelTest, CheckFUMap)
     {
         for(int i=0; i < (1 << FU_COUNT); i++) {
-            W32 fu_used = first_set_fu_map[i];
+            W32 fu_used = first_set(i);
 
             switch(fu_used) {
                 case 0x0:
@@ -998,7 +1005,12 @@ namespace {
                 case 0x8:
                 case 0x10:
                 case 0x20:
-                case 0x30:
+                case 0x40:
+                case 0x80:
+                case 0x100:
+                case 0x200:
+                case 0x400:
+                case 0x800:
                     continue;
                 default:
                     ASSERT_TRUE(0) << "Masking failed for " << i;

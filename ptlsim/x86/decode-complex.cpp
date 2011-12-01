@@ -12,6 +12,7 @@
 extern "C" {
 #include <helper.h>
 #include <cpu.h>
+#include <ioport.h>
 }
 
 template <typename T> bool assist_div(Context& ctx) {
@@ -701,15 +702,7 @@ bool assist_write_cr2(Context& ctx) {
   return true;
 }
 
-#define STORE_CR3_VALUES
-#ifdef STORE_CR3_VALUES
-static ofstream cr3_values("cr3_values.txt");
-#endif
-
 bool assist_write_cr3(Context& ctx) {
-#ifdef STORE_CR3_VALUES
-	cr3_values << "sim_cycle: ", sim_cycle, " cr3: ", (void*)ctx.reg_ar1, endl, flush;
-#endif
   ctx.eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
   ctx.eip = ctx.reg_nextrip;
@@ -751,6 +744,7 @@ bool assist_write_debug_reg(Context& ctx) {
 	  ctx.dr[regid] = value;
   }
   ctx.eip = ctx.reg_nextrip;
+  setup_ptlsim_switch_all_ctx(ctx);
   return true;
 }
 
@@ -859,7 +853,7 @@ bool assist_ioport_in(Context& ctx) {
 W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
-	W64 port = ra;
+	W32 port = ra & IOPORTS_MASK;
 	W64 sizeshift = rb;
 	W64 old_eax = rc;
 
@@ -910,11 +904,12 @@ bool assist_ioport_out(Context& ctx) {
 W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 		W16 rbflags, W16 rcflags, W16& flags) {
 
-	W64 port = ra;
+	W32 port = ra & IOPORTS_MASK;
 	W64 sizeshift = rb;
 	W64 value = x86_merge(0, rc, sizeshift);
 
 	setup_qemu_switch_all_ctx(ctx);
+    assert(port < MAX_IOPORTS);
 	if(sizeshift == 0) {
 		helper_outb(port, value);
 	} else if(sizeshift == 1) {
@@ -1472,7 +1467,7 @@ bool TraceDecoder::decode_complex() {
       }
       case 0xaa: case 0xab: {
         // stos
-        if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
+        //if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
         this << TransOp(OP_st,   REG_mem,   REG_rdi,    REG_imm,  REG_rax, sizeshift, 0);
         this << TransOp(OP_add,  REG_rdi,   REG_rdi,    REG_imm,   REG_zero, addrsizeshift, increment);
         if (rep) {
@@ -1490,7 +1485,7 @@ bool TraceDecoder::decode_complex() {
       }
       case 0xac ... 0xad: {
         // lods
-        if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
+        //if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
 
         if (sizeshift >= 2) {
           this << TransOp(OP_ld,   REG_rax,   REG_rsi,    REG_imm,  REG_zero, sizeshift, 0);
@@ -2077,7 +2072,10 @@ bool TraceDecoder::decode_complex() {
 				microcode_assist(ASSIST_VERR, ripstart, rip);
 			else
 				microcode_assist(ASSIST_VERW, ripstart, rip);
+            break;
 		}
+        default:
+            goto invalid_opcode;
 	}
 	end_of_block = 1;
 	break;

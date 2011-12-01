@@ -45,6 +45,7 @@ void register_assert_cb(void (*fn)())
 
 extern "C" void assert_fail(const char *__assertion, const char *__file, unsigned int __line, const char *__function) {
   stringbuf sb;
+  assert_cb_t *tmp_cb = NULL;
   sb << "Assert ", __assertion, " failed in ", __file, ":", __line, " (", __function, ")", endl;
 
   sb << "Calling Assert Callback functions\n";
@@ -52,11 +53,11 @@ extern "C" void assert_fail(const char *__assertion, const char *__file, unsigne
   /* To avoid infinite recursion of assert in assert callback functions */
   static bool in_assert_fail = 0;
   if(in_assert_fail) {
-      return;
+      goto abort;
   }
   in_assert_fail = 1;
 
-  assert_cb_t *tmp_cb = assert_cb_head;
+  tmp_cb = assert_cb_head;
   while(tmp_cb != NULL) {
       (*tmp_cb->function)();
       tmp_cb = tmp_cb->next;
@@ -80,6 +81,7 @@ extern "C" void assert_fail(const char *__assertion, const char *__file, unsigne
 
 	free (strings);
 
+abort:
   cerr << sb;
   cerr.flush();
   cout.flush();

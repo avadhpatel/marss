@@ -1413,6 +1413,10 @@ static int vm_can_run(void)
 
 qemu_irq qemu_system_powerdown;
 
+#ifdef MARSS_QEMU
+void tb_flush(CPUState *);
+#endif
+
 static void main_loop(void)
 {
     int r;
@@ -1432,6 +1436,7 @@ static void main_loop(void)
                 cpu_set_sim_ticks();
                 in_simulation = 1;
                 start_simulation = 0;
+                tb_flush(first_cpu);
             }
 
             ptl_check_ptlcall_queue();
@@ -1444,6 +1449,7 @@ static void main_loop(void)
             if(in_simulation && !qemu_alarm_pending()) {
                 /* cur_cpu = first_cpu; */
                 sim_cpu_exec();
+                nonblocking = true;
             } else {
 #endif
             nonblocking = cpu_exec_all();
