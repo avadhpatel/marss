@@ -291,7 +291,7 @@ namespace Memory {
     Stats *stats;
 
     pthread_mutex_t cache_mutex;
-    pthread_mutex_t interlock_mutex;
+    pthread_rwlock_t interlock_mutex;
 
   };
 

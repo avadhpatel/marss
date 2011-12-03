@@ -56,7 +56,7 @@ MemoryHierarchy::MemoryHierarchy(BaseMachine& machine) :
     coreNo_ = machine_.get_num_cores();
 
     pthread_mutex_init(&cache_mutex, NULL);
-    pthread_mutex_init(&interlock_mutex, NULL);
+    pthread_rwlock_init(&interlock_mutex, NULL);
 
     foreach(i, NUM_SIM_CORES) {
         RequestPool* pool = new RequestPool();
@@ -427,7 +427,7 @@ bool MemoryHierarchy::grab_lock(W64 lockaddr, W8 ctx_id)
     bool ret = false;
 
     if(config.threaded_simulation)
-        pthread_mutex_lock(&interlock_mutex);
+        pthread_rwlock_wrlock(&interlock_mutex);
 
     MemoryInterlockEntry* lock = interlocks.select_and_lock(lockaddr);
 
@@ -437,7 +437,7 @@ bool MemoryHierarchy::grab_lock(W64 lockaddr, W8 ctx_id)
     }
 
     if(config.threaded_simulation)
-        pthread_mutex_unlock(&interlock_mutex);
+        pthread_rwlock_unlock(&interlock_mutex);
 
     return ret;
 }
@@ -451,7 +451,7 @@ bool MemoryHierarchy::grab_lock(W64 lockaddr, W8 ctx_id)
 void MemoryHierarchy::invalidate_lock(W64 lockaddr, W8 ctx_id)
 {
     if(config.threaded_simulation)
-        pthread_mutex_lock(&interlock_mutex);
+        pthread_rwlock_wrlock(&interlock_mutex);
 
     MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
 
@@ -460,7 +460,7 @@ void MemoryHierarchy::invalidate_lock(W64 lockaddr, W8 ctx_id)
     interlocks.invalidate(lockaddr);
 
     if(config.threaded_simulation)
-        pthread_mutex_unlock(&interlock_mutex);
+        pthread_rwlock_unlock(&interlock_mutex);
 }
 
 /**
@@ -476,7 +476,7 @@ bool MemoryHierarchy::probe_lock(W64 lockaddr, W8 ctx_id)
     bool ret = false;
 
     if(config.threaded_simulation)
-        pthread_mutex_lock(&interlock_mutex);
+        pthread_rwlock_rdlock(&interlock_mutex);
 
     MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
 
@@ -487,7 +487,7 @@ bool MemoryHierarchy::probe_lock(W64 lockaddr, W8 ctx_id)
     }
 
     if(config.threaded_simulation)
-        pthread_mutex_unlock(&interlock_mutex);
+        pthread_rwlock_unlock(&interlock_mutex);
 
     return ret;
 }
