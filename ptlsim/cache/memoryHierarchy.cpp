@@ -350,14 +350,14 @@ void MemoryHierarchy::add_event(Signal *signal, int delay, void *arg)
 
 Message* MemoryHierarchy::get_message()
 {
-    Message* message = messageQueue_.alloc();
+    Message* message = new Message();
     assert(message);
     return message;
 }
 
 void MemoryHierarchy::free_message(Message* msg)
 {
-	messageQueue_.free(msg);
+    delete msg;
 }
 
 void MemoryHierarchy::annul_request(W8 coreid,

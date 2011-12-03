@@ -29,8 +29,13 @@ void BaseCore::update_memory_hierarchy_ptr() {
 
 extern "C" void ptl_flush_bbcache(int8_t context_id) {
     if(in_simulation) {
+        if (context_id == -1) {
       foreach(i, NUM_SIM_CORES) {
         bbcache[i].flush(context_id);
+      }
+        } else {
+            bbcache[context_id].flush(context_id);
+        }
         // Get the current ptlsim machine and call its flush tlb
         PTLsimMachine* machine = PTLsimMachine::getcurrent();
 
@@ -38,6 +43,5 @@ extern "C" void ptl_flush_bbcache(int8_t context_id) {
             Context& ctx = machine->contextof(context_id);
             machine->flush_tlb(ctx);
         }
-      }
     }
 }

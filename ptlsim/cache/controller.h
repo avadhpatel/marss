@@ -45,6 +45,10 @@ struct Message : public FixStateListObject {
 	bool isShared;
 	void *arg;
 
+    Message() {
+        init();
+    }
+
 	ostream& print(ostream& os) const {
 		if(sender == NULL) {
 			os << "Free Message\n";

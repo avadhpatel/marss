@@ -279,7 +279,7 @@ namespace Memory {
 	dynarray<RequestPool*> requestPool_;
 
 	// Message pool
-	FixStateList<Message, 128> messageQueue_;
+	// FixStateList<Message, 128> messageQueue_;
 
 	// Event Queue
 	FixStateList<Event, 2048> eventQueue_;
