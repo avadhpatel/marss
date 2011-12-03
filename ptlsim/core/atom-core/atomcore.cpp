@@ -1954,7 +1954,7 @@ bool AtomThread::fetch_from_icache()
         assert(!waiting_for_icache_miss);
 
         Memory::MemoryRequest *request = core.memoryHierarchy->
-            get_free_request();
+            get_free_request(core.coreid);
         assert(request != NULL);
 
         request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
@@ -2084,7 +2084,7 @@ itlb_walk_finish:
     }
 
     Memory::MemoryRequest *request = core.memoryHierarchy->
-        get_free_request();
+        get_free_request(core.coreid);
     assert(request != NULL);
 
     request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
@@ -2141,7 +2141,7 @@ dtlb_walk_finish:
     }
 
     Memory::MemoryRequest *request = core.memoryHierarchy->
-        get_free_request();
+        get_free_request(core.coreid);
     assert(request != NULL);
 
     request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
@@ -2371,7 +2371,7 @@ void AtomThread::redirect_fetch(W64 rip)
 bool AtomThread::access_dcache(Waddr addr, W64 rip, W8 type, W64 uuid)
 {
     assert(rip);
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
     assert(request);
 
     request->init(core.coreid, threadid, addr, 0,

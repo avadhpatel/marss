@@ -230,8 +230,6 @@ class RequestPool: public array<MemoryRequest,REQUEST_POOL_SIZE>
 		StateList freeRequestList_;
 		StateList usedRequestsList_;
 
-        pthread_mutex_t req_mutex;
-
 		void freeRequest(MemoryRequest* request);
 
 		bool isEmpty()
