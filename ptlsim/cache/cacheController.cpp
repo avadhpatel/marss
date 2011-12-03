@@ -815,7 +815,8 @@ void CacheController::annul_request(MemoryRequest *request)
 bool CacheController::send_update_message(CacheQueueEntry *queueEntry,
 		W64 tag)
 {
-	MemoryRequest *request = memoryHierarchy_->get_free_request();
+	MemoryRequest *request = memoryHierarchy_->get_free_request(
+            queueEntry->request->get_coreid());
 	assert(request);
 
 	request->init(queueEntry->request);
@@ -861,7 +862,8 @@ void CacheController::do_prefetch(MemoryRequest *request, int additional_delay)
 	if(pendingRequests_.count() > pendingRequests_.size() * 0.7)
 		return;
 
-	MemoryRequest *new_request = memoryHierarchy_->get_free_request();
+	MemoryRequest *new_request = memoryHierarchy_->get_free_request(
+            request->get_coreid());
 	assert(new_request);
 
 	new_request->init(request);

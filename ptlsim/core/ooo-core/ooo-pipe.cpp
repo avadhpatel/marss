@@ -115,7 +115,7 @@ itlb_walk_finish:
         return;
     }
 
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
     assert(request != NULL);
 
     request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
@@ -559,7 +559,7 @@ bool ThreadContext::fetch() {
             bool hit;
             assert(!waiting_for_icache_fill);
 
-            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
             assert(request != NULL);
 
             request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
@@ -2092,7 +2092,7 @@ int ReorderBufferEntry::commit() {
             // location in simulation and not here..
             assert(lsq->physaddr);
 
-            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
             assert(request != NULL);
 
             request->init(core.coreid, threadid, lsq->physaddr << 3, 0,

@@ -291,7 +291,8 @@ bool CacheController::is_line_valid(CacheLine *line)
 void CacheController::send_message(CacheQueueEntry *queueEntry,
         Interconnect *interconn, OP_TYPE type, W64 tag)
 {
-    MemoryRequest *request = memoryHierarchy_->get_free_request();
+    MemoryRequest *request = memoryHierarchy_->get_free_request(
+            queueEntry->request->get_coreid());
     assert(request);
 
     if(tag == InvalidTag<W64>::INVALID || tag == (W64)-1)
