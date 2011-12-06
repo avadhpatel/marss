@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import copy
+import itertools
 
 from optparse import OptionParser
 from threading import Thread, Lock
@@ -50,6 +51,8 @@ opt_parser.add_option("-c", "--config",
         help="Configuration File. By default use util.cfg in util directory")
 opt_parser.add_option("-e", "--email", action="store_true",
         help="Send email using 'send_gmail.py' script after completion")
+opt_parser.add_option("-i", "--iterate", action="store", default=1, type=int,
+        help="Run simulation N times")
 
 (options, args) = opt_parser.parse_args()
 
@@ -70,6 +73,15 @@ else:
         os.makedirs(options.output_dir)
 
 output_dir = options.output_dir + "/"
+output_dirs = [output_dir]
+
+if options.iterate > 1:
+    output_dirs = []
+    for i in range(options.iterate):
+        i_dir = output_dir + "run_%d/" % (i + 1)
+        output_dirs.append(i_dir)
+        if not os.path.exists(i_dir):
+            os.makedirs(i_dir)
 
 # Get the configuration
 run_sec = get_run_config(conf_parser, args[0])
@@ -120,6 +132,9 @@ check_list = conf_parser.get(suite, 'checkpoints')
 check_list = get_list_from_conf(check_list)
 print("Checkpoints: %s" % str(check_list))
 
+if options.iterate > 1:
+    print("Will run for %d iterations." % options.iterate)
+
 # Get the simconfig
 if not conf_parser.has_option(run_sec, 'simconfig'):
     print("Please specify simconfig in section '%s'." % run_sec)
@@ -142,11 +157,10 @@ num_threads = len(qemu_img)
 out_to_stdout = False
 
 checkpoint_lock = Lock()
-checkpoint_iter = iter(check_list)
+checkpoint_iter = itertools.product(output_dirs, check_list)
 
 print("Chekcpoints to run: %s" % str(check_list))
 print("All files will be saved in: %s" % output_dir)
-
 
 def pty_to_stdout(fd, untill_chr):
     chr = '1'
@@ -160,9 +174,9 @@ def pty_to_stdout(fd, untill_chr):
 class SerialOut(Thread):
 
     def __init__(self, out_filename, out_devname):
-        global output_dir
+        # global output_dir
         super(SerialOut, self).__init__()
-        self.out_filename = output_dir + out_filename
+        self.out_filename = out_filename
         self.out_devname = out_devname
 
     def run(self):
@@ -220,7 +234,7 @@ class RunSim(Thread):
         global checkpoint_iter
         global sim_cmd_generic
         global vnc_counter
-        global output_dir
+        global output_dirs
         global simconfig
 
         print("Running thread with img: %s" % self.qemu_img)
@@ -243,9 +257,12 @@ class RunSim(Thread):
             finally:
                 checkpoint_lock.release()
 
-            print("Checkpoint %s" % checkpoint)
+            print("Checkpoint %s" % str(checkpoint))
             if not checkpoint:
                 break
+
+            output_dir = checkpoint[0]
+            checkpoint = checkpoint[1]
 
             sim_file_cmd_name = "/tmp/%s.simconfig" % checkpoint
             sim_file_cmd = open(sim_file_cmd_name, "w")
@@ -298,7 +315,7 @@ class RunSim(Thread):
                         break
 
             # Redirect output of serial terminal to file
-            serial_thread = SerialOut('%s.out' % (checkpoint), serial_pty)
+            serial_thread = SerialOut('%s%s.out' % (output_dir, checkpoint), serial_pty)
 
             # os.dup2(serial_pty, sys.stdout.fileno())
 
