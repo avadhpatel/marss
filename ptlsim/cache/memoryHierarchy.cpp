@@ -55,8 +55,13 @@ MemoryHierarchy::MemoryHierarchy(BaseMachine& machine) :
 {
     coreNo_ = machine_.get_num_cores();
 
-    pthread_mutex_init(&cache_mutex, NULL);
+    pthread_mutexattr_t mattr;
+    pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
+
+    pthread_mutex_init(&cache_mutex, &mattr);
     pthread_rwlock_init(&interlock_mutex, NULL);
+
+    pthread_mutexattr_destroy(&mattr);
 
     foreach(i, NUM_SIM_CORES) {
         RequestPool* pool = new RequestPool();
@@ -95,14 +100,8 @@ bool MemoryHierarchy::access_cache(MemoryRequest *request)
 	CPUController *cpuController = (CPUController*)cpuControllers_[coreid];
 	assert(cpuController != NULL);
 
-    if(config.threaded_simulation)
-        pthread_mutex_lock(&cache_mutex);
-
 	int ret_val;
 	ret_val = ((CPUController*)cpuController)->access(request);
-
-    if(config.threaded_simulation)
-        pthread_mutex_unlock(&cache_mutex);
 
 	if(ret_val == 0)
 		return true;
@@ -325,7 +324,11 @@ void MemoryHierarchy::sort_event_queue_tail(Event *event)
 
 void MemoryHierarchy::add_event(Signal *signal, int delay, void *arg)
 {
+    if(config.threaded_simulation)
+        pthread_mutex_lock(&cache_mutex);
+
 	Event *event = eventQueue_.alloc();
+
 	if(eventQueue_.count() == 1)
 		assert(event == eventQueue_.head());
 	assert(event);
@@ -338,12 +341,18 @@ void MemoryHierarchy::add_event(Signal *signal, int delay, void *arg)
 
 		eventQueue_.free(event);
         /* memdebug("Queue after add: \n", eventQueue_); */
+    if(config.threaded_simulation)
+        pthread_mutex_unlock(&cache_mutex);
+
 		return;
 	}
 
 	memdebug("Adding event:", *event);
 
     sort_event_queue(event);
+
+    if(config.threaded_simulation)
+        pthread_mutex_unlock(&cache_mutex);
 
 	return;
 }
