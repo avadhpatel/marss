@@ -40,7 +40,8 @@ def get_list_from_conf(value):
     ret = []
     for i in value.split('\n'):
         for j in i.split(','):
-            ret.append(j.strip())
+            if len(j) > 0:
+                ret.append(j.strip())
     return ret
 
 # First check if user has provided directory to save all results files

@@ -161,7 +161,7 @@ class YAMLReader(Readers):
 
         for doc in yaml.load_all(file, Loader=Loader):
             doc['_file'] = file.name
-            doc['_name'] = file.name.split('.')[0]
+            doc['_name'] = os.path.splitext(file.name)[0]
             docs.append(doc)
 
         return docs
