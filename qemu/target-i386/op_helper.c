@@ -609,6 +609,13 @@ void helper_switch_to_sim(void)
     simulation_configured = 1;
     cpu_loop_exit();
 }
+
+void helper_simpoint(void)
+{
+    /* We reached to a 'simpoint' so call helper function in ptlsim
+     * to handle this 'simpoint'. */
+    ptl_simpoint_reached(env->cpu_index);
+}
 #endif
 
 static inline unsigned int get_sp_mask(unsigned int e2)

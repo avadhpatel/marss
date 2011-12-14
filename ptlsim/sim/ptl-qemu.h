@@ -211,6 +211,27 @@ extern uint64_t qemu_ram_size;
 
 uint64_t get_sim_cpu_freq(void);
 
+extern int simpoint_enabled;
+
+/**
+ * @brief Simpoint is reached in emulation mode
+ *
+ * @param cpuid CPU Context id where simpoint is reached
+ */
+void ptl_simpoint_reached(int cpuid);
+
+/**
+ * @brief Initialize simpoints once we see simpoint configuration options
+ */
+void init_simpoints(void);
+
+/**
+ * @brief Set CPU's simpoint counter
+ *
+ * @param ctx CPU Context
+ */
+void set_next_simpoint(CPUX86State* ctx);
+
 #ifdef __cplusplus
 }
 #endif

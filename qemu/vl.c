@@ -3183,6 +3183,12 @@ int main(int argc, char **argv, char **envp)
 
     os_setup_post();
 
+#ifdef MARSS_QEMU
+    if (simpoint_enabled) {
+        set_next_simpoint(first_cpu);
+    }
+#endif
+
     main_loop();
     quit_timers();
     net_cleanup();

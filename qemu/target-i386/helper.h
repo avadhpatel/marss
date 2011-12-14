@@ -97,6 +97,7 @@ DEF_HELPER_1(inl, tl, i32)
 
 #ifdef MARSS_QEMU
 DEF_HELPER_0(switch_to_sim, void)
+DEF_HELPER_0(simpoint, void)
 #endif
 
 DEF_HELPER_2(svm_check_intercept_param, void, i32, i64)
