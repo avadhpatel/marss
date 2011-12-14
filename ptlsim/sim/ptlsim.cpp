@@ -230,6 +230,10 @@ void PTLsimConfig::reset() {
   // Sync Options
   sync_interval = 0;
 
+  // Simpoint options
+  simpoint_file = "";
+  simpoint_interval = 10e6;
+  simpoint_chk_name = "simpoint";
 }
 
 template <>
@@ -330,6 +334,10 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   section("Synchronization Options");
   add(sync_interval, "sync", "Number of simulation cycles between synchronization");
 
+  section("Simpoint Options");
+  add(simpoint_file, "simpoint", "Create simpoint based checkpoints from given 'simpoint' file");
+  add(simpoint_interval, "simpoint-interval", "Number of instructions in each interval");
+  add(simpoint_chk_name, "simpoint-chk-name", "Checkpoint name prefix");
 };
 
 #ifndef CONFIG_ONLY
@@ -833,6 +841,10 @@ CPUX86State* ptl_create_new_context() {
 	Context* ctx = new Context();
 	ptl_contexts[ctx_counter] = ctx;
 	ctx_counter++;
+
+    if (config.simpoint_file.set()) {
+        init_simpoints();
+    }
 
 	return (CPUX86State*)(ctx);
 }

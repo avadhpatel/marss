@@ -281,6 +281,11 @@ struct PTLsimConfig {
   // Sync Options
   W64  sync_interval;
 
+  // Simpoint options
+  stringbuf simpoint_file;
+  W64 simpoint_interval;
+  stringbuf simpoint_chk_name;
+
   void reset();
 };
 
@@ -310,5 +315,8 @@ void init_qemu_io_events();
 void clock_qemu_io_events();
 
 W64 ns_to_simcycles(W64 ns);
+
+void set_next_simpoint(Context& ctx);
+stringbuf* get_simpoint_chk_name();
 
 #endif // _PTLSIM_H_

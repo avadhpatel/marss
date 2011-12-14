@@ -373,6 +373,23 @@ int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
     return 0;
 }
 
+void create_checkpoint(const char* chk_name)
+{
+    if (!config.quiet)
+        cout << "MARSSx86::Creating checkpoint ",
+             pending_command_str, endl;
+
+    QDict *checkpoint_dict = qdict_new();
+    qdict_put_obj(checkpoint_dict, "name", QOBJECT(
+                qstring_from_str(chk_name)));
+    Monitor *mon = cur_mon;
+    do_savevm(cur_mon, checkpoint_dict);
+
+    if (!config.quiet)
+        cout << "MARSSx86::Checkpoint ", pending_command_str,
+             " created\n";
+}
+
 void ptl_check_ptlcall_queue() {
 
     if(pending_call_type != -1) {
@@ -387,19 +404,7 @@ void ptl_check_ptlcall_queue() {
                 }
             case PTLCALL_CHECKPOINT:
                 {
-                    if (!config.quiet)
-                        cout << "MARSSx86::Creating checkpoint ",
-                             pending_command_str, endl;
-
-                    QDict *checkpoint_dict = qdict_new();
-                    qdict_put_obj(checkpoint_dict, "name", QOBJECT(
-                                qstring_from_str(pending_command_str)));
-                    Monitor *mon = cur_mon;
-                    do_savevm(cur_mon, checkpoint_dict);
-
-                    if (!config.quiet)
-                        cout << "MARSSx86::Checkpoint ", pending_command_str,
-                             " created\n";
+                    create_checkpoint(pending_command_str);
 
                     switch(pending_call_arg3) {
                         case PTLCALL_CHECKPOINT_AND_SHUTDOWN:
@@ -1271,4 +1276,163 @@ void ptl_quit()
 
 uint64_t get_sim_cpu_freq() {
     return config.core_freq_hz;
+}
+
+/* Simpoint Support */
+
+struct Simpoint
+{
+    int label;
+    int interval;
+
+    Simpoint(int _interval, int _label)
+        : label(_label), interval(_interval)
+    { }
+
+    bool operator < (const Simpoint& t) const
+    {
+        return (interval < t.interval);
+    }
+
+    bool operator == (const Simpoint& t) const
+    {
+        return (interval == t.interval);
+    }
+
+    bool operator > (const Simpoint& t) const
+    {
+        return (interval > t.interval);
+    }
+};
+
+static dynarray<Simpoint*> simpoints;
+static W64 total_simpoint_inst_complted = 0;
+static int simpoint_ctr = -1;
+int simpoint_enabled = 0;
+
+void add_simpoint(int point, int label)
+{
+    Simpoint* t = new Simpoint(point, label);
+    simpoints.push(t);
+}
+
+int get_simpoint(int id)
+{
+    return simpoints[id]->interval;
+}
+
+int get_simpoint_label(int id)
+{
+    return simpoints[id]->label;
+}
+
+void clear_simpoints(void)
+{
+    foreach (i, simpoints.size()) {
+        Simpoint* t = simpoints.pop();
+        delete t;
+    }
+
+    simpoints.clear();
+    simpoint_ctr = -1;
+    total_simpoint_inst_complted = 0;
+}
+
+void read_simpoint_file()
+{
+    assert(simpoint_ctr == -1);
+    int id;
+    int point;
+    stringbuf line;
+    char split_char[2] = {' ', '\0'};
+    ifstream is(config.simpoint_file);
+
+    assert(simpoint_ctr == -1);
+    if (!is) {
+        cerr << "Error: Unable to read simpoint file: " <<
+            config.simpoint_file << endl;
+        ptl_quit();
+    }
+
+    assert(simpoint_ctr == -1);
+    while (1) {
+        dynarray<stringbuf*> split;
+        line.reset();
+        is.getline(line.buf, line.length);
+        if (!is) break;
+
+        line.split(split, split_char);
+
+        point = atoi(split[0]->buf);
+        id = atoi(split[1]->buf);
+
+        // Here we assume that simpoints will be written in
+        // assending order
+        add_simpoint(point, id);
+
+        foreach(i, split.size()) {
+            stringbuf* tmp = split.pop();
+            delete tmp;
+        }
+    }
+
+    is.close();
+
+    sort(simpoints.data, simpoints.size(), PointerSortComparator<Simpoint>());
+}
+
+void set_next_simpoint(CPUX86State* ctx)
+{
+    W64 point;
+
+    simpoint_ctr++;
+
+    if (simpoint_ctr >= simpoints.size()) {
+        simpoint_enabled = 0;
+        ctx->simpoint_decr = 0;
+        return;
+    }
+
+    point = get_simpoint(simpoint_ctr) * config.simpoint_interval;
+    ctx->simpoint_decr = (point - total_simpoint_inst_complted);
+    total_simpoint_inst_complted = point;
+    tb_flush(ctx);
+}
+
+stringbuf* get_simpoint_chk_name()
+{
+    stringbuf* name = new stringbuf();
+
+    (*name) << config.simpoint_chk_name << "_sp_" <<
+        get_simpoint_label(simpoint_ctr);
+
+    return name;
+}
+
+void init_simpoints()
+{
+    /* First check if we are simulating only one core or not */
+    if (NUM_SIM_CORES != 1) {
+        cerr << "ERROR: Marss doesnt support simpoints with more than " <<
+            "one CPU Context.  Please simulate with only one CPU.\n";
+        ptl_quit();
+    }
+
+    read_simpoint_file();
+    simpoint_enabled = 1;
+}
+
+void ptl_simpoint_reached(int cpuid)
+{
+    Context& ctx = contextof(cpuid);
+
+    if (!simpoint_enabled)
+        return;
+
+    stringbuf* chk_name = get_simpoint_chk_name();
+    create_checkpoint(chk_name->buf);
+
+    set_next_simpoint(&ctx);
+
+    delete chk_name;
 }

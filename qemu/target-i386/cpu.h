@@ -636,6 +636,7 @@ typedef struct CPUX86State {
 #ifdef MARSS_QEMU
     target_ulong cr[8]; /* NOTE: cr1 is unused */
     uint8_t handle_interrupt; /* Simulater managed int enable flag */
+    uint64_t simpoint_decr;
 #else
     target_ulong cr[5]; /* NOTE: cr1 is unused */
 #endif
