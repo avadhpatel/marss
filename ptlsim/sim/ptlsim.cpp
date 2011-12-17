@@ -662,7 +662,18 @@ static void sync_setup()
     /* First we will try to create a new semaphore if it fails
      * then some other simulation process has already setup the
      * semaphore and it will act as Master */
-    sem_id = semget(SEM_ID, 1, IPC_CREAT | 0666);
+
+        int env_sem_id=-1;
+        char *env_sem_id_p;
+
+        env_sem_id_p = getenv("MARSS_SEM_ID");
+
+        if (env_sem_id_p)
+            env_sem_id=atoi(env_sem_id_p);
+        if (env_sem_id > -1)
+            sem_id = semget(env_sem_id, 1, IPC_CREAT | 0666);
+        else
+            sem_id = semget(SEM_ID, 1, IPC_CREAT | 0666);
 
     if (sem_id == -1) {
         ptl_logfile << "Sempahore setup error: ";
