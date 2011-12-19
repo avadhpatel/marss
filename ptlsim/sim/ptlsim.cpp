@@ -485,6 +485,9 @@ static void flush_stats()
     if(time_stats_file) {
         time_stats_file->close();
     }
+
+    ptl_logfile << "Stats Summary:\n";
+    (StatsBuilder::get()).dump_summary(ptl_logfile);
 }
 
 static void kill_simulation()
