@@ -326,6 +326,43 @@ class NodeFilter(Filters):
 
         return filter_stats
 
+class Summation(Filters):
+    """
+    Sum all the nodes of filtered stats
+    """
+    order = 2
+
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        parser.add_option("--sum", action="store_true", default="False",
+                dest="sum", help="Sum of all selected nodes")
+
+    def do_sum(self, node, value = 0.0):
+        for key,val in node.items():
+            if type(val) == dict:
+                value = self.do_sum(val, value)
+            elif type(val) == int or type(val) == float:
+                value += val
+        return value
+
+    def filter(self, stats, options):
+        if options.sum is not True:
+            return stats
+
+        summed = []
+
+        for stat in stats:
+            sum_stat = {}
+            sum_val = self.do_sum(stat)
+            key = stat.keys()[0]
+            sum_stat[key] = sum_val
+            summed.append(sum_stat)
+
+        return summed
+
+
 # YAML based output generation
 class YAMLWriter(Writers):
     """
