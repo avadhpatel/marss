@@ -30,6 +30,7 @@ using namespace Memory;
 /* Machine Generator Functions */
 MachineBuilder machineBuilder("_default_", NULL);
 
+
 BaseMachine::BaseMachine(const char *name)
 {
     machine_name = name;
@@ -121,7 +122,7 @@ void BaseMachine::setup_threads()
     }
 
     /* Count number of thread to create */
-    num_threads = ceil(num_cores / config.cores_per_pthread);
+    num_threads = ceil(num_cores / config.cores_per_pthread) - 1;
     cerr << "Num threads " << num_threads << endl;
     ptl_logfile << "Num threads " << num_threads << endl;
 
@@ -138,7 +139,10 @@ void BaseMachine::setup_threads()
     exit_process_barrier = new pthread_barrier_t();
     pthread_barrier_init(exit_process_barrier, NULL, num_threads + 1);
 
-    foreach(i, num_threads) {
+    run_barrier = new Barrier(num_threads + 1);
+    exit_barrier = new Barrier(num_threads + 1);
+
+    for (int i = 1; i <= num_threads; i++) {
         int rc;
         pthread_attr_t attr;
         cpu_set_t cpu_set;
@@ -316,10 +320,24 @@ bool BaseMachine::run_threaded()
         clock_qemu_io_events();
 
         // Now send signal to all threads to run one cycle
-        pthread_barrier_wait(runcycle_barrier);
+        // pthread_barrier_wait(runcycle_barrier);
+        run_barrier->wait(0);
+
+        foreach (i, config.cores_per_pthread) {
+            BaseCore& core =* cores[i];
+            exiting |= core.runcycle();
+        }
+
+        /* Check exit request and set global exit request if true */
+        if (exiting) {
+            pthread_mutex_lock (exit_mutex);
+            exit_requested = exiting;
+            pthread_mutex_unlock (exit_mutex);
+        }
 
         // Wait for all threads to simulate one cycle
-        pthread_barrier_wait(exit_process_barrier);
+        // pthread_barrier_wait(exit_process_barrier);
+        exit_barrier->wait(0);
 
         // Check 'exit_requested' and exit if requested
         pthread_mutex_lock(exit_mutex);
@@ -379,7 +397,8 @@ void BaseMachine::run_cores_thread(int start_id)
         bool exiting = 0;
 
         /* Wait for main thread before simulate one cycle */
-        pthread_barrier_wait(runcycle_barrier);
+        // pthread_barrier_wait(runcycle_barrier);
+        run_barrier->wait();
 
         // if(start_coreid == 0) {
             // config.loglevel = 10;
@@ -401,7 +420,8 @@ void BaseMachine::run_cores_thread(int start_id)
         }
 
         /* Wait for main thread to handle exit requests */
-        pthread_barrier_wait(exit_process_barrier);
+        // pthread_barrier_wait(exit_process_barrier);
+        exit_barrier->wait();
     }
 }
 

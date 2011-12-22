@@ -52,6 +52,35 @@ struct PthreadArg {
     {}
 };
 
+/* Custom thread barrier */
+struct Barrier
+{
+    volatile int barrier_counter;
+    int thread_counter;
+
+    int atomic_inc (volatile int *operand)
+    {
+        return __sync_fetch_and_add (operand, 1);
+    }
+
+    Barrier (int threads)
+    {
+        thread_counter = threads;
+        barrier_counter = 0;
+    }
+
+    void wait (bool main = 1)
+    {
+        atomic_inc (&barrier_counter);
+        if (!main) {
+            while (barrier_counter < thread_counter);
+            barrier_counter = 0;
+        } else {
+            while (barrier_counter);
+        }
+    }
+};
+
 struct BaseMachine: public PTLsimMachine {
     dynarray<Core::BaseCore*> cores;
     dynarray<Memory::Controller*> controllers;
@@ -93,6 +122,9 @@ struct BaseMachine: public PTLsimMachine {
     pthread_barrier_t *runcycle_barrier;
     pthread_barrier_t *exit_process_barrier;
     dynarray<pthread_t*> pthreads;
+
+    Barrier *run_barrier;
+    Barrier *exit_barrier;
 
     Context& get_next_context();
     W8 get_next_coreid();
