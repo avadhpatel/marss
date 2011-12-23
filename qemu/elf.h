@@ -104,6 +104,9 @@ typedef int64_t  Elf64_Sxword;
 
 #define EM_H8_300H      47      /* Hitachi H8/300H */
 #define EM_H8S          48      /* Hitachi H8S     */
+#define EM_LATTICEMICO32 138    /* LatticeMico32 */
+
+#define EM_UNICORE32    110     /* UniCore32 */
 
 /*
  * This is an interim value that we will use until the committee comes
@@ -1190,6 +1193,25 @@ typedef struct elf64_note {
   Elf64_Word n_descsz;	/* Content size */
   Elf64_Word n_type;	/* Content type */
 } Elf64_Nhdr;
+
+
+/* This data structure represents a PT_LOAD segment.  */
+struct elf32_fdpic_loadseg {
+  /* Core address to which the segment is mapped.  */
+  Elf32_Addr addr;
+  /* VMA recorded in the program header.  */
+  Elf32_Addr p_vaddr;
+  /* Size of this segment in memory.  */
+  Elf32_Word p_memsz;
+};
+struct elf32_fdpic_loadmap {
+  /* Protocol version number, must be zero.  */
+  Elf32_Half version;
+  /* Number of segments in this map.  */
+  Elf32_Half nsegs;
+  /* The actual memory map.  */
+  struct elf32_fdpic_loadseg segs[/*nsegs*/];
+};
 
 #ifdef ELF_CLASS
 #if ELF_CLASS == ELFCLASS32

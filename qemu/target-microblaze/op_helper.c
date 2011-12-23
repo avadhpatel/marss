@@ -60,19 +60,54 @@ void tlb_fill (target_ulong addr, int is_write, int mmu_idx, void *retaddr)
             if (tb) {
                 /* the PC is inside the translated code. It means that we have
                    a virtual CPU fault */
-                cpu_restore_state(tb, env, pc, NULL);
+                cpu_restore_state(tb, env, pc);
             }
         }
-        cpu_loop_exit();
+        cpu_loop_exit(env);
     }
     env = saved_env;
 }
 #endif
 
+void helper_put(uint32_t id, uint32_t ctrl, uint32_t data)
+{
+    int test = ctrl & STREAM_TEST;
+    int atomic = ctrl & STREAM_ATOMIC;
+    int control = ctrl & STREAM_CONTROL;
+    int nonblock = ctrl & STREAM_NONBLOCK;
+    int exception = ctrl & STREAM_EXCEPTION;
+
+    qemu_log("Unhandled stream put to stream-id=%d data=%x %s%s%s%s%s\n",
+             id, data,
+             test ? "t" : "",
+             nonblock ? "n" : "",
+             exception ? "e" : "",
+             control ? "c" : "",
+             atomic ? "a" : "");
+}
+
+uint32_t helper_get(uint32_t id, uint32_t ctrl)
+{
+    int test = ctrl & STREAM_TEST;
+    int atomic = ctrl & STREAM_ATOMIC;
+    int control = ctrl & STREAM_CONTROL;
+    int nonblock = ctrl & STREAM_NONBLOCK;
+    int exception = ctrl & STREAM_EXCEPTION;
+
+    qemu_log("Unhandled stream get from stream-id=%d %s%s%s%s%s\n",
+             id,
+             test ? "t" : "",
+             nonblock ? "n" : "",
+             exception ? "e" : "",
+             control ? "c" : "",
+             atomic ? "a" : "");
+    return 0xdead0000 | id;
+}
+
 void helper_raise_exception(uint32_t index)
 {
     env->exception_index = index;
-    cpu_loop_exit();
+    cpu_loop_exit(env);
 }
 
 void helper_debug(void)
@@ -303,7 +338,7 @@ uint32_t helper_fcmp_eq(uint32_t a, uint32_t b)
     set_float_exception_flags(0, &env->fp_status);
     fa.l = a;
     fb.l = b;
-    r = float32_eq(fa.f, fb.f, &env->fp_status);
+    r = float32_eq_quiet(fa.f, fb.f, &env->fp_status);
     flags = get_float_exception_flags(&env->fp_status);
     update_fpu_flags(flags & float_flag_invalid);
 
@@ -349,7 +384,7 @@ uint32_t helper_fcmp_ne(uint32_t a, uint32_t b)
     fa.l = a;
     fb.l = b;
     set_float_exception_flags(0, &env->fp_status);
-    r = !float32_eq(fa.f, fb.f, &env->fp_status);
+    r = !float32_eq_quiet(fa.f, fb.f, &env->fp_status);
     flags = get_float_exception_flags(&env->fp_status);
     update_fpu_flags(flags & float_flag_invalid);
 
@@ -453,20 +488,14 @@ void helper_mmu_write(uint32_t rn, uint32_t v)
     mmu_write(env, rn, v);
 }
 
-void do_unassigned_access(target_phys_addr_t addr, int is_write, int is_exec,
-                          int is_asi, int size)
+void cpu_unassigned_access(CPUState *env1, target_phys_addr_t addr,
+                           int is_write, int is_exec, int is_asi, int size)
 {
     CPUState *saved_env;
 
-    if (!cpu_single_env) {
-        /* XXX: ???   */
-        return;
-    }
-
-    /* XXX: hack to restore env in all cases, even if not called from
-       generated code */
     saved_env = env;
-    env = cpu_single_env;
+    env = env1;
+
     qemu_log_mask(CPU_LOG_INT, "Unassigned " TARGET_FMT_plx " wr=%d exe=%d\n",
              addr, is_write, is_exec);
     if (!(env->sregs[SR_MSR] & MSR_EE)) {

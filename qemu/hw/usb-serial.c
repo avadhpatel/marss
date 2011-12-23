@@ -5,7 +5,7 @@
  * Copyright (c) 2008 Samuel Thibault <samuel.thibault@ens-lyon.org>
  * Written by Paul Brook, reused for FTDI by Samuel Thibault
  *
- * This code is licenced under the LGPL.
+ * This code is licensed under the LGPL.
  */
 
 #include "qemu-common.h"
@@ -146,6 +146,7 @@ static const USBDescDevice desc_device = {
             .bConfigurationValue   = 1,
             .bmAttributes          = 0x80,
             .bMaxPower             = 50,
+            .nif = 1,
             .ifs = &desc_iface0,
         },
     },
@@ -218,14 +219,14 @@ static uint8_t usb_get_modem_lines(USBSerialState *s)
     return ret;
 }
 
-static int usb_serial_handle_control(USBDevice *dev, int request, int value,
-                                  int index, int length, uint8_t *data)
+static int usb_serial_handle_control(USBDevice *dev, USBPacket *p,
+               int request, int value, int index, int length, uint8_t *data)
 {
     USBSerialState *s = (USBSerialState *)dev;
     int ret;
 
     DPRINTF("got control %x, value %x\n",request, value);
-    ret = usb_desc_handle_control(dev, request, value, index, length, data);
+    ret = usb_desc_handle_control(dev, p, request, value, index, length, data);
     if (ret >= 0) {
         return ret;
     }

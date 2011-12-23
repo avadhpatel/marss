@@ -8,9 +8,7 @@
 #include <sys/signal.h>
 #endif
 
-#ifndef _WIN32
 #include <sys/time.h>
-#endif
 
 #ifndef glue
 #define xglue(x, y) x ## y
@@ -57,6 +55,10 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #endif
 
+#ifndef DIV_ROUND_UP
+#define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
+#endif
+
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
@@ -86,6 +88,7 @@
 # define QEMU_GNUC_PREREQ(maj, min) 0
 #endif
 
+int qemu_daemon(int nochdir, int noclose);
 void *qemu_memalign(size_t alignment, size_t size);
 void *qemu_vmalloc(size_t size);
 void qemu_vfree(void *ptr);
@@ -125,6 +128,30 @@ void qemu_vfree(void *ptr);
 
 int qemu_madvise(void *addr, size_t len, int advice);
 
+#if defined(__HAIKU__) && defined(__i386__)
+#define FMT_pid "%ld"
+#else
+#define FMT_pid "%d"
+#endif
+
 int qemu_create_pidfile(const char *filename);
+int qemu_get_thread_id(void);
+
+#ifdef _WIN32
+static inline void qemu_timersub(const struct timeval *val1,
+                                 const struct timeval *val2,
+                                 struct timeval *res)
+{
+    res->tv_sec = val1->tv_sec - val2->tv_sec;
+    if (val1->tv_usec < val2->tv_usec) {
+        res->tv_sec--;
+        res->tv_usec = val1->tv_usec - val2->tv_usec + 1000 * 1000;
+    } else {
+        res->tv_usec = val1->tv_usec - val2->tv_usec;
+    }
+}
+#else
+#define qemu_timersub timersub
+#endif
 
 #endif

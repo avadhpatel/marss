@@ -411,11 +411,25 @@
 #define TARGET_NR_signalfd			476
 #define TARGET_NR_timerfd			477
 #define TARGET_NR_eventfd			478
-
-/* The following aliases are defined in order to match up with the
-   standard i386 syscalls implemented in syscalls.c.  */
-#define TARGET_NR_chown32	TARGET_NR_chown
-#define TARGET_NR_setuid32	TARGET_NR_setuid
-#define TARGET_NR_setgid32	TARGET_NR_setgid
-#define TARGET_NR_setfsuid32	TARGET_NR_setfsuid
-#define TARGET_NR_setfsgid32	TARGET_NR_setfsgid
+#define TARGET_NR_recvmmsg                      479
+#define TARGET_NR_fallocate                     480
+#define TARGET_NR_timerfd_create                481
+#define TARGET_NR_timerfd_settime               482
+#define TARGET_NR_timerfd_gettime               483
+#define TARGET_NR_signalfd4                     484
+#define TARGET_NR_eventfd2                      485
+#define TARGET_NR_epoll_create1                 486
+#define TARGET_NR_dup3                          487
+#define TARGET_NR_pipe2                         488
+#define TARGET_NR_inotify_init1                 489
+#define TARGET_NR_preadv                        490
+#define TARGET_NR_pwritev                       491
+#define TARGET_NR_rt_tgsigqueueinfo             492
+#define TARGET_NR_perf_event_open               493
+#define TARGET_NR_fanotify_init                 494
+#define TARGET_NR_fanotify_mark                 495
+#define TARGET_NR_prlimit64                     496
+#define TARGET_NR_name_to_handle_at             497
+#define TARGET_NR_open_by_handle_at             498
+#define TARGET_NR_clock_adjtime                 499
+#define TARGET_NR_syncfs                        500

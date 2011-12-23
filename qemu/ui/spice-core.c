@@ -55,14 +55,14 @@ static SpiceTimer *timer_add(SpiceTimerFunc func, void *opaque)
     SpiceTimer *timer;
 
     timer = qemu_mallocz(sizeof(*timer));
-    timer->timer = qemu_new_timer(rt_clock, func, opaque);
+    timer->timer = qemu_new_timer_ms(rt_clock, func, opaque);
     QTAILQ_INSERT_TAIL(&timers, timer, next);
     return timer;
 }
 
 static void timer_start(SpiceTimer *timer, uint32_t ms)
 {
-    qemu_mod_timer(timer->timer, qemu_get_clock(rt_clock) + ms);
+    qemu_mod_timer(timer->timer, qemu_get_clock_ms(rt_clock) + ms);
 }
 
 static void timer_cancel(SpiceTimer *timer)
@@ -299,8 +299,6 @@ static int parse_name(const char *string, const char *optname,
     exit(1);
 }
 
-#if SPICE_SERVER_VERSION >= 0x000600 /* 0.6.0 */
-
 static const char *stream_video_names[] = {
     [ SPICE_STREAM_VIDEO_OFF ]    = "off",
     [ SPICE_STREAM_VIDEO_ALL ]    = "all",
@@ -308,8 +306,6 @@ static const char *stream_video_names[] = {
 };
 #define parse_stream_video(_name) \
     name2enum(_name, stream_video_names, ARRAY_SIZE(stream_video_names))
-
-#endif /* >= 0.6.0 */
 
 static const char *compression_names[] = {
     [ SPICE_IMAGE_COMPRESS_OFF ]      = "off",
@@ -420,7 +416,7 @@ void do_info_spice(Monitor *mon, QObject **ret_data)
     *ret_data = QOBJECT(server);
 }
 
-static void migration_state_notifier(Notifier *notifier)
+static void migration_state_notifier(Notifier *notifier, void *data)
 {
     int state = get_migration_state();
 
@@ -484,7 +480,16 @@ void qemu_spice_init(void)
     port = qemu_opt_get_number(opts, "port", 0);
     tls_port = qemu_opt_get_number(opts, "tls-port", 0);
     if (!port && !tls_port) {
-        return;
+        fprintf(stderr, "neither port nor tls-port specified for spice.");
+        exit(1);
+    }
+    if (port < 0 || port > 65535) {
+        fprintf(stderr, "spice port is out of range");
+        exit(1);
+    }
+    if (tls_port < 0 || tls_port > 65535) {
+        fprintf(stderr, "spice tls-port is out of range");
+        exit(1);
     }
     password = qemu_opt_get(opts, "password");
 
@@ -549,10 +554,28 @@ void qemu_spice_init(void)
     if (password) {
         spice_server_set_ticket(spice_server, password, 0, 0, 0);
     }
+    if (qemu_opt_get_bool(opts, "sasl", 0)) {
+#if SPICE_SERVER_VERSION >= 0x000900 /* 0.9.0 */
+        if (spice_server_set_sasl_appname(spice_server, "qemu") == -1 ||
+            spice_server_set_sasl(spice_server, 1) == -1) {
+            fprintf(stderr, "spice: failed to enable sasl\n");
+            exit(1);
+        }
+#else
+        fprintf(stderr, "spice: sasl is not available (spice >= 0.9 required)\n");
+        exit(1);
+#endif
+    }
     if (qemu_opt_get_bool(opts, "disable-ticketing", 0)) {
         auth = "none";
         spice_server_set_noauth(spice_server);
     }
+
+#if SPICE_SERVER_VERSION >= 0x000801
+    if (qemu_opt_get_bool(opts, "disable-copy-paste", 0)) {
+        spice_server_set_agent_copypaste(spice_server, false);
+    }
+#endif
 
     compression = SPICE_IMAGE_COMPRESS_AUTO_GLZ;
     str = qemu_opt_get(opts, "image-compression");
@@ -575,8 +598,6 @@ void qemu_spice_init(void)
     }
     spice_server_set_zlib_glz_compression(spice_server, wan_compr);
 
-#if SPICE_SERVER_VERSION >= 0x000600 /* 0.6.0 */
-
     str = qemu_opt_get(opts, "streaming-video");
     if (str) {
         int streaming_video = parse_stream_video(str);
@@ -588,11 +609,12 @@ void qemu_spice_init(void)
     spice_server_set_playback_compression
         (spice_server, qemu_opt_get_bool(opts, "playback-compression", 1));
 
-#endif /* >= 0.6.0 */
-
     qemu_opt_foreach(opts, add_channel, NULL, 0);
 
-    spice_server_init(spice_server, &core_interface);
+    if (0 != spice_server_init(spice_server, &core_interface)) {
+        fprintf(stderr, "failed to initialize spice server");
+        exit(1);
+    };
     using_spice = 1;
 
     migration_state.notify = migration_state_notifier;

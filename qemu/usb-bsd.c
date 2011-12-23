@@ -39,7 +39,6 @@
 #else
 #include <bus/usb/usb.h>
 #endif
-#include <signal.h>
 
 /* This value has maximum potential at 16.
  * You should also set hw.usb.debug to gain
@@ -126,6 +125,7 @@ static void usb_host_handle_reset(USBDevice *dev)
  *  and return appropriate response
  */
 static int usb_host_handle_control(USBDevice *dev,
+                                   USBPacket *p,
                                    int request,
                                    int value,
                                    int index,
@@ -367,8 +367,10 @@ USBDevice *usb_host_device_open(const char *devname)
 
     if (dev_info.udi_speed == 1) {
         dev->dev.speed = USB_SPEED_LOW - 1;
+        dev->dev.speedmask = USB_SPEED_MASK_LOW;
     } else {
         dev->dev.speed = USB_SPEED_FULL - 1;
+        dev->dev.speedmask = USB_SPEED_MASK_FULL;
     }
 
     if (strncmp(dev_info.udi_product, "product", 7) != 0) {
@@ -464,7 +466,7 @@ static int usb_host_scan(void *opaque, USBScanFunc *func)
                 printf("usb_host_scan: couldn't get device information for %s - %s\n",
                        devbuf, strerror(errno));
 
-            // XXX: might need to fixup endianess of word values before copying over
+            /* XXX: might need to fixup endianness of word values before copying over */
 
             vendor_id = dev_info.udi_vendorNo;
             product_id = dev_info.udi_productNo;

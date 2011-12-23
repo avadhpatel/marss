@@ -43,17 +43,17 @@
 
 #ifdef __sun__
 #define _POSIX_PTHREAD_SEMANTICS 1
-#include <signal.h>
 #include <sys/dkio.h>
 #endif
 #ifdef __linux__
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/param.h>
 #include <linux/cdrom.h>
 #include <linux/fd.h>
 #endif
 #if defined (__FreeBSD__) || defined(__FreeBSD_kernel__)
-#include <signal.h>
 #include <sys/disk.h>
 #include <sys/cdio.h>
 #endif
@@ -62,6 +62,13 @@
 #include <sys/ioctl.h>
 #include <sys/disklabel.h>
 #include <sys/dkio.h>
+#endif
+
+#ifdef __NetBSD__
+#include <sys/ioctl.h>
+#include <sys/disklabel.h>
+#include <sys/dkio.h>
+#include <sys/disk.h>
 #endif
 
 #ifdef __DragonFly__
@@ -136,11 +143,54 @@ static int64_t raw_getlength(BlockDriverState *bs);
 static int cdrom_reopen(BlockDriverState *bs);
 #endif
 
+#if defined(__NetBSD__)
+static int raw_normalize_devicepath(const char **filename)
+{
+    static char namebuf[PATH_MAX];
+    const char *dp, *fname;
+    struct stat sb;
+
+    fname = *filename;
+    dp = strrchr(fname, '/');
+    if (lstat(fname, &sb) < 0) {
+        fprintf(stderr, "%s: stat failed: %s\n",
+            fname, strerror(errno));
+        return -errno;
+    }
+
+    if (!S_ISBLK(sb.st_mode)) {
+        return 0;
+    }
+
+    if (dp == NULL) {
+        snprintf(namebuf, PATH_MAX, "r%s", fname);
+    } else {
+        snprintf(namebuf, PATH_MAX, "%.*s/r%s",
+            (int)(dp - fname), fname, dp + 1);
+    }
+    fprintf(stderr, "%s is a block device", fname);
+    *filename = namebuf;
+    fprintf(stderr, ", using %s\n", *filename);
+
+    return 0;
+}
+#else
+static int raw_normalize_devicepath(const char **filename)
+{
+    return 0;
+}
+#endif
+
 static int raw_open_common(BlockDriverState *bs, const char *filename,
                            int bdrv_flags, int open_flags)
 {
     BDRVRawState *s = bs->opaque;
     int fd, ret;
+
+    ret = raw_normalize_devicepath(&filename);
+    if (ret != 0) {
+        return ret;
+    }
 
     s->open_flags = open_flags | O_BINARY;
     s->open_flags &= ~O_ACCMODE;
@@ -154,7 +204,7 @@ static int raw_open_common(BlockDriverState *bs, const char *filename,
      * and O_DIRECT for no caching. */
     if ((bdrv_flags & BDRV_O_NOCACHE))
         s->open_flags |= O_DIRECT;
-    else if (!(bdrv_flags & BDRV_O_CACHE_WB))
+    if (!(bdrv_flags & BDRV_O_CACHE_WB))
         s->open_flags |= O_DSYNC;
 
     s->fd = -1;
@@ -622,6 +672,31 @@ static int64_t raw_getlength(BlockDriverState *bs)
     } else
         return st.st_size;
 }
+#elif defined(__NetBSD__)
+static int64_t raw_getlength(BlockDriverState *bs)
+{
+    BDRVRawState *s = bs->opaque;
+    int fd = s->fd;
+    struct stat st;
+
+    if (fstat(fd, &st))
+        return -1;
+    if (S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode)) {
+        struct dkwedge_info dkw;
+
+        if (ioctl(fd, DIOCGWEDGEINFO, &dkw) != -1) {
+            return dkw.dkw_size * 512;
+        } else {
+            struct disklabel dl;
+
+            if (ioctl(fd, DIOCGDINFO, &dl))
+                return -1;
+            return (uint64_t)dl.d_secsize *
+                dl.d_partitions[DISKPART(st.st_rdev)].p_size;
+        }
+    } else
+        return st.st_size;
+}
 #elif defined(__sun__)
 static int64_t raw_getlength(BlockDriverState *bs)
 {
@@ -718,6 +793,17 @@ static int64_t raw_getlength(BlockDriverState *bs)
 }
 #endif
 
+static int64_t raw_get_allocated_file_size(BlockDriverState *bs)
+{
+    struct stat st;
+    BDRVRawState *s = bs->opaque;
+
+    if (fstat(s->fd, &st) < 0) {
+        return -errno;
+    }
+    return (int64_t)st.st_blocks * 512;
+}
+
 static int raw_create(const char *filename, QEMUOptionParameter *options)
 {
     int fd;
@@ -813,6 +899,8 @@ static BlockDriver bdrv_file = {
 
     .bdrv_truncate = raw_truncate,
     .bdrv_getlength = raw_getlength,
+    .bdrv_get_allocated_file_size
+                        = raw_get_allocated_file_size,
 
     .create_options = raw_create_options,
 };
@@ -1081,6 +1169,8 @@ static BlockDriver bdrv_host_device = {
     .bdrv_read          = raw_read,
     .bdrv_write         = raw_write,
     .bdrv_getlength	= raw_getlength,
+    .bdrv_get_allocated_file_size
+                        = raw_get_allocated_file_size,
 
     /* generic scsi device */
 #ifdef __linux__
@@ -1115,6 +1205,7 @@ static int floppy_probe_device(const char *filename)
     int fd, ret;
     int prio = 0;
     struct floppy_struct fdparam;
+    struct stat st;
 
     if (strstart(filename, "/dev/fd", NULL))
         prio = 50;
@@ -1123,12 +1214,17 @@ static int floppy_probe_device(const char *filename)
     if (fd < 0) {
         goto out;
     }
+    ret = fstat(fd, &st);
+    if (ret == -1 || !S_ISBLK(st.st_mode)) {
+        goto outc;
+    }
 
     /* Attempt to detect via a floppy specific ioctl */
     ret = ioctl(fd, FDGETPRM, &fdparam);
     if (ret >= 0)
         prio = 100;
 
+outc:
     close(fd);
 out:
     return prio;
@@ -1196,6 +1292,8 @@ static BlockDriver bdrv_host_floppy = {
     .bdrv_read          = raw_read,
     .bdrv_write         = raw_write,
     .bdrv_getlength	= raw_getlength,
+    .bdrv_get_allocated_file_size
+                        = raw_get_allocated_file_size,
 
     /* removable device support */
     .bdrv_is_inserted   = floppy_is_inserted,
@@ -1217,10 +1315,15 @@ static int cdrom_probe_device(const char *filename)
 {
     int fd, ret;
     int prio = 0;
+    struct stat st;
 
     fd = open(filename, O_RDONLY | O_NONBLOCK);
     if (fd < 0) {
         goto out;
+    }
+    ret = fstat(fd, &st);
+    if (ret == -1 || !S_ISBLK(st.st_mode)) {
+        goto outc;
     }
 
     /* Attempt to detect via a CDROM specific ioctl */
@@ -1228,6 +1331,7 @@ static int cdrom_probe_device(const char *filename)
     if (ret >= 0)
         prio = 100;
 
+outc:
     close(fd);
 out:
     return prio;
@@ -1293,6 +1397,8 @@ static BlockDriver bdrv_host_cdrom = {
     .bdrv_read          = raw_read,
     .bdrv_write         = raw_write,
     .bdrv_getlength     = raw_getlength,
+    .bdrv_get_allocated_file_size
+                        = raw_get_allocated_file_size,
 
     /* removable device support */
     .bdrv_is_inserted   = cdrom_is_inserted,
@@ -1416,6 +1522,8 @@ static BlockDriver bdrv_host_cdrom = {
     .bdrv_read          = raw_read,
     .bdrv_write         = raw_write,
     .bdrv_getlength     = raw_getlength,
+    .bdrv_get_allocated_file_size
+                        = raw_get_allocated_file_size,
 
     /* removable device support */
     .bdrv_is_inserted   = cdrom_is_inserted,

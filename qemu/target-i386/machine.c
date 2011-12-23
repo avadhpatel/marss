@@ -3,7 +3,7 @@
 #include "hw/pc.h"
 #include "hw/isa.h"
 
-#include "exec-all.h"
+#include "cpu.h"
 #include "kvm.h"
 
 static const VMStateDescription vmstate_segment = {
@@ -84,7 +84,6 @@ static void put_fpreg_error(QEMUFile *f, void *opaque, size_t size)
     exit(0);
 }
 
-#ifdef USE_X86LDOUBLE
 /* XXX: add that in a FPU generic layer */
 union x86_longdouble {
     uint64_t mant;
@@ -202,102 +201,6 @@ static bool fpregs_is_1_no_mmx(void *opaque, int version_id)
     VMSTATE_ARRAY_TEST(_field, _state, _n, fpregs_is_1_mmx, vmstate_fpreg_1_mmx, FPReg), \
     VMSTATE_ARRAY_TEST(_field, _state, _n, fpregs_is_1_no_mmx, vmstate_fpreg_1_no_mmx, FPReg)
 
-#else
-static int get_fpreg(QEMUFile *f, void *opaque, size_t size)
-{
-    FPReg *fp_reg = opaque;
-
-    qemu_get_be64s(f, &fp_reg->mmx.MMX_Q(0));
-    return 0;
-}
-
-static void put_fpreg(QEMUFile *f, void *opaque, size_t size)
-{
-    FPReg *fp_reg = opaque;
-    /* if we use doubles for float emulation, we save the doubles to
-       avoid losing information in case of MMX usage. It can give
-       problems if the image is restored on a CPU where long
-       doubles are used instead. */
-    qemu_put_be64s(f, &fp_reg->mmx.MMX_Q(0));
-}
-
-const VMStateInfo vmstate_fpreg = {
-    .name = "fpreg",
-    .get  = get_fpreg,
-    .put  = put_fpreg,
-};
-
-static int get_fpreg_0_mmx(QEMUFile *f, void *opaque, size_t size)
-{
-    FPReg *fp_reg = opaque;
-    uint64_t mant;
-    uint16_t exp;
-
-    qemu_get_be64s(f, &mant);
-    qemu_get_be16s(f, &exp);
-    fp_reg->mmx.MMX_Q(0) = mant;
-    return 0;
-}
-
-const VMStateInfo vmstate_fpreg_0_mmx = {
-    .name = "fpreg_0_mmx",
-    .get  = get_fpreg_0_mmx,
-    .put  = put_fpreg_error,
-};
-
-static int get_fpreg_0_no_mmx(QEMUFile *f, void *opaque, size_t size)
-{
-    FPReg *fp_reg = opaque;
-    uint64_t mant;
-    uint16_t exp;
-
-    qemu_get_be64s(f, &mant);
-    qemu_get_be16s(f, &exp);
-
-    fp_reg->d = cpu_set_fp80(mant, exp);
-    return 0;
-}
-
-const VMStateInfo vmstate_fpreg_0_no_mmx = {
-    .name = "fpreg_0_no_mmx",
-    .get  = get_fpreg_0_no_mmx,
-    .put  = put_fpreg_error,
-};
-
-static bool fpregs_is_1(void *opaque, int version_id)
-{
-    CPUState *env = opaque;
-
-    return env->fpregs_format_vmstate == 1;
-}
-
-static bool fpregs_is_0_mmx(void *opaque, int version_id)
-{
-    CPUState *env = opaque;
-    int guess_mmx;
-
-    guess_mmx = ((env->fptag_vmstate == 0xff) &&
-                 (env->fpus_vmstate & 0x3800) == 0);
-    return guess_mmx && env->fpregs_format_vmstate == 0;
-}
-
-static bool fpregs_is_0_no_mmx(void *opaque, int version_id)
-{
-    CPUState *env = opaque;
-    int guess_mmx;
-
-    guess_mmx = ((env->fptag_vmstate == 0xff) &&
-                 (env->fpus_vmstate & 0x3800) == 0);
-    return !guess_mmx && env->fpregs_format_vmstate == 0;
-}
-
-#define VMSTATE_FP_REGS(_field, _state, _n)                               \
-    VMSTATE_ARRAY_TEST(_field, _state, _n, fpregs_is_1, vmstate_fpreg, FPReg), \
-    VMSTATE_ARRAY_TEST(_field, _state, _n, fpregs_is_0_mmx, vmstate_fpreg_0_mmx, FPReg), \
-    VMSTATE_ARRAY_TEST(_field, _state, _n, fpregs_is_0_no_mmx, vmstate_fpreg_0_no_mmx, FPReg)
-
-#endif /* USE_X86LDOUBLE */
-
 static bool version_is_5(void *opaque, int version_id)
 {
     return version_id == 5;
@@ -344,11 +247,7 @@ static void cpu_pre_save(void *opaque)
         env->fptag_vmstate |= ((!env->fptags[i]) << i);
     }
 
-#ifdef USE_X86LDOUBLE
     env->fpregs_format_vmstate = 0;
-#else
-    env->fpregs_format_vmstate = 1;
-#endif
 }
 
 static int cpu_post_load(void *opaque, int version_id)
@@ -387,6 +286,26 @@ static const VMStateDescription vmstate_async_pf_msr = {
     .minimum_version_id_old = 1,
     .fields      = (VMStateField []) {
         VMSTATE_UINT64(async_pf_en_msr, CPUState),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
+static bool fpop_ip_dp_needed(void *opaque)
+{
+    CPUState *env = opaque;
+
+    return env->fpop != 0 || env->fpip != 0 || env->fpdp != 0;
+}
+
+static const VMStateDescription vmstate_fpop_ip_dp = {
+    .name = "cpu/fpop_ip_dp",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .minimum_version_id_old = 1,
+    .fields      = (VMStateField []) {
+        VMSTATE_UINT16(fpop, CPUState),
+        VMSTATE_UINT64(fpip, CPUState),
+        VMSTATE_UINT64(fpdp, CPUState),
         VMSTATE_END_OF_LIST()
     }
 };
@@ -498,6 +417,9 @@ static const VMStateDescription vmstate_cpu = {
         {
             .vmsd = &vmstate_async_pf_msr,
             .needed = async_pf_msr_needed,
+        } , {
+            .vmsd = &vmstate_fpop_ip_dp,
+            .needed = fpop_ip_dp_needed,
         } , {
             /* empty */
         }

@@ -26,7 +26,7 @@
 #include "console.h"
 #include "usb.h"
 #include "usb-desc.h"
-#include "sysemu.h"
+#include "qemu-timer.h"
 
 /* HID interface requests */
 #define GET_REPORT   0xa101
@@ -142,7 +142,6 @@ static const USBDescIface desc_iface_tablet = {
     .bInterfaceNumber              = 0,
     .bNumEndpoints                 = 1,
     .bInterfaceClass               = USB_CLASS_HID,
-    .bInterfaceSubClass            = 0x01, /* boot */
     .bInterfaceProtocol            = 0x02,
     .ndesc                         = 1,
     .descs = (USBDescOther[]) {
@@ -211,6 +210,7 @@ static const USBDescDevice desc_device_mouse = {
             .iConfiguration        = STR_CONFIG_MOUSE,
             .bmAttributes          = 0xa0,
             .bMaxPower             = 50,
+            .nif = 1,
             .ifs = &desc_iface_mouse,
         },
     },
@@ -227,6 +227,7 @@ static const USBDescDevice desc_device_tablet = {
             .iConfiguration        = STR_CONFIG_TABLET,
             .bmAttributes          = 0xa0,
             .bMaxPower             = 50,
+            .nif = 1,
             .ifs = &desc_iface_tablet,
         },
     },
@@ -243,6 +244,7 @@ static const USBDescDevice desc_device_keyboard = {
             .iConfiguration        = STR_CONFIG_KEYBOARD,
             .bmAttributes          = 0xa0,
             .bMaxPower             = 50,
+            .nif = 1,
             .ifs = &desc_iface_keyboard,
         },
     },
@@ -529,18 +531,15 @@ static void usb_keyboard_process_keycode(USBHIDState *hs)
     case 0xe0:
         if (s->modifiers & (1 << 9)) {
             s->modifiers ^= 3 << 8;
-            usb_hid_changed(hs);
             return;
         }
     case 0xe1 ... 0xe7:
         if (keycode & (1 << 7)) {
             s->modifiers &= ~(1 << (hid_code & 0x0f));
-            usb_hid_changed(hs);
             return;
         }
     case 0xe8 ... 0xef:
         s->modifiers |= 1 << (hid_code & 0x0f);
-        usb_hid_changed(hs);
         return;
     }
 
@@ -724,13 +723,13 @@ static void usb_hid_set_next_idle(USBHIDState *s, int64_t curtime)
     s->next_idle_clock = curtime + (get_ticks_per_sec() * s->idle * 4) / 1000;
 }
 
-static int usb_hid_handle_control(USBDevice *dev, int request, int value,
-                                  int index, int length, uint8_t *data)
+static int usb_hid_handle_control(USBDevice *dev, USBPacket *p,
+               int request, int value, int index, int length, uint8_t *data)
 {
     USBHIDState *s = (USBHIDState *)dev;
     int ret;
 
-    ret = usb_desc_handle_control(dev, request, value, index, length, data);
+    ret = usb_desc_handle_control(dev, p, request, value, index, length, data);
     if (ret >= 0) {
         return ret;
     }
@@ -767,10 +766,12 @@ static int usb_hid_handle_control(USBDevice *dev, int request, int value,
         }
         break;
     case GET_REPORT:
-        if (s->kind == USB_MOUSE || s->kind == USB_TABLET)
+        if (s->kind == USB_MOUSE || s->kind == USB_TABLET) {
             ret = usb_pointer_poll(s, data, length);
-        else if (s->kind == USB_KEYBOARD)
+        } else if (s->kind == USB_KEYBOARD) {
             ret = usb_keyboard_poll(s, data, length);
+        }
+        s->changed = s->n > 0;
         break;
     case SET_REPORT:
         if (s->kind == USB_KEYBOARD)
@@ -779,13 +780,13 @@ static int usb_hid_handle_control(USBDevice *dev, int request, int value,
             goto fail;
         break;
     case GET_PROTOCOL:
-        if (s->kind != USB_KEYBOARD)
+        if (s->kind != USB_KEYBOARD && s->kind != USB_MOUSE)
             goto fail;
         ret = 1;
         data[0] = s->protocol;
         break;
     case SET_PROTOCOL:
-        if (s->kind != USB_KEYBOARD)
+        if (s->kind != USB_KEYBOARD && s->kind != USB_MOUSE)
             goto fail;
         ret = 0;
         s->protocol = value;
@@ -796,7 +797,7 @@ static int usb_hid_handle_control(USBDevice *dev, int request, int value,
         break;
     case SET_IDLE:
         s->idle = (uint8_t) (value >> 8);
-        usb_hid_set_next_idle(s, qemu_get_clock(vm_clock));
+        usb_hid_set_next_idle(s, qemu_get_clock_ns(vm_clock));
         ret = 0;
         break;
     default:
@@ -815,7 +816,7 @@ static int usb_hid_handle_data(USBDevice *dev, USBPacket *p)
     switch(p->pid) {
     case USB_TOKEN_IN:
         if (p->devep == 1) {
-            int64_t curtime = qemu_get_clock(vm_clock);
+            int64_t curtime = qemu_get_clock_ns(vm_clock);
             if (!s->changed && (!s->idle || s->next_idle_clock - curtime > 0))
                 return USB_RET_NAK;
             usb_hid_set_next_idle(s, curtime);
@@ -900,7 +901,7 @@ static int usb_hid_post_load(void *opaque, int version_id)
     USBHIDState *s = opaque;
 
     if (s->idle) {
-        usb_hid_set_next_idle(s, qemu_get_clock(vm_clock));
+        usb_hid_set_next_idle(s, qemu_get_clock_ns(vm_clock));
     }
     return 0;
 }

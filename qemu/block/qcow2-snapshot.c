@@ -317,7 +317,8 @@ int qcow2_snapshot_goto(BlockDriverState *bs, const char *snapshot_id)
 {
     BDRVQcowState *s = bs->opaque;
     QCowSnapshot *sn;
-    int i, snapshot_index, l1_size2;
+    int i, snapshot_index;
+    int cur_l1_bytes, sn_l1_bytes;
 
 #ifdef MARSS_QEMU
     if (bs->backing_hd) {
@@ -342,18 +343,23 @@ int qcow2_snapshot_goto(BlockDriverState *bs, const char *snapshot_id)
     }
 #endif
 
-    s->l1_size = sn->l1_size;
-    l1_size2 = s->l1_size * sizeof(uint64_t);
+    cur_l1_bytes = s->l1_size * sizeof(uint64_t);
+    sn_l1_bytes = sn->l1_size * sizeof(uint64_t);
+
+    if (cur_l1_bytes > sn_l1_bytes) {
+        memset(s->l1_table + sn->l1_size, 0, cur_l1_bytes - sn_l1_bytes);
+    }
+
     /* copy the snapshot l1 table to the current l1 table */
     if (bdrv_pread(bs->file, sn->l1_table_offset,
-                   s->l1_table, l1_size2) != l1_size2)
+                   s->l1_table, sn_l1_bytes) < 0)
         goto fail;
 
 #ifdef MARSS_QEMU
     if (!bs->read_only) {
 #endif
     if (bdrv_pwrite_sync(bs->file, s->l1_table_offset,
-                    s->l1_table, l1_size2) < 0)
+                    s->l1_table, cur_l1_bytes) < 0)
         goto fail;
 #ifdef MARSS_QEMU
     }

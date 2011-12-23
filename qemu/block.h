@@ -89,6 +89,7 @@ int bdrv_write_sync(BlockDriverState *bs, int64_t sector_num,
     const uint8_t *buf, int nb_sectors);
 int bdrv_truncate(BlockDriverState *bs, int64_t offset);
 int64_t bdrv_getlength(BlockDriverState *bs);
+int64_t bdrv_get_allocated_file_size(BlockDriverState *bs);
 void bdrv_get_geometry(BlockDriverState *bs, uint64_t *nb_sectors_ptr);
 void bdrv_guess_geometry(BlockDriverState *bs, int *pcyls, int *pheads, int *psecs);
 int bdrv_commit(BlockDriverState *bs);
@@ -110,7 +111,7 @@ int bdrv_check(BlockDriverState *bs, BdrvCheckResult *res);
 typedef struct BlockDriverAIOCB BlockDriverAIOCB;
 typedef void BlockDriverCompletionFunc(void *opaque, int ret);
 typedef void BlockDriverDirtyHandler(BlockDriverState *bs, int64_t sector,
-				     int sector_num);
+                                     int sector_num);
 BlockDriverAIOCB *bdrv_aio_readv(BlockDriverState *bs, int64_t sector_num,
                                  QEMUIOVector *iov, int nb_sectors,
                                  BlockDriverCompletionFunc *cb, void *opaque);
@@ -118,7 +119,7 @@ BlockDriverAIOCB *bdrv_aio_writev(BlockDriverState *bs, int64_t sector_num,
                                   QEMUIOVector *iov, int nb_sectors,
                                   BlockDriverCompletionFunc *cb, void *opaque);
 BlockDriverAIOCB *bdrv_aio_flush(BlockDriverState *bs,
-				 BlockDriverCompletionFunc *cb, void *opaque);
+                                 BlockDriverCompletionFunc *cb, void *opaque);
 void bdrv_aio_cancel(BlockDriverAIOCB *acb);
 
 typedef struct BlockRequest {
@@ -150,11 +151,8 @@ void bdrv_close_all(void);
 int bdrv_discard(BlockDriverState *bs, int64_t sector_num, int nb_sectors);
 int bdrv_has_zero_init(BlockDriverState *bs);
 int bdrv_is_allocated(BlockDriverState *bs, int64_t sector_num, int nb_sectors,
-	int *pnum);
+                      int *pnum);
 
-#define BDRV_TYPE_HD     0
-#define BDRV_TYPE_CDROM  1
-#define BDRV_TYPE_FLOPPY 2
 #define BIOS_ATA_TRANSLATION_AUTO   0
 #define BIOS_ATA_TRANSLATION_NONE   1
 #define BIOS_ATA_TRANSLATION_LBA    2
@@ -163,11 +161,19 @@ int bdrv_is_allocated(BlockDriverState *bs, int64_t sector_num, int nb_sectors,
 
 void bdrv_set_geometry_hint(BlockDriverState *bs,
                             int cyls, int heads, int secs);
-void bdrv_set_type_hint(BlockDriverState *bs, int type);
 void bdrv_set_translation_hint(BlockDriverState *bs, int translation);
 void bdrv_get_geometry_hint(BlockDriverState *bs,
                             int *pcyls, int *pheads, int *psecs);
-int bdrv_get_type_hint(BlockDriverState *bs);
+typedef enum FDriveType {
+    FDRIVE_DRV_144  = 0x00,   /* 1.44 MB 3"5 drive      */
+    FDRIVE_DRV_288  = 0x01,   /* 2.88 MB 3"5 drive      */
+    FDRIVE_DRV_120  = 0x02,   /* 1.2  MB 5"25 drive     */
+    FDRIVE_DRV_NONE = 0x03,   /* No drive connected     */
+} FDriveType;
+
+void bdrv_get_floppy_geometry_hint(BlockDriverState *bs, int *nb_heads,
+                                   int *max_track, int *last_sect,
+                                   FDriveType drive_in, FDriveType *drive);
 int bdrv_get_translation_hint(BlockDriverState *bs);
 void bdrv_set_on_error(BlockDriverState *bs, BlockErrorAction on_read_error,
                        BlockErrorAction on_write_error);

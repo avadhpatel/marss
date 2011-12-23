@@ -11,9 +11,8 @@
  */
 
 #include "qemu-common.h"
-#include "sysemu.h"
 #include "hw/hw.h"
-#include "exec-all.h"
+#include "cpu.h"
 #include "gdbstub.h"
 #include "kvm.h"
 
@@ -33,16 +32,6 @@ int kvm_init_vcpu(CPUState *env)
     return -ENOSYS;
 }
 
-int kvm_log_start(target_phys_addr_t phys_addr, ram_addr_t size)
-{
-    return -ENOSYS;
-}
-
-int kvm_log_stop(target_phys_addr_t phys_addr, ram_addr_t size)
-{
-    return -ENOSYS;
-}
-
 int kvm_coalesce_mmio_region(target_phys_addr_t start, ram_addr_t size)
 {
     return -ENOSYS;
@@ -51,11 +40,6 @@ int kvm_coalesce_mmio_region(target_phys_addr_t start, ram_addr_t size)
 int kvm_uncoalesce_mmio_region(target_phys_addr_t start, ram_addr_t size)
 {
     return -ENOSYS;
-}
-
-int kvm_check_extension(KVMState *s, unsigned int extension)
-{
-    return 0;
 }
 
 int kvm_init(void)
@@ -89,16 +73,6 @@ int kvm_has_sync_mmu(void)
     return 0;
 }
 
-int kvm_has_vcpu_events(void)
-{
-    return 0;
-}
-
-int kvm_has_robust_singlestep(void)
-{
-    return 0;
-}
-
 int kvm_has_many_ioeventfds(void)
 {
     return 0;
@@ -110,8 +84,7 @@ void kvm_setup_guest_memory(void *start, size_t size)
 
 int kvm_update_guest_debug(CPUState *env, unsigned long reinject_trap)
 {
-    tb_flush(env);
-    return 0;
+    return -ENOSYS;
 }
 
 int kvm_insert_breakpoint(CPUState *current_env, target_ulong addr,
@@ -145,6 +118,11 @@ int kvm_set_ioeventfd_pio_word(int fd, uint16_t addr, uint16_t val, bool assign)
 int kvm_set_ioeventfd_mmio_long(int fd, uint32_t adr, uint32_t val, bool assign)
 {
     return -ENOSYS;
+}
+
+int kvm_on_sigbus_vcpu(CPUState *env, int code, void *addr)
+{
+    return 1;
 }
 
 int kvm_on_sigbus(int code, void *addr)

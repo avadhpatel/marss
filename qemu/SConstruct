@@ -82,7 +82,7 @@ config_target_h = env.CONFIG_CR(config_target_name, config_target_mak_name)
 # QObject
 q_object_files = "qint.c qstring.c qdict.c qlist.c qfloat.c qbool.c"
 q_object_files += " qjson.c json-lexer.c json-streamer.c json-parser.c"
-q_object_files += " qerror.c"
+q_object_files += " qerror.c error.c"
 
 #######################
 # oslib-obj
@@ -91,8 +91,8 @@ oslib_files = "osdep.c oslib-posix.c"
 #######################
 # block-obj
 block_files = "cutils.c cache-utils.c qemu-malloc.c qemu-option.c module.c"
-block_files += " nbd.c block.c aio.c aes.c"
-block_files += " posix-aio-compat.c qemu-config.c"
+block_files += " nbd.c block.c aio.c aes.c qemu-progress.c qemu-sockets.c"
+block_files += " posix-aio-compat.c qemu-config.c async.c"
 if env['linux_aio'] == True:
     block_files += " linux-aio.c"
 
@@ -140,12 +140,13 @@ comm_hw_files += " event_notifier.c "
 # ssi.c ssi-sd.c sd.c 
 
 comm_files += " buffered_file.c migration.c migration-tcp.c "
-comm_files += " qemu-sockets.c qemu-char.c"
+comm_files += " qemu-char.c"
 comm_files += " savevm.c cache-utils.c bt-host.c bt-vhci.c"
 comm_files += " usb-%s.c" % env['usb']
 comm_files += " migration-exec.c migration-unix.c migration-fd.c"
 comm_files += " block-migration.c blockdev.c cursor.c "
-comm_files += " qemu-error.c input.c pflib.c "
+comm_files += " qemu-error.c input.c pflib.c iohandler.c"
+comm_files += " bitmap.c bitops.c"
 
 # We only add POSIX/Linux related files
 comm_files += " os-posix.c"
@@ -198,6 +199,7 @@ if env['curses'] == True:
     ui_files += " curses.c"
 ui_files += " vnc.c d3des.c vnc-enc-zlib.c "
 ui_files += " vnc-enc-hextile.c vnc-enc-tight.c vnc-palette.c "
+ui_files += " vnc-enc-zrle.c"
 if env['vnc_tls'] == True:
     ui_files += " vnc-tls.c vnc-auth-vencrypt.c"
 if env['vnc_sasl'] == True:
@@ -217,7 +219,7 @@ if env['iothread'] == True:
     comm_files += " qemu-thread.c"
 
 comm_files += " acl.c iov.c"
-comm_files += " notify.c "
+comm_files += " notify.c compatfd.c"
 comm_files += " qemu-timer.c qemu-timer-common.c"
 
 slirp_files = " "
@@ -228,6 +230,8 @@ if env['slirp'] == True:
 if env['xen'] == True:
     comm_files += " xen_backend.c xen_devconfig.c xen_console.c xenfb.c"
     comm_files += " xen_disk.c xen_nic.c"
+else:
+    comm_files += " xen-stub.c"
 
 comm_hw_list = []
 for h in Split(comm_hw_files):
@@ -296,10 +300,7 @@ cpu_emu_objs += " %s/cpuid.c" % target_path
 env['CPPPATH'].append("%s/tcg" % env['source_path'])
 env['CPPPATH'].append("%s/tcg/%s" % (env['source_path'], target_base_arch))
 
-if target['softfloat']:
-    cpu_emu_objs += " fpu/softfloat.c"
-else:
-    cpu_emu_objs += " fpu/softfloat-native.c"
+cpu_emu_objs += " fpu/softfloat.c"
 
 env['CPPPATH'].append("%s/fpu" % env['source_path'])
 
@@ -341,7 +342,7 @@ if target['user_only']:
     print("This configuration is not supported in MARSSx86")
     Return('error_str')
 
-obj_files = "async.c monitor.c dma-helpers.c"
+obj_files = "monitor.c dma-helpers.c"
 obj_files += " %s/machine.c" % target_path
 obj_files += " cpus.c arch_init.c balloon.c "
 obj_files += " rwhandler.c"
@@ -358,6 +359,7 @@ hw_files += " fw_cfg.c watchdog.c wdt_i6300esb.c msix.c "
 if env['kvm']:
     obj_files += " kvm-all.c"
     obj_files += " %s/kvm.c" % target_path
+    obj_files += " hw/kvmclock.c"
 else:
     obj_files += " kvm-stub.c"
 

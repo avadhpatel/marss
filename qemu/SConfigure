@@ -474,6 +474,7 @@ env['sdl_x11']=True
 env['sparse']=False
 env['uuid']=""
 env['vde']=""
+env['vnc']=True
 env['vnc_tls']=""
 env['vnc_sasl']=""
 env['vnc_thread']=False
@@ -512,6 +513,10 @@ env['check_utests']=False
 env['user_pie']=False
 env['zero_malloc']=""
 
+target_short_alignment = 2
+target_int_alignment   = 4
+target_long_alignment  = 4
+target_llong_alignment = 8
 
 # gprof=False
 # sparse=False
@@ -942,9 +947,15 @@ config_mak.write("TOOLS=%s\n" % env['tools'])
 env['roms'] = "optionrom"
 config_mak.write("ROMS=%s\n" % env['roms'])
 
+if env['vnc'] == True:
+    config_mak.write("CONFIG_VNC=y\n")
+
+if env['vnc_tls'] == True:
+    config_mak.write("CONFIG_VNC_TLS=y\n")
+
 if env['vnc_thread'] == True:
-    config_mak.write("CONFIG_VNC_THREAD=y")
-    config_mak.write("CONFIG_THREAD=y")
+    config_mak.write("CONFIG_VNC_THREAD=y\n")
+    config_mak.write("CONFIG_THREAD=y\n")
 
 config_mak.close()
 
@@ -986,6 +997,11 @@ for target in env['target_list'].split():
     bflt = False
     elfload32 = False
     target_nptl = False
+
+    t_config_mak.write("TARGET_SHORT_ALIGNMENT=%d\n" % target_short_alignment)
+    t_config_mak.write("TARGET_INT_ALIGNMENT=%d\n" % target_int_alignment)
+    t_config_mak.write("TARGET_LONG_ALIGNMENT=%d\n" % target_long_alignment)
+    t_config_mak.write("TARGET_LLONG_ALIGNMENT=%d\n" % target_llong_alignment)
 
     target_d['arch'] = env['cpu']
     if env['cpu'] == "i386":

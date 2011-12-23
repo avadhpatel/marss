@@ -59,6 +59,11 @@ static uint64_t translate_kernel_address(void *opaque, uint64_t addr)
     return (addr & 0x0fffffff) + KERNEL_LOAD_ADDR;
 }
 
+static target_phys_addr_t round_page(target_phys_addr_t addr)
+{
+    return (addr + TARGET_PAGE_SIZE - 1) & TARGET_PAGE_MASK;
+}
+
 static void ppc_heathrow_init (ram_addr_t ram_size,
                                const char *boot_device,
                                const char *kernel_filename,
@@ -71,7 +76,7 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
     qemu_irq *pic, **heathrow_irqs;
     int linux_boot, i;
     ram_addr_t ram_offset, bios_offset;
-    uint32_t kernel_base, initrd_base;
+    uint32_t kernel_base, initrd_base, cmdline_base = 0;
     int32_t kernel_size, initrd_size;
     PCIBus *pci_bus;
     MacIONVRAMState *nvr;
@@ -157,7 +162,7 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
         }
         /* load initrd */
         if (initrd_filename) {
-            initrd_base = INITRD_LOAD_ADDR;
+            initrd_base = round_page(kernel_base + kernel_size + KERNEL_GAP);
             initrd_size = load_image_targphys(initrd_filename, initrd_base,
                                               ram_size - initrd_base);
             if (initrd_size < 0) {
@@ -165,9 +170,11 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
                          initrd_filename);
                 exit(1);
             }
+            cmdline_base = round_page(initrd_base + initrd_size);
         } else {
             initrd_base = 0;
             initrd_size = 0;
+            cmdline_base = round_page(kernel_base + kernel_size + KERNEL_GAP);
         }
         ppc_boot_device = 'm';
     } else {
@@ -236,21 +243,16 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
         pci_nic_init_nofail(&nd_table[i], "ne2k_pci", NULL);
 
 
-    if (drive_get_max_bus(IF_IDE) >= MAX_IDE_BUS) {
-        fprintf(stderr, "qemu: too many IDE bus\n");
-        exit(1);
-    }
+    ide_drive_get(hd, MAX_IDE_BUS);
 
     /* First IDE channel is a MAC IDE on the MacIO bus */
-    hd[0] = drive_get(IF_IDE, 0, 0);
-    hd[1] = drive_get(IF_IDE, 0, 1);
     dbdma = DBDMA_init(&dbdma_mem_index);
     ide_mem_index[0] = -1;
     ide_mem_index[1] = pmac_ide_init(hd, pic[0x0D], dbdma, 0x16, pic[0x02]);
 
     /* Second IDE channel is a CMD646 on the PCI bus */
-    hd[0] = drive_get(IF_IDE, 1, 0);
-    hd[1] = drive_get(IF_IDE, 1, 1);
+    hd[0] = hd[MAX_IDE_DEVS];
+    hd[1] = hd[MAX_IDE_DEVS + 1];
     hd[3] = hd[2] = NULL;
     pci_cmd646_ide_init(pci_bus, hd, 0);
 
@@ -283,8 +285,8 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
     fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_ADDR, kernel_base);
     fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_SIZE, kernel_size);
     if (kernel_cmdline) {
-        fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_CMDLINE, CMDLINE_ADDR);
-        pstrcpy_targphys("cmdline", CMDLINE_ADDR, TARGET_PAGE_SIZE, kernel_cmdline);
+        fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_CMDLINE, cmdline_base);
+        pstrcpy_targphys("cmdline", cmdline_base, TARGET_PAGE_SIZE, kernel_cmdline);
     } else {
         fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_CMDLINE, 0);
     }

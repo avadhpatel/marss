@@ -23,7 +23,6 @@
 
 #include "config.h"
 #include "cpu.h"
-#include "exec-all.h"
 #include "host-utils.h"
 
 #define D(x)
@@ -117,7 +116,7 @@ void do_interrupt(CPUState *env)
 {
     uint32_t t;
 
-    /* IMM flag cannot propagate accross a branch and into the dslot.  */
+    /* IMM flag cannot propagate across a branch and into the dslot.  */
     assert(!((env->iflags & D_FLAG) && (env->iflags & IMM_FLAG)));
     assert(!(env->iflags & (DRTI_FLAG | DRTE_FLAG | DRTB_FLAG)));
 /*    assert(env->sregs[SR_MSR] & (MSR_EE)); Only for HW exceptions.  */

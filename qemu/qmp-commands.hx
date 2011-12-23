@@ -430,6 +430,33 @@ Example:
 EQMP
 
     {
+        .name       = "inject-nmi",
+        .args_type  = "",
+        .params     = "",
+        .help       = "",
+        .user_print = monitor_user_noop,
+        .mhandler.cmd_new = do_inject_nmi,
+    },
+
+SQMP
+inject-nmi
+----------
+
+Inject an NMI on guest's CPUs.
+
+Arguments: None.
+
+Example:
+
+-> { "execute": "inject-nmi" }
+<- { "return": {} }
+
+Note: inject-nmi is only supported for x86 guest currently, it will
+      returns "Unsupported" error for non-x86 guest.
+
+EQMP
+
+    {
         .name       = "migrate",
         .args_type  = "detach:-d,blk:-b,inc:-i,uri:s",
         .params     = "[-d] [-b] [-i] uri",
@@ -503,41 +530,6 @@ EQMP
     },
 
 SQMP
-client_migrate_info
-------------------
-
-Set the spice/vnc connection info for the migration target.  The spice/vnc
-server will ask the spice/vnc client to automatically reconnect using the
-new parameters (if specified) once the vm migration finished successfully.
-
-Arguments:
-
-- "protocol":     protocol: "spice" or "vnc" (json-string)
-- "hostname":     migration target hostname (json-string)
-- "port":         spice/vnc tcp port for plaintext channels (json-int, optional)
-- "tls-port":     spice tcp port for tls-secured channels (json-int, optional)
-- "cert-subject": server certificate subject (json-string, optional)
-
-Example:
-
--> { "execute": "client_migrate_info",
-     "arguments": { "protocol": "spice",
-                    "hostname": "virt42.lab.kraxel.org",
-                    "port": 1234 } }
-<- { "return": {} }
-
-EQMP
-
-    {
-        .name       = "client_migrate_info",
-        .args_type  = "protocol:s,hostname:s,port:i?,tls-port:i?,cert-subject:s?",
-        .params     = "protocol hostname port tls-port cert-subject",
-        .help       = "send migration info to spice/vnc client",
-        .user_print = monitor_user_noop,
-        .mhandler.cmd_new = client_migrate_info,
-    },
-
-SQMP
 migrate_set_speed
 -----------------
 
@@ -576,6 +568,41 @@ Arguments:
 Example:
 
 -> { "execute": "migrate_set_downtime", "arguments": { "value": 0.1 } }
+<- { "return": {} }
+
+EQMP
+
+    {
+        .name       = "client_migrate_info",
+        .args_type  = "protocol:s,hostname:s,port:i?,tls-port:i?,cert-subject:s?",
+        .params     = "protocol hostname port tls-port cert-subject",
+        .help       = "send migration info to spice/vnc client",
+        .user_print = monitor_user_noop,
+        .mhandler.cmd_new = client_migrate_info,
+    },
+
+SQMP
+client_migrate_info
+------------------
+
+Set the spice/vnc connection info for the migration target.  The spice/vnc
+server will ask the spice/vnc client to automatically reconnect using the
+new parameters (if specified) once the vm migration finished successfully.
+
+Arguments:
+
+- "protocol":     protocol: "spice" or "vnc" (json-string)
+- "hostname":     migration target hostname (json-string)
+- "port":         spice/vnc tcp port for plaintext channels (json-int, optional)
+- "tls-port":     spice tcp port for tls-secured channels (json-int, optional)
+- "cert-subject": server certificate subject (json-string, optional)
+
+Example:
+
+-> { "execute": "client_migrate_info",
+     "arguments": { "protocol": "spice",
+                    "hostname": "virt42.lab.kraxel.org",
+                    "port": 1234 } }
 <- { "return": {} }
 
 EQMP
@@ -662,6 +689,40 @@ Arguments:
 Example:
 
 -> { "execute": "block_resize", "arguments": { "device": "scratch", "size": 1073741824 } }
+<- { "return": {} }
+
+EQMP
+
+    {
+        .name       = "blockdev-snapshot-sync",
+        .args_type  = "device:B,snapshot-file:s?,format:s?",
+        .params     = "device [new-image-file] [format]",
+        .user_print = monitor_user_noop,
+        .mhandler.cmd_new = do_snapshot_blkdev,
+    },
+
+SQMP
+blockdev-snapshot-sync
+----------------------
+
+Synchronous snapshot of a block device. snapshot-file specifies the
+target of the new image. If the file exists, or if it is a device, the
+snapshot will be created in the existing file/device. If does not
+exist, a new file will be created. format specifies the format of the
+snapshot image, default is qcow2.
+
+Arguments:
+
+- "device": device name to snapshot (json-string)
+- "snapshot-file": name of new image file (json-string)
+- "format": format of new image (json-string, optional)
+
+Example:
+
+-> { "execute": "blockdev-snapshot", "arguments": { "device": "ide-hd0",
+                                                    "snapshot-file":
+                                                    "/some/place/my-image",
+                                                    "format": "qcow2" } }
 <- { "return": {} }
 
 EQMP
@@ -858,6 +919,33 @@ Example:
 EQMP
 
     {
+        .name       = "add_client",
+        .args_type  = "protocol:s,fdname:s,skipauth:b?",
+        .params     = "protocol fdname skipauth",
+        .help       = "add a graphics client",
+        .user_print = monitor_user_noop,
+        .mhandler.cmd_new = add_graphics_client,
+    },
+
+SQMP
+add_client
+----------
+
+Add a graphics client
+
+Arguments:
+
+- "protocol": protocol name (json-string)
+- "fdname": file descriptor name (json-string)
+
+Example:
+
+-> { "execute": "add_client", "arguments": { "protocol": "vnc",
+                                             "fdname": "myclient" } }
+<- { "return": {} }
+
+EQMP
+    {
         .name       = "qmp_capabilities",
         .args_type  = "",
         .params     = "",
@@ -1039,7 +1127,8 @@ Each json-object contain the following:
 
 - "device": device name (json-string)
 - "type": device type (json-string)
-         - Possible values: "hd", "cdrom", "floppy", "unknown"
+         - deprecated, retained for backward compatibility
+         - Possible values: "unknown"
 - "removable": true if the device is removable, false otherwise (json-bool)
 - "locked": true if the device is locked, false otherwise (json-bool)
 - "inserted": only present if the device is inserted, it is a json-object
@@ -1070,25 +1159,25 @@ Example:
                "encrypted":false,
                "file":"disks/test.img"
             },
-            "type":"hd"
+            "type":"unknown"
          },
          {
             "device":"ide1-cd0",
             "locked":false,
             "removable":true,
-            "type":"cdrom"
+            "type":"unknown"
          },
          {
             "device":"floppy0",
             "locked":false,
             "removable":true,
-            "type": "floppy"
+            "type":"unknown"
          },
          {
             "device":"sd0",
             "locked":false,
             "removable":true,
-            "type":"floppy"
+            "type":"unknown"
          }
       ]
    }
@@ -1194,6 +1283,7 @@ Return a json-array. Each CPU is represented by a json-object, which contains:
      "nip": PPC (json-int)
      "pc" and "npc": sparc (json-int)
      "PC": mips (json-int)
+- "thread_id": ID of the underlying host thread (json-int)
 
 Example:
 
@@ -1205,12 +1295,14 @@ Example:
             "current":true,
             "halted":false,
             "pc":3227107138
+            "thread_id":3134
          },
          {
             "CPU":1,
             "current":false,
             "halted":true,
             "pc":7108165
+            "thread_id":3135
          }
       ]
    }

@@ -438,8 +438,12 @@
 #define CPUID_VENDOR_INTEL_3 0x6c65746e /* "ntel" */
 
 #define CPUID_VENDOR_AMD_1   0x68747541 /* "Auth" */
-#define CPUID_VENDOR_AMD_2   0x69746e65 /* "enti" */ 
+#define CPUID_VENDOR_AMD_2   0x69746e65 /* "enti" */
 #define CPUID_VENDOR_AMD_3   0x444d4163 /* "cAMD" */
+
+#define CPUID_VENDOR_VIA_1   0x746e6543 /* "Cent" */
+#define CPUID_VENDOR_VIA_2   0x48727561 /* "aurH" */
+#define CPUID_VENDOR_VIA_3   0x736c7561 /* "auls" */
 
 #define CPUID_MWAIT_IBE     (1 << 1) /* Interrupts can exit capability */
 #define CPUID_MWAIT_EMX     (1 << 0) /* enumeration supported */
@@ -465,6 +469,15 @@
 
 #define EXCP_SYSCALL    0x100 /* only happens in user only emulation
                                  for syscall instruction */
+
+/* i386-specific interrupt pending bits.  */
+#define CPU_INTERRUPT_SMI       CPU_INTERRUPT_TGT_EXT_2
+#define CPU_INTERRUPT_NMI       CPU_INTERRUPT_TGT_EXT_3
+#define CPU_INTERRUPT_MCE       CPU_INTERRUPT_TGT_EXT_4
+#define CPU_INTERRUPT_VIRQ      CPU_INTERRUPT_TGT_INT_0
+#define CPU_INTERRUPT_INIT      CPU_INTERRUPT_TGT_INT_1
+#define CPU_INTERRUPT_SIPI      CPU_INTERRUPT_TGT_INT_2
+
 
 enum {
     CC_OP_DYNAMIC, /* must use dynamic code to get cc_op */
@@ -523,16 +536,6 @@ enum {
     CC_OP_NB,
 };
 
-#ifdef FLOATX80
-#define USE_X86LDOUBLE
-#endif
-
-#ifdef USE_X86LDOUBLE
-typedef floatx80 CPU86_LDouble;
-#else
-typedef float64 CPU86_LDouble;
-#endif
-
 typedef struct SegmentCache {
     uint32_t selector;
     target_ulong base;
@@ -585,11 +588,7 @@ typedef union {
 #define MMX_Q(n) q
 
 typedef union {
-#ifdef USE_X86LDOUBLE
-    CPU86_LDouble d __attribute__((aligned(16)));
-#else
-    CPU86_LDouble d;
-#endif
+    floatx80 d __attribute__((aligned(16)));
     MMXReg mmx;
 } FPReg;
 
@@ -648,10 +647,14 @@ typedef struct CPUX86State {
     uint16_t fpuc;
     uint8_t fptags[8];   /* 0 = valid, 1 = empty */
     FPReg fpregs[8];
+    /* KVM-only so far */
+    uint16_t fpop;
+    uint64_t fpip;
+    uint64_t fpdp;
 
     /* emulator internal variables */
     float_status fp_status;
-    CPU86_LDouble ft0;
+    floatx80 ft0;
 
     float_status mmx_status; /* for 3DNow! float ops */
     float_status sse_status;
@@ -691,7 +694,7 @@ typedef struct CPUX86State {
 
     uint64_t tsc;
 
-    uint64_t pat;
+    uint64_t mcg_status;
 
     /* exception/interrupt handling */
     int error_code;
@@ -711,6 +714,8 @@ typedef struct CPUX86State {
 
     CPU_COMMON
 
+    uint64_t pat;
+
     /* processor features (e.g. for CPUID insn) */
     uint32_t cpuid_level;
     uint32_t cpuid_vendor1;
@@ -725,6 +730,9 @@ typedef struct CPUX86State {
     uint32_t cpuid_ext3_features;
     uint32_t cpuid_apic_id;
     int cpuid_vendor_override;
+    /* Store the results of Centaur's CPUID instructions */
+    uint32_t cpuid_xlevel2;
+    uint32_t cpuid_ext4_features;
 
     /* MTRRs */
     uint64_t mtrr_fixed[11];
@@ -740,13 +748,13 @@ typedef struct CPUX86State {
     uint32_t sipi_vector;
     uint32_t cpuid_kvm_features;
     uint32_t cpuid_svm_features;
-
+    bool tsc_valid;
+    
     /* in order to simplify APIC support, we leave this pointer to the
        user */
     struct DeviceState *apic_state;
 
     uint64_t mcg_cap;
-    uint64_t mcg_status;
     uint64_t mcg_ctl;
     uint64_t mce_banks[MCE_BANKS_DEF*4];
 
@@ -860,8 +868,8 @@ static inline void cpu_x86_set_cpl(CPUX86State *s, int cpl)
 
 /* op_helper.c */
 /* used for debug or cpu save/restore */
-void cpu_get_fp80(uint64_t *pmant, uint16_t *pexp, CPU86_LDouble f);
-CPU86_LDouble cpu_set_fp80(uint64_t mant, uint16_t upper);
+void cpu_get_fp80(uint64_t *pmant, uint16_t *pexp, floatx80 f);
+floatx80 cpu_set_fp80(uint64_t mant, uint16_t upper);
 
 /* cpu-exec.c */
 /* the following helpers are only usable in user mode simulation as
@@ -963,6 +971,36 @@ static inline int cpu_mmu_index_2(target_ulong env_ptr)
 }
 #endif
 
+#undef EAX
+#define EAX (env->regs[R_EAX])
+#undef ECX
+#define ECX (env->regs[R_ECX])
+#undef EDX
+#define EDX (env->regs[R_EDX])
+#undef EBX
+#define EBX (env->regs[R_EBX])
+#undef ESP
+#define ESP (env->regs[R_ESP])
+#undef EBP
+#define EBP (env->regs[R_EBP])
+#undef ESI
+#define ESI (env->regs[R_ESI])
+#undef EDI
+#define EDI (env->regs[R_EDI])
+#undef EIP
+#define EIP (env->eip)
+#define DF  (env->df)
+
+#define CC_SRC (env->cc_src)
+#define CC_DST (env->cc_dst)
+#define CC_OP  (env->cc_op)
+
+/* float macros */
+#define FT0    (env->ft0)
+#define ST0    (env->fpregs[env->fpstt].d)
+#define ST(n)  (env->fpregs[(env->fpstt + (n)) & 7].d)
+#define ST1    ST(1)
+
 /* translate.c */
 void optimize_flags_init(void);
 
@@ -987,6 +1025,23 @@ static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
 #include "hw/apic.h"
 #endif
 
+static inline bool cpu_has_work(CPUState *env)
+{
+    return ((env->interrupt_request & CPU_INTERRUPT_HARD) &&
+            (env->eflags & IF_MASK)) ||
+           (env->interrupt_request & (CPU_INTERRUPT_NMI |
+                                      CPU_INTERRUPT_INIT |
+                                      CPU_INTERRUPT_SIPI |
+                                      CPU_INTERRUPT_MCE));
+}
+
+#include "exec-all.h"
+
+static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
+{
+    env->eip = tb->pc - tb->cs_base;
+}
+
 static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
                                         target_ulong *cs_base, int *flags)
 {
@@ -1000,7 +1055,24 @@ void do_cpu_init(CPUState *env);
 void do_cpu_sipi(CPUState *env);
 
 #ifdef MARSS_QEMU
-void set_cpu_env(CPUState* env1);
 int sim_cpu_exec(void);
 #endif
+
+#define MCE_INJECT_BROADCAST    1
+#define MCE_INJECT_UNCOND_AO    2
+
+void cpu_x86_inject_mce(Monitor *mon, CPUState *cenv, int bank,
+                        uint64_t status, uint64_t mcg_status, uint64_t addr,
+                        uint64_t misc, int flags);
+
+/* op_helper.c */
+void do_interrupt(CPUState *env);
+void do_interrupt_x86_hardirq(CPUState *env, int intno, int is_hw);
+
+void do_smm_enter(CPUState *env1);
+
+void svm_check_intercept(CPUState *env1, uint32_t type);
+
+uint32_t cpu_cc_compute_all(CPUState *env1, int op);
+
 #endif /* CPU_I386_H */

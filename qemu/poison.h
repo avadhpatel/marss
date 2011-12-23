@@ -10,6 +10,7 @@
 #pragma GCC poison TARGET_ALPHA
 #pragma GCC poison TARGET_ARM
 #pragma GCC poison TARGET_CRIS
+#pragma GCC poison TARGET_LM32
 #pragma GCC poison TARGET_M68K
 #pragma GCC poison TARGET_MIPS
 #pragma GCC poison TARGET_MIPS64
@@ -36,15 +37,27 @@
 #pragma GCC poison CPUState
 #pragma GCC poison env
 
+#pragma GCC poison lduw_phys
+#pragma GCC poison ldl_phys
+#pragma GCC poison ldq_phys
+#pragma GCC poison stl_phys_notdirty
+#pragma GCC poison stq_phys_notdirty
+#pragma GCC poison stw_phys
+#pragma GCC poison stl_phys
+#pragma GCC poison stq_phys
+
 #pragma GCC poison CPU_INTERRUPT_HARD
 #pragma GCC poison CPU_INTERRUPT_EXITTB
-#pragma GCC poison CPU_INTERRUPT_TIMER
-#pragma GCC poison CPU_INTERRUPT_FIQ
 #pragma GCC poison CPU_INTERRUPT_HALT
-#pragma GCC poison CPU_INTERRUPT_SMI
 #pragma GCC poison CPU_INTERRUPT_DEBUG
-#pragma GCC poison CPU_INTERRUPT_VIRQ
-#pragma GCC poison CPU_INTERRUPT_NMI
+#pragma GCC poison CPU_INTERRUPT_TGT_EXT_0
+#pragma GCC poison CPU_INTERRUPT_TGT_EXT_1
+#pragma GCC poison CPU_INTERRUPT_TGT_EXT_2
+#pragma GCC poison CPU_INTERRUPT_TGT_EXT_3
+#pragma GCC poison CPU_INTERRUPT_TGT_EXT_4
+#pragma GCC poison CPU_INTERRUPT_TGT_INT_0
+#pragma GCC poison CPU_INTERRUPT_TGT_INT_1
+#pragma GCC poison CPU_INTERRUPT_TGT_INT_2
 
 #endif
 #endif

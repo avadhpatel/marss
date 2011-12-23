@@ -1495,7 +1495,7 @@ sub process {
 		next if ($realfile !~ /\.(h|c|pl)$/);
 
 # in QEMU, no tabs are allowed
-		if ($rawline =~ /\t/) {
+		if ($rawline =~ /^\+.*\t/) {
 			my $herevet = "$here\n" . cat_vet($rawline) . "\n";
 			ERROR("code indent should never use tabs\n" . $herevet);
 			$rpt_cleaners = 1;
@@ -2068,8 +2068,10 @@ sub process {
 					}
 
 				# , must have a space on the right.
+                                # not required when having a single },{ on one line
 				} elsif ($op eq ',') {
-					if ($ctx !~ /.x[WEC]/ && $cc !~ /^}/) {
+					if ($ctx !~ /.x[WEC]/ && $cc !~ /^}/ &&
+                                            ($elements[$n] . $elements[$n + 2]) !~ " *}{") {
 						ERROR("space required after that '$op' $at\n" . $hereptr);
 					}
 
@@ -2537,6 +2539,7 @@ sub process {
 		}
 		if (!defined $suppress_ifbraces{$linenr - 1} &&
 					$line =~ /\b(if|while|for|else)\b/ &&
+					$line !~ /\#\s*if/ &&
 					$line !~ /\#\s*else/) {
 			my $allowed = 0;
 

@@ -16,6 +16,7 @@
 #define PCI_DEVFN(slot, func)   ((((slot) & 0x1f) << 3) | ((func) & 0x07))
 #define PCI_SLOT(devfn)         (((devfn) >> 3) & 0x1f)
 #define PCI_FUNC(devfn)         ((devfn) & 0x07)
+#define PCI_SLOT_MAX            32
 #define PCI_FUNC_MAX            8
 
 /* Class, Vendor and Device IDs from Linux's pci_ids.h */
@@ -91,6 +92,7 @@ typedef struct PCIIORegion {
     pcibus_t filtered_size;
     uint8_t type;
     PCIMapIORegionFunc *map_func;
+    ram_addr_t ram_addr;
 } PCIIORegion;
 
 #define PCI_ROM_SLOT 6
@@ -130,7 +132,7 @@ struct PCIDevice {
     /* PCI config space */
     uint8_t *config;
 
-    /* Used to enable config checks on load. Note that writeable bits are
+    /* Used to enable config checks on load. Note that writable bits are
      * never checked even if set in cmask. */
     uint8_t *cmask;
 
@@ -199,6 +201,8 @@ PCIDevice *pci_register_device(PCIBus *bus, const char *name,
 void pci_register_bar(PCIDevice *pci_dev, int region_num,
                             pcibus_t size, uint8_t type,
                             PCIMapIORegionFunc *map_func);
+void pci_register_bar_simple(PCIDevice *pci_dev, int region_num,
+                             pcibus_t size, uint8_t attr, ram_addr_t ram_addr);
 
 int pci_add_capability(PCIDevice *pdev, uint8_t cap_id,
                        uint8_t offset, uint8_t size);
@@ -229,14 +233,15 @@ typedef enum {
 typedef int (*pci_hotplug_fn)(DeviceState *qdev, PCIDevice *pci_dev,
                               PCIHotplugState state);
 void pci_bus_new_inplace(PCIBus *bus, DeviceState *parent,
-                         const char *name, int devfn_min);
-PCIBus *pci_bus_new(DeviceState *parent, const char *name, int devfn_min);
+                         const char *name, uint8_t devfn_min);
+PCIBus *pci_bus_new(DeviceState *parent, const char *name, uint8_t devfn_min);
 void pci_bus_irqs(PCIBus *bus, pci_set_irq_fn set_irq, pci_map_irq_fn map_irq,
                   void *irq_opaque, int nirq);
+int pci_bus_get_irq_level(PCIBus *bus, int irq_num);
 void pci_bus_hotplug(PCIBus *bus, pci_hotplug_fn hotplug, DeviceState *dev);
 PCIBus *pci_register_bus(DeviceState *parent, const char *name,
                          pci_set_irq_fn set_irq, pci_map_irq_fn map_irq,
-                         void *irq_opaque, int devfn_min, int nirq);
+                         void *irq_opaque, uint8_t devfn_min, int nirq);
 void pci_device_reset(PCIDevice *dev);
 void pci_bus_reset(PCIBus *bus);
 
@@ -251,7 +256,7 @@ void pci_for_each_device(PCIBus *bus, int bus_num, void (*fn)(PCIBus *bus, PCIDe
 PCIBus *pci_find_root_bus(int domain);
 int pci_find_domain(const PCIBus *bus);
 PCIBus *pci_find_bus(PCIBus *bus, int bus_num);
-PCIDevice *pci_find_device(PCIBus *bus, int bus_num, int slot, int function);
+PCIDevice *pci_find_device(PCIBus *bus, int bus_num, uint8_t devfn);
 int pci_qdev_find_device(const char *id, PCIDevice **pdev);
 PCIBus *pci_get_bus_devfn(int *devfnp, const char *devaddr);
 
@@ -428,6 +433,13 @@ typedef struct {
     PCIConfigReadFunc *config_read;
     PCIConfigWriteFunc *config_write;
 
+    uint16_t vendor_id;
+    uint16_t device_id;
+    uint8_t revision;
+    uint16_t class_id;
+    uint16_t subsystem_vendor_id;       /* only for header type = 0 */
+    uint16_t subsystem_id;              /* only for header type = 0 */
+
     /*
      * pci-to-pci bridge or normal device.
      * This doesn't mean pci host switch.
@@ -453,8 +465,12 @@ PCIDevice *pci_create_multifunction(PCIBus *bus, int devfn, bool multifunction,
 PCIDevice *pci_create_simple_multifunction(PCIBus *bus, int devfn,
                                            bool multifunction,
                                            const char *name);
+PCIDevice *pci_try_create_multifunction(PCIBus *bus, int devfn,
+                                        bool multifunction,
+                                        const char *name);
 PCIDevice *pci_create(PCIBus *bus, int devfn, const char *name);
 PCIDevice *pci_create_simple(PCIBus *bus, int devfn, const char *name);
+PCIDevice *pci_try_create(PCIBus *bus, int devfn, const char *name);
 
 static inline int pci_is_express(const PCIDevice *d)
 {

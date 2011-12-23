@@ -3,13 +3,12 @@
  *
  * Copyright (c) 2007 CodeSourcery.
  *
- * This code is licenced under the GPL
+ * This code is licensed under the GPL
  */
 
 #include "hw.h"
 #include "pc.h"
 #include "mcf.h"
-#include "sysemu.h"
 #include "boards.h"
 #include "loader.h"
 #include "elf.h"

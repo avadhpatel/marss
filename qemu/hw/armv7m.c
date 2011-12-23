@@ -4,18 +4,17 @@
  * Copyright (c) 2006-2007 CodeSourcery.
  * Written by Paul Brook
  *
- * This code is licenced under the GPL.
+ * This code is licensed under the GPL.
  */
 
 #include "sysbus.h"
 #include "arm-misc.h"
-#include "sysemu.h"
 #include "loader.h"
 #include "elf.h"
 
 /* Bitbanded IO.  Each word corresponds to a single bit.  */
 
-/* Get the byte address of the real memory for a bitband acess.  */
+/* Get the byte address of the real memory for a bitband access.  */
 static inline uint32_t bitband_addr(void * opaque, uint32_t addr)
 {
     uint32_t res;

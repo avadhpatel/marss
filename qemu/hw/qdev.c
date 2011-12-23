@@ -106,6 +106,18 @@ static DeviceState *qdev_create_from_info(BusState *bus, DeviceInfo *info)
    initialize the actual device emulation.  */
 DeviceState *qdev_create(BusState *bus, const char *name)
 {
+    DeviceState *dev;
+
+    dev = qdev_try_create(bus, name);
+    if (!dev) {
+        hw_error("Unknown device '%s' for bus '%s'\n", name, bus->info->name);
+    }
+
+    return dev;
+}
+
+DeviceState *qdev_try_create(BusState *bus, const char *name)
+{
     DeviceInfo *info;
 
     if (!bus) {
@@ -114,7 +126,7 @@ DeviceState *qdev_create(BusState *bus, const char *name)
 
     info = qdev_find_info(bus->info, name);
     if (!info) {
-        hw_error("Unknown device '%s' for bus '%s'\n", name, bus->info->name);
+        return NULL;
     }
 
     return qdev_create_from_info(bus, info);
@@ -346,7 +358,8 @@ int qdev_simple_unplug_cb(DeviceState *dev)
     return 0;
 }
 
-/* Like qdev_init(), but terminate program via hw_error() instead of
+
+/* Like qdev_init(), but terminate program via error_report() instead of
    returning an error value.  This is okay during machine creation.
    Don't use for hotplug, because there callers need to recover from
    failure.  Exception: if you know the device's init() callback can't
@@ -358,7 +371,7 @@ void qdev_init_nofail(DeviceState *dev)
     DeviceInfo *info = dev->info;
 
     if (qdev_init(dev) < 0) {
-        error_report("Initialization of device %s failed\n", info->name);
+        error_report("Initialization of device %s failed", info->name);
         exit(1);
     }
 }
@@ -446,7 +459,7 @@ void qdev_connect_gpio_out(DeviceState * dev, int n, qemu_irq pin)
 
 void qdev_set_nic_properties(DeviceState *dev, NICInfo *nd)
 {
-    qdev_prop_set_macaddr(dev, "mac", nd->macaddr);
+    qdev_prop_set_macaddr(dev, "mac", nd->macaddr.a);
     if (nd->vlan)
         qdev_prop_set_vlan(dev, "vlan", nd->vlan);
     if (nd->netdev)
@@ -455,6 +468,7 @@ void qdev_set_nic_properties(DeviceState *dev, NICInfo *nd)
         qdev_prop_exists(dev, "vectors")) {
         qdev_prop_set_uint32(dev, "vectors", nd->nvectors);
     }
+    nd->instantiated = 1;
 }
 
 BusState *qdev_get_child_bus(DeviceState *dev, const char *name)

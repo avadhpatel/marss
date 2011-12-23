@@ -36,14 +36,13 @@ static int vmc_write(SpiceCharDeviceInstance *sin, const uint8_t *buf, int len)
 
     while (len > 0) {
         last_out = MIN(len, VMC_MAX_HOST_WRITE);
-        qemu_chr_read(scd->chr, p, last_out);
-        if (last_out > 0) {
-            out += last_out;
-            len -= last_out;
-            p += last_out;
-        } else {
+        if (qemu_chr_can_read(scd->chr) < last_out) {
             break;
         }
+        qemu_chr_read(scd->chr, p, last_out);
+        out += last_out;
+        len -= last_out;
+        p += last_out;
     }
 
     dprintf(scd, 3, "%s: %lu/%zd\n", __func__, out, len + out);
@@ -131,6 +130,18 @@ static void spice_chr_close(struct CharDriverState *chr)
     qemu_free(s);
 }
 
+static void spice_chr_guest_open(struct CharDriverState *chr)
+{
+    SpiceCharDriver *s = chr->opaque;
+    vmc_register_interface(s);
+}
+
+static void spice_chr_guest_close(struct CharDriverState *chr)
+{
+    SpiceCharDriver *s = chr->opaque;
+    vmc_unregister_interface(s);
+}
+
 static void print_allowed_subtypes(void)
 {
     const char** psubtype;
@@ -148,7 +159,7 @@ static void print_allowed_subtypes(void)
     fprintf(stderr, "\n");
 }
 
-CharDriverState *qemu_chr_open_spice(QemuOpts *opts)
+int qemu_chr_open_spice(QemuOpts *opts, CharDriverState **_chr)
 {
     CharDriverState *chr;
     SpiceCharDriver *s;
@@ -160,7 +171,7 @@ CharDriverState *qemu_chr_open_spice(QemuOpts *opts)
     if (name == NULL) {
         fprintf(stderr, "spice-qemu-char: missing name parameter\n");
         print_allowed_subtypes();
-        return NULL;
+        return -EINVAL;
     }
     for(;*psubtype != NULL; ++psubtype) {
         if (strcmp(name, *psubtype) == 0) {
@@ -171,7 +182,7 @@ CharDriverState *qemu_chr_open_spice(QemuOpts *opts)
     if (subtype == NULL) {
         fprintf(stderr, "spice-qemu-char: unsupported name\n");
         print_allowed_subtypes();
-        return NULL;
+        return -EINVAL;
     }
 
     chr = qemu_mallocz(sizeof(CharDriverState));
@@ -183,8 +194,11 @@ CharDriverState *qemu_chr_open_spice(QemuOpts *opts)
     chr->opaque = s;
     chr->chr_write = spice_chr_write;
     chr->chr_close = spice_chr_close;
+    chr->chr_guest_open = spice_chr_guest_open;
+    chr->chr_guest_close = spice_chr_guest_close;
 
     qemu_chr_generic_open(chr);
 
-    return chr;
+    *_chr = chr;
+    return 0;
 }

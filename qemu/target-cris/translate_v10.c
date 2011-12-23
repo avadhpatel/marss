@@ -262,9 +262,6 @@ static unsigned int dec10_quick_imm(DisasContext *dc)
             break;
 
         case CRISV10_QIMM_BCC_R0:
-            if (!dc->ir) {
-                cpu_abort(dc->env, "opcode zero\n");
-            }
         case CRISV10_QIMM_BCC_R1:
         case CRISV10_QIMM_BCC_R2:
         case CRISV10_QIMM_BCC_R3:
@@ -956,7 +953,7 @@ static int dec10_bdap_m(DisasContext *dc, int size)
         return insn_len;
     }
 #endif
-    /* Now the rest of the modes are truely indirect.  */
+    /* Now the rest of the modes are truly indirect.  */
     insn_len += dec10_prep_move_m(dc, 1, size, cpu_PR[PR_PREFIX]);
     tcg_gen_add_tl(cpu_PR[PR_PREFIX], cpu_PR[PR_PREFIX], cpu_R[rd]);
     cris_set_prefix(dc);

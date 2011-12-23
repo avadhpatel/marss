@@ -23,31 +23,15 @@ register struct CPUS390XState *env asm(AREG0);
 
 #include "config.h"
 #include "cpu.h"
-#include "exec-all.h"
 
 #if !defined(CONFIG_USER_ONLY)
 #include "softmmu_exec.h"
 #endif /* !defined(CONFIG_USER_ONLY) */
 
-static inline int cpu_has_work(CPUState *env)
+static inline void regs_to_env(void)
 {
-    return env->interrupt_request & CPU_INTERRUPT_HARD; // guess
 }
 
-static inline int cpu_halted(CPUState *env)
+static inline void env_to_regs(void)
 {
-    if (!env->halted) {
-       return 0;
-    }
-    if (cpu_has_work(env)) {
-        env->halted = 0;
-        return 0;
-    }
-    return EXCP_HALTED;
 }
-
-static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock* tb)
-{
-    env->psw.addr = tb->pc;
-}
-

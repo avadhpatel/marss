@@ -28,9 +28,10 @@
 #include "kvm_ppc.h"
 #include "device_tree.h"
 #include "openpic.h"
-#include "ppce500.h"
+#include "ppc.h"
 #include "loader.h"
 #include "elf.h"
+#include "sysbus.h"
 
 #define BINARY_DEVICE_TREE_FILE    "mpc8544ds.dtb"
 #define UIMAGE_LOAD_BASE           0
@@ -49,6 +50,13 @@
 #define MPC8544_PCI_REGS_SIZE      0x1000
 #define MPC8544_PCI_IO             0xE1000000
 #define MPC8544_PCI_IOLEN          0x10000
+#define MPC8544_UTIL_BASE          (MPC8544_CCSRBAR_BASE + 0xe0000)
+
+struct boot_info
+{
+    uint32_t dt_base;
+    uint32_t entry;
+};
 
 #ifdef CONFIG_FDT
 static int mpc8544_copy_soc_cell(void *fdt, const char *node, const char *prop)
@@ -74,18 +82,20 @@ out:
 }
 #endif
 
-static int mpc8544_load_device_tree(target_phys_addr_t addr,
-                                     uint32_t ramsize,
-                                     target_phys_addr_t initrd_base,
-                                     target_phys_addr_t initrd_size,
-                                     const char *kernel_cmdline)
+static int mpc8544_load_device_tree(CPUState *env,
+                                    target_phys_addr_t addr,
+                                    uint32_t ramsize,
+                                    target_phys_addr_t initrd_base,
+                                    target_phys_addr_t initrd_size,
+                                    const char *kernel_cmdline)
 {
     int ret = -1;
 #ifdef CONFIG_FDT
-    uint32_t mem_reg_property[] = {0, ramsize};
+    uint32_t mem_reg_property[] = {0, cpu_to_be32(ramsize)};
     char *filename;
     int fdt_size;
     void *fdt;
+    uint8_t hypercall[16];
 
     filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, BINARY_DEVICE_TREE_FILE);
     if (!filename) {
@@ -103,15 +113,19 @@ static int mpc8544_load_device_tree(target_phys_addr_t addr,
     if (ret < 0)
         fprintf(stderr, "couldn't set /memory/reg\n");
 
-    ret = qemu_devtree_setprop_cell(fdt, "/chosen", "linux,initrd-start",
-                                    initrd_base);
-    if (ret < 0)
-        fprintf(stderr, "couldn't set /chosen/linux,initrd-start\n");
+    if (initrd_size) {
+        ret = qemu_devtree_setprop_cell(fdt, "/chosen", "linux,initrd-start",
+                                        initrd_base);
+        if (ret < 0) {
+            fprintf(stderr, "couldn't set /chosen/linux,initrd-start\n");
+        }
 
-    ret = qemu_devtree_setprop_cell(fdt, "/chosen", "linux,initrd-end",
-                                    (initrd_base + initrd_size));
-    if (ret < 0)
-        fprintf(stderr, "couldn't set /chosen/linux,initrd-end\n");
+        ret = qemu_devtree_setprop_cell(fdt, "/chosen", "linux,initrd-end",
+                                        (initrd_base + initrd_size));
+        if (ret < 0) {
+            fprintf(stderr, "couldn't set /chosen/linux,initrd-end\n");
+        }
+    }
 
     ret = qemu_devtree_setprop_string(fdt, "/chosen", "bootargs",
                                       kernel_cmdline);
@@ -145,6 +159,20 @@ static int mpc8544_load_device_tree(target_phys_addr_t addr,
 
         mpc8544_copy_soc_cell(fdt, buf, "clock-frequency");
         mpc8544_copy_soc_cell(fdt, buf, "timebase-frequency");
+
+        /* indicate KVM hypercall interface */
+        qemu_devtree_setprop_string(fdt, "/hypervisor", "compatible",
+                                    "linux,kvm");
+        kvmppc_get_hypercall(env, hypercall, sizeof(hypercall));
+        qemu_devtree_setprop(fdt, "/hypervisor", "hcall-instructions",
+                             hypercall, sizeof(hypercall));
+    } else {
+        const uint32_t freq = 400000000;
+
+        qemu_devtree_setprop_cell(fdt, "/cpus/PowerPC,8544@0",
+                                  "clock-frequency", freq);
+        qemu_devtree_setprop_cell(fdt, "/cpus/PowerPC,8544@0",
+                                  "timebase-frequency", freq);
     }
 
     ret = rom_add_blob_fixed(BINARY_DEVICE_TREE_FILE, fdt, fdt_size, addr);
@@ -154,6 +182,40 @@ out:
 #endif
 
     return ret;
+}
+
+/* Create -kernel TLB entries for BookE, linearly spanning 256MB.  */
+static inline target_phys_addr_t booke206_page_size_to_tlb(uint64_t size)
+{
+    return (ffs(size >> 10) - 1) >> 1;
+}
+
+static void mmubooke_create_initial_mapping(CPUState *env,
+                                     target_ulong va,
+                                     target_phys_addr_t pa)
+{
+    ppcmas_tlb_t *tlb = booke206_get_tlbm(env, 1, 0, 0);
+    target_phys_addr_t size;
+
+    size = (booke206_page_size_to_tlb(256 * 1024 * 1024) << MAS1_TSIZE_SHIFT);
+    tlb->mas1 = MAS1_VALID | size;
+    tlb->mas2 = va & TARGET_PAGE_MASK;
+    tlb->mas7_3 = pa & TARGET_PAGE_MASK;
+    tlb->mas7_3 |= MAS3_UR | MAS3_UW | MAS3_UX | MAS3_SR | MAS3_SW | MAS3_SX;
+}
+
+static void mpc8544ds_cpu_reset(void *opaque)
+{
+    CPUState *env = opaque;
+    struct boot_info *bi = env->load_info;
+
+    cpu_reset(env);
+
+    /* Set initial guest state. */
+    env->gpr[1] = (16<<20) - 8;
+    env->gpr[3] = bi->dt_base;
+    env->nip = bi->entry;
+    mmubooke_create_initial_mapping(env, 0, 0);
 }
 
 static void mpc8544ds_init(ram_addr_t ram_size,
@@ -175,14 +237,27 @@ static void mpc8544ds_init(ram_addr_t ram_size,
     target_long initrd_size=0;
     int i=0;
     unsigned int pci_irq_nrs[4] = {1, 2, 3, 4};
-    qemu_irq *irqs, *mpic, *pci_irqs;
+    qemu_irq *irqs, *mpic;
+    DeviceState *dev;
+    struct boot_info *boot_info;
 
     /* Setup CPU */
-    env = cpu_ppc_init("e500v2_v30");
+    if (cpu_model == NULL) {
+        cpu_model = "e500v2_v30";
+    }
+
+    env = cpu_ppc_init(cpu_model);
     if (!env) {
         fprintf(stderr, "Unable to initialize CPU!\n");
         exit(1);
     }
+
+    /* XXX register timer? */
+    ppc_emb_timers_init(env, 400000000, PPC_INTERRUPT_DECR);
+    ppc_dcr_init(env, NULL, NULL);
+
+    /* Register reset handler */
+    qemu_register_reset(mpc8544ds_cpu_reset, env);
 
     /* Fixup Memory size on a alignment boundary */
     ram_size &= ~(RAM_SIZES_ALIGN - 1);
@@ -210,13 +285,15 @@ static void mpc8544ds_init(ram_addr_t ram_size,
                        serial_hds[0], 1, 1);
     }
 
+    /* General Utility device */
+    sysbus_create_simple("mpc8544-guts", MPC8544_UTIL_BASE, NULL);
+
     /* PCI */
-    pci_irqs = qemu_malloc(sizeof(qemu_irq) * 4);
-    pci_irqs[0] = mpic[pci_irq_nrs[0]];
-    pci_irqs[1] = mpic[pci_irq_nrs[1]];
-    pci_irqs[2] = mpic[pci_irq_nrs[2]];
-    pci_irqs[3] = mpic[pci_irq_nrs[3]];
-    pci_bus = ppce500_pci_init(pci_irqs, MPC8544_PCI_REGS_BASE);
+    dev = sysbus_create_varargs("e500-pcihost", MPC8544_PCI_REGS_BASE,
+                                mpic[pci_irq_nrs[0]], mpic[pci_irq_nrs[1]],
+                                mpic[pci_irq_nrs[2]], mpic[pci_irq_nrs[3]],
+                                NULL);
+    pci_bus = (PCIBus *)qdev_get_child_bus(dev, "pci.0");
     if (!pci_bus)
         printf("couldn't create PCI controller!\n");
 
@@ -259,28 +336,28 @@ static void mpc8544ds_init(ram_addr_t ram_size,
         }
     }
 
+    boot_info = qemu_mallocz(sizeof(struct boot_info));
+
     /* If we're loading a kernel directly, we must load the device tree too. */
     if (kernel_filename) {
+#ifndef CONFIG_FDT
+        cpu_abort(env, "Compiled without FDT support - can't load kernel\n");
+#endif
         dt_base = (kernel_size + DTC_LOAD_PAD) & ~DTC_PAD_MASK;
-        if (mpc8544_load_device_tree(dt_base, ram_size,
+        if (mpc8544_load_device_tree(env, dt_base, ram_size,
                     initrd_base, initrd_size, kernel_cmdline) < 0) {
             fprintf(stderr, "couldn't load device tree\n");
             exit(1);
         }
 
-        cpu_synchronize_state(env);
-
-        /* Set initial guest state. */
-        env->gpr[1] = (16<<20) - 8;
-        env->gpr[3] = dt_base;
-        env->nip = entry;
-        /* XXX we currently depend on KVM to create some initial TLB entries. */
+        boot_info->entry = entry;
+        boot_info->dt_base = dt_base;
     }
+    env->load_info = boot_info;
 
-    if (kvm_enabled())
+    if (kvm_enabled()) {
         kvmppc_init();
-
-    return;
+    }
 }
 
 static QEMUMachine mpc8544ds_machine = {

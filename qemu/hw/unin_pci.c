@@ -63,23 +63,6 @@ static void pci_unin_set_irq(void *opaque, int irq_num, int level)
     qemu_set_irq(pic[unin_irq_line[irq_num]], level);
 }
 
-static void pci_unin_save(QEMUFile* f, void *opaque)
-{
-    PCIDevice *d = opaque;
-
-    pci_device_save(d, f);
-}
-
-static int pci_unin_load(QEMUFile* f, void *opaque, int version_id)
-{
-    PCIDevice *d = opaque;
-
-    if (version_id != 1)
-        return -EINVAL;
-
-    return pci_device_load(d, f);
-}
-
 static void pci_unin_reset(void *opaque)
 {
 }
@@ -158,8 +141,6 @@ static int pci_unin_main_init_device(SysBusDevice *dev)
     sysbus_init_mmio(dev, 0x1000, pci_mem_config);
     sysbus_init_mmio(dev, 0x1000, pci_mem_data);
 
-    register_savevm(&dev->qdev, "uninorth", 0, 1,
-                    pci_unin_save, pci_unin_load, &s->host_state);
     qemu_register_reset(pci_unin_reset, &s->host_state);
     return 0;
 }
@@ -181,8 +162,6 @@ static int pci_u3_agp_init_device(SysBusDevice *dev)
     sysbus_init_mmio(dev, 0x1000, pci_mem_config);
     sysbus_init_mmio(dev, 0x1000, pci_mem_data);
 
-    register_savevm(&dev->qdev, "uninorth", 0, 1,
-                    pci_unin_save, pci_unin_load, &s->host_state);
     qemu_register_reset(pci_unin_reset, &s->host_state);
 
     return 0;
@@ -300,10 +279,6 @@ PCIBus *pci_pmac_u3_init(qemu_irq *pic)
 
 static int unin_main_pci_host_init(PCIDevice *d)
 {
-    pci_config_set_vendor_id(d->config, PCI_VENDOR_ID_APPLE);
-    pci_config_set_device_id(d->config, PCI_DEVICE_ID_APPLE_UNI_N_PCI);
-    d->config[0x08] = 0x00; // revision
-    pci_config_set_class(d->config, PCI_CLASS_BRIDGE_HOST);
     d->config[0x0C] = 0x08; // cache_line_size
     d->config[0x0D] = 0x10; // latency_timer
     d->config[0x34] = 0x00; // capabilities_pointer
@@ -312,10 +287,6 @@ static int unin_main_pci_host_init(PCIDevice *d)
 
 static int unin_agp_pci_host_init(PCIDevice *d)
 {
-    pci_config_set_vendor_id(d->config, PCI_VENDOR_ID_APPLE);
-    pci_config_set_device_id(d->config, PCI_DEVICE_ID_APPLE_UNI_N_AGP);
-    d->config[0x08] = 0x00; // revision
-    pci_config_set_class(d->config, PCI_CLASS_BRIDGE_HOST);
     d->config[0x0C] = 0x08; // cache_line_size
     d->config[0x0D] = 0x10; // latency_timer
     //    d->config[0x34] = 0x80; // capabilities_pointer
@@ -324,11 +295,6 @@ static int unin_agp_pci_host_init(PCIDevice *d)
 
 static int u3_agp_pci_host_init(PCIDevice *d)
 {
-    pci_config_set_vendor_id(d->config, PCI_VENDOR_ID_APPLE);
-    pci_config_set_device_id(d->config, PCI_DEVICE_ID_APPLE_U3_AGP);
-    /* revision */
-    d->config[0x08] = 0x00;
-    pci_config_set_class(d->config, PCI_CLASS_BRIDGE_HOST);
     /* cache line size */
     d->config[0x0C] = 0x08;
     /* latency timer */
@@ -338,10 +304,6 @@ static int u3_agp_pci_host_init(PCIDevice *d)
 
 static int unin_internal_pci_host_init(PCIDevice *d)
 {
-    pci_config_set_vendor_id(d->config, PCI_VENDOR_ID_APPLE);
-    pci_config_set_device_id(d->config, PCI_DEVICE_ID_APPLE_UNI_N_I_PCI);
-    d->config[0x08] = 0x00; // revision
-    pci_config_set_class(d->config, PCI_CLASS_BRIDGE_HOST);
     d->config[0x0C] = 0x08; // cache_line_size
     d->config[0x0D] = 0x10; // latency_timer
     d->config[0x34] = 0x00; // capabilities_pointer
@@ -352,24 +314,40 @@ static PCIDeviceInfo unin_main_pci_host_info = {
     .qdev.name = "uni-north",
     .qdev.size = sizeof(PCIDevice),
     .init      = unin_main_pci_host_init,
+    .vendor_id = PCI_VENDOR_ID_APPLE,
+    .device_id = PCI_DEVICE_ID_APPLE_UNI_N_PCI,
+    .revision  = 0x00,
+    .class_id  = PCI_CLASS_BRIDGE_HOST,
 };
 
 static PCIDeviceInfo u3_agp_pci_host_info = {
     .qdev.name = "u3-agp",
     .qdev.size = sizeof(PCIDevice),
     .init      = u3_agp_pci_host_init,
+    .vendor_id = PCI_VENDOR_ID_APPLE,
+    .device_id = PCI_DEVICE_ID_APPLE_U3_AGP,
+    .revision  = 0x00,
+    .class_id  = PCI_CLASS_BRIDGE_HOST,
 };
 
 static PCIDeviceInfo unin_agp_pci_host_info = {
     .qdev.name = "uni-north-agp",
     .qdev.size = sizeof(PCIDevice),
     .init      = unin_agp_pci_host_init,
+    .vendor_id = PCI_VENDOR_ID_APPLE,
+    .device_id = PCI_DEVICE_ID_APPLE_UNI_N_AGP,
+    .revision  = 0x00,
+    .class_id  = PCI_CLASS_BRIDGE_HOST,
 };
 
 static PCIDeviceInfo unin_internal_pci_host_info = {
     .qdev.name = "uni-north-pci",
     .qdev.size = sizeof(PCIDevice),
     .init      = unin_internal_pci_host_init,
+    .vendor_id = PCI_VENDOR_ID_APPLE,
+    .device_id = PCI_DEVICE_ID_APPLE_UNI_N_I_PCI,
+    .revision  = 0x00,
+    .class_id  = PCI_CLASS_BRIDGE_HOST,
 };
 
 static void unin_register_devices(void)

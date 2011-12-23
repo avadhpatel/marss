@@ -49,13 +49,17 @@
 #define TARGET_IOC_TYPEBITS	8
 
 #if defined(TARGET_I386) || defined(TARGET_ARM) || defined(TARGET_SPARC) \
-    || defined(TARGET_M68K) || defined(TARGET_SH4) || defined(TARGET_CRIS) || defined(TARGET_PPC) || defined(TARGET_MIPS)
+    || defined(TARGET_M68K) || defined(TARGET_SH4) || defined(TARGET_CRIS)
     /* 16 bit uid wrappers emulation */
 #define USE_UID16
+#define target_id uint16_t
+#else
+#define target_id uint32_t
 #endif
 
 #if defined(TARGET_I386) || defined(TARGET_ARM) || defined(TARGET_SH4) \
-    || defined(TARGET_M68K) || defined(TARGET_CRIS)
+    || defined(TARGET_M68K) || defined(TARGET_CRIS) || defined(TARGET_UNICORE32) \
+    || defined(TARGET_S390X)
 
 #define TARGET_IOC_SIZEBITS	14
 #define TARGET_IOC_DIRBITS	2
@@ -315,7 +319,11 @@ struct target_sigaction;
 int do_sigaction(int sig, const struct target_sigaction *act,
                  struct target_sigaction *oact);
 
-#if defined(TARGET_I386) || defined(TARGET_ARM) || defined(TARGET_SPARC) || defined(TARGET_PPC) || defined(TARGET_MIPS) || defined (TARGET_SH4) || defined(TARGET_M68K) || defined(TARGET_ALPHA) || defined(TARGET_CRIS) || defined(TARGET_MICROBLAZE)
+#if defined(TARGET_I386) || defined(TARGET_ARM) || defined(TARGET_SPARC) \
+    || defined(TARGET_PPC) || defined(TARGET_MIPS) || defined(TARGET_SH4) \
+    || defined(TARGET_M68K) || defined(TARGET_ALPHA) || defined(TARGET_CRIS) \
+    || defined(TARGET_MICROBLAZE) || defined(TARGET_UNICORE32) \
+    || defined(TARGET_S390X)
 
 #if defined(TARGET_SPARC)
 #define TARGET_SA_NOCLDSTOP    8u
@@ -685,6 +693,40 @@ struct target_rlimit {
 #define TARGET_RLIM_INFINITY	((target_ulong)~0UL)
 #endif
 
+#if defined(TARGET_MIPS)
+#define TARGET_RLIMIT_CPU		0
+#define TARGET_RLIMIT_FSIZE		1
+#define TARGET_RLIMIT_DATA		2
+#define TARGET_RLIMIT_STACK		3
+#define TARGET_RLIMIT_CORE		4
+#define TARGET_RLIMIT_RSS		7
+#define TARGET_RLIMIT_NPROC		8
+#define TARGET_RLIMIT_NOFILE		5
+#define TARGET_RLIMIT_MEMLOCK		9
+#define TARGET_RLIMIT_AS		6
+#define TARGET_RLIMIT_LOCKS		10
+#define TARGET_RLIMIT_SIGPENDING	11
+#define TARGET_RLIMIT_MSGQUEUE		12
+#define TARGET_RLIMIT_NICE		13
+#define TARGET_RLIMIT_RTPRIO		14
+#else
+#define TARGET_RLIMIT_CPU		0
+#define TARGET_RLIMIT_FSIZE		1
+#define TARGET_RLIMIT_DATA		2
+#define TARGET_RLIMIT_STACK		3
+#define TARGET_RLIMIT_CORE		4
+#define TARGET_RLIMIT_RSS		5
+#define TARGET_RLIMIT_NPROC		6
+#define TARGET_RLIMIT_NOFILE		7
+#define TARGET_RLIMIT_MEMLOCK		8
+#define TARGET_RLIMIT_AS		9
+#define TARGET_RLIMIT_LOCKS		10
+#define TARGET_RLIMIT_SIGPENDING	11
+#define TARGET_RLIMIT_MSGQUEUE		12
+#define TARGET_RLIMIT_NICE		13
+#define TARGET_RLIMIT_RTPRIO		14
+#endif
+
 struct target_pollfd {
     int fd;           /* file descriptor */
     short events;     /* requested events */
@@ -700,6 +742,10 @@ struct target_pollfd {
 #define TARGET_KDSKBMODE       0x4b45
 #define TARGET_KDGKBENT	       0x4B46	/* gets one entry in translation table */
 #define TARGET_KDGKBSENT       0x4B48	/* gets one function key string entry */
+#define TARGET_KDGKBLED        0x4B64	/* get led flags (not lights) */
+#define TARGET_KDSKBLED        0x4B65	/* set led flags (not lights) */
+#define TARGET_KDGETLED        0x4B31	/* return current led state */
+#define TARGET_KDSETLED        0x4B32	/* set led state [lights, not flags] */
 
 #define TARGET_SIOCATMARK      0x8905
 
@@ -762,6 +808,9 @@ struct target_pollfd {
 #define TARGET_SIOCADDDLCI     0x8980          /* Create new DLCI device       */
 #define TARGET_SIOCDELDLCI     0x8981          /* Delete DLCI device           */
 
+/* From <linux/wireless.h> */
+
+#define TARGET_SIOCGIWNAME     0x8B01          /* get name == wireless protocol */
 
 /* From <linux/fs.h> */
 
@@ -917,6 +966,11 @@ struct target_pollfd {
 #define TARGET_FBIOGET_VSCREENINFO    0x4600
 #define TARGET_FBIOPUT_VSCREENINFO    0x4601
 #define TARGET_FBIOGET_FSCREENINFO    0x4602
+#define TARGET_FBIOGETCMAP            0x4604
+#define TARGET_FBIOPUTCMAP            0x4605
+#define TARGET_FBIOPAN_DISPLAY        0x4606
+#define TARGET_FBIOGET_CON2FBMAP      0x460F
+#define TARGET_FBIOPUT_CON2FBMAP      0x4610
 
 /* vt ioctls */
 #define TARGET_VT_OPENQRY             0x5600
@@ -925,6 +979,10 @@ struct target_pollfd {
 #define TARGET_VT_WAITACTIVE          0x5607
 #define TARGET_VT_LOCKSWITCH          0x560b
 #define TARGET_VT_UNLOCKSWITCH        0x560c
+#define TARGET_VT_GETMODE             0x5601
+#define TARGET_VT_SETMODE             0x5602
+#define TARGET_VT_RELDISP             0x5605
+#define TARGET_VT_DISALLOCATE         0x5608
 
 /* from asm/termbits.h */
 
@@ -999,9 +1057,11 @@ struct target_winsize {
 #define TARGET_MAP_NORESERVE	0x4000		/* don't check for reservations */
 #define TARGET_MAP_POPULATE	0x8000		/* populate (prefault) pagetables */
 #define TARGET_MAP_NONBLOCK	0x10000		/* do not block on IO */
+#define TARGET_MAP_UNINITIALIZED 0x4000000	/* for anonymous mmap, memory could be uninitialized */
 #endif
 
-#if (defined(TARGET_I386) && defined(TARGET_ABI32)) || defined(TARGET_ARM) || defined(TARGET_CRIS)
+#if (defined(TARGET_I386) && defined(TARGET_ABI32)) || defined(TARGET_ARM) \
+    || defined(TARGET_CRIS) || defined(TARGET_UNICORE32)
 struct target_stat {
 	unsigned short st_dev;
 	unsigned short __pad1;
@@ -1677,6 +1737,27 @@ struct target_stat {
 
   	abi_long	__unused[3];
 };
+#elif defined(TARGET_S390X)
+struct target_stat {
+    abi_ulong  st_dev;
+    abi_ulong  st_ino;
+    abi_ulong  st_nlink;
+    unsigned int   st_mode;
+    unsigned int   st_uid;
+    unsigned int   st_gid;
+    unsigned int   __pad1;
+    abi_ulong  st_rdev;
+    abi_ulong  st_size;
+    abi_ulong  target_st_atime;
+    abi_ulong  target_st_atime_nsec;
+    abi_ulong  target_st_mtime;
+    abi_ulong  target_st_mtime_nsec;
+    abi_ulong  target_st_ctime;
+    abi_ulong  target_st_ctime_nsec;
+    abi_ulong  st_blksize;
+    abi_long       st_blocks;
+    abi_ulong  __unused[3];
+};
 #else
 #error unsupported CPU
 #endif
@@ -1762,6 +1843,34 @@ struct target_statfs64 {
 	abi_long f_namelen;
 	abi_long f_frsize;
 	abi_long f_spare[5];
+};
+#elif defined(TARGET_S390X)
+struct target_statfs {
+    int32_t  f_type;
+    int32_t  f_bsize;
+    abi_long f_blocks;
+    abi_long f_bfree;
+    abi_long f_bavail;
+    abi_long f_files;
+    abi_long f_ffree;
+    kernel_fsid_t f_fsid;
+    int32_t  f_namelen;
+    int32_t  f_frsize;
+    int32_t  f_spare[5];
+};
+
+struct target_statfs64 {
+    int32_t  f_type;
+    int32_t  f_bsize;
+    abi_long f_blocks;
+    abi_long f_bfree;
+    abi_long f_bavail;
+    abi_long f_files;
+    abi_long f_ffree;
+    kernel_fsid_t f_fsid;
+    int32_t  f_namelen;
+    int32_t  f_frsize;
+    int32_t  f_spare[5];
 };
 #else
 struct target_statfs {
@@ -2205,3 +2314,20 @@ struct target_mq_attr {
 #define FUTEX_CLOCK_REALTIME    256
 #define FUTEX_CMD_MASK          ~(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME)
 
+#ifdef CONFIG_EPOLL
+typedef union target_epoll_data {
+    abi_ulong ptr;
+    abi_ulong fd;
+    uint32_t u32;
+    uint64_t u64;
+} target_epoll_data_t;
+
+struct target_epoll_event {
+    uint32_t events;
+    target_epoll_data_t data;
+};
+#endif
+struct target_rlimit64 {
+    uint64_t rlim_cur;
+    uint64_t rlim_max;
+};

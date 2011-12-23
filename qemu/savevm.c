@@ -23,7 +23,6 @@
  */
 #include <unistd.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <time.h>
 #include <errno.h>
 #include <sys/time.h>
@@ -82,6 +81,7 @@
 #include "migration.h"
 #include "qemu_socket.h"
 #include "qemu-queue.h"
+#include "cpus.h"
 
 #define SELF_ANNOUNCE_ROUNDS 5
 
@@ -137,7 +137,7 @@ static void qemu_announce_self_once(void *opaque)
 
     if (--count) {
         /* delay 50ms, 150ms, 250ms, ... */
-        qemu_mod_timer(timer, qemu_get_clock(rt_clock) +
+        qemu_mod_timer(timer, qemu_get_clock_ms(rt_clock) +
                        50 + (SELF_ANNOUNCE_ROUNDS - count - 1) * 100);
     } else {
 	    qemu_del_timer(timer);
@@ -148,7 +148,7 @@ static void qemu_announce_self_once(void *opaque)
 void qemu_announce_self(void)
 {
 	static QEMUTimer *timer;
-	timer = qemu_new_timer(rt_clock, qemu_announce_self_once, &timer);
+	timer = qemu_new_timer_ms(rt_clock, qemu_announce_self_once, &timer);
 	qemu_announce_self_once(&timer);
 }
 
@@ -194,7 +194,7 @@ static int socket_get_buffer(void *opaque, uint8_t *buf, int64_t pos, int size)
     ssize_t len;
 
     do {
-        len = recv(s->fd, (void *)buf, size, 0);
+        len = qemu_recv(s->fd, buf, size, 0);
     } while (len == -1 && socket_error() == EINTR);
 
     if (len == -1)
@@ -882,6 +882,27 @@ const VMStateInfo vmstate_info_uint32 = {
     .put  = put_uint32,
 };
 
+/* 32 bit uint. See that the received value is the same than the one
+   in the field */
+
+static int get_uint32_equal(QEMUFile *f, void *pv, size_t size)
+{
+    uint32_t *v = pv;
+    uint32_t v2;
+    qemu_get_be32s(f, &v2);
+
+    if (*v == v2) {
+        return 0;
+    }
+    return -EINVAL;
+}
+
+const VMStateInfo vmstate_info_uint32_equal = {
+    .name = "uint32 equal",
+    .get  = get_uint32_equal,
+    .put  = put_uint32,
+};
+
 /* 64 bit unsigned int */
 
 static int get_uint64(QEMUFile *f, void *pv, size_t size)
@@ -986,7 +1007,7 @@ const VMStateInfo vmstate_info_buffer = {
 };
 
 /* unused buffers: space that was used for some fields that are
-   not usefull anymore */
+   not useful anymore */
 
 static int get_unused_buffer(QEMUFile *f, void *pv, size_t size)
 {
@@ -1308,8 +1329,12 @@ int vmstate_load_state(QEMUFile *f, const VMStateDescription *vmsd,
                 n_elems = field->num;
             } else if (field->flags & VMS_VARRAY_INT32) {
                 n_elems = *(int32_t *)(opaque+field->num_offset);
+            } else if (field->flags & VMS_VARRAY_UINT32) {
+                n_elems = *(uint32_t *)(opaque+field->num_offset);
             } else if (field->flags & VMS_VARRAY_UINT16) {
                 n_elems = *(uint16_t *)(opaque+field->num_offset);
+            } else if (field->flags & VMS_VARRAY_UINT8) {
+                n_elems = *(uint8_t *)(opaque+field->num_offset);
             }
             if (field->flags & VMS_POINTER) {
                 base_addr = *(void **)base_addr + field->start;
@@ -1370,6 +1395,8 @@ void vmstate_save_state(QEMUFile *f, const VMStateDescription *vmsd,
                 n_elems = *(int32_t *)(opaque+field->num_offset);
             } else if (field->flags & VMS_VARRAY_UINT16) {
                 n_elems = *(uint16_t *)(opaque+field->num_offset);
+            } else if (field->flags & VMS_VARRAY_UINT8) {
+                n_elems = *(uint8_t *)(opaque+field->num_offset);
             }
             if (field->flags & VMS_POINTER) {
                 base_addr = *(void **)base_addr + field->start;
@@ -1575,7 +1602,7 @@ static int qemu_savevm_state(Monitor *mon, QEMUFile *f)
     int ret;
 
     saved_vm_running = vm_running;
-    vm_stop(0);
+    vm_stop(VMSTOP_SAVEVM);
 
     if (qemu_savevm_state_blocked(mon)) {
         ret = -EINVAL;
@@ -1904,7 +1931,7 @@ void do_savevm(Monitor *mon, const QDict *qdict)
     }
 
     saved_vm_running = vm_running;
-    vm_stop(0);
+    vm_stop(VMSTOP_SAVEVM);
 
     memset(sn, 0, sizeof(*sn));
 
@@ -1918,7 +1945,7 @@ void do_savevm(Monitor *mon, const QDict *qdict)
     sn->date_sec = tv.tv_sec;
     sn->date_nsec = tv.tv_usec * 1000;
 #endif
-    sn->vm_clock_nsec = qemu_get_clock(vm_clock);
+    sn->vm_clock_nsec = qemu_get_clock_ns(vm_clock);
 
     if (name) {
         ret = bdrv_snapshot_find(bs, old_sn, name);
@@ -1996,6 +2023,8 @@ int load_vmstate(const char *name)
     if (ret < 0) {
         return ret;
     } else if (sn.vm_state_size == 0) {
+        error_report("This is a disk-only snapshot. Revert to it offline "
+            "using qemu-img.");
         return -EINVAL;
     }
 
@@ -2044,6 +2073,7 @@ int load_vmstate(const char *name)
         return -EINVAL;
     }
 
+    qemu_system_reset(VMRESET_SILENT);
     ret = qemu_loadvm_state(f);
 
     qemu_fclose(f);

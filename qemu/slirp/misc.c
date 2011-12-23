@@ -119,6 +119,7 @@ fork_exec(struct socket *so, const char *ex, int do_pty)
 	char *bptr;
 	const char *curarg;
 	int c, i, ret;
+	pid_t pid;
 
 	DEBUG_CALL("fork_exec");
 	DEBUG_ARG("so = %lx", (long)so);
@@ -142,7 +143,8 @@ fork_exec(struct socket *so, const char *ex, int do_pty)
 		}
 	}
 
-	switch(fork()) {
+	pid = fork();
+	switch(pid) {
 	 case -1:
 		lprint("Error: fork failed: %s\n", strerror(errno));
 		close(s);
@@ -151,11 +153,12 @@ fork_exec(struct socket *so, const char *ex, int do_pty)
 		return 0;
 
 	 case 0:
+                setsid();
+
 		/* Set the DISPLAY */
 		if (do_pty == 2) {
 			(void) close(master);
 #ifdef TIOCSCTTY /* XXXXX */
-			(void) setsid();
 			ioctl(s, TIOCSCTTY, (char *)NULL);
 #endif
 		} else {
@@ -206,6 +209,7 @@ fork_exec(struct socket *so, const char *ex, int do_pty)
 		exit(1);
 
 	 default:
+		qemu_add_child_watch(pid);
 		if (do_pty == 2) {
 			close(s);
 			so->s = master;
@@ -401,6 +405,19 @@ void slirp_connection_info(Slirp *slirp, Monitor *mon)
                        ntohs(src.sin_port));
         monitor_printf(mon, "%15s %5d %5d %5d\n",
                        inet_ntoa(dst_addr), ntohs(dst_port),
+                       so->so_rcv.sb_cc, so->so_snd.sb_cc);
+    }
+
+    for (so = slirp->icmp.so_next; so != &slirp->icmp; so = so->so_next) {
+        n = snprintf(buf, sizeof(buf), "  ICMP[%d sec]",
+                     (so->so_expire - curtime) / 1000);
+        src.sin_addr = so->so_laddr;
+        dst_addr = so->so_faddr;
+        memset(&buf[n], ' ', 19 - n);
+        buf[19] = 0;
+        monitor_printf(mon, "%s %3d %15s  -    ", buf, so->s,
+                       src.sin_addr.s_addr ? inet_ntoa(src.sin_addr) : "*");
+        monitor_printf(mon, "%15s  -    %5d %5d\n", inet_ntoa(dst_addr),
                        so->so_rcv.sb_cc, so->so_snd.sb_cc);
     }
 }

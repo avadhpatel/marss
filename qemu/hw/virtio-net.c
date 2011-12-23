@@ -115,7 +115,8 @@ static void virtio_net_vhost_status(VirtIONet *n, uint8_t status)
     if (!tap_get_vhost_net(n->nic->nc.peer)) {
         return;
     }
-    if (!!n->vhost_started == virtio_net_started(n, status)) {
+    if (!!n->vhost_started == virtio_net_started(n, status) &&
+                              !n->nic->nc.peer->link_down) {
         return;
     }
     if (!n->vhost_started) {
@@ -149,7 +150,7 @@ static void virtio_net_set_status(struct VirtIODevice *vdev, uint8_t status)
     if (virtio_net_started(n, status) && !n->vhost_started) {
         if (n->tx_timer) {
             qemu_mod_timer(n->tx_timer,
-                           qemu_get_clock(vm_clock) + n->tx_timeout);
+                           qemu_get_clock_ns(vm_clock) + n->tx_timeout);
         } else {
             qemu_bh_schedule(n->tx_bh);
         }
@@ -656,7 +657,7 @@ static ssize_t virtio_net_receive(VLANClientState *nc, const uint8_t *buf, size_
 
         /* copy in packet.  ugh */
         len = iov_from_buf(sg, elem.in_num,
-                           buf + offset, size - offset);
+                           buf + offset, 0, size - offset);
         total += len;
         offset += len;
         /* If buffers can't be merged, at this point we
@@ -784,7 +785,7 @@ static void virtio_net_handle_tx_timer(VirtIODevice *vdev, VirtQueue *vq)
         virtio_net_flush_tx(n, vq);
     } else {
         qemu_mod_timer(n->tx_timer,
-                       qemu_get_clock(vm_clock) + n->tx_timeout);
+                       qemu_get_clock_ns(vm_clock) + n->tx_timeout);
         n->tx_waiting = 1;
         virtio_queue_set_notification(vq, 0);
     }
@@ -1018,7 +1019,7 @@ VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
 
     if (net->tx && !strcmp(net->tx, "timer")) {
         n->tx_vq = virtio_add_queue(&n->vdev, 256, virtio_net_handle_tx_timer);
-        n->tx_timer = qemu_new_timer(vm_clock, virtio_net_tx_timer, n);
+        n->tx_timer = qemu_new_timer_ns(vm_clock, virtio_net_tx_timer, n);
         n->tx_timeout = net->txtimer;
     } else {
         n->tx_vq = virtio_add_queue(&n->vdev, 256, virtio_net_handle_tx_bh);

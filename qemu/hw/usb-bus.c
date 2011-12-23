@@ -39,9 +39,10 @@ const VMStateDescription vmstate_usb_device = {
     }
 };
 
-void usb_bus_new(USBBus *bus, DeviceState *host)
+void usb_bus_new(USBBus *bus, USBBusOps *ops, DeviceState *host)
 {
     qbus_create_inplace(&bus->qbus, &usb_bus_info, host, NULL);
+    bus->ops = ops;
     bus->busnr = next_usb_bus++;
     bus->qbus.allow_hotplug = 1; /* Yes, we can */
     QTAILQ_INIT(&bus->free);
@@ -74,7 +75,7 @@ static int usb_qdev_init(DeviceState *qdev, DeviceInfo *base)
     QLIST_INIT(&dev->strings);
     rc = dev->info->init(dev);
     if (rc == 0 && dev->auto_attach)
-        usb_device_attach(dev);
+        rc = usb_device_attach(dev);
     return rc;
 }
 
@@ -82,7 +83,9 @@ static int usb_qdev_exit(DeviceState *qdev)
 {
     USBDevice *dev = DO_UPCAST(USBDevice, qdev, qdev);
 
-    usb_device_detach(dev);
+    if (dev->attached) {
+        usb_device_detach(dev);
+    }
     if (dev->info->handle_destroy) {
         dev->info->handle_destroy(dev);
     }
@@ -116,7 +119,7 @@ USBDevice *usb_create(USBBus *bus, const char *name)
         bus = usb_bus_find(-1);
         if (!bus)
             return NULL;
-        fprintf(stderr, "%s: no bus specified, using \"%s\" for \"%s\"\n",
+        error_report("%s: no bus specified, using \"%s\" for \"%s\"\n",
                 __FUNCTION__, bus->qbus.name, name);
     }
 #endif
@@ -135,17 +138,53 @@ USBDevice *usb_create_simple(USBBus *bus, const char *name)
     return dev;
 }
 
-void usb_register_port(USBBus *bus, USBPort *port, void *opaque, int index,
-                       USBPortOps *ops, int speedmask)
+static void usb_fill_port(USBPort *port, void *opaque, int index,
+                          USBPortOps *ops, int speedmask)
 {
-    port->opaque = opaque;
-    port->index = index;
     port->opaque = opaque;
     port->index = index;
     port->ops = ops;
     port->speedmask = speedmask;
+    usb_port_location(port, NULL, index + 1);
+}
+
+void usb_register_port(USBBus *bus, USBPort *port, void *opaque, int index,
+                       USBPortOps *ops, int speedmask)
+{
+    usb_fill_port(port, opaque, index, ops, speedmask);
     QTAILQ_INSERT_TAIL(&bus->free, port, next);
     bus->nfree++;
+}
+
+int usb_register_companion(const char *masterbus, USBPort *ports[],
+                           uint32_t portcount, uint32_t firstport,
+                           void *opaque, USBPortOps *ops, int speedmask)
+{
+    USBBus *bus;
+    int i;
+
+    QTAILQ_FOREACH(bus, &busses, next) {
+        if (strcmp(bus->qbus.name, masterbus) == 0) {
+            break;
+        }
+    }
+
+    if (!bus || !bus->ops->register_companion) {
+        qerror_report(QERR_INVALID_PARAMETER_VALUE, "masterbus",
+                      "an USB masterbus");
+        if (bus) {
+            error_printf_unless_qmp(
+                "USB bus '%s' does not allow companion controllers\n",
+                masterbus);
+        }
+        return -1;
+    }
+
+    for (i = 0; i < portcount; i++) {
+        usb_fill_port(ports[i], opaque, i, ops, speedmask);
+    }
+
+    return bus->ops->register_companion(bus, ports, portcount, firstport);
 }
 
 void usb_port_location(USBPort *downstream, USBPort *upstream, int portnr)
@@ -166,15 +205,20 @@ void usb_unregister_port(USBBus *bus, USBPort *port)
     bus->nfree--;
 }
 
-static void do_attach(USBDevice *dev)
+static int do_attach(USBDevice *dev)
 {
     USBBus *bus = usb_bus_from_device(dev);
     USBPort *port;
 
     if (dev->attached) {
-        fprintf(stderr, "Warning: tried to attach usb device %s twice\n",
+        error_report("Error: tried to attach usb device %s twice\n",
                 dev->product_desc);
-        return;
+        return -1;
+    }
+    if (bus->nfree == 0) {
+        error_report("Error: tried to attach usb device %s to a bus with no free ports\n",
+                dev->product_desc);
+        return -1;
     }
     if (dev->port_path) {
         QTAILQ_FOREACH(port, &bus->free, next) {
@@ -183,12 +227,17 @@ static void do_attach(USBDevice *dev)
             }
         }
         if (port == NULL) {
-            fprintf(stderr, "Warning: usb port %s (bus %s) not found\n",
+            error_report("Error: usb port %s (bus %s) not found\n",
                     dev->port_path, bus->qbus.name);
-            return;
+            return -1;
         }
     } else {
         port = QTAILQ_FIRST(&bus->free);
+    }
+    if (!(port->speedmask & dev->speedmask)) {
+        error_report("Warning: speed mismatch trying to attach usb device %s to bus %s\n",
+                dev->product_desc, bus->qbus.name);
+        return -1;
     }
 
     dev->attached++;
@@ -199,6 +248,8 @@ static void do_attach(USBDevice *dev)
 
     QTAILQ_INSERT_TAIL(&bus->used, port, next);
     bus->nused++;
+
+    return 0;
 }
 
 int usb_device_attach(USBDevice *dev)
@@ -210,8 +261,7 @@ int usb_device_attach(USBDevice *dev)
            (unless a physical port location is specified). */
         usb_create_simple(bus, "usb-hub");
     }
-    do_attach(dev);
-    return 0;
+    return do_attach(dev);
 }
 
 int usb_device_detach(USBDevice *dev)
@@ -220,7 +270,7 @@ int usb_device_detach(USBDevice *dev)
     USBPort *port;
 
     if (!dev->attached) {
-        fprintf(stderr, "Warning: tried to detach unattached usb device %s\n",
+        error_report("Error: tried to detach unattached usb device %s\n",
                 dev->product_desc);
         return -1;
     }
@@ -270,6 +320,7 @@ static const char *usb_speed(unsigned int speed)
         [ USB_SPEED_LOW  ] = "1.5",
         [ USB_SPEED_FULL ] = "12",
         [ USB_SPEED_HIGH ] = "480",
+        [ USB_SPEED_SUPER ] = "5000",
     };
     if (speed >= ARRAY_SIZE(txt))
         return "?";

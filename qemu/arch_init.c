@@ -64,6 +64,8 @@ const char arch_config_name[] = CONFIG_QEMU_CONFDIR "/target-" TARGET_ARCH ".con
 #define QEMU_ARCH QEMU_ARCH_I386
 #elif defined(TARGET_M68K)
 #define QEMU_ARCH QEMU_ARCH_M68K
+#elif defined(TARGET_LM32)
+#define QEMU_ARCH QEMU_ARCH_LM32
 #elif defined(TARGET_MICROBLAZE)
 #define QEMU_ARCH QEMU_ARCH_MICROBLAZE
 #elif defined(TARGET_MIPS)
@@ -705,6 +707,11 @@ int audio_available(void)
 #else
     return 0;
 #endif
+}
+
+int tcg_available(void)
+{
+    return 1;
 }
 
 int kvm_available(void)
