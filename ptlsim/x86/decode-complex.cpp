@@ -704,7 +704,9 @@ bool assist_write_cr2(Context& ctx) {
 
 bool assist_write_cr3(Context& ctx) {
   ctx.eip = ctx.reg_selfrip;
+  PTHREAD_LOCK(&translate_access);
   ASSIST_IN_QEMU(helper_write_crN, 3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
+  PTHREAD_UNLOCK(&translate_access);
   ctx.eip = ctx.reg_nextrip;
   return true;
 }

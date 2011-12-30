@@ -46,16 +46,17 @@ struct ConnectionDef {
 struct PthreadArg {
     BaseMachine* obj;
     int start_id;
+    int end_id;
 
-    PthreadArg(BaseMachine* obj_, int start_id_)
-        : obj(obj_), start_id(start_id_)
+    PthreadArg(BaseMachine* obj_, int start_id_, int end_id_)
+        : obj(obj_), start_id(start_id_), end_id(end_id_)
     {}
 };
 
 /* Custom thread barrier */
 struct Barrier
 {
-    volatile int barrier_counter;
+    volatile int barrier_counter _cacheline_align;
     int thread_counter;
 
     int atomic_inc (volatile int *operand)
@@ -114,7 +115,8 @@ struct BaseMachine: public PTLsimMachine {
     void setup_threads();
     bool run_threaded();
     static void *start_thread(void *arg);
-    void run_cores_thread(int start_id);
+    void run_cores_thread(int start_id, int end_id);
+    PthreadArg* thread_arg;
 
     W8   exit_requested;
     pthread_mutex_t   *exit_mutex;

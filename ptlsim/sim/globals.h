@@ -89,6 +89,11 @@ typedef W32 Waddr;
 #define packedstruct __attribute__ ((packed))
 #define noinline __attribute__((noinline))
 
+#define CACHE_LINE_SIZE 64
+#define _cacheline_align alignto(CACHE_LINE_SIZE)
+
+#define _read_mostly __attribute__((__section__(".data.read_mostly")))
+
 #ifndef unlikely
 #define unlikely(x) (__builtin_expect(!!(x), 0))
 #endif

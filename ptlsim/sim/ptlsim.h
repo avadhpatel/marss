@@ -32,6 +32,12 @@ extern W64 total_uops_committed;
 extern W64 total_user_insns_committed;
 
 extern pthread_mutex_t qemu_access;
+extern pthread_mutex_t translate_access;
+
+#define PTHREAD_LOCK(mutex) if (config.threaded_simulation) \
+    pthread_mutex_lock(mutex);
+#define PTHREAD_UNLOCK(mutex) if (config.threaded_simulation) \
+    pthread_mutex_unlock(mutex);
 
 void user_process_terminated(int rc);
 
@@ -282,9 +288,8 @@ struct PTLsimConfig {
   //Utilities/Tools
   stringbuf execute_after_kill;
 
-  //Pthread
-  bool threaded_simulation;
-  W64 cores_per_pthread;
+  // Pthread Support
+  W64 threaded_simulation;
 
   // Sync Options
   W64  sync_interval;

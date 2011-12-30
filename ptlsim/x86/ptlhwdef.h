@@ -942,50 +942,9 @@ struct Context: public CPUX86State {
   W64 store_internal(Waddr addr, W64 data, byte bytemask);
 
   // SMC code support
-  bool smc_isdirty(Waddr virtaddr) {
+  bool smc_isdirty(Waddr virtaddr);
 
-	  CPUTLBEntry *tlb_entry = get_tlb_entry(virtaddr);;
-	  W64 tlb_addr = tlb_entry->addr_code;
-
-	  if((virtaddr & TARGET_PAGE_MASK) != tlb_addr) {
-		  // if not tlb entry found assume we are not modifying
-		  // and code
-		  return false;
-	  }
-
-	  target_ulong ram_addr;
-	  ram_addr = (tlb_addr & TARGET_PAGE_MASK) + tlb_entry->addend;
-      ram_addr = qemu_ram_addr_from_host_nofail((void*)ram_addr);
-		  // (unsigned long)(phys_ram_base);
-
-	  bool dirty = false;
-	  setup_qemu_switch();
-	  dirty = cpu_physical_memory_is_dirty(ram_addr);
-	  setup_ptlsim_switch();
-
-	  return dirty;
-  }
-
-  void smc_setdirty(Waddr virtaddr) {
-
-	  CPUTLBEntry *tlb_entry = get_tlb_entry(virtaddr);;
-	  W64 tlb_addr = tlb_entry->addr_code;
-
-	  if((virtaddr & TARGET_PAGE_MASK) != tlb_addr) {
-		  // if not tlb entry found assume we are not modifying
-		  // and code
-		  return ;
-	  }
-
-	  target_ulong ram_addr;
-	  ram_addr = (tlb_addr & TARGET_PAGE_MASK) + tlb_entry->addend;
-      ram_addr = qemu_ram_addr_from_host_nofail((void*)ram_addr);
-		  // (unsigned long)(phys_ram_base);
-
-	  setup_qemu_switch();
-	  cpu_physical_memory_set_dirty(ram_addr);
-	  setup_ptlsim_switch();
-  }
+  void smc_setdirty(Waddr virtaddr);
 
   void smc_cleardirty(Waddr virtaddr) {
 	  //TODO

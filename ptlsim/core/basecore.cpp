@@ -29,6 +29,7 @@ void BaseCore::update_memory_hierarchy_ptr() {
 
 extern "C" void ptl_flush_bbcache(int8_t context_id) {
     if(in_simulation) {
+        pthread_mutex_lock(&translate_access);
         if (context_id == -1) {
       foreach(i, NUM_SIM_CORES) {
         bbcache[i].flush(context_id);
@@ -43,5 +44,6 @@ extern "C" void ptl_flush_bbcache(int8_t context_id) {
             Context& ctx = machine->contextof(context_id);
             machine->flush_tlb(ctx);
         }
+        pthread_mutex_unlock(&translate_access);
     }
 }

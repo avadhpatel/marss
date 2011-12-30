@@ -1286,6 +1286,51 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
     return true;
 }
 
+bool Context::smc_isdirty(Waddr virtaddr) {
+
+    CPUTLBEntry *tlb_entry = get_tlb_entry(virtaddr);;
+    W64 tlb_addr = tlb_entry->addr_code;
+
+    if((virtaddr & TARGET_PAGE_MASK) != tlb_addr) {
+        // if not tlb entry found assume we are not modifying
+        // and code
+        return false;
+    }
+
+    target_ulong ram_addr;
+    ram_addr = (tlb_addr & TARGET_PAGE_MASK) + tlb_entry->addend;
+    ram_addr = qemu_ram_addr_from_host_nofail((void*)ram_addr);
+    // (unsigned long)(phys_ram_base);
+
+    bool dirty = false;
+    setup_qemu_switch_all_ctx(*this);
+    dirty = cpu_physical_memory_is_dirty(ram_addr);
+    setup_ptlsim_switch_all_ctx(*this);
+
+    return dirty;
+}
+
+void Context::smc_setdirty(Waddr virtaddr) {
+
+    CPUTLBEntry *tlb_entry = get_tlb_entry(virtaddr);;
+    W64 tlb_addr = tlb_entry->addr_code;
+
+    if((virtaddr & TARGET_PAGE_MASK) != tlb_addr) {
+        // if not tlb entry found assume we are not modifying
+        // and code
+        return ;
+    }
+
+    target_ulong ram_addr;
+    ram_addr = (tlb_addr & TARGET_PAGE_MASK) + tlb_entry->addend;
+    ram_addr = qemu_ram_addr_from_host_nofail((void*)ram_addr);
+    // (unsigned long)(phys_ram_base);
+
+    setup_qemu_switch_all_ctx(*this);
+    cpu_physical_memory_set_dirty(ram_addr);
+    setup_ptlsim_switch_all_ctx(*this);
+}
+
 extern "C" void ptl_add_phys_memory_mapping(int8_t cpu_index, uint64_t host_vaddr, uint64_t guest_paddr)
 {
   contextof(cpu_index).hvirt_gphys_map[(Waddr)host_vaddr] = (Waddr)guest_paddr;

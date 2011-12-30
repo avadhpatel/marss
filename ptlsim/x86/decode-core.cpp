@@ -2173,6 +2173,13 @@ ostream& printflags(ostream& os, W64 flags) {
 // references to some of the basic blocks.
 //
 BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
+    BasicBlock* ret_bb = NULL;
+    TraceDecoder *trans;
+    int page_crossing;
+    W64 ct;
+
+    PTHREAD_LOCK(&translate_access);
+
     if unlikely ((rvp.rip == config.start_log_at_rip) && (rvp.rip != 0xffffffffffffffffULL)) {
         config.start_log_at_iteration = 0;
         logenable = 1;
@@ -2192,7 +2199,8 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
 
     BasicBlock* bb = get(rvp);
     if likely (bb && bb->context_id == ctx.cpu_index) {
-        return bb;
+        ret_bb = bb;
+        goto finish;
     }
 
     bb = NULL;
@@ -2201,14 +2209,15 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
 
     byte insnbuf[MAX_BB_BYTES];
 
-    TraceDecoder trans(rvp);
-    if(trans.fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
-        return NULL;
+    trans = new TraceDecoder(rvp);
+    if(trans->fillbuf(ctx, insnbuf, sizeof(insnbuf)) <= 0) {
+        ret_bb = NULL;
+        goto finish;
     }
 
     if (logable(10) | log_code_page_ops) {
-        ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;
-        ptl_logfile << "Instruction Buffer: 64[", trans.use64, "] \n";
+        ptl_logfile << "Translating ", rvp, " (", trans->valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;
+        ptl_logfile << "Instruction Buffer: 64[", trans->use64, "] \n";
         foreach(i, sizeof(insnbuf)) {
             ptl_logfile << hexstring(insnbuf[i], 8), " ";
         }
@@ -2216,20 +2225,21 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     }
 
     if (rvp.mfnlo == RIPVirtPhys::INVALID) {
-        assert(trans.valid_byte_count == 0);
+        assert(trans->valid_byte_count == 0);
     }
 
     for (;;) {
-        if (!trans.translate()) break;
+        if (!trans->translate()) break;
     }
 
-    if(trans.handle_exec_fault) {
-        return NULL;
+    if(trans->handle_exec_fault) {
+        ret_bb = NULL;
+        goto finish;
     }
 
-    trans.bb.hitcount = 0;
-    trans.bb.predcount = 0;
-    bb = trans.bb.clone();
+    trans->bb.hitcount = 0;
+    trans->bb.predcount = 0;
+    bb = trans->bb.clone();
     //
     // Acquire a reference to the new basic block right away,
     // since we make allocations below that might reclaim it
@@ -2238,7 +2248,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     bb->acquire();
 
     add(bb);
-    W64 ct = this->count;
+    ct = this->count;
     DECODERSTAT->bbcache.count = ct;
     DECODERSTAT->bbcache.inserts++;
     DECODERSTAT->throughput.basic_blocks++;
@@ -2250,7 +2260,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
         pagelist = new BasicBlockChunkList(bb->rip.mfnlo);
         pagelist->refcount++;
         bbpages.add(pagelist);
-        W64 ct = bbpages.count;
+        ct = bbpages.count;
         DECODERSTAT->pagecache.count = ct;
         DECODERSTAT->pagecache.inserts++;
         pagelist->refcount--;
@@ -2266,7 +2276,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     pagelist->add(bb, bb->mfnlo_loc);
     if (logable(5) | log_code_page_ops) ptl_logfile << "Add bb ", bb, " (", bb->rip, ", ", bb->bytes, " bytes) to low page list ", pagelist, ": loc ", bb->mfnlo_loc.chunk, ":", bb->mfnlo_loc.index, endl;
 
-    int page_crossing = ((lowbits(bb->rip, 12) + (bb->bytes-1)) >> 12);
+    page_crossing = ((lowbits(bb->rip, 12) + (bb->bytes-1)) >> 12);
 
     if (page_crossing) {
         BasicBlockChunkList* pagelisthi = bbpages.get(bb->rip.mfnhi);
@@ -2274,7 +2284,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
             pagelisthi = new BasicBlockChunkList(bb->rip.mfnhi);
             pagelisthi->refcount++;
             bbpages.add(pagelisthi);
-            W64 ct = bbpages.count;
+            ct = bbpages.count;
             DECODERSTAT->pagecache.count = ct;
             DECODERSTAT->pagecache.inserts++;
             pagelisthi->refcount--;
@@ -2290,7 +2300,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     if (logable(10)) {
         ptl_logfile << "=====================================================================", endl;
         ptl_logfile << *bb, endl;
-        ptl_logfile << "End of basic block: rip ", trans.bb.rip, " -> taken rip 0x", (void*)(Waddr)trans.bb.rip_taken, ", not taken rip 0x", (void*)(Waddr)trans.bb.rip_not_taken, endl;
+        ptl_logfile << "End of basic block: rip ", trans->bb.rip, " -> taken rip 0x", (void*)(Waddr)trans->bb.rip_taken, ", not taken rip 0x", (void*)(Waddr)trans->bb.rip_not_taken, endl;
     }
 
     bb->context_id = ctx.cpu_index;
@@ -2298,8 +2308,13 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     translate_timer.stop();
 
     bb->release();
+    ret_bb = bb;
 
-    return bb;
+    delete trans;
+
+finish:
+    PTHREAD_UNLOCK(&translate_access);
+    return ret_bb;
 }
 
 //

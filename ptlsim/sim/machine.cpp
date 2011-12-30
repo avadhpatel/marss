@@ -107,24 +107,27 @@ void BaseMachine::setup_threads()
 {
     int num_cores;
     int num_threads;
+    int cores_per_pthread;
 
     if(!config.threaded_simulation)
         return;
 
     num_cores = cores.count();
 
-    if(num_cores <= config.cores_per_pthread ||
-            logable(1)) {
+    if (config.threaded_simulation == 1) {
         config.threaded_simulation = 0;
-        ptl_logfile << "Disabled Threaded simulation because ",
-                    "cores_per_pthread < number of simulated cores.\n";
+        ptl_logfile << "Disabled threaded simulation because user have specified "
+            << "only 1 thread.\n";
         return;
+    } else if (config.threaded_simulation > num_cores) {
+        config.threaded_simulation = num_cores;
     }
 
     /* Count number of thread to create */
-    num_threads = ceil(num_cores / config.cores_per_pthread) - 1;
-    cerr << "Num threads " << num_threads << endl;
+    num_threads = config.threaded_simulation - 1;// ceil(num_cores / config.cores_per_pthread) - 1;
+    cores_per_pthread = ceil(float(num_cores)/float(config.threaded_simulation));
     ptl_logfile << "Num threads " << num_threads << endl;
+    ptl_logfile << "Cores per thread " << cores_per_pthread << endl;
 
     /* Setup barriers and mutex */
     exit_mutex = new pthread_mutex_t();
@@ -142,8 +145,12 @@ void BaseMachine::setup_threads()
     run_barrier = new Barrier(num_threads + 1);
     exit_barrier = new Barrier(num_threads + 1);
 
+    /* Set 'thread_arg' for default thread */
+    thread_arg = new PthreadArg(this, 0, cores_per_pthread);
+
     for (int i = 1; i <= num_threads; i++) {
         int rc;
+        int start_id, end_id;
         pthread_attr_t attr;
         cpu_set_t cpu_set;
 
@@ -162,7 +169,12 @@ void BaseMachine::setup_threads()
         }
 
         pthread_t *th = new pthread_t();
-        PthreadArg *th_arg = new PthreadArg(this, i * config.cores_per_pthread);
+        start_id = i * cores_per_pthread;
+        end_id = (i * cores_per_pthread) + cores_per_pthread;
+
+        if (end_id > num_cores) end_id = num_cores;
+
+        PthreadArg *th_arg = new PthreadArg(this, start_id, end_id);
 
         if((rc = pthread_create(th, &attr, &BaseMachine::start_thread,
                         th_arg))) {
@@ -181,7 +193,7 @@ void *BaseMachine::start_thread(void *arg)
 {
     PthreadArg *th_arg = (PthreadArg*)arg;
     reinterpret_cast<BaseMachine*>(th_arg->obj)->run_cores_thread(
-            th_arg->start_id);
+            th_arg->start_id, th_arg->end_id);
 }
 
 int BaseMachine::run(PTLsimConfig& config)
@@ -323,7 +335,7 @@ bool BaseMachine::run_threaded()
         // pthread_barrier_wait(runcycle_barrier);
         run_barrier->wait(0);
 
-        foreach (i, config.cores_per_pthread) {
+        foreach (i, thread_arg->end_id) {
             BaseCore& core =* cores[i];
             exiting |= core.runcycle();
         }
@@ -378,14 +390,13 @@ bool BaseMachine::run_threaded()
     return exiting;
 }
 
-void BaseMachine::run_cores_thread(int start_id)
+void BaseMachine::run_cores_thread(int start_id, int end_id)
 {
     int start_coreid = start_id;
-    int end_coreid = min(int(start_coreid + config.cores_per_pthread),
-            cores.count());
+    int end_coreid = end_id;
     dynarray<BaseCore*> mycores;
 
-    cerr << "Start ", start_coreid, " End ", end_coreid, endl;
+    ptl_logfile << "Start ", start_coreid, " End ", end_coreid, endl;
 
     pthread_mutex_lock(access_mutex);
     for(int i=start_coreid; i < end_coreid; i++) {

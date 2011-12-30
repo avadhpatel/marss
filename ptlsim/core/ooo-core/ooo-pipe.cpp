@@ -2009,7 +2009,6 @@ int ReorderBufferEntry::commit() {
     }
 
     if likely (uop.eom) {
-        pthread_mutex_lock(&qemu_access);
         if unlikely (uop.rd == REG_rip) {
             assert(isbranch(uop.opcode));
 
@@ -2034,7 +2033,6 @@ int ReorderBufferEntry::commit() {
             assert(!isbranch(uop.opcode));
             ctx.eip += uop.bytes;
         }
-        pthread_mutex_unlock(&qemu_access);
     }
 
     if likely ((!ld) & (!st) & (!uop.nouserflags)) {
