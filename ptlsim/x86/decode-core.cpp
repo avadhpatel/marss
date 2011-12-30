@@ -2173,8 +2173,8 @@ ostream& printflags(ostream& os, W64 flags) {
 // references to some of the basic blocks.
 //
 BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
-    BasicBlock* ret_bb = NULL;
-    TraceDecoder *trans;
+    BasicBlock *ret_bb = NULL;
+    TraceDecoder *trans = NULL;
     int page_crossing;
     W64 ct;
 
@@ -2310,9 +2310,10 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     bb->release();
     ret_bb = bb;
 
-    delete trans;
 
 finish:
+    if (trans) delete trans;
+
     PTHREAD_UNLOCK(&translate_access);
     return ret_bb;
 }
