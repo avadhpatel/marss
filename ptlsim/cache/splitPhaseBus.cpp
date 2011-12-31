@@ -298,7 +298,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
             queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
         memdebug("Bus cant do addr broadcast, pending queue full\n");
         memoryHierarchy_->add_event(&broadcast_,
-                latency_, queueEntry);
+                latency_, NULL);
         return true;
     }
 
