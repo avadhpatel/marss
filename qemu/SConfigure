@@ -824,7 +824,7 @@ except OSError:
     env['curl'] = False
 
 # KVM
-if conf.CheckKVM():
+if env['kvm'] == True and conf.CheckKVM():
     env['kvm'] = True
 else:
     env['kvm'] = False
