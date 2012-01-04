@@ -333,6 +333,10 @@ def CheckKVM(context):
     #if !defined(KVM_API_VERSION) || KVM_API_VERSION < 12 || KVM_API_VERSION > 12
     #error Invalid KVM Version
     #endif
+    #include <asm/kvm_para.h>
+    #if !defined(KVM_FEATURE_ASYNC_PF)
+    #error KVM Feature not supported
+    #endif
     int main() { return 0;}
     """
     res = context.TryRun(src, '.cpp')[0]
