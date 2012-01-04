@@ -409,7 +409,7 @@ if target_base_arch == "i386":
     hw_files += " vmware_vga.c hpet.c device-hotplug.c pci-hotplug.c"
     hw_files += " pm_smbus.c apm.c"
     hw_files += " multiboot.c debugcon.c "
-    hw_files += " pc_piix.c"
+    hw_files += " pc_piix.c sga.c "
     env.Append(CPPFLAGS = " -DHAS_AUDIO -DHAS_AUDIO_CHOICE")
 else:
     print("ERROR: Unsupported arch.")
