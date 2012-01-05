@@ -122,8 +122,8 @@ class Filters(object):
         return stats
     filter = staticmethod(filter)
 
-# Operators Plugin Base Class
-class Operators(object):
+# Process Plugin Base Class
+class Process(object):
     """
     Base class for Operator plugins. These plugins are run after filters and
     before writers to perform user specific operations on selected data. For
@@ -132,13 +132,13 @@ class Operators(object):
     __metaclass__ = PluginBase
     order = 0
 
-    def operate(stats, options):
-        for plugin in Operators.get_plugins():
+    def process(stats, options):
+        for plugin in Process.get_plugins():
             p = plugin()
-            stats = p.operate(stats, options)
+            stats = p.process(stats, options)
 
         return stats
-    operate = staticmethod(operate)
+    process = staticmethod(process)
 
 
 # YAML Stats Reader class
@@ -326,7 +326,7 @@ class NodeFilter(Filters):
 
         return filter_stats
 
-class Summation(Filters):
+class Summation(Process):
     """
     Sum all the nodes of filtered stats
     """
@@ -347,7 +347,7 @@ class Summation(Filters):
                 value += val
         return value
 
-    def filter(self, stats, options):
+    def process(self, stats, options):
         if options.sum is not True:
             return stats
 
@@ -516,6 +516,9 @@ def setup_options():
     filter_opt = OptionGroup(opt, "Stats Filtering Options")
     opt_setup(filter_opt, Filters)
 
+    process_opt = OptionGroup(opt, "PostProcess Options")
+    opt_setup(process_opt, Process)
+
     write_opt = OptionGroup(opt, "Output Options")
     opt_setup(write_opt, Writers)
 
@@ -528,6 +531,8 @@ def execute(options, args):
     stats = Readers.read(options, args)
 
     stats = Filters.filter(stats, options)
+
+    stats = Process.process(stats, options)
 
     Writers.write(stats, options)
 
