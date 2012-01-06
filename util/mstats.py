@@ -30,6 +30,17 @@ try:
 except:
     from yaml import Loader
 
+# Standard Logging and Error reporting functions
+def log(msg):
+    print(msg)
+
+def debug(msg):
+    print("[DEBUG] : %s" % msg)
+
+def error(msg):
+    print("[ERROR] : %s" % msg)
+    sys.exit(-1)
+
 # Some helper functions
 def is_leaf_node(node):
     """Check if this node is leaf node or not."""
@@ -504,6 +515,133 @@ class HistogramWriter(Writers):
         if options.hist == True:
             for stat in stats:
                 self.histogram_of_node(stat,"")
+
+############ Simpoints Merg Support Plugins  ############
+
+class SPWeight(Readers):
+    """
+    Read the simpoint weights file
+    """
+    order = 1
+
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        """Set option parsers for cmdline options"""
+        parser.add_option("--sp-weights", type="string", dest="sp_weights",
+                help="Provide Simpoint Weight file")
+
+    def read(self, options, args):
+        if not options.sp_weights:
+            return
+
+        # Check if given file exists or not
+        if not os.path.exists(options.sp_weights):
+            error("Given simpoint weights file (%s) doesn't exists." %
+                    options.sp_weights)
+
+        with open(options.sp_weights, 'r') as weights:
+            w = {}
+            for line in weights.readlines():
+                sp = line.strip().split(' ')
+                assert(len(sp) == 2)
+                weight = float(sp[0])
+                id = int(sp[1])
+                w[id] = weight
+
+            # Replace 'sp_weights' in options with weights we have read in
+            options.sp_weights = w
+
+class SPPrefix(Readers):
+    """
+    Set the tag filter based on simpoint prefix
+    """
+    order = 2  # Set it to run after 'SPWeight' has run
+
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        parser.add_option("--sp-pfx", type="string", dest="sp_pfx",
+                help="Simpoint prefix used to filter stats")
+
+    def read(self, options, args):
+        if not options.sp_pfx:
+            if options.sp_weights:
+                error("Please provide simpoint prefix for filtering " + \
+                      "benchmarks using --sp-pfx option")
+            return
+
+        # generate tag filter based on prefix provided
+        sp_filter_pattern = "%s_sp_[0-9]+" % options.sp_pfx
+
+        if options.tags == None:
+            options.tags = [sp_filter_pattern]
+        elif type(options.tags) == list:
+            options.tags.append(sp_filter_pattern)
+        else:
+            error("Tag type is : %s" % type(options.tags))
+
+class SPMerge(Process):
+    """
+    Merge the stats using Simpoint Weights
+    """
+    order = 0
+
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        # We dont set any option. This plugin will run when sp-weights is set
+        # by SPWeight plugin
+        pass
+
+    def get_sp_id(self, st_name):
+        sp = st_name.split('.')
+
+        # we always ignore the first name because its a file name
+        for n in sp[1:]:
+            if 'sp_' in n:
+                return int(n.split('_')[-1])
+
+    def apply_weight(self, node, weight, merge_node):
+        for key,val in node.items():
+            if type(val) == dict:
+                if not merge_node.has_key(key):
+                    merge_node[key] = {}
+                self.apply_weight(val, weight, merge_node[key])
+            elif type(val) == list:
+                if not merge_node.has_key(key):
+                    merge_node[key] = [x * weight for x in val]
+                else:
+                    merge_node[key] = [y + (x * weight) for x,y in zip(val,
+                        merge_node[key])]
+            elif type(val) == int:
+                if not merge_node.has_key(key):
+                    merge_node[key] = 0
+                merge_node[key] += (val * weight)
+            elif type(val) == float:
+                if not merge_node.has_key(key):
+                    merge_node[key] = 0.0
+                merge_node[key] += (val * weight)
+
+    def process(self, stats, options):
+        if options.sp_weights == None:
+            return stats
+
+        weights = options.sp_weights
+        name = "%s_sp_merged" % options.sp_pfx
+        merged_stat = { name : {} }
+
+        # Iterate through all the stats and apply the weight
+        for stat in stats:
+            sp_id = self.get_sp_id(stat.keys()[0])
+            weight = weights[sp_id]
+            self.apply_weight(stat[stat.keys()[0]], weight, merged_stat[name])
+
+        return [merged_stat]
+
 
 def setup_options():
     opt = OptionParser("usage: %prog [options] args")
