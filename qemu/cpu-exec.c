@@ -789,6 +789,21 @@ int cpu_exec(CPUState *env1)
 #define env cpu_single_env
 #endif
                     next_tb = tcg_qemu_tb_exec(tc_ptr);
+#ifdef MARSS_QEMU
+                    if (((next_tb & 3) == 2) && simpoint_enabled) {
+                        tb = (TranslationBlock *)(long)(next_tb & ~3);
+                        /* Restore PC.  */
+                        cpu_pc_from_tb(env, tb);
+
+                        /* Reached to simpoint take appropriate action */
+                        ptl_simpoint_reached(env->cpu_index);
+
+                        if (env->exception_index == -1)
+                            env->exception_index = EXCP_INTERRUPT;
+                        next_tb = 0;
+                        cpu_loop_exit();
+                    }
+#endif
                     if ((next_tb & 3) == 2) {
                         /* Instruction counter expired.  */
                         int insns_left;
