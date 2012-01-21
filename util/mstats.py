@@ -349,19 +349,26 @@ class Summation(Process):
     def set_options(self, parser):
         parser.add_option("--sum", action="store_true", default="False",
                 dest="sum", help="Sum of all selected nodes")
+        parser.add_option("--sum-all", type="string" , default="",
+                dest="sum_all", help="Sum of all stats")
 
     def do_sum(self, node, value = 0.0):
         for key,val in node.items():
             if type(val) == dict:
                 value = self.do_sum(val, value)
+            elif type(val) == list:
+                if len(val) == 0:
+                    continue
+                if type(val[0]) == str:
+                    continue
+                if value == 0.0:
+                    value = []
+                value = map(sum, zip(val, value))
             elif type(val) == int or type(val) == float:
                 value += val
         return value
 
-    def process(self, stats, options):
-        if options.sum is not True:
-            return stats
-
+    def sum(self, stats):
         summed = []
 
         for stat in stats:
@@ -372,6 +379,37 @@ class Summation(Process):
             summed.append(sum_stat)
 
         return summed
+
+    def do_sum_merge(self, node, merge_node):
+        for key,val in node.items():
+            if type(val) == dict:
+                self.do_sum_merge(val, merge_node[key])
+            elif type(val) == list:
+                if len(val) == 0:
+                    continue
+                if type(val[0]) == str:
+                    continue # TODO Merge strings
+                merge_node[key] = map(sum, zip(val, merge_node[key]))
+            elif type(val) == int or type(val) == float:
+                merge_node[key] += val
+
+    def sum_all(self, stats, name):
+        summed = { name : {}}
+
+        for stat in stats:
+            if len(summed[name]) == 0:
+                summed[name] = stat[stat.keys()[0]] # Copy the first stat
+            else:
+                self.do_sum_merge(stat[stat.keys()[0]], summed[name])
+
+        return [summed]
+
+    def process(self, stats, options):
+        if options.sum_all != "":
+            stats = self.sum_all(stats, options.sum_all)
+        if options.sum == True:
+            stats = self.sum(stats)
+        return stats
 
 
 # YAML based output generation
