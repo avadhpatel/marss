@@ -162,11 +162,7 @@ void cpu_disable_ticks(void)
 
 void cpu_set_sim_ticks(void)
 {
-  if(timers_state.cpu_ticks_enabled) {
-    timers_state.cpu_sim_ticks_offset = cpu_get_ticks();
-  } else {
     timers_state.cpu_sim_ticks_offset = timers_state.cpu_ticks_offset;
-  }
 }
 
 static int64_t cpu_get_sim_clock(void)
