@@ -347,6 +347,7 @@ for th in threads:
 # Send email to notify run completion
 if options.email:
     email_script = "%s/send_gmail.py" % os.path.dirname(os.path.realpath(__file__))
-    subprocess.call([email_script, "-m", "Completed simulation runs"])
+    subprocess.call([email_script, "-m", "Completed simulation runs in %s" %
+        str(options.output_dir)])
 
 print("Completed all simulation runs.")
