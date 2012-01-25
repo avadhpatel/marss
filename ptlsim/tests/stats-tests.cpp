@@ -6,6 +6,10 @@
 #include <ptlsim.h>
 #include <statsBuilder.h>
 
+#include <sstream>
+#define reset_stream(os) { os.str(""); }
+        using std::ostringstream;
+
 namespace {
 
     class TestStat : public Statable {
@@ -46,10 +50,6 @@ namespace {
        output
        */
     TEST(Stats, TimeStats) {
-#include <sstream>
-#define reset_stream(os) { os.str(""); }
-        using std::ostringstream;
-
         StatsBuilder &builder = StatsBuilder::get();
 
         ostringstream os;
@@ -266,4 +266,34 @@ namespace {
         ASSERT_STREQ(out.c_str(), "---\ndiv: 33.3333");
     }
 
+    TEST(Stats, Summary) {
+        StatsBuilder &builder = StatsBuilder::get();
+
+        ostringstream os;
+        TestStat st;
+
+        st.ct1.set_default_stats(kernel_stats);
+        st.ct2.set_default_stats(user_stats);
+        st.ct1.enable_summary();
+        st.ct2.enable_summary();
+
+        ASSERT_TRUE(st.ct1.is_summarize_enabled());
+        ASSERT_TRUE(st.ct2.is_summarize_enabled());
+
+        foreach (i, 10) {
+            st.ct1++;
+            st.ct2++;
+        }
+
+        builder.dump_summary(os);
+        stringbuf test_str;
+        test_str << "user.test.ct1 = 0\n";
+        test_str << "user.test.ct2 = 10\n";
+        test_str << "kernel.test.ct1 = 10\n";
+        test_str << "kernel.test.ct2 = 0\n";
+        test_str << "total.test.ct1 = 0\n";
+        test_str << "total.test.ct2 = 0\n";
+
+        ASSERT_STREQ(os.str().c_str(), test_str.buf);
+    }
 };

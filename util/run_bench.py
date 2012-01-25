@@ -151,7 +151,7 @@ qemu_args = ''
 if conf_parser.has_option(run_sec, 'qemu_args'):
     qemu_args = conf_parser.get(run_sec, 'qemu_args')
 
-num_threads = len(qemu_img)
+num_threads = min(len(qemu_img), len(check_list))
 
 # If user give argument 'out' then print the output of simulation run
 # to stdout else ignore it
@@ -347,6 +347,7 @@ for th in threads:
 # Send email to notify run completion
 if options.email:
     email_script = "%s/send_gmail.py" % os.path.dirname(os.path.realpath(__file__))
-    subprocess.call([email_script, "-m", "Completed simulation runs"])
+    subprocess.call([email_script, "-m", "Completed simulation runs in %s" %
+        str(options.output_dir)])
 
 print("Completed all simulation runs.")

@@ -495,6 +495,9 @@ static void flush_stats()
     if(time_stats_file) {
         time_stats_file->close();
     }
+
+    ptl_logfile << "Stats Summary:\n";
+    (StatsBuilder::get()).dump_summary(ptl_logfile);
 }
 
 static void kill_simulation()
@@ -672,7 +675,18 @@ static void sync_setup()
     /* First we will try to create a new semaphore if it fails
      * then some other simulation process has already setup the
      * semaphore and it will act as Master */
-    sem_id = semget(SEM_ID, 1, IPC_CREAT | 0666);
+
+    int env_sem_id = -1;
+    char *env_sem_id_p;
+
+    env_sem_id_p = getenv("MARSS_SEM_ID");
+
+    if (env_sem_id_p)
+        env_sem_id = atoi(env_sem_id_p);
+    else
+        env_sem_id = SEM_ID;
+
+    sem_id = semget(env_sem_id, 1, IPC_CREAT | 0666);
 
     if (sem_id == -1) {
         ptl_logfile << "Sempahore setup error: ";

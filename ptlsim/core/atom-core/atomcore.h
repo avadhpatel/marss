@@ -965,7 +965,9 @@ namespace ATOM_CORE_MODEL {
                   , ipc("ipc", this)
                   , atomop_pc("atomop_pc", this)
                   , uipc("uipc", this)
-            {}
+            {
+                ipc.enable_summary();
+            }
         } st_commit;
 
         struct st_branch_predictions : public Statable

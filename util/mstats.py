@@ -30,6 +30,17 @@ try:
 except:
     from yaml import Loader
 
+# Standard Logging and Error reporting functions
+def log(msg):
+    print(msg)
+
+def debug(msg):
+    print("[DEBUG] : %s" % msg)
+
+def error(msg):
+    print("[ERROR] : %s" % msg)
+    sys.exit(-1)
+
 # Some helper functions
 def is_leaf_node(node):
     """Check if this node is leaf node or not."""
@@ -122,8 +133,8 @@ class Filters(object):
         return stats
     filter = staticmethod(filter)
 
-# Operators Plugin Base Class
-class Operators(object):
+# Process Plugin Base Class
+class Process(object):
     """
     Base class for Operator plugins. These plugins are run after filters and
     before writers to perform user specific operations on selected data. For
@@ -132,13 +143,13 @@ class Operators(object):
     __metaclass__ = PluginBase
     order = 0
 
-    def operate(stats, options):
-        for plugin in Operators.get_plugins():
+    def process(stats, options):
+        for plugin in Process.get_plugins():
             p = plugin()
-            stats = p.operate(stats, options)
+            stats = p.process(stats, options)
 
         return stats
-    operate = staticmethod(operate)
+    process = staticmethod(process)
 
 
 # YAML Stats Reader class
@@ -326,6 +337,81 @@ class NodeFilter(Filters):
 
         return filter_stats
 
+class Summation(Process):
+    """
+    Sum all the nodes of filtered stats
+    """
+    order = 2
+
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        parser.add_option("--sum", action="store_true", default="False",
+                dest="sum", help="Sum of all selected nodes")
+        parser.add_option("--sum-all", type="string" , default="",
+                dest="sum_all", help="Sum of all stats")
+
+    def do_sum(self, node, value = 0.0):
+        for key,val in node.items():
+            if type(val) == dict:
+                value = self.do_sum(val, value)
+            elif type(val) == list:
+                if len(val) == 0:
+                    continue
+                if type(val[0]) == str:
+                    continue
+                if value == 0.0:
+                    value = []
+                value = map(sum, zip(val, value))
+            elif type(val) == int or type(val) == float:
+                value += val
+        return value
+
+    def sum(self, stats):
+        summed = []
+
+        for stat in stats:
+            sum_stat = {}
+            sum_val = self.do_sum(stat)
+            key = stat.keys()[0]
+            sum_stat[key] = sum_val
+            summed.append(sum_stat)
+
+        return summed
+
+    def do_sum_merge(self, node, merge_node):
+        for key,val in node.items():
+            if type(val) == dict:
+                self.do_sum_merge(val, merge_node[key])
+            elif type(val) == list:
+                if len(val) == 0:
+                    continue
+                if type(val[0]) == str:
+                    continue # TODO Merge strings
+                merge_node[key] = map(sum, zip(val, merge_node[key]))
+            elif type(val) == int or type(val) == float:
+                merge_node[key] += val
+
+    def sum_all(self, stats, name):
+        summed = { name : {}}
+
+        for stat in stats:
+            if len(summed[name]) == 0:
+                summed[name] = stat[stat.keys()[0]] # Copy the first stat
+            else:
+                self.do_sum_merge(stat[stat.keys()[0]], summed[name])
+
+        return [summed]
+
+    def process(self, stats, options):
+        if options.sum_all != "":
+            stats = self.sum_all(stats, options.sum_all)
+        if options.sum == True:
+            stats = self.sum(stats)
+        return stats
+
+
 # YAML based output generation
 class YAMLWriter(Writers):
     """
@@ -468,6 +554,133 @@ class HistogramWriter(Writers):
             for stat in stats:
                 self.histogram_of_node(stat,"")
 
+############ Simpoints Merg Support Plugins  ############
+
+class SPWeight(Readers):
+    """
+    Read the simpoint weights file
+    """
+    order = 1
+
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        """Set option parsers for cmdline options"""
+        parser.add_option("--sp-weights", type="string", dest="sp_weights",
+                help="Provide Simpoint Weight file")
+
+    def read(self, options, args):
+        if not options.sp_weights:
+            return
+
+        # Check if given file exists or not
+        if not os.path.exists(options.sp_weights):
+            error("Given simpoint weights file (%s) doesn't exists." %
+                    options.sp_weights)
+
+        with open(options.sp_weights, 'r') as weights:
+            w = {}
+            for line in weights.readlines():
+                sp = line.strip().split(' ')
+                assert(len(sp) == 2)
+                weight = float(sp[0])
+                id = int(sp[1])
+                w[id] = weight
+
+            # Replace 'sp_weights' in options with weights we have read in
+            options.sp_weights = w
+
+class SPPrefix(Readers):
+    """
+    Set the tag filter based on simpoint prefix
+    """
+    order = 2  # Set it to run after 'SPWeight' has run
+
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        parser.add_option("--sp-pfx", type="string", dest="sp_pfx",
+                help="Simpoint prefix used to filter stats")
+
+    def read(self, options, args):
+        if not options.sp_pfx:
+            if options.sp_weights:
+                error("Please provide simpoint prefix for filtering " + \
+                      "benchmarks using --sp-pfx option")
+            return
+
+        # generate tag filter based on prefix provided
+        sp_filter_pattern = "%s_sp_[0-9]+" % options.sp_pfx
+
+        if options.tags == None:
+            options.tags = [sp_filter_pattern]
+        elif type(options.tags) == list:
+            options.tags.append(sp_filter_pattern)
+        else:
+            error("Tag type is : %s" % type(options.tags))
+
+class SPMerge(Process):
+    """
+    Merge the stats using Simpoint Weights
+    """
+    order = 0
+
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        # We dont set any option. This plugin will run when sp-weights is set
+        # by SPWeight plugin
+        pass
+
+    def get_sp_id(self, st_name):
+        sp = st_name.split('.')
+
+        # we always ignore the first name because its a file name
+        for n in sp[1:]:
+            if 'sp_' in n:
+                return int(n.split('_')[-1])
+
+    def apply_weight(self, node, weight, merge_node):
+        for key,val in node.items():
+            if type(val) == dict:
+                if not merge_node.has_key(key):
+                    merge_node[key] = {}
+                self.apply_weight(val, weight, merge_node[key])
+            elif type(val) == list:
+                if not merge_node.has_key(key):
+                    merge_node[key] = [x * weight for x in val]
+                else:
+                    merge_node[key] = [y + (x * weight) for x,y in zip(val,
+                        merge_node[key])]
+            elif type(val) == int:
+                if not merge_node.has_key(key):
+                    merge_node[key] = 0
+                merge_node[key] += (val * weight)
+            elif type(val) == float:
+                if not merge_node.has_key(key):
+                    merge_node[key] = 0.0
+                merge_node[key] += (val * weight)
+
+    def process(self, stats, options):
+        if options.sp_weights == None:
+            return stats
+
+        weights = options.sp_weights
+        name = "%s_sp_merged" % options.sp_pfx
+        merged_stat = { name : {} }
+
+        # Iterate through all the stats and apply the weight
+        for stat in stats:
+            sp_id = self.get_sp_id(stat.keys()[0])
+            weight = weights[sp_id]
+            self.apply_weight(stat[stat.keys()[0]], weight, merged_stat[name])
+
+        return [merged_stat]
+
+
 def setup_options():
     opt = OptionParser("usage: %prog [options] args")
 
@@ -478,6 +691,9 @@ def setup_options():
 
     filter_opt = OptionGroup(opt, "Stats Filtering Options")
     opt_setup(filter_opt, Filters)
+
+    process_opt = OptionGroup(opt, "PostProcess Options")
+    opt_setup(process_opt, Process)
 
     write_opt = OptionGroup(opt, "Output Options")
     opt_setup(write_opt, Writers)
@@ -491,6 +707,8 @@ def execute(options, args):
     stats = Readers.read(options, args)
 
     stats = Filters.filter(stats, options)
+
+    stats = Process.process(stats, options)
 
     Writers.write(stats, options)
 

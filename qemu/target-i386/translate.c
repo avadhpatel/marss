@@ -7739,7 +7739,6 @@ static void gen_simpoint_check_end(CPUState* env, DisasContext *dc, int num_insn
     if (env->simpoint_decr && ((dc->flags >> HF_CPL_SHIFT) & 3) == 3) {
         *simpoint_arg = num_insns;
         gen_set_label(simpoint_count_label);
-        gen_helper_simpoint();
         tcg_gen_exit_tb((long)(dc->tb) + 2);
     }
 }

@@ -20,6 +20,7 @@ Statable::Statable(const char *name)
 {
     this->name = name;
     parent = NULL;
+    summarize = false;
     default_stats = NULL;
     dump_disabled = false;
     periodic_enabled = false;
@@ -32,6 +33,7 @@ Statable::Statable(const char *name, bool is_root)
 {
     this->name = name;
     parent = NULL;
+    summarize = false;
     default_stats = NULL;
     dump_disabled = false;
     periodic_enabled = false;
@@ -46,6 +48,7 @@ Statable::Statable(stringbuf &str, bool is_root)
     : name(str)
 {
     parent = NULL;
+    summarize = false;
     default_stats = NULL;
     dump_disabled = false;
     periodic_enabled = false;
@@ -60,6 +63,7 @@ Statable::Statable(const char *name, Statable *parent)
     : parent(parent)
 {
     this->name = name;
+    summarize = false;
     dump_disabled = false;
     periodic_enabled = false;
 
@@ -141,6 +145,21 @@ ostream& Statable::dump_periodic(ostream &os, Stats *stats) const
     // Now print all the child nodes
     foreach(i, childNodes.count()) {
         childNodes[i]->dump_periodic(os, stats);
+    }
+
+    return os;
+}
+
+ostream& Statable::dump_summary(ostream &os, Stats *stats, const char* pfx) const
+{
+    if (dump_disabled || !summarize) return os;
+
+    foreach (i, leafs.count()) {
+        leafs[i]->dump_summary(os, stats, pfx);
+    }
+
+    foreach (i, childNodes.count()) {
+        childNodes[i]->dump_summary(os, stats, pfx);
     }
 
     return os;
@@ -257,7 +276,7 @@ void Statable::sub_periodic_stats(Stats& dest_stats, Stats& src_stats)
         sub_stats(dest_stats, src_stats);
 }
 
-stringbuf *Statable::get_full_stat_string()
+stringbuf *Statable::get_full_stat_string() const
 {
     if (parent)
     {
@@ -332,6 +351,23 @@ ostream& StatsBuilder::dump_periodic(ostream& os, W64 cycle) const
         os << cycle;
         rootNode->dump_periodic(os, temp_stats);
         os << "\n";
+    }
+
+    return os;
+}
+
+ostream& StatsBuilder::dump_summary(ostream& os) const
+{
+    if (rootNode->is_summarize_enabled()) {
+
+        /* First dump the user stats */
+        rootNode->dump_summary(os, user_stats, "user");
+
+        /* Now kernel stats */
+        rootNode->dump_summary(os, kernel_stats, "kernel");
+
+        /* Total stats at the end */
+        rootNode->dump_summary(os, global_stats, "total");
     }
 
     return os;
