@@ -3102,15 +3102,6 @@ static const mon_cmd_t info_cmds[] = {
         .help       = "show qdev device model list",
         .mhandler.info = do_info_qdm,
     },
-#ifdef MARSS_QEMU
-    {
-        .name       = "simconfig",
-        .args_type  = "",
-        .params     = "",
-        .help       = "-help for all options",
-        .mhandler.info = do_simulate,
-    },
-#endif
     {
         .name       = "roms",
         .args_type  = "",

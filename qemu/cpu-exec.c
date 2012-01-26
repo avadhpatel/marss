@@ -309,7 +309,6 @@ int sim_cpu_exec(void)
 			cpu_single_env = env;
             in_simulation = ptl_simulate();
 
-			uint8_t exit_requested = 0;
 			for(env = first_cpu; env != NULL; env = env->next_cpu) {
 				cpu_single_env = env;
 				/* env_to_regs(); */
@@ -325,7 +324,6 @@ int sim_cpu_exec(void)
 					if (interrupt_request & CPU_INTERRUPT_DEBUG) {
 						env->interrupt_request &= ~CPU_INTERRUPT_DEBUG;
 						env->exception_index = EXCP_DEBUG;
-						exit_requested = 1;
 						/* cpu_loop_exit(); */
 					}
 #if defined(TARGET_I386)
@@ -374,7 +372,6 @@ int sim_cpu_exec(void)
                         in_simulation == 0) {
 					env->exit_request = 0;
 					env->exception_index = EXCP_INTERRUPT;
-					exit_requested = 1;
 				}
 			}
 		}

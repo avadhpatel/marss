@@ -1221,7 +1221,7 @@ ETEXI
         .params     = "simulation_options",
         .help       = "set various simulation options",
         .user_print = monitor_user_noop,
-        .mhandler.cmd_new = do_simulate,
+        .mhandler.cmd = do_simulate,
     },
 #endif
 
