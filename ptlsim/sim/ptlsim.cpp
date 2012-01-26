@@ -230,6 +230,10 @@ void PTLsimConfig::reset() {
   // Sync Options
   sync_interval = 0;
 
+  // Simpoint options
+  simpoint_file = "";
+  simpoint_interval = 10e6;
+  simpoint_chk_name = "simpoint";
 }
 
 template <>
@@ -330,6 +334,10 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   section("Synchronization Options");
   add(sync_interval, "sync", "Number of simulation cycles between synchronization");
 
+  section("Simpoint Options");
+  add(simpoint_file, "simpoint", "Create simpoint based checkpoints from given 'simpoint' file");
+  add(simpoint_interval, "simpoint-interval", "Number of instructions in each interval");
+  add(simpoint_chk_name, "simpoint-chk-name", "Checkpoint name prefix");
 };
 
 #ifndef CONFIG_ONLY
@@ -477,6 +485,9 @@ static void flush_stats()
     if(time_stats_file) {
         time_stats_file->close();
     }
+
+    ptl_logfile << "Stats Summary:\n";
+    (StatsBuilder::get()).dump_summary(ptl_logfile);
 }
 
 static void kill_simulation()
@@ -654,7 +665,18 @@ static void sync_setup()
     /* First we will try to create a new semaphore if it fails
      * then some other simulation process has already setup the
      * semaphore and it will act as Master */
-    sem_id = semget(SEM_ID, 1, IPC_CREAT | 0666);
+
+    int env_sem_id = -1;
+    char *env_sem_id_p;
+
+    env_sem_id_p = getenv("MARSS_SEM_ID");
+
+    if (env_sem_id_p)
+        env_sem_id = atoi(env_sem_id_p);
+    else
+        env_sem_id = SEM_ID;
+
+    sem_id = semget(env_sem_id, 1, IPC_CREAT | 0666);
 
     if (sem_id == -1) {
         ptl_logfile << "Sempahore setup error: ";
@@ -833,6 +855,10 @@ CPUX86State* ptl_create_new_context() {
 	Context* ctx = new Context();
 	ptl_contexts[ctx_counter] = ctx;
 	ctx_counter++;
+
+    if (config.simpoint_file.set()) {
+        init_simpoints();
+    }
 
 	return (CPUX86State*)(ctx);
 }

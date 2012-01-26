@@ -309,7 +309,9 @@ namespace OOO_CORE_MODEL {
                   , result(this)
                   , fail(this)
                   , setflags(this)
-            {}
+            {
+                ipc.enable_summary();
+            }
         } commit;
 
         struct branchpred : public Statable

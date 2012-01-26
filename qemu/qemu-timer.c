@@ -70,6 +70,7 @@ typedef struct TimersState {
     int64_t dummy;
 #ifdef MARSS_QEMU
     int64_t cpu_sim_ticks_offset;
+    int64_t cpu_sim_clock_offset;
 #endif
 } TimersState;
 
@@ -155,23 +156,23 @@ void cpu_disable_ticks(void)
 
 void cpu_set_sim_ticks(void)
 {
-  if(timers_state.cpu_ticks_enabled) {
-    timers_state.cpu_sim_ticks_offset = cpu_get_ticks();
-  } else {
-    timers_state.cpu_sim_ticks_offset = timers_state.cpu_ticks_offset;
-  }
+    timers_state.cpu_sim_ticks_offset = timers_state.cpu_ticks_offset +
+        cpu_get_real_ticks();
+    timers_state.cpu_sim_clock_offset = timers_state.cpu_clock_offset +
+        get_clock();
 }
 
 static int64_t cpu_get_sim_clock(void)
 {
-  uint64_t sim_clock_t;
-  sim_clock_t = timers_state.cpu_sim_ticks_offset + (uint64_t)((float)(sim_cycle) * freq_to_ns(get_sim_cpu_freq()));
-  return sim_clock_t;
+    int64_t sim_clock_t;
+    sim_clock_t = timers_state.cpu_sim_clock_offset +
+        (int64_t)((float)(sim_cycle) * freq_to_ns(get_sim_cpu_freq()));
+    return sim_clock_t;
 }
 
 void qemu_take_screenshot(char *filename)
 {
-  vga_hw_screen_dump(filename);
+    vga_hw_screen_dump(filename);
 }
 #endif
 

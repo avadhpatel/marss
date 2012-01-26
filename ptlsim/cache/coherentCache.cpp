@@ -539,7 +539,8 @@ bool CacheController::cache_hit_cb(void *arg)
     bool kernel_req = queueEntry->request->is_kernel();
 
     if(queueEntry->isSnoop) {
-        if (is_full()) {
+        if (pendingRequests_.count() >=  (
+                    pendingRequests_.size() - 4)) {
             /* Snoop hit can cause eviction in local cache and if we dont have
              * free queue entries we delay this by 2 cycles */
             memoryHierarchy_->add_event(&cacheHit_, 2, queueEntry);

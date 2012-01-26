@@ -70,16 +70,26 @@ void set(int sem_id, int val)
 
 int main(int argc, char** argv)
 {
+    char *env_sem_id_p;
+    int sem_num;
     int sem_id;
     int val;
     int rc;
 
     /* First check if semaphore exists or not */
-    sem_id = semget(SEM_NUM, 1, IPC_CREAT|IPC_EXCL|0666);
+
+    env_sem_id_p = getenv("MARSS_SEM_ID");
+
+    if (env_sem_id_p)
+        sem_num = atoi(env_sem_id_p);
+    else
+        sem_num = SEM_NUM;
+
+    sem_id = semget(sem_num, 1, IPC_CREAT|IPC_EXCL|0666);
 
     if (sem_id == -1) {
         if (errno == EEXIST) {
-            sem_id = semget(SEM_NUM, 1, IPC_CREAT|0666);
+            sem_id = semget(sem_num, 1, IPC_CREAT|0666);
         }
 
         if (sem_id == -1) {
