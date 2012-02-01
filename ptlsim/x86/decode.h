@@ -284,7 +284,7 @@ enum {
 
 #define DECODE(form, decbuf, mode) invalid |= (!decbuf.form(*this, mode));
 #define EndOfDecode() { \
-  invalid |= ((rip - (Waddr)bb.rip) > valid_byte_count); \
+  invalid |= ((rip - (Waddr)bb.rip) > (W64)valid_byte_count); \
   if unlikely (invalid) { \
     if (invalidate()) return false; \
     break; \

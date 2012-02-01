@@ -3198,7 +3198,7 @@ namespace superstl {
     // Fast vectorized method: empty only if all slots are literally zero
     const W64* p = (const W64*)ptr;
     W64 v = 0;
-    foreach (i, (bytes/8)) v |= p[i];
+    foreach (i, (int)(bytes/8)) v |= p[i];
     if unlikely (v % 8) {
       v |= (p[(bytes/8)] & bitmask((bytes % 8)*8));
     }

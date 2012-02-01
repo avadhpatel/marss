@@ -857,7 +857,7 @@ bool OooCore::runcycle() {
         ThreadContext* thread = threads[i];
         if unlikely (!thread->ctx.running) break;
 
-        if unlikely ((sim_cycle - thread->last_commit_at_cycle) > 1024*1024*threadcount) {
+        if unlikely ((sim_cycle - thread->last_commit_at_cycle) > (W64)1024*1024*threadcount) {
             stringbuf sb;
             sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
                sim_cycle, ", ", total_user_insns_committed,  " user commits: no instructions have committed for ",

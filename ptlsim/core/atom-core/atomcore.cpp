@@ -1576,13 +1576,13 @@ void AtomOp::update_checker()
                     setflags_to_x86_flags[last_uop.setflags]);
 
             if(checker_context->eip) {
-                foreach(i, (W64)checker_stores_count) {
+                foreach(i, checker_stores_count) {
                     thread->ctx.check_store_virt(checker_stores[i].virtaddr,
                             checker_stores[i].data, checker_stores[i].bytemask,
                             checker_stores[i].sizeshift);
                 }
             } else {
-                foreach(i, (W64)checker_stores_count) {
+                foreach(i, checker_stores_count) {
                     thread->ctx.storemask_virt(checker_stores[i].virtaddr,
                             checker_stores[i].data, checker_stores[i].bytemask,
                             checker_stores[i].sizeshift);

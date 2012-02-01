@@ -843,8 +843,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
     Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
     LoadStoreAliasPredictor& lsap = thread.lsap;
 
-    time_this_scope(ctissuestore);
-
     OooCore& core = getcore();
 
     int sizeshift = uop.size;
@@ -1224,7 +1222,6 @@ W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
 }
 
 int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate) {
-    time_this_scope(ctissueload);
 
     OooCore& core = getcore();
     ThreadContext& thread = getthread();
@@ -1842,7 +1839,6 @@ rob_cont:
 }
 
 void ThreadContext::tlbwalk() {
-    time_this_scope(ctfrontend);
 
     ReorderBufferEntry* rob;
     foreach_list_mutable(rob_tlb_miss_list, rob, entry, nextentry) {
@@ -2265,7 +2261,6 @@ void ReorderBufferEntry::release() {
 // Process the ready to issue queue and issue as many ROBs as possible
 //
 int OooCore::issue(int cluster) {
-    time_this_scope(ctissue);
 
     int issuecount = 0;
     int maxwidth = clusters[cluster].issue_width;
