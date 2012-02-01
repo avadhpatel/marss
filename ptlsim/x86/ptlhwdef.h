@@ -413,7 +413,7 @@ struct FXSAVEStruct {
 };
 
 inline W64 x87_fp_80bit_to_64bit(const X87Reg* x87reg) {
-  W64 reg64;
+  W64 reg64 = 0;
   asm("fldt (%[mem80])\n"
       "fstpl %[mem64]\n"
       : : [mem64] "m" (reg64), [mem80] "r" (x87reg));

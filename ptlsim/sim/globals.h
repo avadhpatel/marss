@@ -295,9 +295,9 @@ inline vec16b x86_sse_dupb(const byte b) {
   return *((vec16b*)&byte_to_vec16b[b]);
 }
 
-inline vec8w x86_sse_dupw(const W16 b) {
+inline vec8w x86_sse_dupw(const W16 b) __attribute__(__may_alias__) {
   W32 w = (b << 16) | b;
-  vec8w v;
+  vec8w v = {0};
   W32* wp = (W32*)&v;
   wp[0] = w; wp[1] = w; wp[2] = w; wp[3] = w;
   return v;

@@ -452,7 +452,7 @@ bool TraceDecoder::decode_x87() {
   is_x87 = 1;
   prefixes &= ~PFX_LOCK;
 
-  switch (op) {
+  switch ((W32)op) {
     //
     // x87 floating point
     //

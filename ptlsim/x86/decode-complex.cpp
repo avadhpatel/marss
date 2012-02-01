@@ -998,7 +998,7 @@ bool TraceDecoder::decode_complex() {
   DecodedOperand rd;
   DecodedOperand ra;
 
-  switch (op) {
+  switch ((W32)op) {
 
   case 0x60: {
     // pusha [not used by gcc]

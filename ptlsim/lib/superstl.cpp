@@ -476,7 +476,7 @@ namespace superstl {
   char* dynarray<char*>::tokenize(char* string, const char* seplist) {
     byte issep[256];
     setzero(issep);
-    foreach (i, strlen(seplist)) { issep[(byte)seplist[i]] = 1; }
+    foreach (i, (int)strlen(seplist)) { issep[(byte)seplist[i]] = 1; }
 
     char* pbase = string;
     char* p = pbase;

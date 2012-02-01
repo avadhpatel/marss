@@ -11,7 +11,7 @@ bool TraceDecoder::decode_fast() {
   DecodedOperand rd;
   DecodedOperand ra;
 
-  switch (op) {
+  switch ((W32)op) {
   case 0x00 ... 0x0e:
   case 0x10 ... 0x3f: {
 	if (op == 0x3f) {
