@@ -113,7 +113,7 @@ void BaseMachine::setup_threads()
         ptl_logfile << "Disabled threaded simulation because user have specified "
             << "only 1 thread.\n";
         return;
-    } else if (config.threaded_simulation > num_cores) {
+    } else if (config.threaded_simulation > (W64)num_cores) {
         config.threaded_simulation = num_cores;
     }
 
@@ -188,6 +188,7 @@ void *BaseMachine::start_thread(void *arg)
     PthreadArg *th_arg = (PthreadArg*)arg;
     reinterpret_cast<BaseMachine*>(th_arg->obj)->run_cores_thread(
             th_arg->start_id, th_arg->end_id);
+    return NULL;
 }
 
 int BaseMachine::run(PTLsimConfig& config)
@@ -318,7 +319,7 @@ bool BaseMachine::run_threaded()
 
         // limit the ptl_logfile size
         if unlikely (ptl_logfile.is_open() &&
-                (ptl_logfile.tellp() > config.log_file_size))
+                ((W64)ptl_logfile.tellp() > config.log_file_size))
             backup_and_reopen_logfile();
 
         memoryHierarchyPtr->clock();

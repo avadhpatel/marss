@@ -2723,7 +2723,6 @@ handle_page_fault:
                 ATOMTHLOG1("Page fault: ", exception_names[ctx.exception],
                         " addr: ", hexstring(ctx.page_fault_addr, 48));
 
-                int old_exception = 0;
                 assert(ctx.page_fault_addr != 0);
                 ctx.handle_interrupt = 1;
                 ctx.handle_page_fault(ctx.page_fault_addr, write_exception);

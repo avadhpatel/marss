@@ -1333,7 +1333,6 @@ handle_page_fault:
                                 hexstring(exception_address, 64),
                                 " is_write: ", write_exception, endl, ctx, endl;
                 assert(ctx.page_fault_addr != 0);
-                int old_exception = ctx.exception_index;
                 ctx.handle_interrupt = 1;
                 ctx.handle_page_fault(exception_address, write_exception);
                 // If we return here means the QEMU has fix the page fault
