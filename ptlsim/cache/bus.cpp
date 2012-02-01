@@ -109,13 +109,15 @@ bool BusInterconnect::controller_request_cb(void *arg)
 {
 	Message *message = (Message*)arg;
 
-	BusControllerQueue* busControllerQueue;
+	BusControllerQueue* busControllerQueue = NULL;
 	foreach(i, controllers.count()) {
 		if(controllers[i]->controller ==
 				(Controller*)message->sender) {
 			busControllerQueue = controllers[i];
 		}
 	}
+
+    assert(busControllerQueue);
 
 	if (busControllerQueue->queue.isFull()) {
 		memdebug("Bus queue is full\n");
@@ -251,10 +253,12 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
 
 bool BusInterconnect::data_broadcast_cb(void *arg)
 {
+    return true;
 }
 
 bool BusInterconnect::data_broadcast_completed_cb(void *arg)
 {
+    return true;
 }
 
 void BusInterconnect::print_map(ostream& os)

@@ -228,18 +228,18 @@ handle_cpuid_cache_switch = '''
             switch (count) {
                 case 0: { // L1-D cache info
                             *eax = 0x121 | cores_info;
-                            *ebx = (%(L1D_LINE_SIZE)d & 0xfff |
-                                    (%(L1D_LINE_SIZE)d << 12) & 0x3ff000 |
-                                    (%(L1D_WAY_COUNT)d << 22) & 0xffc00000 );
+                            *ebx = ((%(L1D_LINE_SIZE)d & 0xfff) |
+                                    ((%(L1D_LINE_SIZE)d << 12) & 0x3ff000) |
+                                    ((%(L1D_WAY_COUNT)d << 22) & 0xffc00000) );
                             *ecx = %(L1D_SET_COUNT)d;
                             *edx = 0x1;
                             break;
                         }
                 case 1: { // L1-I cache info
                             *eax = 0x122 | cores_info;
-                            *ebx = (%(L1I_LINE_SIZE)d & 0xfff |
-                                    (%(L1I_LINE_SIZE)d << 12) & 0x3ff000 |
-                                    (%(L1I_WAY_COUNT)d << 22) & 0xffc00000 );
+                            *ebx = ((%(L1I_LINE_SIZE)d & 0xfff) |
+                                    ((%(L1I_LINE_SIZE)d << 12) & 0x3ff000) |
+                                    ((%(L1I_WAY_COUNT)d << 22) & 0xffc00000) );
                             *ecx = %(L1I_SET_COUNT)d;
                             *edx = 0x1;
                             break;
@@ -251,9 +251,9 @@ handle_cpuid_cache_switch = '''
                             l2_core_info |= ((NUMBER_OF_CORES - 1) << 26) &
                                 0xfc00000;
                             *eax = 0x143 | l2_core_info;
-                            *ebx = (%(L2_LINE_SIZE)d & 0xfff |
-                                    (%(L2_LINE_SIZE)d << 12) & 0x3ff000 |
-                                    (%(L2_WAY_COUNT)d << 22) & 0xffc00000 );
+                            *ebx = ((%(L2_LINE_SIZE)d & 0xfff) |
+                                    ((%(L2_LINE_SIZE)d << 12) & 0x3ff000) |
+                                    ((%(L2_WAY_COUNT)d << 22) & 0xffc00000) );
                             *ecx = %(L2_SET_COUNT)d;
                             *edx = 0x1;
                             break;

@@ -373,8 +373,6 @@ void MemoryHierarchy::annul_request(W8 coreid,
 		W8 threadid, int robid, W64 physaddr,
 		bool is_icache, bool is_write)
 {
-	MemoryRequest* annul_request = NULL;
-
     /*
 	 * Flushin of the caches is disabled currently because we need to
 	 * implement a logic where every cache will check physaddr's cache line

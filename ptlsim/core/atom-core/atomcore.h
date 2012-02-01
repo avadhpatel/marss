@@ -432,9 +432,8 @@ namespace ATOM_CORE_MODEL {
         bool insert(W64 addr, W8 threadid = 0) {
             addr = floor(addr, PAGE_SIZE);
             W64 tag = tagof(addr, threadid);
-            W64 oldtag;
+            W64 oldtag = -1;
             int way = base_t::select(tag, oldtag);
-            W64 oldaddr = lowbits(oldtag, 36) << 12;
             if (logable(6)) {
                 ptl_logfile << "TLB insertion of virt page ",
                             (void*)(Waddr)addr, " (virt addr ",

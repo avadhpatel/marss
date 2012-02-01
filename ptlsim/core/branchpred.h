@@ -79,6 +79,6 @@ ostream& operator <<(ostream& os, const BranchPredictorInterface& branchpred);
 
 extern BranchPredictorInterface branchpred;
 
-static const char* branchpred_outcome_names[2] = {"mispred", "correct"};
+extern const char* branchpred_outcome_names[2];
 
 #endif // _BRANCHPRED_H_

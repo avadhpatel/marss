@@ -41,7 +41,7 @@ namespace Memory {
 
         void init(W64 tag_t) {
             tag = tag_t;
-            if (tag == -1) state = 0;
+            if (tag == (W64)-1) state = 0;
         }
 
         void reset() {
@@ -218,8 +218,8 @@ namespace Memory {
                     rc = (writePortUsed_ < writePorts_) ? ++writePortUsed_ : 0;
                     break;
                 default:
-                    memdebug("Unknown type of memory request: ",
-                            request->get_type(), endl);
+                    memdebug("Unknown type of memory request: " <<
+                            request->get_type() << endl);
                     assert(0);
             };
             return rc;

@@ -79,13 +79,13 @@ static void save_core_dump(char* dump, W64 dump_size,
     app = (char*)qemu_malloc((sizeof(char) * app_name_size) + 1);
 
     _addr = dump;
-    foreach(i, dump_size) {
+    foreach(i, (W64s)dump_size) {
         dmp[i] = (char)ldub_kernel((target_ulong)(_addr));
         _addr++;
     }
 
     _addr = app_name;
-    foreach(i, app_name_size) {
+    foreach(i, (int)app_name_size) {
         app[i] = (char)ldub_kernel((target_ulong)(_addr));
         _addr++;
     }
@@ -110,7 +110,6 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
     W64 arg3 = cpu->regs[REG_rdx];
     W64 arg4 = cpu->regs[REG_r10];
     W64 arg5 = cpu->regs[REG_r8];
-    W64 arg6 = cpu->regs[REG_r9];
 
     switch(calltype) {
         case PTLCALL_VERSION:
@@ -137,15 +136,14 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                 desc.command = (W64)(ldq_kernel(arg1));
                 desc.length = (W64)(ldq_kernel(arg1 + 8));
 
-                char *command_str = (char*)qemu_malloc(desc.length);
+                char *command_str = (char*)qemu_malloc(desc.length + 1);
                 char *command_addr = (char*)(desc.command);
-                int i = 0;
-                for(i=0; i < desc.length; i++) {
+                foreach (i, (W64s)desc.length) {
                     command_str[i] = (char)ldub_kernel(
                             (target_ulong)(command_addr));
                     command_addr++;
                 }
-                command_str[i] = '\0';
+                command_str[desc.length] = '\0';
 
                 /*
                  * Stop the QEMU vm and change ptlsim configuration
@@ -163,7 +161,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 
                 char *checkpoint_name = (char*)qemu_malloc(arg2 + 1);
                 char *name_addr = (char*)(arg1);
-                for(int i=0; i < arg2; i++) {
+                foreach (i, (W64s)arg2) {
                     checkpoint_name[i] = (char)ldub_kernel(
                             (target_ulong)(name_addr++));
                 }
@@ -269,11 +267,6 @@ void dump_all_info();
 void dump_bbcache_to_logfile();
 
 void ptlsim_init() {
-
-    /* First allocate some memory for PTLsim for its own memory manager */
-    byte* ptlsim_ram_start = (byte*)qemu_malloc(PTLSIM_RAM_SIZE);
-    assert(ptlsim_ram_start);
-    byte* ptlsim_ram_end = ptlsim_ram_start + PTLSIM_RAM_SIZE;
 
     /* Register PTLsim PTLCALL mmio page */
     W64 ptlcall_mmio_pd = cpu_register_io_memory(ptlcall_mmio_read_ops,
@@ -382,7 +375,6 @@ void create_checkpoint(const char* chk_name)
     QDict *checkpoint_dict = qdict_new();
     qdict_put_obj(checkpoint_dict, "name", QOBJECT(
                 qstring_from_str(chk_name)));
-    Monitor *mon = cur_mon;
     do_savevm(cur_mon, checkpoint_dict);
 
     if (!config.quiet)
@@ -439,10 +431,6 @@ RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
     mfnlo = 0;
     mfnhi = 0;
 
-    int exception = 0;
-    PageFaultErrorCode pfec = 0;
-    int mmio = 0;
-
     return *this;
 }
 
@@ -450,7 +438,7 @@ RIPVirtPhys& RIPVirtPhys::update(Context& ctx, int bytes) {
 
 W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
 
-    W64 ptep, pte;
+    W64 ptep;
     W64 pde_addr, pte_addr;
     W64 ret_addr;
 
@@ -598,7 +586,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
 
     int exception = 0;
     int mmio = 0;
-    Waddr physaddr = check_and_translate(source, 0, 0, 0, exception,
+    check_and_translate(source, 0, 0, 0, exception,
             mmio, pfec, forexec);
     if (exception) {
         cr2 = cr[2];
@@ -654,7 +642,7 @@ int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErro
     exception = 0;
     mmio = 0;
 
-    physaddr = check_and_translate(source + n, 0, 0, 0, exception,
+    check_and_translate(source + n, 0, 0, 0, exception,
             mmio, pfec, forexec);
     if (exception) {
         cr2 = cr[2];
@@ -744,14 +732,10 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 
     Waddr paddr;
 
-    bool page_not_present;
-    bool page_read_only;
-    bool page_kernel_only;
-
     int mmu_index = cpu_mmu_index((CPUState*)this);
     int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     W64 tlb_addr;
-redo:
+
     if likely (!store) {
         if likely (!is_code) {
             tlb_addr = tlb_table[mmu_index][index].addr_read;
@@ -1049,7 +1033,6 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
 }
 
 W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshift) {
-    W64 old_data = 0;
     setup_qemu_switch_all_ctx(*this);
     Waddr paddr = floor(virtaddr, 8);
 

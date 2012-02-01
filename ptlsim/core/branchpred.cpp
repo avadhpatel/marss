@@ -10,6 +10,7 @@
 
 #include <branchpred.h>
 
+const char* branchpred_outcome_names[2] = {"mispred", "correct"};
 
 template <int SIZE>
 struct BimodalPredictor {

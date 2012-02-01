@@ -334,7 +334,7 @@ bool TraceDecoder::decode_fast() {
 
     TransOp sel(OP_sel, REG_temp0, REG_zero, REG_imm, REG_temp0, 3, -1LL);
     sel.cond = COND_c;
-    this << sel, endl;
+    this << sel;
 
     // move in value
     this << TransOp(OP_mov, REG_rdx, (rashift < 2) ? REG_rdx : REG_zero, REG_temp0, REG_zero, rashift);
@@ -379,7 +379,6 @@ bool TraceDecoder::decode_fast() {
     rd.gform_ext(*this, b_mode, bits(op, 0, 3), false, true);
     DECODE(iform, ra, b_mode);
     EndOfDecode();
-    int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
     move_reg_or_mem(rd, ra);
     break;
   }
@@ -814,7 +813,7 @@ bool TraceDecoder::decode_fast() {
 
     TransOp transop(OP_sel, destreg, destreg, srcreg, condreg, sizeshift);
     transop.cond = condcode;
-    this << transop, endl;
+    this << transop;
     break;
   }
 
@@ -837,7 +836,7 @@ bool TraceDecoder::decode_fast() {
 
     TransOp transop(OP_set, r, cctfr.ra, cctfr.rb, (rd.type == OPTYPE_MEM) ? REG_zero : r, 0);
     transop.cond = condcode;
-    this << transop, endl;
+    this << transop;
 
     if (rd.type == OPTYPE_MEM) {
       rd.mem.size = 0;
@@ -886,7 +885,6 @@ bool TraceDecoder::decode_fast() {
 
     assert(rd.type == OPTYPE_REG);
     int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
-    int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
 
     // bt has no output - just flags:
     this << TransOp(opcode, (opcode == OP_bt) ? REG_temp0 : rdreg, rdreg, REG_imm, REG_zero, 3, ra.imm.imm, 0, SETFLAG_CF);

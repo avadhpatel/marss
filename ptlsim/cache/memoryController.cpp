@@ -218,6 +218,8 @@ bool MemoryController::access_completed_cb(void *arg)
         case MEMORY_OP_UPDATE:
             N_STAT_UPDATE(new_stats.bank_update, [bank_no]++, kernel);
             break;
+        default:
+            assert(0);
     }
 
     /*

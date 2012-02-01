@@ -158,7 +158,6 @@ void shutdown_subsystems();
 bool simulate(const char* machinename);
 int inject_events();
 bool check_for_async_sim_break();
-extern "C" void update_progress();
 
 //
 // uop implementations

@@ -91,6 +91,9 @@ static inline W64 extract_bytes(byte* target, int SIZESHIFT, bool SIGNEXT) {
             data = (SIGNEXT) ? (W64s)(*(W32s*)target) : (*(W32*)target); break;
         case 3:
             data = *(W64*)target; break;
+        default:
+            ptl_logfile << "Invalid sizeshift in extract_bytes\n";
+            data = 0xdeadbeefdeadbeef;
     }
     return data;
 }
@@ -288,7 +291,7 @@ bool AtomOp::fetch()
             ret_value = false;
         }
 
-        if(rip == -1) {
+        if(rip == (W64)-1) {
             rip = fetchrip;
         } else {
             assert(rip == fetchrip);
@@ -743,7 +746,7 @@ W8 AtomOp::execute_uop(W8 idx)
     }
 
     /* Update 'rflags' to new flags and save dest reg data */
-    if(!ld && !st && uop.setflags || uop.opcode == OP_ast) {
+    if((!ld && !st && uop.setflags) || uop.opcode == OP_ast) {
         W64 flagmask = setflags_to_x86_flags[uop.setflags];
 
         if(uop.opcode == OP_ast) {
@@ -770,12 +773,6 @@ W8 AtomOp::execute_uop(W8 idx)
 
     /* If branch, check branch misprediction */
     if(is_branch && isbranch(uop.opcode)) {
-        int bptype = predinfo.bptype;
-
-        bool cond = bit(bptype, log2(BRANCH_HINT_COND));
-        bool indir = bit(bptype, log2(BRANCH_HINT_INDIRECT));
-        bool ret = bit(bptype, log2(BRANCH_HINT_RET));
-
         bool mispredicted = (state.reg.rddata != uop.riptaken);
 
         if (mispredicted) {
@@ -887,7 +884,7 @@ W8 AtomOp::execute_load(TransOp& uop, int idx)
      * If its tlb-miss then return ISSUE_FAIL so AtomOp will be kept in
      * Dispatch queue and will be re-issued once its handled.
      */
-    if(addr == -1) {
+    if(addr == (W64)-1) {
         return ISSUE_FAIL;
     }
 
@@ -970,8 +967,6 @@ W64 AtomOp::get_load_data(W64 addr, TransOp& uop)
     /* First get the data from RAM then merge it with latest data in Store
      * buffer if there is any. */
     W64 data = thread->ctx.loadvirt(cache_virtaddr, uop.size);
-
-    W8 bytemask = ((1 << (1 << uop.size))-1);
 
     /* Now we iterate in Store Buffer for St->Ld forwarding */
     foreach_forward(thread->storebuf, i) {
@@ -1081,23 +1076,11 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
 
     W64 addr = generate_address(uop, true);
 
-    byte bytemask = 0;
-
-    switch(uop.cond) {
-        case LDST_ALIGN_NORMAL:
-        case LDST_ALIGN_LO:
-        case LDST_ALIGN_HI:
-            bytemask = ((1 << (1 << uop.size))-1);
-            break;
-        default:
-            assert(0);
-    }
-
     /*
      * If its tlb-miss then return ISSUE_FAIL so AtomOp will be kept in
      * Dispatch queue and will be re-issued once its handled.
      */
-    if(addr == -1) {
+    if(addr == (W64)-1) {
         return ISSUE_FAIL;
     }
 
@@ -1209,7 +1192,7 @@ W64 AtomOp::generate_address(TransOp& uop, bool is_st)
     int page_crossing = ((lowbits(virtaddr, 12) + (op_size - 1)) >> 12);
 
     if unlikely (page_crossing) {
-        W64 physaddr2 = get_phys_address(uop, is_st, virtaddr2);
+        get_phys_address(uop, is_st, virtaddr2);
 
         /* Access TLB with next page address */
         tlb_hit2 = thread->core.dtlb.probe(virtaddr2, thread->threadid);
@@ -1252,7 +1235,6 @@ W64 AtomOp::generate_address(TransOp& uop, bool is_st)
  */
 W64 AtomOp::get_virt_address(TransOp& uop, bool is_st)
 {
-    int sizeshift = uop.size;
     int aligntype = uop.cond;
 
     W64 virt_addr = (is_st) ? (radata + rbdata) :
@@ -1595,14 +1577,14 @@ void AtomOp::update_checker()
             compare_checker(thread->ctx.cpu_index,
                     setflags_to_x86_flags[last_uop.setflags]);
 
-            if(checker_context->eip != 0) {
-                foreach(i, checker_stores_count) {
+            if(checker_context->eip) {
+                foreach(i, (W64)checker_stores_count) {
                     thread->ctx.check_store_virt(checker_stores[i].virtaddr,
                             checker_stores[i].data, checker_stores[i].bytemask,
                             checker_stores[i].sizeshift);
                 }
             } else {
-                foreach(i, checker_stores_count) {
+                foreach(i, (W64)checker_stores_count) {
                     thread->ctx.storemask_virt(checker_stores[i].virtaddr,
                             checker_stores[i].data, checker_stores[i].bytemask,
                             checker_stores[i].sizeshift);
@@ -1715,9 +1697,9 @@ ostream& AtomOp::print(ostream& os) const
  */
 AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
     : Statable("thread", &core)
+      , threadid(threadid)
       , core(core)
       , ctx(ctx)
-      , threadid(threadid)
       /* Initialize Statistics structures*/
       , st_fetch(this)
       , st_issue(this)
@@ -2070,7 +2052,7 @@ itlb_walk_finish:
 
     W64 pteaddr = ctx.virt_to_pte_phys_addr(fetchrip, itlb_walk_level);
 
-    if(pteaddr == -1) {
+    if(pteaddr == (W64)-1) {
         // Its a page fault but it will be detected when our fetchrip is same
         // as ctx.eip
         goto itlb_walk_finish;
@@ -2125,7 +2107,7 @@ dtlb_walk_finish:
     assert(dtlb_miss_addr);
     W64 pteaddr = ctx.virt_to_pte_phys_addr(dtlb_miss_addr, dtlb_walk_level);
 
-    if(pteaddr == -1) {
+    if(pteaddr == (W64)-1) {
         goto dtlb_walk_finish;
     }
 
@@ -2236,8 +2218,7 @@ bool AtomThread::dispatch(AtomOp *op)
 bool AtomThread::issue()
 {
     W8 issue_result;
-    W8 num_issues = 0;
-    W8 ret_value = false;
+    W8 num_issues;
 
     /*
      * First check if issue is not disabled for this thread
@@ -2262,7 +2243,7 @@ bool AtomThread::issue()
         return true;
     }
 
-    for(num_issues; num_issues < MAX_ISSUE_PER_CYCLE; num_issues++) {
+    for(num_issues = 0; num_issues < MAX_ISSUE_PER_CYCLE; num_issues++) {
 
         /* Check if dispatch queue has anything to dispatch. */
         if(dispatchq.empty()) {
@@ -2552,7 +2533,6 @@ void AtomThread::transfer()
 bool AtomThread::writeback()
 {
     AtomOp* op;
-    int ins_commited = 0;
     bool ret_value = false;
 
     if(sim_cycle > (last_commit_cycle + 1024*1024)) {
@@ -2641,7 +2621,7 @@ bool AtomThread::writeback()
  */
 bool AtomThread::commit_queue()
 {
-    int commit_result;
+    int commit_result = COMMIT_FAILED;
 
     ATOMTHLOG1("commit_queue");
 
@@ -2660,6 +2640,9 @@ bool AtomThread::commit_queue()
         assert(buf.op->current_state_list == &op_ready_to_writeback_list);
 
         commit_result = buf.op->writeback();
+
+        ATOMLOG1("Commting entry " << buf << " With result: " <<
+                commit_res_names[commit_result]);
 
         if (commit_result == COMMIT_FAILED) {
             handle_interrupt_at_next_eom = 0;

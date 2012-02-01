@@ -278,6 +278,12 @@ static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
     return rd;
 }
 
+static void decode_tag(issueq_tag_t tag, int& threadid, int& idx) {
+    threadid = tag >> MAX_ROB_IDX_BIT;
+    int mask = ((1 << (MAX_ROB_IDX_BIT + MAX_THREADS_BIT)) - 1) >> MAX_THREADS_BIT;
+    idx = tag & mask;
+}
+
 //
 // Issue a single ROB.
 //
@@ -408,7 +414,6 @@ int ReorderBufferEntry::issue() {
                rc.rfid, [rc.state]++);
     }
 
-    bool propagated_exception = 0;
     if unlikely ((ra.flags | rb.flags | rc.flags) & FLAG_INV) {
         //
         // Invalid data propagated through operands: mark output as
@@ -417,7 +422,6 @@ int ReorderBufferEntry::issue() {
         state.st.invalid = 1;
         state.reg.rdflags = FLAG_INV;
         state.reg.rddata = EXCEPTION_Propagate;
-        propagated_exception = 1;
         if (logable(6)) {
             ptl_logfile << "Invalid operands: ra[", ra, "] rb[",
                         rb, "] rc[", rc, "] ", endl;
@@ -611,7 +615,7 @@ bool ReorderBufferEntry::recheck_page_fault() {
     PTEUpdate pteupdate;
     Context& ctx = getthread().ctx;
     int mmio;
-    Waddr physaddr = ctx.check_and_translate(lsq->virtaddr, 1, 0, 0, exception, mmio, pfec);
+    ctx.check_and_translate(lsq->virtaddr, 1, 0, 0, exception, mmio, pfec);
 
     Waddr addr = lsq->physaddr << 3;
     Waddr virtaddr = lsq->virtaddr;
@@ -636,8 +640,6 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     int sizeshift = uop.size;
     int aligntype = uop.cond;
-    bool internal = uop.internal;
-    bool signext = (uop.opcode == OP_ldx);
 
     addr = (st) ? (ra + rb) : ((aligntype == LDST_ALIGN_NORMAL) ? (ra + rb) : ra);
     if(logable(10)) {
@@ -840,7 +842,6 @@ bool ReorderBufferEntry::release_mem_lock(bool forced) {
 int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, bool rcready, PTEUpdate& pteupdate) {
     ThreadContext& thread = getthread();
     Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
-    Queue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
     LoadStoreAliasPredictor& lsap = thread.lsap;
 
     time_this_scope(ctissuestore);
@@ -1035,7 +1036,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
             // in the same cycle, and only signal a load speculation failure if
             // the aliased load truly came at least one cycle before the store.
             //
-            int i;
             int parallel_forwarding_match = 0;
             foreach (i, thread.loads_in_this_cycle) {
                 bool match = (thread.load_to_store_parallel_forwarding_buffer[i] == state.physaddr);
@@ -1153,16 +1153,15 @@ static inline W64 extract_bytes(void* target, int SIZESHIFT, bool SIGNEXT) {
             data = (SIGNEXT) ? (W64s)(*(W32s*)target) : (*(W32*)target); break;
         case 3:
             data = *(W64*)target; break;
+        default:
+            ptl_logfile << "Invalid sizeshift in extract_bytes\n";
+            data = 0xdeadbeefdeadbeef;
     }
     return data;
 }
 
 W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
-#undef USE_MSDEBUG
-#define USE_MSDEBUG logable(1000)
 
-    msdebug << " rob ", *this, " data ", (void*) data, endl;
-    OooCore& core = getcore();
     ThreadContext& thread = getthread();
     Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
 
@@ -1198,7 +1197,6 @@ W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
         }
     }
 
-    bool ready = (!sfra || (sfra && sfra->addrvalid && sfra->datavalid));
     PhysicalRegister& rb = *operands[RB];
     W64 rbdata = (uop.rb == REG_imm) ? uop.rbimm : rb.data;
     assert(generated_addr && original_addr); // updated in issueload()
@@ -1224,9 +1222,6 @@ W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
         data = extract_bytes(((byte*)&data) + lowbits(generated_addr, 3), sizeshift, signext);
     }
     return data;
-#undef USE_MSDEBUG
-#define USE_MSDEBUG logable(5)
-
 }
 
 int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate) {
@@ -1239,7 +1234,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     int sizeshift = uop.size;
     int aligntype = uop.cond;
-    bool signext = (uop.opcode == OP_ldx);
 
     Waddr addr;
     int exception = 0;
@@ -1297,7 +1291,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     //
 
 
-    int num_sfra_found = 0;
     int sfra_addr_diff;
     bool all_sfra_datavalid = true;
 
@@ -1500,11 +1493,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     thread.thread_stats.dcache.load.datatype[uop.datatype]++;
     thread.thread_stats.dcache.load.forward.sfr_and_cache += ((sfra != NULL) & (!covered));
 
-    if(!config.verify_cache){
-        state.data = data;
-        state.invalid = 0;
-        state.bytemask = 0xff;
-    }
     tlb_walk_level = 0;
 
     assert(thread.loads_in_this_cycle < LOAD_FU_COUNT);
@@ -1531,28 +1519,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
         return ISSUE_COMPLETED;
     }
-
-#ifdef USE_TLB
-    if unlikely (!thread.dtlb.probe(addr, threadid)) {
-        //
-        // TLB miss:
-        //
-        if(thread.in_tlb_walk) {
-            replay();
-            return ISSUE_NEEDS_REPLAY;
-        }
-
-        cycles_left = 0;
-        tlb_walk_level = thread.ctx.page_table_level_count();
-        changestate(thread.rob_tlb_miss_list);
-        thread.thread_stats.dcache.dtlb.misses++;
-        thread.in_tlb_walk = 1;
-
-        return ISSUE_COMPLETED;
-    }
-
-    thread.thread_stats.dcache.dtlb.hits++;
-#endif
 
     if(sfra) {
         // the data is partially covered by previous store..
@@ -1637,14 +1603,9 @@ void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
 // Probe the cache and initiate a miss if required
 //
 int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
-    OooCore& core = getcore();
     ThreadContext& thread = getthread();
-    int sizeshift = uop.size;
-    int aligntype = uop.cond;
-    bool signext = (uop.opcode == OP_ldx);
 
     LoadStoreQueueEntry& state = *lsq;
-    W64 physaddr = state.physaddr << 3;
 
     bool L1hit = (config.perfect_cache) ? 1 : 1; //core.caches.probe_cache_and_sfr(physaddr, sfra, sizeshift);
 
@@ -1683,7 +1644,6 @@ int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
 bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate) {
 
     PageFaultErrorCode pfec;
-    Waddr physaddr;
     int exception;
     bool handled;
     bool annul;
@@ -1691,7 +1651,6 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
     bool st;
 
     ThreadContext& thread = getthread();
-    OooCore& core = getcore();
     st = isstore(uop.opcode);
     handled = true;
     exception = 0;
@@ -1700,7 +1659,7 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
     bool handle_next_page = false;
 #endif
 
-    physaddr = addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
+    addrgen(state, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
 #ifndef DISABLE_TLB
     // First check if its a TLB hit or miss
@@ -1808,13 +1767,11 @@ rob_cont:
         }
         PageFaultErrorCode pfec;
         bool st = isstore(uop.opcode);
-        bool handled_hi = false;
         bool handled = false;
         int exception = 0;
-        Waddr physaddr;
         int mmio = 0;
 
-        physaddr = thread.ctx.check_and_translate(virtaddr, uop.size, st, uop.internal, exception,
+        thread.ctx.check_and_translate(virtaddr, uop.size, st, uop.internal, exception,
                 mmio, pfec);
 
         if unlikely (exception) {
@@ -1857,7 +1814,7 @@ rob_cont:
 
     W64 pteaddr = thread.ctx.virt_to_pte_phys_addr(virtaddr, tlb_walk_level);
 
-    if(pteaddr == -1) {
+    if(pteaddr == (W64)-1) {
         goto rob_cont;
     }
 
@@ -1942,8 +1899,6 @@ LoadStoreQueueEntry* ReorderBufferEntry::find_nearest_memory_fence() {
 int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
     ThreadContext& thread = getthread();
 
-    OooCore& core = getcore();
-
     assert(uop.opcode == OP_mf);
 
     thread.thread_stats.dcache.fence.lfence += (uop.extshift == MF_TYPE_LFENCE);
@@ -1970,9 +1925,6 @@ int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
 // Issues a prefetch on the given memory address into the specified cache level.
 //
 void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc, int cachelevel) {
-    OooCore& core = getcore();
-    ThreadContext& thread = getthread();
-
     state.reg.rddata = 0;
     state.reg.rdflags = 0;
 
@@ -1986,36 +1938,13 @@ void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc
     LoadStoreQueueEntry dummy;
     setzero(dummy);
     dummy.virtaddr = origaddr;
-    Waddr physaddr = addrgen(dummy, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
+    addrgen(dummy, origaddr, virtpage, ra, rb, rc, pteupdate, addr, exception, pfec, annul);
 
     // Ignore bogus prefetches:
     if unlikely (exception) return;
 
     // Ignore unaligned prefetches (should never happen)
     if unlikely (annul) return;
-
-    // (Stats are already updated by initiate_prefetch())
-#ifdef USE_TLB
-    if unlikely (!core.caches.dtlb.probe(addr, threadid)) {
-#if 0
-        //
-        // TLB miss: Ignore this prefetch but handle the miss!
-        //
-        // Note that most x86 processors will not prefetch beyond
-        // a TLB miss, so this is disabled by default.
-        //
-        if unlikely (config.event_log_enabled) OutOfOrderCoreEvent* event = core.eventlog.add_load_store(EVENT_LOAD_TLB_MISS, this, NULL, addr);
-        cycles_left = 0;
-        tlb_walk_level = thread.ctx.page_table_level_count();
-        changestate(thread.rob_tlb_miss_list);
-#endif
-        return;
-    }
-
-    thread.thread_stats.dtlb.hits++;
-#endif
-
-    //core.caches.initiate_prefetch(physaddr, cachelevel);
 }
 
 //
@@ -2052,7 +1981,6 @@ bool OooCore::dcache_wakeup(void *arg) {
 
             int sizeshift = rob.uop.size;
             bool signext = (rob.uop.opcode == OP_ldx);
-            W64 offset = lowbits(rob.lsq->virtaddr, 3);
             W64 data;
             data = thread->ctx.loadvirt(rob.lsq->virtaddr, sizeshift);
 
@@ -2079,7 +2007,6 @@ bool OooCore::dcache_wakeup(void *arg) {
                  * have the most recent data and merge all the data for this load
                  */
                 Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread->LSQ;
-                LoadStoreQueueEntry* lsq_head = &LSQ[LSQ.head];
                 foreach_forward(LSQ, i) {
                     LoadStoreQueueEntry& stq = LSQ[i];
                     if unlikely (&stq == rob.lsq)
@@ -2342,8 +2269,6 @@ int OooCore::issue(int cluster) {
     time_this_scope(ctissue);
 
     int issuecount = 0;
-    ReorderBufferEntry* rob;
-
     int maxwidth = clusters[cluster].issue_width;
 
     int last_issue_id = -1;
@@ -2390,9 +2315,6 @@ int OooCore::issue(int cluster) {
 // forwarding networks.
 //
 int ReorderBufferEntry::forward() {
-    ReorderBufferEntry* target;
-    int wakeupcount = 0;
-
     assert(inrange((int)forward_cycle, 0, (MAX_FORWARDING_LATENCY+1)-1));
 
     W32 targets = forward_at_cycle_lut[cluster][forward_cycle];
@@ -2552,13 +2474,9 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
     // Pass 3: For each speculative ROB, reinitialize and free speculative ROBs
     //
 
-    ReorderBufferEntry* lastrob = NULL;
-
     idx = endidx;
     for (;;) {
         ReorderBufferEntry& annulrob = ROB[idx];
-
-        lastrob = &annulrob;
 
         //
         // Free the speculatively allocated physical register
@@ -2730,7 +2648,6 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
 // redispatch each of them.
 //
 void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
-    OooCore& core = getcore();
     ThreadContext& thread = getthread();
     Queue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
 
@@ -2788,11 +2705,8 @@ void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
 }
 
 int ReorderBufferEntry::pseudocommit() {
-    OooCore& core = getcore();
-
     ThreadContext& thread = getthread();
     RegisterRenameTable& specrrt = thread.specrrt;
-    RegisterRenameTable& commitrrt = thread.commitrrt;
 
     if likely (archdest_can_commit[uop.rd]) {
         specrrt[uop.rd]->unspecref(uop.rd, thread.threadid);

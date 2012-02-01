@@ -26,8 +26,8 @@ env['CPPPATH'].append("%s/%s" % (qemu_dir, "target-i386"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "fpu"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "x86_64-softmmu"))
 
-optimization_defs = '-fno-trapping-math -fno-stack-protector -fno-exceptions '
-optimization_defs += '-fno-rtti -funroll-loops -fno-strict-aliasing '
+optimization_defs = '-fno-trapping-math -fstack-protector -fno-exceptions '
+optimization_defs += '-fno-rtti -funroll-loops -fstrict-aliasing '
 
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
@@ -107,6 +107,8 @@ if git_branch == "(no branch)":
 env.Append(CCFLAGS = "-DGITBRANCH=%s -DGITCOMMIT=%s -DGITDATE='%s'" %
         (git_branch, git_comm, git_date))
 
+env.Append(CCFLAGS = " -Wall -Wendif-labels -Wwrite-strings" +
+        " -Wno-redundant-decls")
 Export('env')
 
 # print("Build Envrionment:")

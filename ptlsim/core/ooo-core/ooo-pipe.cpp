@@ -104,7 +104,7 @@ itlb_walk_finish:
 
     W64 pteaddr = ctx.virt_to_pte_phys_addr(fetchrip, itlb_walk_level);
 
-    if(pteaddr == -1) {
+    if(pteaddr == (W64)-1) {
         goto itlb_walk_finish;
         return;
     }
@@ -157,8 +157,11 @@ static W32 phys_reg_files_writable_by_uop(const TransOp& uop) {
         (c & OPCLASS_STORE) ? OooCore::PHYS_REG_FILE_MASK_ST :
         (c & OPCLASS_BRANCH) ? OooCore::PHYS_REG_FILE_MASK_BR :
         (c & (OPCLASS_LOAD | OPCLASS_PREFETCH)) ? ((uop.datatype == DATATYPE_INT) ? OooCore::PHYS_REG_FILE_MASK_INT : OooCore::PHYS_REG_FILE_MASK_FP) :
-        ((c & OPCLASS_FP) | inrange((int)uop.rd, REG_xmml0, REG_xmmh15) | inrange((int)uop.rd, REG_fptos, REG_ctx)) ? OooCore::PHYS_REG_FILE_MASK_FP :
-        OooCore::PHYS_REG_FILE_MASK_INT;
+        ((c & OPCLASS_FP) |
+         inrange((int)uop.rd, REG_xmml0, REG_xmmh15) |
+         inrange((int)uop.rd, REG_mmx0, REG_mmx7) |
+         inrange((int)uop.rd, REG_fptos, REG_ctx)) ?
+        OooCore::PHYS_REG_FILE_MASK_FP : OooCore::PHYS_REG_FILE_MASK_INT;
 #endif
 }
 
@@ -435,33 +438,6 @@ void ThreadContext::redispatch_deadlock_recovery() {
 }
 
 
-//
-// Fetch Stage
-//
-// Fetch a stream of x86 instructions from the L1 i-cache along predicted
-// branch paths.
-//
-// Internally, up to N uops per clock corresponding to instructions in
-// the current basic block are fetched per cycle and placed in the uopq
-// as TransOps. When we run out of uops in one basic block, we proceed
-// to lookup or translate the next basic block.
-//
-
-//
-// Used to debug crashes when cycle to start logging can't be determined:
-//
-static RIPVirtPhys fetch_bb_address_ringbuf[256];
-static W64 fetch_bb_address_ringbuf_head = 0;
-
-static void print_fetch_bb_address_ringbuf(ostream& os) {
-    os << "Head: ", fetch_bb_address_ringbuf_head, endl;
-    foreach (i, lengthof(fetch_bb_address_ringbuf)) {
-        int j = (fetch_bb_address_ringbuf_head + i) % lengthof(fetch_bb_address_ringbuf);
-        const RIPVirtPhys& addr = fetch_bb_address_ringbuf[j];
-        os << "  ", intstring(i, 16), ": ", addr, endl;
-    }
-}
-
 int OooCore::hash_unaligned_predictor_slot(const RIPVirtPhysBase& rvp) {
     W32 h = rvp.rip ^ rvp.mfnlo;
     return lowbits(h, log2(UNALIGNED_PREDICTOR_SIZE));
@@ -531,9 +507,6 @@ bool ThreadContext::fetch() {
         }
 
         if unlikely ((!current_basic_block) || (current_basic_block_transop_index >= current_basic_block->count)) {
-            fetch_bb_address_ringbuf[fetch_bb_address_ringbuf_head] = fetchrip;
-            fetch_bb_address_ringbuf_head = add_index_modulo(fetch_bb_address_ringbuf_head, +1, lengthof(fetch_bb_address_ringbuf));
-
             if(logable(10))
                 ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
 
@@ -592,7 +565,6 @@ bool ThreadContext::fetch() {
 
             hit |= config.perfect_cache;
             if unlikely (!hit) {
-                int missbuf = -1;
                 waiting_for_icache_fill = 1;
                 waiting_for_icache_fill_physaddr = req_icache_block;
                 thread_stats.fetch.stop.icache_miss++;
@@ -1418,7 +1390,6 @@ int ThreadContext::complete(int cluster) {
 int ThreadContext::transfer(int cluster) {
     time_this_scope(cttransfer);
 
-    int wakeupcount = 0;
     ReorderBufferEntry* rob;
     foreach_list_mutable(rob_completed_list[cluster], rob, entry, nextentry) {
         rob->forward();
@@ -1449,9 +1420,10 @@ int ThreadContext::writeback(int cluster) {
         //
         // Gather statistics
         //
-        bool transient = 0;
 
 #ifdef ENABLE_TRANSIENT_VALUE_TRACKING
+        bool transient = 0;
+
         if likely (!isclass(rob->uop.opcode, OPCLASS_STORE|OPCLASS_BRANCH)) {
             transient =
                 (rob->dest_renamed_before_writeback) &&
@@ -1851,7 +1823,6 @@ int ReorderBufferEntry::commit() {
     // store to overwrite its own instruction bytes, but this update only
     // becomes visible after the store has committed.
     //
-    bool page_crossing = ((lowbits(uop.rip.rip, 12) + (uop.bytes-1)) >> 12);
     if unlikely (thread.ctx.smc_isdirty(uop.rip.mfnlo)) {
 
         //
@@ -1958,8 +1929,8 @@ int ReorderBufferEntry::commit() {
 
     if (ld) physreg->data = lsq->data;
 
-    W64 result = physreg->data;
-
+    // FIXME : Check if we really need to merge the load with existing register
+#if 0
     W64 old_data = ctx.get(uop.rd);
     W64 merged_data;
     if(ld | st) {
@@ -1969,6 +1940,7 @@ int ReorderBufferEntry::commit() {
     } else {
         merged_data = physreg->data;
     }
+#endif
 
     if (logable(10)) {
         ptl_logfile << "ROB Commit RIP check...\n", flush;
@@ -2082,7 +2054,6 @@ int ReorderBufferEntry::commit() {
 
 
     if unlikely (uop.opcode == OP_st) {
-        Waddr mfn = (lsq->physaddr << 3) >> 12;
         thread.ctx.smc_setdirty(lsq->physaddr << 3);
 
         if(uop.internal) {
@@ -2176,8 +2147,6 @@ int ReorderBufferEntry::commit() {
         // instruction in sequence from within the branch predictor logic.
         //
         W64 end_of_branch_x86_insn = uop.rip + uop.bytes;
-        bool taken = (ctx.get_cs_eip() != end_of_branch_x86_insn);
-        bool predtaken = (uop.riptaken != end_of_branch_x86_insn);
 
         thread.branchpred.update(uop.predinfo, end_of_branch_x86_insn, ctx.get_cs_eip());
         thread.thread_stats.branchpred.updates++;
@@ -2208,7 +2177,6 @@ int ReorderBufferEntry::commit() {
 
     bool uop_is_eom = uop.eom;
     bool uop_is_barrier = isclass(uop.opcode, OPCLASS_BARRIER);
-    bool uop_is_fence = (uop.opcode == OP_mf);
     changestate(thread.rob_free_list);
     reset();
     thread.ROB.commit(*this);

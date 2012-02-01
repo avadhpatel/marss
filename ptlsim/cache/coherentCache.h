@@ -121,7 +121,7 @@ namespace Memory {
                         return os;
                     }
 
-                    os << "Request{", *request, "} ";
+                    os << "Request{" << *request << "} ";
 
                     os << "idx["<< this->idx <<"] ";
                     if(sender)
