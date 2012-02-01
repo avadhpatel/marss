@@ -270,7 +270,7 @@ W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 
 bool assist_enter(Context& ctx) {
 
-    int ot, opsize, esp_addend, level;
+    int opsize, esp_addend, level;
     W64 tmp1;
 
     esp_addend = ctx.reg_ar1;
@@ -1192,7 +1192,6 @@ bool TraceDecoder::decode_complex() {
       // ld t6 = [mem]
       //
       int destreg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
-      int mergewith = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
       if (sizeshift >= 2) {
         // zero extend 32-bit to 64-bit or just load as 64-bit:
         operand_load(REG_temp0, rd);
@@ -1809,7 +1808,6 @@ bool TraceDecoder::decode_complex() {
 		break;
 	}
 
-	W32 offset;
 	int sizeshift;
 	if(addrsize_prefix) {
 		DECODE(iform, ra, d_mode);
@@ -2090,7 +2088,6 @@ bool TraceDecoder::decode_complex() {
 			if(!pe || vm86)
 				goto invalid_opcode;
 
-			int sizeshift = (modrm.mod == 3) ? 3 : 2;
 			DECODE(eform, rd, v_mode);
 			EndOfDecode();
 
@@ -2563,7 +2560,7 @@ bool TraceDecoder::decode_complex() {
     if (!kernel) { outcome = DECODE_OUTCOME_GP_FAULT; MakeInvalid(); }
     EndOfDecode();
 
-    int offset;
+    int offset = -1;
 
     switch (modrm.reg) {
     case 0: offset = offsetof_t(Context, cr[0]); break;
@@ -2601,8 +2598,6 @@ bool TraceDecoder::decode_complex() {
     if (!kernel) { outcome = DECODE_OUTCOME_GP_FAULT; MakeInvalid(); }
     EndOfDecode();
 
-    int offset;
-
     static const int index_to_assist[8] = {
       ASSIST_WRITE_CR0,
       ASSIST_INVALID_OPCODE,
@@ -2628,7 +2623,7 @@ bool TraceDecoder::decode_complex() {
     if (!kernel) { outcome = DECODE_OUTCOME_GP_FAULT; MakeInvalid(); }
     EndOfDecode();
 
-    int offset;
+    int offset = -1;
 
     switch (modrm.reg) {
     case 0: offset = offsetof_t(Context, dr[0]); break;
@@ -2758,7 +2753,6 @@ bool TraceDecoder::decode_complex() {
 
     if (rd.type == OPTYPE_REG) {
       int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
-      int rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
 
       // bt has no output - just flags:
       this << TransOp(opcode, (opcode == OP_bt) ? REG_temp0 : rdreg, rdreg, REG_imm, REG_zero, 3, ra.imm.imm, 0, SETFLAG_CF);

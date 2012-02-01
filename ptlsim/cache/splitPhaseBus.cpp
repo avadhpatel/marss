@@ -42,10 +42,10 @@ using namespace Memory::SplitPhaseBus;
 
 BusInterconnect::BusInterconnect(const char *name,
         MemoryHierarchy *memoryHierarchy) :
-    Interconnect(name,memoryHierarchy),
-    busBusy_(false),
-    dataBusBusy_(false),
-    lastAccessQueue(NULL)
+    Interconnect(name,memoryHierarchy)
+    , lastAccessQueue(NULL)
+    , busBusy_(false)
+    , dataBusBusy_(false)
 {
     memoryHierarchy_->add_interconnect(this);
     new_stats = new BusStats(name, &memoryHierarchy->get_machine());
@@ -143,7 +143,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
             entry, nextentry) {
         if(pendingEntry->request == message->request) {
             memdebug("Bus Response received for: ", *pendingEntry);
-            int idx;
+            int idx = -1;
             Controller *sender = (Controller*)message->sender;
             foreach(i, controllers.count()) {
                 if(sender == controllers[i]->controller) {
@@ -196,7 +196,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
     }
 
     /* its a new request, add entry into controllerqueues */
-    BusControllerQueue* busControllerQueue;
+    BusControllerQueue* busControllerQueue = NULL;
     foreach(i, controllers.count()) {
         if(controllers[i]->controller ==
                 (Controller*)message->sender) {
@@ -501,7 +501,7 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
 
     N_STAT_UPDATE(new_stats->data_bus_cycles, += latency_, kernel);
     W64 delay = sim_cycle - pendingEntry->initCycle;
-    assert(delay > latency_);
+    assert(delay > (W64)latency_);
     switch(pendingEntry->request->get_type()) {
         case MEMORY_OP_READ: N_STAT_UPDATE(new_stats->broadcast_cycles.read, += delay, kernel);
                              break;

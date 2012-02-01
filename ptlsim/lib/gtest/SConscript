@@ -3,6 +3,19 @@
 # Import envrionment
 Import('env')
 
+pretty_printing=ARGUMENTS.get('pretty',1)
+
+test_env = Environment()
+base_flags = str(env['CCFLAGS'])
+base_flags = base_flags.replace("-Wall", "")
+test_env.Append(CCFLAGS = base_flags)
+test_env.Append(CCFLAGS = "-Wno-undef")
+test_env['CC'] = env['CC']
+
+if int(pretty_printing):
+    test_env['CCCOMSTR'] = env['CCCOMSTR']
+    test_env['CXXCOMSTR'] = env['CXXCOMSTR']
+
 # Now get list of .cpp files
 src_files = ["src/gtest-all.cc"]
 

@@ -41,6 +41,8 @@ void MOESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
     OP_TYPE type = queueEntry->request->get_type();
     bool k_req = queueEntry->request->is_kernel();
 
+    N_STAT_UPDATE(hit_state, [oldState]++, k_req);
+
     if (type == MEMORY_OP_EVICT) {
         *state = MOESI_INVALID;
         controller->clear_entry_cb(queueEntry);
@@ -83,7 +85,7 @@ void MOESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
             break;
 
         default:
-            memdebug("Invalid line state: ", oldState);
+            memdebug("Invalid line state: " << oldState);
             assert(0);
     }
 
@@ -224,7 +226,7 @@ void MOESILogic::handle_interconn_hit(CacheQueueEntry *queueEntry)
             break;
 
         default:
-            memdebug("Invalid line state: ", oldState);
+            memdebug("Invalid line state: " << oldState);
             assert(0);
     }
 
@@ -276,7 +278,7 @@ void MOESILogic::handle_cache_insert(CacheQueueEntry *queueEntry,
     MOESICacheLineState *state = (MOESICacheLineState*)(&queueEntry->line->state);
     MOESICacheLineState oldState = *state;
 
-    if (oldTag != InvalidTag<W64>::INVALID && oldTag != -1) {
+    if (oldTag != InvalidTag<W64>::INVALID && oldTag != (W64)-1) {
         if (oldState != MOESI_INVALID) {
             if (controller->is_lowest_private()) {
                 send_evict(queueEntry, oldTag, 1);
@@ -340,12 +342,13 @@ void MOESILogic::complete_request(CacheQueueEntry *queueEntry,
                 break;
 
             default:
-                memdebug("Invalid line state: ", oldState);
+                memdebug("Invalid line state: " << oldState);
                 assert(0);
         }
 
-        if (oldState != *state)
+        if (oldState != *state) {
             UPDATE_MOESI_TRANS_STATS(oldState, *state, k_req);
+        }
 
     } else {
         if (message.request->get_type() == MEMORY_OP_EVICT) {

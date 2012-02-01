@@ -190,8 +190,8 @@ struct MESIStats : public BaseCacheStats {
 
     MESIStats(const char *name, Statable *parent=NULL)
         :BaseCacheStats(name, parent)
-         ,hit_state("hit_state",this)
          ,miss_state("miss_state",this)
+         ,hit_state("hit_state",this)
          ,state_transition("state_transition",this)
     {}
 };

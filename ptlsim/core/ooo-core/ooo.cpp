@@ -41,6 +41,39 @@ namespace OOO_CORE_MODEL {
     byte uop_executable_on_cluster[OP_MAX_OPCODE];
     W32 forward_at_cycle_lut[MAX_CLUSTERS][MAX_FORWARDING_LATENCY+1];
     bool globals_initialized = false;
+
+    const char* physreg_state_names[MAX_PHYSREG_STATE] = {"none", "free",
+        "waiting", "bypass", "written", "arch", "pendingfree"};
+    const char* short_physreg_state_names[MAX_PHYSREG_STATE] = {"-",
+        "free", "wait", "byps", "wrtn", "arch", "pend"};
+
+#ifdef MULTI_IQ
+    const char* cluster_names[MAX_CLUSTERS] = {"int0", "int1", "ld", "fp"};
+#else
+    const char* cluster_names[MAX_CLUSTERS] = {"all"};
+#endif
+
+    const char* phys_reg_file_names[PHYS_REG_FILE_COUNT] = {"int", "fp", "st", "br"};
+
+    const char* fu_names[FU_COUNT] = {
+        "ldu0",
+        "stu0",
+        "ldu1",
+        "stu1",
+        "ldu2",
+        "stu2",
+        "ldu3",
+        "stu4",
+        "alu0",
+        "fpu0",
+        "alu1",
+        "fpu1",
+        "alu2",
+        "fpu2",
+        "alu3",
+        "fpu3",
+    };
+
 };
 
 //
@@ -149,10 +182,10 @@ void ThreadContext::setupTLB() {
     foreach(i, CPU_TLB_SIZE) {
         W64 dtlb_addr = ctx.tlb_table[!ctx.kernel_mode][i].addr_read;
         W64 itlb_addr = ctx.tlb_table[!ctx.kernel_mode][i].addr_code;
-        if((dtlb_addr ) != -1) {
+        if(dtlb_addr != (W64)-1) {
             dtlb.insert(dtlb_addr);
         }
-        if((itlb_addr) != -1) {
+        if(itlb_addr != (W64)-1) {
             itlb.insert(itlb_addr);
         }
     }
@@ -730,7 +763,7 @@ bool OooCore::runcycle() {
                         ThreadContext* t = threads[i];
                         if unlikely (!t) continue;
                         if (logable(3)) {
-                            ptl_logfile << "  [vcpu ", i, "] current_basic_block = ", t->current_basic_block;  ": ";
+                            ptl_logfile << "  [vcpu " << i << "] current_basic_block = " << t->current_basic_block <<  ": ";
                             if (t->current_basic_block) ptl_logfile << t->current_basic_block->rip;
                             ptl_logfile << endl;
                         }
@@ -860,7 +893,6 @@ void ReorderBufferEntry::init(int idx) {
 // expected to be zero when allocating a new ROB entry.
 //
 void ReorderBufferEntry::reset() {
-    int latency, operand;
     // Deallocate ROB entry
     entry_valid = false;
     cycles_left = 0;
@@ -903,7 +935,6 @@ bool ReorderBufferEntry::ready_to_commit() const {
 }
 
 StateList& ReorderBufferEntry::get_ready_to_issue_list() {
-    OooCore& core = getcore();
     ThreadContext& thread = getthread();
     return
         isload(uop.opcode) ? thread.rob_ready_to_load_list[cluster] :

@@ -246,18 +246,16 @@ namespace OOO_CORE_MODEL {
     static const int UNALIGNED_PREDICTOR_SIZE = 4096;
 
     // String names used in stats labels
-    static const char* physreg_state_names[MAX_PHYSREG_STATE] = {"none", "free",
-        "waiting", "bypass", "written", "arch", "pendingfree"};
-    static const char* short_physreg_state_names[MAX_PHYSREG_STATE] = {"-",
-        "free", "wait", "byps", "wrtn", "arch", "pend"};
+    extern const char* physreg_state_names[MAX_PHYSREG_STATE];
+    extern const char* short_physreg_state_names[MAX_PHYSREG_STATE];
 
 #ifdef MULTI_IQ
-    static const char* cluster_names[MAX_CLUSTERS] = {"int0", "int1", "ld", "fp"};
+    extern const char* cluster_names[MAX_CLUSTERS];
 #else
-    static const char* cluster_names[MAX_CLUSTERS] = {"all"};
+    extern const char* cluster_names[MAX_CLUSTERS];
 #endif
 
-    static const char* phys_reg_file_names[PHYS_REG_FILE_COUNT] = {"int", "fp", "st", "br"};
+    extern const char* phys_reg_file_names[PHYS_REG_FILE_COUNT];
 
 };
 

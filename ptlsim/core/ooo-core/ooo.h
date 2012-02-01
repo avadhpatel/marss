@@ -82,24 +82,7 @@ namespace OOO_CORE_MODEL {
         FU_FPU3       = (1 << 15),
     };
 
-    static const char* fu_names[FU_COUNT] = {
-        "ldu0",
-        "stu0",
-        "ldu1",
-        "stu1",
-        "ldu2",
-        "stu2",
-        "ldu3",
-        "stu4",
-        "alu0",
-        "fpu0",
-        "alu1",
-        "fpu1",
-        "alu2",
-        "fpu2",
-        "alu3",
-        "fpu3",
-    };
+    extern const char* fu_names[FU_COUNT];
 
 //
 // Opcodes and properties
@@ -576,12 +559,6 @@ namespace OOO_CORE_MODEL {
         issueq_tag_t get_tag();
     };
 
-    static void decode_tag(issueq_tag_t tag, int& threadid, int& idx) {
-        threadid = tag >> MAX_ROB_IDX_BIT;
-        int mask = ((1 << (MAX_ROB_IDX_BIT + MAX_THREADS_BIT)) - 1) >> MAX_THREADS_BIT;
-        idx = tag & mask;
-    }
-
     static inline ostream& operator <<(ostream& os, const ReorderBufferEntry& rob) {
         return rob.print(os);
     }
@@ -895,9 +872,8 @@ namespace OOO_CORE_MODEL {
         bool insert(W64 addr, W8 threadid = 0) {
           addr = floor(addr, PAGE_SIZE);
           W64 tag = tagof(addr, threadid);
-          W64 oldtag;
+          W64 oldtag = 0;
           int way = base_t::select(tag, oldtag);
-          W64 oldaddr = lowbits(oldtag, 36) << 12;
           if (logable(6)) {
             ptl_logfile << "TLB insertion of virt page ", (void*)(Waddr)addr, " (virt addr ",
                         (void*)(Waddr)(addr), ") into way ", way, ": ",
@@ -1137,6 +1113,14 @@ namespace OOO_CORE_MODEL {
             case 3: rc = core.issueq_fp.expr; break; \
         }
 
+#define issueq_operation_on_cluster_no_res(core, cluster, expr) \
+        switch (cluster) { \
+            case 0: core.issueq_int0.expr; break; \
+            case 1: core.issueq_int1.expr; break; \
+            case 2: core.issueq_ld.expr; break; \
+            case 3: core.issueq_fp.expr; break; \
+        }
+
 #define per_cluster_stats_update(prefix, cluster, expr) \
         switch (cluster) { \
             case 0: CORE_STATS(prefix.int0) expr; break; \
@@ -1155,6 +1139,7 @@ namespace OOO_CORE_MODEL {
             a[0] = issueq_all.remaining();
         }
 #define issueq_operation_on_cluster_with_result(core, cluster, rc, expr) rc = core.issueq_all.expr;
+#define issueq_operation_on_cluster_no_res(core, cluster, expr) core.issueq_all.expr;
 #define per_cluster_stats_update(prefix, cluster, expr) CORE_STATS(prefix.all) expr;
 
 #endif
@@ -1167,7 +1152,7 @@ namespace OOO_CORE_MODEL {
             case 3: CORE_STATS(prefix.br) expr; break; \
         }
 
-#define issueq_operation_on_cluster(core, cluster, expr) { int dummyrc; issueq_operation_on_cluster_with_result(core, cluster, dummyrc, expr); }
+#define issueq_operation_on_cluster(core, cluster, expr) { issueq_operation_on_cluster_no_res(core, cluster, expr); }
 
 #define for_each_cluster(iter) foreach (iter, MAX_CLUSTERS)
 #define for_each_operand(iter) foreach (iter, MAX_OPERANDS)

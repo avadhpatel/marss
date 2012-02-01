@@ -44,25 +44,25 @@ struct ModRMByte {
 
 struct SIBByte {
   byte base:3, index:3, scale:2;
-  SIBByte() { }
+  SIBByte() { *((byte*)this) = 0; }
   SIBByte(const byte& b) { *((byte*)this) = b; }
   operator byte() const { return (*((byte*)this)); }
 };
 
-static const int PFX_REPZ      = (1 << 0);
-static const int PFX_REPNZ     = (1 << 1);
-static const int PFX_LOCK      = (1 << 2);
-static const int PFX_CS        = (1 << 3);
-static const int PFX_SS        = (1 << 4);
-static const int PFX_DS        = (1 << 5);
-static const int PFX_ES        = (1 << 6);
-static const int PFX_FS        = (1 << 7);
-static const int PFX_GS        = (1 << 8);
-static const int PFX_DATA      = (1 << 9);
-static const int PFX_ADDR      = (1 << 10);
-static const int PFX_REX       = (1 << 11);
-static const int PFX_FWAIT     = (1 << 12);
-static const int PFX_count     = 13;
+static const W32 PFX_REPZ      = (1 << 0);
+static const W32 PFX_REPNZ     = (1 << 1);
+static const W32 PFX_LOCK      = (1 << 2);
+static const W32 PFX_CS        = (1 << 3);
+static const W32 PFX_SS        = (1 << 4);
+static const W32 PFX_DS        = (1 << 5);
+static const W32 PFX_ES        = (1 << 6);
+static const W32 PFX_FS        = (1 << 7);
+static const W32 PFX_GS        = (1 << 8);
+static const W32 PFX_DATA      = (1 << 9);
+static const W32 PFX_ADDR      = (1 << 10);
+static const W32 PFX_REX       = (1 << 11);
+static const W32 PFX_FWAIT     = (1 << 12);
+static const W32 PFX_count     = 13;
 
 extern const char* prefix_names[PFX_count];
 
@@ -420,139 +420,9 @@ enum {
   ASSIST_COUNT,
 };
 
-
 extern const assist_func_t assistid_to_func[ASSIST_COUNT];
 
-//
-// These need to be in the header file so dstbuild can
-// pick them up without having to link every file in PTLsim
-// just to build the data store template. The linker will
-// eliminate duplicates.
-//
-static const char* assist_names[ASSIST_COUNT] = {
-  // Forced assists based on decode context
-  "invalid_opcode",
-  "exec_page_fault",
-  "gp_fault",
-  "ud2a",
-  // Integer arithmetic
-  "div<byte>",
-  "div<W16>",
-  "div<W32>",
-  "div<W64>",
-  "idiv<byte>",
-  "idiv<W16>",
-  "idiv<W32>",
-  "idiv<W64>",
-  // x87
-  "x87_fprem",
-  "x87_fyl2xp1",
-  "x87_fsqrt",
-  "x87_fsincos",
-  "x87_frndint",
-  "x87_fscale",
-  "x87_fsin",
-  "x87_fcos",
-  "x87_fxam",
-  "x87_f2xm1",
-  "x87_fyl2x",
-  "x87_fptan",
-  "x87_fpatan",
-  "x87_fxtract",
-  "x87_fprem1",
-  "x87_fld80",
-  "x87_fstp80",
-  "x87_fsave",
-  "x87_frstor",
-  "x87_finit",
-  "x87_fclex",
-  "x87_fxch",
-  "x87_fnstenv",
-  "x87_fldenv",
-  "x87_fbstp",
-  "x87_fbld",
-  "x87_fnsave",
-  "x87_fldcw",
-  "mmx_emms",
-  // SSE save/restore
-  "ldmxcsr",
-  "fxsave",
-  "fxrstor",
-  // Interrupts", system calls", etc.
-  "int",
-  "syscall",
-  "sysret",
-  "hypercall",
-  "ptlcall",
-  "sysenter",
-  "iret16",
-  "iret32",
-  "iret64",
-  "sti",
-  "cli",
-  "enter",
-  // Control register updates
-  "cpuid",
-  "rdtsc",
-  "cld",
-  "std",
-  "pushf",
-  "popf",
-  "write_segreg",
-  "wrmsr",
-  "rdmsr",
-  "write_cr0",
-  "write_cr2",
-  "write_cr3",
-  "write_cr4",
-  "write_debug_reg",
-  // I/O and legacy
-  "ioport_in",
-  "ioport_out",
-  // Jumps
-  "ljmp",
-  "ljmp_prct",
-  // BCD
-  "bcd_aas",
-  // SVM
-  "svm_check",
-  // MONITOR
-  "monitor",
-  // MWAIT
-  "mwait",
-  // VM
-  "vmrun",
-  "vmcall",
-  "vmload",
-  "vmsave",
-  // STGI
-  "stgi",
-  // CLGI
-  "clgi",
-  // SKINIT
-  "skinit",
-  //INVLPGA
-  "invlpga",
-  "invlpg",
-  // LMSW
-  "lmsw",
-  // LLDT
-  "lldt",
-  // LTR
-  "ltr",
-  // VERR / VERW
-  "verr",
-  "verw",
-  // CLTS
-  "clts",
-  // SWAPGS
-  "swapgs",
-  // Barrier
-  "barrier",
-  // HLT
-  "halt",
-  "pause",
-};
+extern const char* assist_names[ASSIST_COUNT];
 
 int propagate_exception_during_assist(Context& ctx, byte exception, W32 errorcode, Waddr virtaddr = 0, bool intN = 0);
 
@@ -571,16 +441,7 @@ enum {
 
 extern const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT];
 
-static const char* light_assist_names[L_ASSIST_COUNT] = {
-	"l_sti",
-	"l_cli",
-	"l_pushf",
-	"l_popf",
-	"l_io_in",
-	"l_io_out",
-	"l_pause",
-    "l_popcnt"
-};
+extern const char* light_assist_names[L_ASSIST_COUNT];
 
 //
 // Microcode assists

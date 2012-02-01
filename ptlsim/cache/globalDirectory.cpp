@@ -578,7 +578,7 @@ bool DirectoryController::send_evict_cb(void *arg)
 
     /* Check if we have enough free entries in queue */
     if (pendingRequests_->remaining() <
-            queueEntry->entry->present.popcount()) {
+            (int)queueEntry->entry->present.popcount()) {
         memoryHierarchy_->add_event(&send_evict, 1, queueEntry);
         return true;
     }
@@ -799,7 +799,7 @@ DirectoryEntry* DirectoryController::get_directory_entry(
 
         /* If we are removing any entry with cached line then we
          * must send evict signal to those caches. */
-        if ((old_tag != InvalidTag<W64>::INVALID && old_tag != -1) &&
+        if ((old_tag != InvalidTag<W64>::INVALID && old_tag != (W64)-1) &&
                 entry->present.nonzero()) {
             DirContBufferEntry *newEntry = pendingRequests_->alloc();
 
