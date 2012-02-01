@@ -301,11 +301,14 @@ inline vec16b x86_sse_dupb(const byte b) {
 }
 
 inline vec8w x86_sse_dupw(const W16 b) {
+  union {
+      vec8w v;
+      W32 wp[4];
+  } val;
+
   W32 w = (b << 16) | b;
-  vec8w v;
-  W32* wp = (W32*)&v;
-  wp[0] = w; wp[1] = w; wp[2] = w; wp[3] = w;
-  return v;
+  foreach(i, 4) { val.wp[i] = w; }
+  return val.v;
 }
 
 inline void x86_set_mxcsr(W32 value) { asm volatile("ldmxcsr %[value]" : : [value] "m" (value)); }

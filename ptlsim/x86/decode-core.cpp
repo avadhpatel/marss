@@ -1971,7 +1971,7 @@ bool assist_gp_fault(Context& ctx) {
 }
 
 bool TraceDecoder::invalidate() {
-    if likely ((rip - bb.rip) > valid_byte_count) {
+    if likely ((rip - bb.rip) > (W64)valid_byte_count) {
         //    // NOTE: contextof(0) is for debugging purposes only
         //    Level1PTE pte = contextof(0).virt_to_pte(ripstart);
         //    mfn_t mfn = (pte.p) ? pte.mfn : RIPVirtPhys::INVALID;
@@ -2202,7 +2202,7 @@ bool TraceDecoder::translate() {
     is_sse = 0;
     is_mmx = 0;
 
-    invalid |= ((rip - (Waddr)bb.rip) > valid_byte_count);
+    invalid |= ((rip - (Waddr)bb.rip) > (W64)valid_byte_count);
 
     if (invalid) {
         if(logable(5))
@@ -2264,8 +2264,8 @@ bool TraceDecoder::translate() {
     } else {
         // Block did not end with a branch: do we have more room for another x86 insn?
         if (// ((MAX_BB_UOPS - bb.count) < (MAX_TRANSOPS_PER_USER_INSN-2)) ||
-                ((rip - bb.rip) >= (insnbytes_bufsize-15)) ||
-                ((rip - bb.rip) >= valid_byte_count) ||
+                ((rip - bb.rip) >= (W64)(insnbytes_bufsize-15)) ||
+                ((rip - bb.rip) >= (W64)valid_byte_count) ||
                 (user_insn_count >= (W16)MAX_BB_X86_INSNS) ||
                 (rip == stop_at_rip)) {
             if (logable(5)) ptl_logfile << "Basic block ", (void*)(Waddr)bb.rip, " too long: cutting at ", bb.count, " transops (", transbufcount, " currently in buffer)", endl;
