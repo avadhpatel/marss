@@ -285,9 +285,9 @@ handle_cpuid_l3_cache_info = '''
                             l3_core_info |= ((NUMBER_OF_CORES - 1) << 26) &
                                 0xfc00000;
                             *eax = 0x163 | l3_core_info;
-                            *ebx = (%(L3_LINE_SIZE)d & 0xfff |
-                                    (%(L3_LINE_SIZE)d << 12) & 0x3ff000 |
-                                    (%(L3_WAY_COUNT)d << 22) & 0xffc00000 );
+                            *ebx = ((%(L3_LINE_SIZE)d & 0xfff) |
+                                    ((%(L3_LINE_SIZE)d << 12) & 0x3ff000) |
+                                    ((%(L3_WAY_COUNT)d << 22) & 0xffc00000) );
                             *ecx = %(L3_SET_COUNT)d;
                             *edx = 0x1;
                             break;
