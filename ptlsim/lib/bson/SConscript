@@ -8,7 +8,17 @@ import sys
 # Import envrionment
 Import('env')
 
-bson_env = env.Clone()
+bson_env = Environment()
+
+pretty_printing=ARGUMENTS.get('pretty',1)
+
+bson_env['CC'] = env['CC']
+
+if int(pretty_printing):
+    bson_env['CCCOMSTR'] = env['CCCOMSTR']
+    bson_env['RANLIBCOMSTR'] = env['RANLIBCOMSTR']
+    bson_env['ARCOMSTR'] = env['ARCOMSTR']
+
 bson_env.Append(CCFLAGS = '-x c')
 bson_env.Append(CCFLAGS = '-DMONGO_HAVE_STDINT')
 env.Append(CCFLAGS = '-DMONGO_HAVE_STDINT')

@@ -425,6 +425,7 @@ class Stats {
         Stats& operator=(Stats& rhs_stats)
         {
             memcpy(mem, rhs_stats.mem, sizeof(W8) * STATS_SIZE);
+            return *this;
         }
 };
 
@@ -509,6 +510,7 @@ class StatObjBase {
 
                 delete full_string;
             }
+            return os;
         }
 
         virtual ostream& dump_summary(ostream& os, Stats* stats, const char* pfx) const = 0;
@@ -1252,7 +1254,7 @@ class StatString : public StatObjBase {
 
     public:
 
-        static const int MAX_STAT_STR_SIZE = 256;
+        static const uint16_t MAX_STAT_STR_SIZE = 256;
 
         /**
          * @brief Default constructor

@@ -108,8 +108,6 @@ bool TraceDecoder::decode_sse() {
 
     EndOfDecode();
 
-    int destreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
-
     // XXXss: 0x2xx 00
     // XXXps: 0x3xx 01
     // XXXsd: 0x4xx 10
@@ -117,7 +115,6 @@ bool TraceDecoder::decode_sse() {
 
     byte sizetype = (op >> 8) - 2; // put into 0x{2-5}00 -> 2-5 range, then set to 0-3 range
     bool packed = bit(sizetype, 0);
-    bool dp = bit(sizetype, 1);
 
     static const byte opcode_to_uop[16] = {OP_nop, OP_fsqrt, OP_frsqrt, OP_frcp, OP_and, OP_andnot, OP_or, OP_xor, OP_fadd, OP_fmul, OP_nop, OP_nop, OP_fsub, OP_fmin, OP_fdiv, OP_fmax};
 
@@ -1162,7 +1159,7 @@ bool TraceDecoder::decode_sse() {
     int base2 = bits(imm.imm.imm, 2*2, 2) * 2;
     int base3 = bits(imm.imm.imm, 3*2, 2) * 2;
 
-    W32 ctl = MakePermuteControlInfo(base3+1, base3+0, base2+1, base2+0, base1+1, base1+0, base0+1, base0+0);
+    W32 ctl = MakePermuteControlInfo((base3+1), (base3+0), (base2+1), (base2+0), (base1+1), (base1+0), (base0+1), (base0+0));
 
     this << TransOp(OP_permb, rdreg + hi, rareg + hi, REG_zero, REG_imm, 3, 0, ctl);
     this << TransOp(OP_mov, rdreg + (!hi), REG_zero, rareg + (!hi), REG_zero, 3);
@@ -1218,7 +1215,7 @@ bool TraceDecoder::decode_sse() {
     case 0x32f: sizecode = 0; break;
     case 0x32e: sizecode = 1; break;
     case 0x52f: sizecode = 2; break;
-    case 0x52e: sizecode = 3; break;
+    default:    sizecode = 3; break;
     }
 
     //

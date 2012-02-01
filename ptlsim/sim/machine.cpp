@@ -16,10 +16,6 @@
 #include <statsBuilder.h>
 #include <memoryHierarchy.h>
 
-#include <ooo.h>
-
-#include <atomcore.h>
-
 #include <cstdarg>
 
 using namespace Core;
@@ -72,8 +68,6 @@ W8 BaseMachine::get_num_cores()
 
 bool BaseMachine::init(PTLsimConfig& config)
 {
-    int context_idx = 0;
-
     // At the end create a memory hierarchy
     memoryHierarchyPtr = new MemoryHierarchy(*this);
 
@@ -115,7 +109,6 @@ int BaseMachine::run(PTLsimConfig& config)
 
     // reset all cores for fresh start:
     foreach (cur_core, cores.count()){
-        BaseCore& core =* cores[cur_core];
         if(first_run) {
             cores[cur_core]->reset();
         }
@@ -149,7 +142,7 @@ int BaseMachine::run(PTLsimConfig& config)
 
         // limit the ptl_logfile size
         if unlikely (ptl_logfile.is_open() &&
-                (ptl_logfile.tellp() > config.log_file_size))
+                ((W64)ptl_logfile.tellp() > config.log_file_size))
             backup_and_reopen_logfile();
 
         memoryHierarchyPtr->clock();

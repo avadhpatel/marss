@@ -91,11 +91,11 @@ class Controller
 		W8 idx;
 
 		Controller(W8 coreid, const char *name,
-				MemoryHierarchy *memoryHierarchy) :
-			memoryHierarchy_(memoryHierarchy)
-			, idx(coreid)
-			, handle_request_("handle_request")
+				MemoryHierarchy *memoryHierarchy)
+			: handle_request_("handle_request")
 			, handle_interconnect_("handle_interconnect")
+			, memoryHierarchy_(memoryHierarchy)
+			, idx(coreid)
 		{
 			name_ << name;
 			isPrivate_ = false;

@@ -112,12 +112,13 @@ void MESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
             controller->wait_interconnect_cb(queueEntry);
             break;
         default:
-            memdebug("Invalid line state: ", oldState);
+            memdebug("Invalid line state: " << oldState);
             assert(0);
     }
 
-    if(newState != NO_MESI_STATES)
+    if(newState != NO_MESI_STATES) {
         UPDATE_MESI_TRANS_STATS(oldState, newState, kernel_req);
+    }
 }
 
 void MESILogic::handle_local_miss(CacheQueueEntry *queueEntry)
@@ -215,12 +216,13 @@ void MESILogic::handle_interconn_hit(CacheQueueEntry *queueEntry)
             }
             break;
         default:
-            memdebug("Invalid line state: ", oldState);
+            memdebug("Invalid line state: " << oldState);
             assert(0);
     }
 
-    if(newState != NO_MESI_STATES)
+    if(newState != NO_MESI_STATES) {
         UPDATE_MESI_TRANS_STATS(oldState, newState, kernel_req);
+    }
 
     /* send back the response */
     queueEntry->sendTo = queueEntry->sender;
@@ -284,7 +286,7 @@ void MESILogic::handle_cache_insert(CacheQueueEntry *queueEntry, W64 oldTag)
         } else if(type == MEMORY_OP_WRITE) {
             queueEntry->line->state = MESI_MODIFIED;
         } else {
-            ptl_logfile << "queueEntry : ", *queueEntry, endl;
+            ptl_logfile << "queueEntry : " << *queueEntry << endl;
             assert(0);
         }
     }
@@ -335,7 +337,7 @@ MESICacheLineState MESILogic::get_new_state(
     }
 
     if(type == MEMORY_OP_UPDATE) {
-        ptl_logfile << "Queueentry: ", *queueEntry, endl;
+        ptl_logfile << "Queueentry: " << *queueEntry << endl;
         assert(0);
     }
 
@@ -426,7 +428,7 @@ MESICacheLineState MESILogic::get_new_state(
             }
             break;
         default:
-            memdebug("Invalid line state: ", oldState);
+            memdebug("Invalid line state: " << oldState);
             assert(0);
     }
     UPDATE_MESI_TRANS_STATS(oldState, newState, kernel_req);

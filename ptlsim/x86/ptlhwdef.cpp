@@ -278,6 +278,21 @@ const char* arch_reg_names[TRANSREG_COUNT] = {
   "zf", "cf", "of", "imm", "mem", "tr8", "tr9", "tr10",
 };
 
+const char* branch_type_names[8] = {
+  "bru8",
+  "bru32",
+  "br8",
+  "br32",
+  "asist",
+  "split",
+  "rep",
+  "jmp"
+};
+
+const char* sizeshift_names[4] = {
+  "1 (byte)", "2 (word)", "4 (dword)", "8 (qword)"
+};
+
 bool Context::check_events() const {
 	if(exit_request)
 		return true;
@@ -368,7 +383,6 @@ stringbuf& operator <<(stringbuf& sb, const TransOpBase& op) {
   bool ld = isload(op.opcode);
   bool st = isstore(op.opcode);
   bool fp = (isclass(op.opcode, OPCLASS_FP_ALU));
-  bool br = isbranch(op.opcode);
 
   stringbuf sbname;
 
@@ -508,7 +522,7 @@ ostream& operator <<(ostream& os, const BasicBlock& bb) {
   os << ", uses ", bitstring(bb.usedregs, 64, true), "), ";
   os << bb.refcount, " refs, ", (void*)(Waddr)bb.rip_taken, " taken, ", (void*)(Waddr)bb.rip_not_taken, " not taken:", endl;
   Waddr rip = bb.rip;
-  int bytes_in_insn;
+  int bytes_in_insn = 0;
 
   foreach (i, bb.count) {
     const TransOp& transop = bb.transops[i];
@@ -687,7 +701,7 @@ ostream& operator <<(ostream& os, const Context& ctx) {
 	  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.regs[i], 64);
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
-  for(i; i < 48; i++) {
+  for(; i < 48; i++) {
       os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.get(i), 64);
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }

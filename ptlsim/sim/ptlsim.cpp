@@ -138,10 +138,10 @@ struct SimStats : public Statable
 
     SimStats()
         : Statable("simulator")
-          , tags("tags", this)
           , version(this)
           , run(this)
           , performance(this)
+          , tags("tags", this)
     {
         tags.set_split(",");
     }
@@ -466,7 +466,7 @@ void dump_yaml_stats()
 
 static void flush_stats()
 {
-    if(config.screenshot_file.buf != "") {
+    if(config.screenshot_file.set()) {
         qemu_take_screenshot((char*)config.screenshot_file);
     }
 
@@ -932,7 +932,7 @@ void execute_checker() {
     checker_context->exception_index = 0;
     W64 old_eip = checker_context->eip;
     int old_exception_index = checker_context->exception_index;
-    int ret;
+    int ret = 0;
     while(checker_context->eip == old_eip)
         ret = cpu_exec((CPUX86State*)checker_context);
 
@@ -953,8 +953,8 @@ void execute_checker() {
     in_simulation = 1;
 
     if(logable(4)) {
-        ptl_logfile << "Checker execution ret value: ", ret, endl;
-        ptl_logfile << "Checker flags: ", (void*)checker_context->eflags, endl;
+        ptl_logfile << "Checker execution ret value: " << ret << endl;
+        ptl_logfile << "Checker flags: " << (void*)checker_context->eflags << endl;
     }
 }
 
@@ -981,8 +981,8 @@ void compare_checker(W8 context_id, W64 flagmask) {
     bool fail = false;
     fail = (checker_context->eip != ptl_contexts[context_id]->eip);
 
-    W64 flag1 = checker_context->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
-    W64 flag2 = ptl_contexts[context_id]->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
+    //W64 flag1 = checker_context->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
+    //W64 flag2 = ptl_contexts[context_id]->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
     //fail |= (flag1 != flag2);
 
     if(ret != 0 || ret1 != 0 || ret_x87 != 0 || fail) {
@@ -1035,7 +1035,6 @@ void add_bson_PTLsimStats(PTLsimStats *stats, bson_buffer *bb, const char *snaps
 void write_mongo_stats() {
     bson *bout;
     bson_buffer *bb;
-    char numstr[4];
     mongo_connection conn[1];
     mongo_connection_options opts;
     const char *ns = "marss.benchmarks";
@@ -1067,7 +1066,7 @@ void write_mongo_stats() {
         switch(i) {
             case 0: stats_ = user_stats; break;
             case 1: stats_ = kernel_stats; break;
-            case 2: stats_ = global_stats; break;
+            default: stats_ = global_stats; break;
         }
 
         bb = (StatsBuilder::get()).dump(stats_, bb);
@@ -1342,7 +1341,7 @@ extern "C" void update_progress() {
   W64 ticks = rdtsc();
   W64s delta = (ticks - last_printed_status_at_ticks);
   if unlikely (delta < 0) delta = 0;
-  if unlikely (delta >= ticks_per_update) {
+  if unlikely (delta >= (W64s)ticks_per_update) {
     double seconds = ticks_to_seconds(delta);
     double cycles_per_sec = (sim_cycle - last_printed_status_at_cycle) / seconds;
     double insns_per_sec = (total_user_insns_committed - last_printed_status_at_user_insn) / seconds;

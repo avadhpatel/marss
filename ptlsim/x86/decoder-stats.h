@@ -70,12 +70,12 @@ struct DecoderStats : public Statable
     DecoderStats(Statable *parent)
         : Statable("decode", parent)
           , throughput(this)
+          , x86_decode_type("x86_decode_type", this, decode_type_names)
           , bb_decode_type(this)
           , page_crossings(this)
           , bbcache("bbcache", this)
           , pagecache("pagecache", this)
           , reclaim_rounds("reclaim_rounds", this)
-          , x86_decode_type("x86_decode_type", this, decode_type_names)
     { }
 };
 

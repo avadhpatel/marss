@@ -161,7 +161,7 @@ bool CPUController::is_icache_buffer_hit(MemoryRequest *request)
 int CPUController::access_fast_path(Interconnect *interconnect,
 		MemoryRequest *request)
 {
-	int fastPathLat ;
+	int fastPathLat = 0;
     bool kernel_req = request->is_kernel();
 
 	if(interconnect == NULL) {
@@ -180,7 +180,6 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 		}
 	}
 
-	// if(fastPathLat == 0 && request->is_instruction())
     if(fastPathLat == 0)
 		return 0;
 
