@@ -16,7 +16,7 @@ bool TraceDecoder::decode_sse() {
   is_sse = 1;
   prefixes &= ~PFX_LOCK;
 
-  switch ((W32)op) {
+  switch (op) {
     /*
       0x2xx   0xf3  OPss
       0x3xx   none  OPps
