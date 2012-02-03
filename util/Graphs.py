@@ -23,6 +23,7 @@ import matplotlib
 matplotlib.use("Agg"); #this gets reset later, but for now it prevents matplotlib from going into interactive mode
 import matplotlib.pyplot as plt
 import matplotlib.axes as ax
+import matplotlib.mlab as mlab
 import tempfile; 
 import pdb
 
@@ -308,6 +309,32 @@ class SingleGraph:
 		ax.set_xbound(self.x_axis_desc.range_min,self.x_axis_desc.range_max)
 
 		ax.set_title(self.title)
+
+class SimpleGraph:
+	def __init__(self, filename):
+		# First read the input file (csv format)
+		self.data = mlab.csv2rec(filename)
+
+	def draw(self, output_name, x, y_list):
+		plt.autoscale(True, 'both', True)
+		fig = plt.figure(figsize=(100,10), dpi=300)
+		lines = []
+		ax = fig.add_subplot(111)
+
+		for y in y_list:
+			ys = y.split(',')
+			l = None
+			if len(ys) > 1:
+				l = ys[1]
+			y = ys[0].replace('.','')
+			line, = ax.plot(self.data[x], self.data[y], '-', label=l)
+			lines.append(line)
+
+		ax.set_xlabel(x)
+		# handles, labels = ax.get_legend_handles_labels()
+		ax.legend()
+		plt.savefig(output_name, bbox_inches='tight')
+		plt.clf()
 
 class LinePlot:
 	def __init__(self,data_table,x_col,y_col,label,line_params=None):
