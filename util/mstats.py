@@ -25,6 +25,8 @@ except (ImportError, NotImplementedError):
     sys.path.append("%s/../ptlsim/lib/python" % a_path)
     import yaml
 
+import Graphs
+
 try:
     from yaml import CLoader as Loader
 except:
@@ -179,13 +181,54 @@ class YAMLReader(Readers):
 
     def read(self, options, args):
         """ Read yaml file if user give that option"""
-        if options.yaml_file:
+        if options.yaml_file == True:
             docs = []
             for yf in args:
                 l = lambda x: [ doc for doc in yaml.load_all(x, Loader=Loader)]
                 with open(yf, 'r') as st_f:
                     docs += self.load_yaml(st_f)
             return docs
+
+class TimeGraphRead(Readers):
+    """
+    Generate a graph from periodic stats dump file
+    """
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        parser.add_option("--time-stats", action="store_true", default="False",
+                help="Input time stats file")
+
+    def read(self, options, args):
+        if options.time_stats == True:
+            assert(len(args) == 1)
+            options.sg = Graphs.SimpleGraph(args[0])
+        else:
+            options.sg = None
+
+class TimeGraphGen(Writers):
+    def __init__(self):
+        pass
+
+    def set_options(self, parser):
+        parser.add_option("--time-col", type="string", action="append",
+                help="Label of column for creating graph, to add separate \
+                        title name use COL_NAME,TITLE_NAME format")
+        parser.add_option("--time-graph", type="string", default="time.png",
+                help="Output file name")
+        parser.add_option("--time-list-idx", action="store_true",
+                default="False", help="Print the column title and its index")
+
+    def write(self, stats, options):
+        if options.sg and options.time_list_idx == True:
+            print("Id\tTitle")
+            i = 0
+            for dt in options.sg.data.dtype.names:
+                print("%d\t%s" % (i, dt))
+                i += 1
+        elif options.sg:
+            options.sg.draw(options.time_graph, "sim_cycle", options.time_col)
 
 class TagFilter(Filters):
     """
