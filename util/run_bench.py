@@ -54,6 +54,8 @@ opt_parser.add_option("-e", "--email", action="store_true",
         help="Send email using 'send_gmail.py' script after completion")
 opt_parser.add_option("-i", "--iterate", action="store", default=1, type=int,
         help="Run simulation N times")
+opt_parser.add_option("-n", "--num-insts", dest="num_insts", default=1,
+        type=int, help="Run N instance of simulations in parallel")
 
 (options, args) = opt_parser.parse_args()
 
@@ -151,7 +153,10 @@ qemu_args = ''
 if conf_parser.has_option(run_sec, 'qemu_args'):
     qemu_args = conf_parser.get(run_sec, 'qemu_args')
 
-num_threads = min(len(qemu_img), len(check_list))
+if 'snapshot' not in qemu_args:
+    qemu_args = '%s -snapshot' % qemu_args
+
+num_threads = min(int(options.num_insts), len(check_list))
 
 # If user give argument 'out' then print the output of simulation run
 # to stdout else ignore it
@@ -161,6 +166,7 @@ checkpoint_lock = Lock()
 checkpoint_iter = itertools.product(output_dirs, check_list)
 
 print("Chekcpoints to run: %s" % str(check_list))
+print("%d parallel simulation instances will be run." % num_threads)
 print("All files will be saved in: %s" % output_dir)
 
 def pty_to_stdout(fd, untill_chr):
@@ -335,7 +341,7 @@ class RunSim(Thread):
 threads = []
 
 for i in range(num_threads):
-    th = RunSim(qemu_img[i])
+    th = RunSim(qemu_img[0])
     threads.append(th)
     th.start()
 
