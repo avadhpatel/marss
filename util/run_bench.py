@@ -176,6 +176,14 @@ def pty_to_stdout(fd, untill_chr):
         sys.stdout.write(chr)
     sys.stdout.flush()
 
+def gen_simconfig(args):
+    global simconfig
+    gen_cfg = simconfig
+    recursive_count = 0
+    while '%' in gen_cfg or recursive_count > 10:
+        gen_cfg = gen_cfg % args
+        recursive_count += 1
+    return gen_cfg
 
 # Thread class that will store the output on the serial port of qemu to file
 class SerialOut(Thread):
@@ -276,8 +284,9 @@ class RunSim(Thread):
             config_args = copy.copy(conf_parser.defaults())
             config_args['out_dir'] = os.path.realpath(output_dir)
             config_args['bench'] = checkpoint
-            print("simconfig: %s" % simconfig)
-            sim_file_cmd.write(simconfig % config_args)
+            t_simconfig = gen_simconfig(config_args)
+            print("simconfig: %s" % t_simconfig)
+            sim_file_cmd.write(t_simconfig)
             sim_file_cmd.write("\n")
             sim_file_cmd.close()
             print("Config file written")
