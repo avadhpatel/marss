@@ -273,9 +273,9 @@ int BaseMachine::run(PTLsimConfig& config)
         sim_cycle++;
         iterations++;
 
-        if unlikely (config.stop_at_user_insns <= total_user_insns_committed ||
+        if unlikely (config.stop_at_insns <= total_insns_committed ||
                 config.stop_at_cycle <= sim_cycle) {
-            ptl_logfile << "Stopping simulation loop at specified limits (", sim_cycle, " cycles, ", total_user_insns_committed, " commits)", endl;
+            ptl_logfile << "Stopping simulation loop at specified limits (", sim_cycle, " cycles, ", total_insns_committed, " commits)", endl;
             exiting = 1;
             break;
         }
@@ -287,7 +287,7 @@ int BaseMachine::run(PTLsimConfig& config)
     }
 
     if(logable(1))
-        ptl_logfile << "Exiting out-of-order core at ", total_user_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
+        ptl_logfile << "Exiting out-of-order core at ", total_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
 
     config.dump_state_now = 0;
 

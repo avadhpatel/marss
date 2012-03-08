@@ -565,7 +565,7 @@ finish:
     return ret_addr;
 }
 
-int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec) {
+int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec) {
 
     if (source == 0) {
         return -1;
@@ -1449,6 +1449,10 @@ void set_next_simpoint(CPUX86State* ctx)
     ctx->simpoint_decr = (point - total_simpoint_inst_complted);
     total_simpoint_inst_complted = point;
     tb_flush(ctx);
+
+    if (ctx->simpoint_decr == 0 && get_simpoint(simpoint_ctr) == 0) {
+        ptl_simpoint_reached(ctx->cpu_index);
+    }
 }
 
 stringbuf* get_simpoint_chk_name()

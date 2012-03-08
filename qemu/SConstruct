@@ -58,7 +58,7 @@ qemu_prog_name = "qemu-system-%s" % target['arch']
 # Set helper CFLAGS
 HELPER_CFLAGS = ""
 if target['arch'] == "i386":
-    HELPER_CLFAGS += " -fomit-frame-pointer"
+    HELPER_CFLAGS += " -fomit-frame-pointer"
 
 env.Append(CPPFLAGS = "-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 \
         -D_LARGEFILE_SOURCE")

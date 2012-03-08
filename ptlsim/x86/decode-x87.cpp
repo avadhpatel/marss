@@ -169,7 +169,7 @@ bool assist_x87_fld80(Context& ctx) {
     X87Reg data;
     PageFaultErrorCode pfec;
     Waddr faultaddr = 0;
-    int bytes = ctx.copy_from_user(data, addr, sizeof(X87Reg), pfec, faultaddr, false);
+    int bytes = ctx.copy_from_vm(data, addr, sizeof(X87Reg), pfec, faultaddr, false);
 
     if (bytes < (int)sizeof(X87Reg) || faultaddr != 0) {
         ctx.eip = ctx.reg_selfrip;
@@ -425,7 +425,7 @@ void check_warned_about_x87() {
     sb << endl,
       "//", endl,
       "// NOTE: This program is using a lot of legacy x87 floating point", endl,
-      "// at ", total_user_insns_committed, " commits, ", sim_cycle, " cycles.", endl,
+      "// at ", total_insns_committed, " commits, ", sim_cycle, " cycles.", endl,
       "// PTLsim executes x87 code very sub-optimally: it is HIGHLY recommended", endl,
       "// that you recompile the program with SSE/SSE2 support and/or update", endl,
       "// the standard libraries (libc, libm) to an SSE/SSE2-specific version.", endl,

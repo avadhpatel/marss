@@ -430,7 +430,14 @@ int CacheController::access_fast_path(Interconnect *interconnect,
         MemoryRequest *request)
 {
     memdebug("Accessing Cache " << get_name() << " : Request: " << *request << endl);
-    CacheLine *line	= cacheLines_->probe(request);
+    CacheLine *line	= NULL;
+
+    if (find_dependency(request) != NULL) {
+        return -1;
+    }
+
+    if (request->get_type() != MEMORY_OP_WRITE)
+        line = cacheLines_->probe(request);
 
     /*
      * if its a write, dont do fast access as the lower

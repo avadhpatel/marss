@@ -12,6 +12,7 @@ bson_env = Environment()
 
 pretty_printing=ARGUMENTS.get('pretty',1)
 
+bson_env['ENV'] = env['ENV']
 bson_env['CC'] = env['CC']
 
 if int(pretty_printing):
