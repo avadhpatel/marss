@@ -1251,8 +1251,6 @@ namespace OOO_CORE_MODEL {
         W8 get_coreid() { return coreid; }
     };
 
-#define MAX_SMT_CORES 8
-
     /* Checker - saved stores to compare after executing emulated instruction */
     struct CheckStores {
       W64 virtaddr;

@@ -367,7 +367,14 @@ int CacheController::access_fast_path(Interconnect *interconnect,
 		MemoryRequest *request)
 {
 	memdebug("Accessing Cache " << get_name() << " : Request: " << *request << endl);
-	bool hit = cacheLines_->probe(request);
+	bool hit = false;
+
+    if (find_dependency(request) != NULL) {
+        return -1;
+    }
+
+    if (request->get_type() != MEMORY_OP_WRITE)
+        hit = cacheLines_->probe(request);
 
 	// TESTING
     //	hit = true;
