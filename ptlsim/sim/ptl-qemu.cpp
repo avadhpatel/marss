@@ -564,7 +564,7 @@ finish:
     return ret_addr;
 }
 
-int Context::copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec) {
+int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec) {
 
     if (source == 0) {
         return -1;

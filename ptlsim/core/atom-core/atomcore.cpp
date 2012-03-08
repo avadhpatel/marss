@@ -2655,7 +2655,7 @@ bool AtomThread::commit_queue()
         st_commit.uops += buf.op->num_uops_used;
 
         if(buf.op->eom || commit_result == COMMIT_BARRIER) {
-            total_user_insns_committed++;
+            total_insns_committed++;
             st_commit.insns++;
             break;
         }

@@ -1648,16 +1648,16 @@ void TraceDecoder::split(bool after) {
 
 void print_invalid_insns(int op, const byte* ripstart, const byte* rip, int valid_byte_count, const PageFaultErrorCode& pfec, Waddr faultaddr) {
     if (pfec) {
-        if (logable(4)) ptl_logfile << "translate: page fault at iteration ", iterations, ", ", total_user_insns_committed, " commits: ",
+        if (logable(4)) ptl_logfile << "translate: page fault at iteration ", iterations, ", ", total_insns_committed, " commits: ",
             "ripstart ", ripstart, ", rip ", rip, ": required ", (rip - ripstart), " more bytes but only fetched ", valid_byte_count, " bytes; ",
                 "page fault error code: ", pfec, endl, flush;
     } else {
-        if (logable(4)) ptl_logfile << "translate: invalid opcode at iteration ", iterations, ": ", (void*)(Waddr)op, " commits ", total_user_insns_committed, " (at ripstart ", ripstart, ", rip ", rip, "); may be speculative", endl, flush;
+        if (logable(4)) ptl_logfile << "translate: invalid opcode at iteration ", iterations, ": ", (void*)(Waddr)op, " commits ", total_insns_committed, " (at ripstart ", ripstart, ", rip ", rip, "); may be speculative", endl, flush;
 #if 0
         if (!config.dumpcode_filename.empty()) {
             byte insnbuf[256];
             PageFaultErrorCode copypfec;
-            int valid_byte_count = contextof(0).copy_from_user(insnbuf, (Waddr)rip, sizeof(insnbuf), copypfec, faultaddr);
+            int valid_byte_count = contextof(0).copy_from_vm(insnbuf, (Waddr)rip, sizeof(insnbuf), copypfec, faultaddr);
             odstream os(config.dumpcode_filename);
             os.write(insnbuf, sizeof(insnbuf));
             os.close();
@@ -1795,7 +1795,7 @@ int BasicBlockCache::reclaim(size_t bytesreq, int urgency) {
 
     if (!count) return 0;
 
-    if (DEBUG) ptl_logfile << "Reclaiming cached basic blocks at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits:", endl;
+    if (DEBUG) ptl_logfile << "Reclaiming cached basic blocks at ", sim_cycle, " cycles, ", total_insns_committed, " commits:", endl;
 
     if (DECODERSTAT)
         DECODERSTAT->reclaim_rounds++;
@@ -1912,7 +1912,7 @@ int BasicBlockCache::reclaim(size_t bytesreq, int urgency) {
 void BasicBlockCache::flush(int8_t context_id) {
 
     if (logable(1))
-        ptl_logfile << "Flushing basic block cache at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits:", endl;
+        ptl_logfile << "Flushing basic block cache at ", sim_cycle, " cycles, ", total_insns_committed, " commits:", endl;
 
     if (DECODERSTAT)
         DECODERSTAT->reclaim_rounds++;
@@ -2126,7 +2126,7 @@ int TraceDecoder::fillbuf(Context& ctx, byte* insnbytes, int insnbytes_bufsize) 
     faultaddr = 0;
     pfec = 0;
     invalid = 0;
-    valid_byte_count = ctx.copy_from_user(insnbytes, bb.rip, insnbytes_bufsize, pfec, faultaddr, true);
+    valid_byte_count = ctx.copy_from_vm(insnbytes, bb.rip, insnbytes_bufsize, pfec, faultaddr, true);
     return valid_byte_count;
 }
 
@@ -2339,7 +2339,7 @@ BasicBlock* BasicBlockCache::translate(Context& ctx, const RIPVirtPhys& rvp) {
     }
 
     if (logable(10) | log_code_page_ops) {
-        ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;
+        ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl;
         ptl_logfile << "Instruction Buffer: 64[", trans.use64, "] \n";
         foreach(i, (int)sizeof(insnbuf)) {
             ptl_logfile << hexstring(insnbuf[i], 8), " ";
@@ -2457,7 +2457,7 @@ void BasicBlockCache::translate_in_place(BasicBlock& targetbb, Context& ctx, Wad
     trans.fillbuf(ctx, insnbuf, sizeof(insnbuf));
 
     if (logable(5) | log_code_page_ops) {
-        ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;
+        ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl;
     }
 
     for (;;) {
@@ -2492,7 +2492,7 @@ BasicBlock* BasicBlockCache::translate_and_clone(Context& ctx, Waddr rip) {
     trans.fillbuf(ctx, insnbuf, sizeof(insnbuf));
 
     if (logable(5) | log_code_page_ops) {
-        ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl;
+        ptl_logfile << "Translating ", rvp, " (", trans.valid_byte_count, " bytes valid) at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl;
     }
 
     for (;;) {

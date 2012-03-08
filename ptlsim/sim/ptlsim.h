@@ -24,11 +24,6 @@
 
 #define contextcount smp_cpus
 
-extern W64 sim_cycle;
-extern W64 unhalted_cycle_count;
-extern W64 total_uops_committed;
-extern W64 total_user_insns_committed;
-
 void user_process_terminated(int rc);
 
 ostream& print_user_context(ostream& os, const UserContext& ctx, int width = 4);
@@ -172,7 +167,7 @@ extern W64 user_insn_commits;
 extern W64 iterations;
 extern W64 total_uops_executed;
 extern W64 total_uops_committed;
-extern W64 total_user_insns_committed;
+extern W64 total_insns_committed;
 extern W64 total_basic_blocks_committed;
 
 // #define TRACE_RIP
@@ -226,14 +221,14 @@ struct PTLsimConfig {
   bool use_memory_model;
 
   // Stopping Point
-  W64 stop_at_user_insns;
+  W64 stop_at_insns;
   W64 stop_at_cycle;
   W64 stop_at_iteration;
   W64 stop_at_rip;
   W64 stop_at_marker;
   W64 stop_at_marker_hits;
   W64 insns_in_last_basic_block;
-  W64 stop_at_user_insns_relative;
+  W64 stop_at_insns_relative;
   W64 flush_interval;
   bool kill_after_run;
 

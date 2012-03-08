@@ -741,7 +741,7 @@ bool OooCore::runcycle() {
         switch (rc) {
             case COMMIT_RESULT_SMC:
                 {
-                    if (logable(3)) ptl_logfile << "Potentially cross-modifying SMC detected: global flush required (cycle ", sim_cycle, ", ", total_user_insns_committed, " commits)", endl, flush;
+                    if (logable(3)) ptl_logfile << "Potentially cross-modifying SMC detected: global flush required (cycle ", sim_cycle, ", ", total_insns_committed, " commits)", endl, flush;
                     //
                     // DO NOT GLOBALLY FLUSH! It will cut off the other thread(s) in the
                     // middle of their currently committing x86 instruction, causing massive
@@ -847,7 +847,7 @@ bool OooCore::runcycle() {
         if (logable(9)) {
             stringbuf sb;
             sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
-               sim_cycle, ", ", total_user_insns_committed,  " user commits: ",
+               sim_cycle, ", ", total_insns_committed,  " user commits: ",
                (sim_cycle - thread->last_commit_at_cycle), " cycles;", endl;
             ptl_logfile << sb, flush;
         }
@@ -860,7 +860,7 @@ bool OooCore::runcycle() {
         if unlikely ((sim_cycle - thread->last_commit_at_cycle) > (W64)1024*1024*threadcount) {
             stringbuf sb;
             sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
-               sim_cycle, ", ", total_user_insns_committed,  " user commits: no instructions have committed for ",
+               sim_cycle, ", ", total_insns_committed,  " user commits: no instructions have committed for ",
                (sim_cycle - thread->last_commit_at_cycle), " cycles; the pipeline could be deadlocked", endl;
             ptl_logfile << sb, flush;
             cerr << sb, flush;
@@ -1233,7 +1233,7 @@ bool ThreadContext::handle_barrier() {
     if (logable(1)) {
         ptl_logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
                     (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
-                    ") at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
+                    ") at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl, flush;
     }
 
     if (logable(6)) ptl_logfile << "Calling assist function at ", (void*)assist, "...", endl, flush;
@@ -1274,7 +1274,7 @@ bool ThreadContext::handle_exception() {
 
     if (logable(4)) {
         ptl_logfile << "[vcpu ", ctx.cpu_index, "] Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip,
-                    " at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
+                    " at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl, flush;
     }
 
     //
@@ -1373,7 +1373,7 @@ bool ThreadContext::handle_interrupt() {
     if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline.",endl;
 
     if (logable(6)) {
-        ptl_logfile << "[vcpu ", threadid, "] interrupts pending at ", sim_cycle, " cycles, ", total_user_insns_committed, " commits", endl, flush;
+        ptl_logfile << "[vcpu ", threadid, "] interrupts pending at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl, flush;
         ptl_logfile << "Context at interrupt:", endl;
         ptl_logfile << ctx;
         ptl_logfile.flush();
