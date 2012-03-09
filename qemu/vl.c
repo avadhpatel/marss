@@ -3184,9 +3184,7 @@ int main(int argc, char **argv, char **envp)
     os_setup_post();
 
 #ifdef MARSS_QEMU
-    if (simpoint_enabled) {
-        set_next_simpoint(first_cpu);
-    }
+    ptl_qemu_initialized();
 #endif
 
     main_loop();

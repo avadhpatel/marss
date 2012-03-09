@@ -179,6 +179,7 @@ void PTLsimConfig::reset() {
   time_stats_period = 10000;
 
   start_at_rip = INVALIDRIP;
+  fast_fwd_insns = 0;
 
   // memory model
   use_memory_model = 0;
@@ -270,6 +271,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(time_stats_period,            "time-stats-period",    "Frequency of capturing time-stats (in cycles)");
   section("Trace Start/Stop Point");
   add(start_at_rip,                 "startrip",             "Start at rip <startrip>");
+  add(fast_fwd_insns,               "fast-fwd-insns",       "Fast Fwd each CPU by <N> instructions");
   add(stop_at_insns,                "stopinsns",            "Stop after executing <stopinsns> user instructions");
   add(stop_at_cycle,                "stopcycle",            "Stop after <stop> cycles");
   add(stop_at_iteration,            "stopiter",             "Stop after <stop> iterations (does not apply to cycle-accurate cores)");
@@ -516,7 +518,7 @@ static void kill_simulation()
     ptl_quit();
 }
 
-bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
+bool handle_config_change(PTLsimConfig& config) {
   static bool first_time = true;
 
   if (config.log_filename.set() && (config.log_filename != current_log_filename)) {
@@ -568,6 +570,15 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
   config.start_at_rip = signext64(config.start_at_rip, 48);
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif
+
+  if (config.fast_fwd_insns && qemu_initialized) {
+      set_cpu_fast_fwd();
+  }
+
+  if (config.run && config.fast_fwd_insns > 0) {
+      /* Disable run untill cpus are fast-forwarded */
+      config.run = 0;
+  }
 
   if(config.run && !config.kill && !config.stop) {
 	  start_simulation = 1;
@@ -755,17 +766,21 @@ PTLsimMachine* PTLsimMachine::getcurrent() {
   return curr_ptl_machine;
 }
 
-void ptl_reconfigure(char* config_str) {
+void ptl_reconfigure(const char* config_str) {
 
-	char* argv[1]; argv[0] = config_str;
+	char* argv;
 
 	if(config_str == NULL || strlen(config_str) == 0) {
 		print_usage();
 		return;
 	}
 
-	configparser.parse(config, config_str);
-	handle_config_change(config, 1, argv);
+    argv = (char*)(qemu_malloc((strlen(config_str)+1) * sizeof(char)));
+    strcpy(argv, config_str);
+    argv[strlen(config_str)] = '\0';
+
+	configparser.parse(config, argv);
+	handle_config_change(config);
 	ptl_logfile << "Configuration changed: ", config, endl;
 
     if (config.sync_interval && sem_id == -1) {
@@ -777,6 +792,8 @@ void ptl_reconfigure(char* config_str) {
 	 * new configured machine
      */
 	curr_ptl_machine = NULL;
+
+    qemu_free(argv);
 }
 
 extern "C" void ptl_machine_configure(const char* config_str_) {
