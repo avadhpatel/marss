@@ -1432,14 +1432,14 @@ static void main_loop(void)
                 vm_start();
             }
 
+            ptl_check_ptlcall_queue();
+
             if (start_simulation) {
                 cpu_set_sim_ticks();
                 in_simulation = 1;
                 start_simulation = 0;
                 tb_flush(first_cpu);
             }
-
-            ptl_check_ptlcall_queue();
 #endif
 #ifdef CONFIG_PROFILER
             int64_t ti;
