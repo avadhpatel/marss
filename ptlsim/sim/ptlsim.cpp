@@ -1340,6 +1340,7 @@ extern "C" uint8_t ptl_simulate() {
 	}
 
     machine->first_run = 1;
+    sim_update_clock_offset = 1;
 
     if(config.stop) {
         config.stop = false;

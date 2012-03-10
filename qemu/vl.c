@@ -3170,6 +3170,10 @@ int main(int argc, char **argv, char **envp)
         }
     }
 
+#ifdef MARSS_QEMU
+    ptl_qemu_initialized();
+#endif
+
     if (incoming) {
         int ret = qemu_start_incoming_migration(incoming);
         if (ret < 0) {
@@ -3182,10 +3186,6 @@ int main(int argc, char **argv, char **envp)
     }
 
     os_setup_post();
-
-#ifdef MARSS_QEMU
-    ptl_qemu_initialized();
-#endif
 
     main_loop();
     quit_timers();

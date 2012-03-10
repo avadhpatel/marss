@@ -1415,6 +1415,8 @@ void init_simpoints()
  */
 int ptl_fast_fwd_enabled = 0;
 
+uint8_t sim_update_clock_offset = 1;
+
 /**
  * @brief Set CPU's simpoint_decr count to fast-forward simulation mode
  */
@@ -1593,4 +1595,12 @@ void ptl_qemu_initialized(void)
     }
 
     set_cpu_fast_fwd();
+
+    if (config.run) {
+        /* If we are going to run simulations immediately then we set
+         * simulation clock offset before QEMU updates offset with
+         * current clock values. */
+        cpu_set_sim_ticks();
+        sim_update_clock_offset = 0;
+    }
 }

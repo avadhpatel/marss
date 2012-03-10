@@ -219,6 +219,11 @@ uint64_t get_sim_cpu_freq(void);
 extern int simpoint_enabled;
 
 /**
+ * @brief Update simulation clock offset if set
+ */
+extern uint8_t sim_update_clock_offset;
+
+/**
  * @brief Simpoint is reached in emulation mode
  *
  * @param cpuid CPU Context id where simpoint is reached

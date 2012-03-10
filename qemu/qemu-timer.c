@@ -163,10 +163,19 @@ void cpu_disable_ticks(void)
 
 void cpu_set_sim_ticks(void)
 {
-    timers_state.cpu_sim_ticks_offset = timers_state.cpu_ticks_offset +
-        cpu_get_real_ticks();
-    timers_state.cpu_sim_clock_offset = timers_state.cpu_clock_offset +
-        get_clock();
+    if (sim_update_clock_offset == 1) {
+        if (timers_state.cpu_ticks_enabled) {
+            timers_state.cpu_sim_ticks_offset = timers_state.cpu_ticks_offset +
+                cpu_get_real_ticks();
+            timers_state.cpu_sim_clock_offset = timers_state.cpu_clock_offset +
+                get_clock();
+        } else {
+            timers_state.cpu_sim_ticks_offset = timers_state.cpu_ticks_offset;
+            timers_state.cpu_sim_clock_offset = timers_state.cpu_clock_offset;
+        }
+        /* Disable offset update until simulation mode set this flag */
+        sim_update_clock_offset = 0;
+    }
 }
 
 static int64_t cpu_get_sim_clock(void)
