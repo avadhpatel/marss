@@ -728,7 +728,8 @@ int cpu_exec(CPUState *env)
                 /* execute the generated code */
                     next_tb = tcg_qemu_tb_exec(env, tc_ptr);
 #ifdef MARSS_QEMU
-                    if (((next_tb & 3) == 2) && simpoint_enabled) {
+                    if (((next_tb & 3) == 2) &&
+                            (ptl_fast_fwd_enabled || simpoint_enabled)) {
                         tb = (TranslationBlock *)(long)(next_tb & ~3);
                         /* Restore PC.  */
                         cpu_pc_from_tb(env, tb);

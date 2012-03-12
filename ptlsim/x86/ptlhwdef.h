@@ -903,7 +903,7 @@ struct Context: public CPUX86State {
 	  return eip;
   }
 
-  int copy_from_user(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = true) ;
+  int copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = true) ;
 
   CPUTLBEntry* get_tlb_entry(Waddr virtaddr) {
 	  int mmu_idx = cpu_mmu_index((CPUX86State*)this);
@@ -925,7 +925,7 @@ struct Context: public CPUX86State {
     return 0;
   }
 
-  int copy_from_user(void* target, Waddr source, int bytes) ;
+  int copy_from_vm(void* target, Waddr source, int bytes) ;
 
   W64 loadvirt(Waddr virtaddr, int sizeshift=3);
   W64 loadphys(Waddr addr, bool internal=0, int sizeshift=3);

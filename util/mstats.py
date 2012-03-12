@@ -25,7 +25,11 @@ except (ImportError, NotImplementedError):
     sys.path.append("%s/../ptlsim/lib/python" % a_path)
     import yaml
 
-import Graphs
+try:
+    import Graphs
+    graphs_supported = True
+except (ImportError, NotImplementedError):
+    graphs_supported = False
 
 try:
     from yaml import CLoader as Loader
@@ -194,14 +198,17 @@ class TimeGraphRead(Readers):
     Generate a graph from periodic stats dump file
     """
     def __init__(self):
-        pass
+        global graphs_supported
+        self.enabled = graphs_supported
 
     def set_options(self, parser):
+        if self.enabled == False:
+            return
         parser.add_option("--time-stats", action="store_true", default="False",
                 help="Input time stats file")
 
     def read(self, options, args):
-        if options.time_stats == True:
+        if self.enabled and options.time_stats == True:
             assert(len(args) == 1)
             options.sg = Graphs.SimpleGraph(args[0])
         else:
@@ -209,9 +216,13 @@ class TimeGraphRead(Readers):
 
 class TimeGraphGen(Writers):
     def __init__(self):
-        pass
+        global graphs_supported
+        self.enabled = graphs_supported
 
     def set_options(self, parser):
+        if not self.enabled:
+            return
+
         parser.add_option("--time-col", type="string", action="append",
                 help="Label of column for creating graph, to add separate \
                         title name use COL_NAME,TITLE_NAME format")
@@ -221,7 +232,7 @@ class TimeGraphGen(Writers):
                 default="False", help="Print the column title and its index")
 
     def write(self, stats, options):
-        if options.sg and options.time_list_idx == True:
+        if self.enabled and options.sg and options.time_list_idx == True:
             print("Id\tTitle")
             i = 0
             for dt in options.sg.data.dtype.names:

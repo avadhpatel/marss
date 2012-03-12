@@ -2142,7 +2142,7 @@ int ReorderBufferEntry::commit() {
     }
 
     if likely (uop.eom) {
-        total_user_insns_committed++;
+        total_insns_committed++;
         thread.thread_stats.commit.insns++;
         thread.total_insns_committed++;
 
@@ -2176,7 +2176,7 @@ int ReorderBufferEntry::commit() {
     }
 
     if unlikely (uop_is_eom & thread.stop_at_next_eom) {
-        ptl_logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_user_insns_committed, " commits)", endl;
+        ptl_logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_insns_committed, " commits)", endl;
         return COMMIT_RESULT_STOP;
     }
 

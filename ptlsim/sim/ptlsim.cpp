@@ -57,11 +57,11 @@ W64 unhalted_cycle_count = 0;
 W64 iterations = 0;
 W64 total_uops_executed = 0;
 W64 total_uops_committed = 0;
-W64 total_user_insns_committed = 0;
+W64 total_insns_committed = 0;
 W64 total_basic_blocks_committed = 0;
 
 W64 last_printed_status_at_ticks;
-W64 last_printed_status_at_user_insn;
+W64 last_printed_status_at_insn;
 W64 last_printed_status_at_cycle;
 W64 ticks_per_update;
 
@@ -179,17 +179,18 @@ void PTLsimConfig::reset() {
   time_stats_period = 10000;
 
   start_at_rip = INVALIDRIP;
+  fast_fwd_insns = 0;
 
   // memory model
   use_memory_model = 0;
   kill_after_run = 0;
-  stop_at_user_insns = infinity;
+  stop_at_insns = infinity;
   stop_at_cycle = infinity;
   stop_at_iteration = infinity;
   stop_at_rip = INVALIDRIP;
   stop_at_marker = infinity;
   stop_at_marker_hits = infinity;
-  stop_at_user_insns_relative = infinity;
+  stop_at_insns_relative = infinity;
   insns_in_last_basic_block = 65536;
   flush_interval = infinity;
   event_trace_record_filename.reset();
@@ -270,13 +271,14 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(time_stats_period,            "time-stats-period",    "Frequency of capturing time-stats (in cycles)");
   section("Trace Start/Stop Point");
   add(start_at_rip,                 "startrip",             "Start at rip <startrip>");
-  add(stop_at_user_insns,           "stopinsns",            "Stop after executing <stopinsns> user instructions");
+  add(fast_fwd_insns,               "fast-fwd-insns",       "Fast Fwd each CPU by <N> instructions");
+  add(stop_at_insns,                "stopinsns",            "Stop after executing <stopinsns> user instructions");
   add(stop_at_cycle,                "stopcycle",            "Stop after <stop> cycles");
   add(stop_at_iteration,            "stopiter",             "Stop after <stop> iterations (does not apply to cycle-accurate cores)");
   add(stop_at_rip,                  "stoprip",              "Stop before rip <stoprip> is translated for the first time");
   add(stop_at_marker,               "stop-at-marker",       "Stop after PTLCALL_MARKER with marker X");
   add(stop_at_marker_hits,          "stop-at-marker-hits",  "Stop after PTLCALL_MARKER is called N times");
-  add(stop_at_user_insns_relative,  "stopinsns-rel",        "Stop after executing <stopinsns-rel> user instructions relative to start of current run");
+  add(stop_at_insns_relative,       "stopinsns-rel",        "Stop after executing <stopinsns-rel> user instructions relative to start of current run");
   add(insns_in_last_basic_block,    "bbinsns",              "In final basic block, only translate <bbinsns> user instructions");
   add(flush_interval,               "flushevery",           "Flush the pipeline every N committed instructions");
   add(kill_after_run,               "kill-after-run",       "Kill PTLsim after this run");
@@ -516,7 +518,7 @@ static void kill_simulation()
     ptl_quit();
 }
 
-bool handle_config_change(PTLsimConfig& config, int argc, char** argv) {
+bool handle_config_change(PTLsimConfig& config) {
   static bool first_time = true;
 
   if (config.log_filename.set() && (config.log_filename != current_log_filename)) {
@@ -568,6 +570,15 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
   config.start_at_rip = signext64(config.start_at_rip, 48);
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif
+
+  if (config.fast_fwd_insns && qemu_initialized) {
+      set_cpu_fast_fwd();
+  }
+
+  if (config.run && config.fast_fwd_insns > 0) {
+      /* Disable run untill cpus are fast-forwarded */
+      config.run = 0;
+  }
 
   if(config.run && !config.kill && !config.stop) {
 	  start_simulation = 1;
@@ -755,17 +766,21 @@ PTLsimMachine* PTLsimMachine::getcurrent() {
   return curr_ptl_machine;
 }
 
-void ptl_reconfigure(char* config_str) {
+void ptl_reconfigure(const char* config_str) {
 
-	char* argv[1]; argv[0] = config_str;
+	char* argv;
 
 	if(config_str == NULL || strlen(config_str) == 0) {
 		print_usage();
 		return;
 	}
 
-	configparser.parse(config, config_str);
-	handle_config_change(config, 1, argv);
+    argv = (char*)(qemu_malloc((strlen(config_str)+1) * sizeof(char)));
+    strcpy(argv, config_str);
+    argv[strlen(config_str)] = '\0';
+
+	configparser.parse(config, argv);
+	handle_config_change(config);
 	ptl_logfile << "Configuration changed: ", config, endl;
 
     if (config.sync_interval && sem_id == -1) {
@@ -777,6 +792,8 @@ void ptl_reconfigure(char* config_str) {
 	 * new configured machine
      */
 	curr_ptl_machine = NULL;
+
+    qemu_free(argv);
 }
 
 extern "C" void ptl_machine_configure(const char* config_str_) {
@@ -1105,7 +1122,7 @@ static void set_run_stats()
     seconds += W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
     W64 cycles_per_sec = W64(double(sim_cycle) / double(seconds));
     W64 commits_per_sec = W64(
-            double(total_user_insns_committed) / double(seconds));
+            double(total_insns_committed) / double(seconds));
 
 #define RUN_STAT(stat) \
     simstats.set_default_stats(stat); \
@@ -1194,14 +1211,14 @@ extern "C" uint8_t ptl_simulate() {
 		if(logable(1)) {
 			ptl_logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
 			cerr <<  "Switching to simulation core '", machinename, "'...", endl, flush;
-			ptl_logfile << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
-			cerr << "Stopping after ", config.stop_at_user_insns, " commits", endl, flush;
+			ptl_logfile << "Stopping after ", config.stop_at_insns, " commits", endl, flush;
+			cerr << "Stopping after ", config.stop_at_insns, " commits", endl, flush;
 		}
 
 		/* Update stats every half second: */
 		ticks_per_update = seconds_to_ticks(0.2);
 		last_printed_status_at_ticks = 0;
-		last_printed_status_at_user_insn = 0;
+		last_printed_status_at_insn = 0;
 		last_printed_status_at_cycle = 0;
 
 		tsc_at_start = rdtsc();
@@ -1268,7 +1285,7 @@ extern "C" uint8_t ptl_simulate() {
 
 	machine->run(config);
 
-	if (config.stop_at_user_insns <= total_user_insns_committed || config.kill == true
+	if (config.stop_at_insns <= total_insns_committed || config.kill == true
 			|| config.stop == true || config.stop_at_cycle < sim_cycle) {
 		machine->stopped = 1;
 	}
@@ -1297,8 +1314,8 @@ extern "C" uint8_t ptl_simulate() {
 
 	W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
 	stringbuf sb;
-	sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_user_insns_committed, " instructions and ",
-	   seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_user_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_user_insns_committed) / double(sim_cycle), ")", endl;
+	sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_insns_committed, " instructions and ",
+	   seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_insns_committed) / double(sim_cycle), ")", endl;
 
 	ptl_logfile << sb, flush;
 	cerr << sb, flush;
@@ -1323,6 +1340,7 @@ extern "C" uint8_t ptl_simulate() {
 	}
 
     machine->first_run = 1;
+    sim_update_clock_offset = 1;
 
     if(config.stop) {
         config.stop = false;
@@ -1344,10 +1362,10 @@ extern "C" void update_progress() {
   if unlikely (delta >= (W64s)ticks_per_update) {
     double seconds = ticks_to_seconds(delta);
     double cycles_per_sec = (sim_cycle - last_printed_status_at_cycle) / seconds;
-    double insns_per_sec = (total_user_insns_committed - last_printed_status_at_user_insn) / seconds;
+    double insns_per_sec = (total_insns_committed - last_printed_status_at_insn) / seconds;
 
     stringbuf sb;
-    sb << "Completed ", intstring(sim_cycle, 13), " cycles, ", intstring(total_user_insns_committed, 13), " commits: ",
+    sb << "Completed ", intstring(sim_cycle, 13), " cycles, ", intstring(total_insns_committed, 13), " commits: ",
       intstring((W64)cycles_per_sec, 9), " Hz, ", intstring((W64)insns_per_sec, 9), " insns/sec";
 
     sb << ": rip";
@@ -1376,7 +1394,7 @@ extern "C" void update_progress() {
 
     last_printed_status_at_ticks = ticks;
     last_printed_status_at_cycle = sim_cycle;
-    last_printed_status_at_user_insn = total_user_insns_committed;
+    last_printed_status_at_insn = total_insns_committed;
   }
 
   if unlikely ((sim_cycle - last_stats_captured_at_cycle) >= config.snapshot_cycles) {
