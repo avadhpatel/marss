@@ -192,6 +192,8 @@ struct PTLsimConfig {
   // Starting Point
   W64 start_at_rip;
   W64 fast_fwd_insns;
+  W64 fast_fwd_user_insns;
+  stringbuf fast_fwd_checkpoint;
 
   // Logging
   bool quiet;

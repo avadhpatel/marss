@@ -7722,7 +7722,8 @@ static void gen_simpoint_check_start(CPUState *env, DisasContext *dc)
 {
     if (env->simpoint_decr) {
 
-        if (simpoint_enabled && ((dc->flags >> HF_CPL_SHIFT) & 3) != 3) {
+        /* Check if we are counting user level instructions or not */
+        if (ptl_fast_fwd_enabled == 2 && dc->cpl != 3) {
             return;
         }
 
@@ -7743,7 +7744,7 @@ static void gen_simpoint_check_start(CPUState *env, DisasContext *dc)
 static void gen_simpoint_check_end(CPUState* env, DisasContext *dc, int num_insns)
 {
     if (env->simpoint_decr) {
-        if (simpoint_enabled && ((dc->flags >> HF_CPL_SHIFT) & 3) != 3) {
+        if (ptl_fast_fwd_enabled == 2 && dc->cpl != 3) {
             return;
         }
 

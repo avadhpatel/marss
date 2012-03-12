@@ -216,8 +216,6 @@ extern uint64_t qemu_ram_size;
 
 uint64_t get_sim_cpu_freq(void);
 
-extern int simpoint_enabled;
-
 /**
  * @brief Update simulation clock offset if set
  */
@@ -244,8 +242,11 @@ void set_next_simpoint(CPUX86State* ctx);
 
 /**
  * @brief Indicate if Emualtion mode is running in fast-fwd mode or not
+ *
+ * Flag set to 1 means count all instructions
+ * Flag set to 2 means count only user level instructions
  */
-extern int ptl_fast_fwd_enabled;
+extern uint8_t ptl_fast_fwd_enabled;
 
 /**
  * @brief Set each CPU Context to fast forward N instructions before
