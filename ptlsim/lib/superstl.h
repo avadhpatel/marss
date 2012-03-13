@@ -546,7 +546,7 @@ namespace superstl {
     T* pp = (T*)malloc(sizeof(T) * newcount);
     if unlikely (!p) { assert(oldcount == 0); }
 
-    if likely (p) {
+    if likely (p && p != pp) {
       arraycopy(pp, p, oldcount);
       free(p);
     }

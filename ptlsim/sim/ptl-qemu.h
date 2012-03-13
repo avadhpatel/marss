@@ -78,6 +78,11 @@ extern uint8_t simulation_configured;
  */
 extern uint8_t inside_ptlsim;
 
+/**
+ * @brief Flag indicate if QEMU has initialized its structures or not
+ */
+extern uint8_t qemu_initialized;
+
 /*
  * ptlsim_init
  * returns void
@@ -117,7 +122,7 @@ CPUX86State* ptl_create_new_context(void);
  * working		: It will change the config variable to reflect the new
  *                 configuration options for PTLsim.
  */
-void ptl_reconfigure(char* config_str);
+void ptl_reconfigure(const char* config_str);
 
 /*
  * ptl_config_from_file
@@ -211,7 +216,10 @@ extern uint64_t qemu_ram_size;
 
 uint64_t get_sim_cpu_freq(void);
 
-extern int simpoint_enabled;
+/**
+ * @brief Update simulation clock offset if set
+ */
+extern uint8_t sim_update_clock_offset;
 
 /**
  * @brief Simpoint is reached in emulation mode
@@ -231,6 +239,28 @@ void init_simpoints(void);
  * @param ctx CPU Context
  */
 void set_next_simpoint(CPUX86State* ctx);
+
+/**
+ * @brief Indicate if Emualtion mode is running in fast-fwd mode or not
+ *
+ * Flag set to 1 means count all instructions
+ * Flag set to 2 means count only user level instructions
+ */
+extern uint8_t ptl_fast_fwd_enabled;
+
+/**
+ * @brief Set each CPU Context to fast forward N instructions before
+ * switching to simulation mode
+ */
+void set_cpu_fast_fwd(void);
+
+/**
+ * @brief Initialize simulator structures after QEMU's initialization
+ *
+ * Its called after QEMU has initialized all its structures and its
+ * ready to start emulation/simulation
+ */
+void ptl_qemu_initialized(void);
 
 #ifdef __cplusplus
 }

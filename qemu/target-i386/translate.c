@@ -7719,7 +7719,13 @@ static int simpoint_count_label;
 
 static void gen_simpoint_check_start(CPUState *env, DisasContext *dc)
 {
-    if (env->simpoint_decr && ((dc->flags >> HF_CPL_SHIFT) & 3) == 3) {
+    if (env->simpoint_decr) {
+
+        /* Check if we are counting user level instructions or not */
+        if (ptl_fast_fwd_enabled == 2 && dc->cpl != 3) {
+            return;
+        }
+
         TCGv_i64 count;
 
         simpoint_count_label = gen_new_label();
@@ -7736,7 +7742,11 @@ static void gen_simpoint_check_start(CPUState *env, DisasContext *dc)
 
 static void gen_simpoint_check_end(CPUState* env, DisasContext *dc, int num_insns)
 {
-    if (env->simpoint_decr && ((dc->flags >> HF_CPL_SHIFT) & 3) == 3) {
+    if (env->simpoint_decr) {
+        if (ptl_fast_fwd_enabled == 2 && dc->cpl != 3) {
+            return;
+        }
+
         *simpoint_arg = num_insns;
         gen_set_label(simpoint_count_label);
         tcg_gen_exit_tb((long)(dc->tb) + 2);

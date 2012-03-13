@@ -142,7 +142,7 @@ struct TransOpBuffer {
 void split_unaligned(const TransOp& transop, TransOpBuffer& buf);
 
 void capture_stats_snapshot(const char* name = NULL);
-bool handle_config_change(PTLsimConfig& config, int argc = 0, char** argv = NULL);
+bool handle_config_change(PTLsimConfig& config);
 void collect_sysinfo(PTLsimStats& stats, int argc, char** argv);
 void print_sysinfo(ostream& os);
 void backup_and_reopen_logfile();
@@ -201,6 +201,9 @@ struct PTLsimConfig {
 
   // Starting Point
   W64 start_at_rip;
+  W64 fast_fwd_insns;
+  W64 fast_fwd_user_insns;
+  stringbuf fast_fwd_checkpoint;
 
   // Logging
   bool quiet;

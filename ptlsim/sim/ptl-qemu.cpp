@@ -61,6 +61,7 @@ uint8_t start_simulation = 0;
 uint8_t simulation_configured = 0;
 uint8_t ptl_stable_state = 1;
 uint64_t ptl_start_sim_rip = 0;
+uint8_t qemu_initialized = 0;
 
 static char *pending_command_str = NULL;
 static int pending_call_type = -1;
@@ -370,7 +371,7 @@ void create_checkpoint(const char* chk_name)
 {
     if (!config.quiet)
         cout << "MARSSx86::Creating checkpoint ",
-             pending_command_str, endl;
+             chk_name, endl;
 
     QDict *checkpoint_dict = qdict_new();
     qdict_put_obj(checkpoint_dict, "name", QOBJECT(
@@ -378,7 +379,7 @@ void create_checkpoint(const char* chk_name)
     do_savevm(cur_mon, checkpoint_dict);
 
     if (!config.quiet)
-        cout << "MARSSx86::Checkpoint ", pending_command_str,
+        cout << "MARSSx86::Checkpoint ", chk_name,
              " created\n";
 }
 
@@ -1360,7 +1361,7 @@ struct Simpoint
 static dynarray<Simpoint*> simpoints;
 static W64 total_simpoint_inst_complted = 0;
 static int simpoint_ctr = -1;
-int simpoint_enabled = 0;
+static int simpoint_enabled = 0;
 
 void add_simpoint(int point, int label)
 {
@@ -1478,17 +1479,213 @@ void init_simpoints()
     simpoint_enabled = 1;
 }
 
+/**
+ * @brief Flag to indicate if simulation is waiting for fast-fwd to complete
+ *
+ * Flag vlaue 1 means count all instructions
+ * Flag value 2 means count only user level instructions
+ */
+uint8_t ptl_fast_fwd_enabled = 0;
+
+uint8_t sim_update_clock_offset = 1;
+
+/**
+ * @brief Set CPU's simpoint_decr count to fast-forward simulation mode
+ */
+void set_cpu_fast_fwd()
+{
+    W64 fwd_insns;
+
+    if (config.fast_fwd_insns == 0 && config.fast_fwd_user_insns == 0)
+        return;
+
+    if (config.fast_fwd_insns > 0) {
+        ptl_fast_fwd_enabled = 1;
+        fwd_insns = config.fast_fwd_insns;
+    } else if (config.fast_fwd_user_insns > 0) {
+        ptl_fast_fwd_enabled = 2;
+        fwd_insns = config.fast_fwd_user_insns;
+    }
+
+    /* Set each CPU's counter specified from config.fast_fwd_insns */
+    W64 per_cpu_fast_fwd = fwd_insns / NUM_SIM_CORES;
+
+    ptl_logfile << "All CPU context will be fast-forwared to " <<
+        per_cpu_fast_fwd << " instructions.\n";
+
+    foreach (i, NUM_SIM_CORES) {
+        Context& ctx = contextof(i);
+        ctx.simpoint_decr = per_cpu_fast_fwd;
+        tb_flush(&ctx);
+    }
+}
+
+/**
+ * @brief Allocate part of remaining instructions to specified CPU
+ *
+ * @param ctx CPU Context in which instructions will be allocated
+ */
+static void adjust_fwd_insts(Context& ctx)
+{
+    W64 min_remaining = (W64)-1;
+    Context* min_ctx = NULL;
+
+    foreach (i, NUM_SIM_CORES) {
+        if (i == ctx.cpu_index)
+            continue;
+
+        Context& t_ctx = contextof(i);
+
+        if (t_ctx.halted && !t_ctx.stopped && t_ctx.simpoint_decr > 0) {
+            min_remaining = min((W64)t_ctx.simpoint_decr, min_remaining);
+            if (min_remaining == t_ctx.simpoint_decr)
+                min_ctx = &contextof(i);
+        }
+    }
+
+    /* Maximum allocation is 10million instructions */
+    min_remaining = min(min_remaining, (W64)10000000);
+
+    if (min_remaining && min_ctx) {
+        min_ctx->simpoint_decr -= min_remaining;
+        ctx.simpoint_decr = min_remaining;
+
+        if (logable(2)) {
+            ptl_logfile << "Min ctx " << int(min_ctx->cpu_index) <<
+                " allocated " << min_remaining << " instructions to " <<
+                int(ctx.cpu_index) << " CPU\n";
+        }
+    } else {
+        /* We can't find any CPU Context with remaining
+         * instructions so we will force switch to simulation */
+        ctx.simpoint_decr = 0;
+    }
+}
+
+/**
+ * @brief CPU has emulated fast-fwd instructions, check if simulation point has
+ * reached or not
+ *
+ * @param ctx CPU Context that finished emulating its allocated instructions
+ */
+static void cpu_fast_fwded(Context& ctx)
+{
+    bool all_halted_or_stopped = true;
+    bool others_halted = false;
+    W64 insns_remaining = 0;
+
+    /* Stop this CPU and check if all CPU are stopped or not */
+    ctx.stopped = 1;
+
+    /* Check if all other cpus are stopped or not */
+    foreach (i, NUM_SIM_CORES) {
+        Context& t_ctx = contextof(i);
+        insns_remaining += t_ctx.simpoint_decr;
+
+        if (i != ctx.cpu_index)
+            others_halted |= (t_ctx.halted);
+
+        all_halted_or_stopped &= (t_ctx.stopped || t_ctx.halted);
+    }
+
+    if (others_halted && insns_remaining > 100) {
+        /* This happens because all other CPUs are either halted
+         * or stopped and if we still have some instructions
+         * remaining then we allocate more instructions to this core
+         * and let it run in emulation mode untill our instruciton
+         * count reaches to near zero. */
+        adjust_fwd_insts(ctx);
+
+        /* If we found some more instructions to emulate then return */
+        if (ctx.simpoint_decr) {
+            if (logable(2)) {
+                ptl_logfile << "Cpu " << int(ctx.cpu_index) << " will emulate " <<
+                    ctx.simpoint_decr << " instructions\n";
+            }
+            ctx.stopped = 0;
+            return;
+        }
+    }
+
+    /* If all CPU's are stopped then issue -run to start simulation */
+    if (all_halted_or_stopped) {
+
+        /* If we still have any instrucitons remaining then print message
+         * to logfile indicating that we are switching to simulation
+         * earlier than expected. */
+        if (insns_remaining > 1000) {
+            ptl_logfile << "WARNING: Early switching to simulation mode. ";
+            ptl_logfile << "Instrucitons remaining in each CPU context to fast-forward are:\n";
+
+            foreach (i, NUM_SIM_CORES) {
+                ptl_logfile << "\tCPU " << (int)i << ": " <<
+                    (int)(contextof(i).simpoint_decr) << "\n";
+                contextof(i).simpoint_decr = 0;
+            }
+        }
+
+        ptl_fast_fwd_enabled = 0;
+
+        foreach (i, NUM_SIM_CORES) {
+            contextof(i).stopped = 0;
+            tb_flush(&contextof(i));
+        }
+
+        if (config.fast_fwd_checkpoint.size() > 0) {
+            create_checkpoint(config.fast_fwd_checkpoint.buf);
+            ptl_quit();
+        } else {
+            start_simulation = 1;
+        }
+    }
+}
+
+/**
+ * @brief CPU has reached to specified point in emulation mode
+ *
+ * @param cpuid ID of CPU that reached to the specified point
+ *
+ * This is a callback function called when emulating CPU reaches to a
+ * pre-specific point in emulation such as number of instructions
+ * executed/emulated.
+ */
 void ptl_simpoint_reached(int cpuid)
 {
     Context& ctx = contextof(cpuid);
 
-    if (!simpoint_enabled)
-        return;
+    if (simpoint_enabled) {
 
-    stringbuf* chk_name = get_simpoint_chk_name();
-    create_checkpoint(chk_name->buf);
+        stringbuf* chk_name = get_simpoint_chk_name();
+        create_checkpoint(chk_name->buf);
 
-    set_next_simpoint(&ctx);
+        set_next_simpoint(&ctx);
 
-    delete chk_name;
+        delete chk_name;
+    }
+
+    if (config.fast_fwd_insns > 0 || config.fast_fwd_user_insns > 0) {
+        cpu_fast_fwded(ctx);
+    }
+}
+
+/**
+ * @brief Initialize simulation specific structures after QEMU finish its
+ * initialization
+ */
+void ptl_qemu_initialized(void)
+{
+    qemu_initialized = 1;
+
+    if (simpoint_enabled) {
+        set_next_simpoint(&contextof(0));
+    }
+
+    set_cpu_fast_fwd();
+
+    if (config.run) {
+        /* If we are going to run simulations immediately then we set
+         * simulation clock offset before QEMU updates offset with
+         * current clock values. */
+        cpu_set_sim_ticks();
+    }
 }
