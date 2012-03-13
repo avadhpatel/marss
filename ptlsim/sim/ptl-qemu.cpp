@@ -371,7 +371,7 @@ void create_checkpoint(const char* chk_name)
 {
     if (!config.quiet)
         cout << "MARSSx86::Creating checkpoint ",
-             pending_command_str, endl;
+             chk_name, endl;
 
     QDict *checkpoint_dict = qdict_new();
     qdict_put_obj(checkpoint_dict, "name", QOBJECT(
@@ -379,7 +379,7 @@ void create_checkpoint(const char* chk_name)
     do_savevm(cur_mon, checkpoint_dict);
 
     if (!config.quiet)
-        cout << "MARSSx86::Checkpoint ", pending_command_str,
+        cout << "MARSSx86::Checkpoint ", chk_name,
              " created\n";
 }
 
@@ -1292,7 +1292,7 @@ struct Simpoint
 static dynarray<Simpoint*> simpoints;
 static W64 total_simpoint_inst_complted = 0;
 static int simpoint_ctr = -1;
-int simpoint_enabled = 0;
+static int simpoint_enabled = 0;
 
 void add_simpoint(int point, int label)
 {
@@ -1412,8 +1412,11 @@ void init_simpoints()
 
 /**
  * @brief Flag to indicate if simulation is waiting for fast-fwd to complete
+ *
+ * Flag vlaue 1 means count all instructions
+ * Flag value 2 means count only user level instructions
  */
-int ptl_fast_fwd_enabled = 0;
+uint8_t ptl_fast_fwd_enabled = 0;
 
 uint8_t sim_update_clock_offset = 1;
 
@@ -1422,13 +1425,21 @@ uint8_t sim_update_clock_offset = 1;
  */
 void set_cpu_fast_fwd()
 {
-    if (config.fast_fwd_insns == 0)
+    W64 fwd_insns;
+
+    if (config.fast_fwd_insns == 0 && config.fast_fwd_user_insns == 0)
         return;
 
-    ptl_fast_fwd_enabled = 1;
+    if (config.fast_fwd_insns > 0) {
+        ptl_fast_fwd_enabled = 1;
+        fwd_insns = config.fast_fwd_insns;
+    } else if (config.fast_fwd_user_insns > 0) {
+        ptl_fast_fwd_enabled = 2;
+        fwd_insns = config.fast_fwd_user_insns;
+    }
 
     /* Set each CPU's counter specified from config.fast_fwd_insns */
-    W64 per_cpu_fast_fwd = config.fast_fwd_insns / NUM_SIM_CORES;
+    W64 per_cpu_fast_fwd = fwd_insns / NUM_SIM_CORES;
 
     ptl_logfile << "All CPU context will be fast-forwared to " <<
         per_cpu_fast_fwd << " instructions.\n";
@@ -1544,13 +1555,19 @@ static void cpu_fast_fwded(Context& ctx)
             }
         }
 
+        ptl_fast_fwd_enabled = 0;
+
         foreach (i, NUM_SIM_CORES) {
             contextof(i).stopped = 0;
+            tb_flush(&contextof(i));
         }
 
-        start_simulation = 1;
-
-        ptl_fast_fwd_enabled = 0;
+        if (config.fast_fwd_checkpoint.size() > 0) {
+            create_checkpoint(config.fast_fwd_checkpoint.buf);
+            ptl_quit();
+        } else {
+            start_simulation = 1;
+        }
     }
 }
 
@@ -1577,7 +1594,7 @@ void ptl_simpoint_reached(int cpuid)
         delete chk_name;
     }
 
-    if (config.fast_fwd_insns > 0) {
+    if (config.fast_fwd_insns > 0 || config.fast_fwd_user_insns > 0) {
         cpu_fast_fwded(ctx);
     }
 }
@@ -1601,6 +1618,5 @@ void ptl_qemu_initialized(void)
          * simulation clock offset before QEMU updates offset with
          * current clock values. */
         cpu_set_sim_ticks();
-        sim_update_clock_offset = 0;
     }
 }

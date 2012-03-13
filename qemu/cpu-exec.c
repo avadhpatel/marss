@@ -729,10 +729,16 @@ int cpu_exec(CPUState *env)
                     next_tb = tcg_qemu_tb_exec(env, tc_ptr);
 #ifdef MARSS_QEMU
                     if (((next_tb & 3) == 2) &&
-                            (ptl_fast_fwd_enabled || simpoint_enabled)) {
+                            (ptl_fast_fwd_enabled > 0)) {
+                        int insns_left;
                         tb = (TranslationBlock *)(long)(next_tb & ~3);
                         /* Restore PC.  */
                         cpu_pc_from_tb(env, tb);
+
+                        insns_left = env->simpoint_decr;
+                        if (insns_left > 0) {
+                            cpu_exec_nocache(insns_left, tb);
+                        }
 
                         /* Reached to simpoint take appropriate action */
                         ptl_simpoint_reached(env->cpu_index);

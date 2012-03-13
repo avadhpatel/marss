@@ -180,6 +180,8 @@ void PTLsimConfig::reset() {
 
   start_at_rip = INVALIDRIP;
   fast_fwd_insns = 0;
+  fast_fwd_user_insns = 0;
+  fast_fwd_checkpoint = "";
 
   // memory model
   use_memory_model = 0;
@@ -272,6 +274,8 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   section("Trace Start/Stop Point");
   add(start_at_rip,                 "startrip",             "Start at rip <startrip>");
   add(fast_fwd_insns,               "fast-fwd-insns",       "Fast Fwd each CPU by <N> instructions");
+  add(fast_fwd_user_insns,          "fast-fwd-user-insns",  "Fast Fwd each CPU by <N> user level instructions");
+  add(fast_fwd_checkpoint,          "fast-fwd-checkpoint",  "Create a checkpoint <chk-name> after fast-forwarding");
   add(stop_at_insns,                "stopinsns",            "Stop after executing <stopinsns> user instructions");
   add(stop_at_cycle,                "stopcycle",            "Stop after <stop> cycles");
   add(stop_at_iteration,            "stopiter",             "Stop after <stop> iterations (does not apply to cycle-accurate cores)");
@@ -571,11 +575,11 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
   config.stop_at_rip = signext64(config.stop_at_rip, 48);
 #endif
 
-  if (config.fast_fwd_insns && qemu_initialized) {
+  if ((config.fast_fwd_insns || config.fast_fwd_user_insns) && qemu_initialized) {
       set_cpu_fast_fwd();
   }
 
-  if (config.run && config.fast_fwd_insns > 0) {
+  if (config.run && (config.fast_fwd_insns > 0 || config.fast_fwd_user_insns > 0)) {
       /* Disable run untill cpus are fast-forwarded */
       config.run = 0;
   }
