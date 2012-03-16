@@ -130,30 +130,46 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                 if (!config.quiet) cout << "PTLCALL type PTLCALL_ENQUEUE\n";
 
                 /*
-                 * Address of the command is stored in arg1 and
-                 * length of the command string is in arg2
+                 * arg1: Start of descriptor
+                 * arg2: Total number of descriptors
                  */
-                PTLsimCommandDescriptor desc;
-                desc.command = (W64)(ldq_kernel(arg1));
-                desc.length = (W64)(ldq_kernel(arg1 + 8));
+                int num_desc = (W64)arg2;
+                W64 desc_ptr = arg1;
+                stringbuf command;
 
-                char *command_str = (char*)qemu_malloc(desc.length + 1);
-                char *command_addr = (char*)(desc.command);
-                foreach (i, (W64s)desc.length) {
-                    command_str[i] = (char)ldub_kernel(
-                            (target_ulong)(command_addr));
-                    command_addr++;
+                foreach (i, num_desc) {
+                    PTLsimCommandDescriptor desc;
+                    desc.command = (W64)(ldq_kernel(desc_ptr));
+                    desc.length = (W64)(ldq_kernel(desc_ptr + 8));
+
+                    desc_ptr += 16;
+
+                    char *command_str = (char*)qemu_malloc(desc.length + 1);
+                    char *command_addr = (char*)(desc.command);
+                    foreach (i, (W64s)desc.length) {
+                        command_str[i] = (char)ldub_kernel(
+                                (target_ulong)(command_addr));
+                        command_addr++;
+                    }
+                    command_str[desc.length] = '\0';
+
+                    command << command_str << " ";
+
+                    qemu_free(command_str);
                 }
-                command_str[desc.length] = '\0';
+
+
+                ptl_logfile << "Command received: " << command << endl << flush;
+                pending_command_str = (char*)qemu_malloc(command.size() * sizeof(char));
+                strcpy(pending_command_str, command.buf);
+                pending_call_type = PTLCALL_ENQUEUE;
+                simulation_configured = 1;
 
                 /*
                  * Stop the QEMU vm and change ptlsim configuration
                  * QEMU will be automatically started in simulation mode
                  */
                 cpu_exit(cpu);
-                pending_command_str = command_str;
-                pending_call_type = PTLCALL_ENQUEUE;
-                simulation_configured = 1;
                 break;
             }
         case PTLCALL_CHECKPOINT:
