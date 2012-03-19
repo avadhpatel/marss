@@ -524,6 +524,8 @@ static void kill_simulation()
         }
     }
 
+    shutdown_decode();
+
     ptl_logfile.flush();
     ptl_logfile.close();
 

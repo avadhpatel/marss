@@ -1683,8 +1683,7 @@ bool BasicBlockCache::invalidate(BasicBlock* bb, int reason) {
     }
 
     if unlikely (bbcache_dump_file) {
-        bbcache_dump_file.write(reinterpret_cast<char*>((BasicBlockBase*)bb), sizeof(BasicBlockBase));
-        bbcache_dump_file.write(reinterpret_cast<char*>(bb->transops), bb->count * sizeof(TransOp));
+        bbcache_dump_file << *bb << endl;
     }
 
     pagelist = bbpages.get(bb->rip.mfnlo);
