@@ -879,6 +879,11 @@ CPUX86State* ptl_create_new_context() {
 	ptl_contexts[ctx_counter] = ctx;
 	ctx_counter++;
 
+#ifdef INTEL_TSX
+    ctx->tsx_backup_ctx = new Context();
+    bzero(ctx->tsx_backup_ctx, sizeof(Context));
+#endif
+
     if (config.simpoint_file.set()) {
         init_simpoints();
     }

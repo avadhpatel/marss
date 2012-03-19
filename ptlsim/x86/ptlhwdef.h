@@ -831,7 +831,6 @@ struct Context: public CPUX86State {
   W64 exec_fault_addr;
   map<Waddr, Waddr> hvirt_gphys_map;
 
-
   void change_runstate(int new_state) { running = new_state; }
 
   void propagate_x86_exception(byte exception, W32 errorcode = 0, Waddr virtaddr = 0) ;
@@ -1158,6 +1157,29 @@ struct Context: public CPUX86State {
       use32 = (use64) ? false : (hflags >> HF_CS32_SHIFT) & 1;
 	  virt_addr_mask = (use64 ? 0xffffffffffffffffULL : 0x00000000ffffffffULL);
   }
+
+#ifdef INTEL_TSX
+  Context* tsx_backup_ctx;
+  int tsx_mode;  /* Indicate if CPU is in TSX mode and its recursive depth */
+  W64 tsx_abort_addr;
+
+  void tsx_backup()
+  {
+      /* Store Context to its backup context */
+      memcpy(tsx_backup_ctx, this, sizeof(Context));
+  }
+
+  void tsx_restore()
+  {
+      /* Restore Context from backup */
+      memcpy(this, tsx_backup_ctx, sizeof(Context));
+  }
+
+  void tsx_clear_backup()
+  {
+      bzero(tsx_backup_ctx, sizeof(Context));
+  }
+#endif
 
 };
 

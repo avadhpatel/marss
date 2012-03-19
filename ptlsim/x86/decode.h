@@ -436,6 +436,12 @@ enum {
 	L_ASSIST_IOPORT_OUT,
 	L_ASSIST_PAUSE,
     L_ASSIST_POPCNT,
+#ifdef INTEL_TSX
+    L_ASSIST_XBEGIN,
+    L_ASSIST_XEND,
+    L_ASSIST_XABORT,
+    L_ASSIST_XTEST,
+#endif
 	L_ASSIST_COUNT
 };
 
@@ -568,14 +574,21 @@ bool assist_halt(Context& ctx);
 bool assist_pause(Context& ctx);
 
 // Light weight Assist
-W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
-W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
-W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
-W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
-W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
-W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
-W64 l_assist_pause(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
-W64 l_assist_popcnt(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags);
+#define L_ASSIST_FN(fn) W64 fn(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags)
+L_ASSIST_FN(l_assist_sti);
+L_ASSIST_FN(l_assist_cli);
+L_ASSIST_FN(l_assist_pushf);
+L_ASSIST_FN(l_assist_popf);
+L_ASSIST_FN(l_assist_ioport_in);
+L_ASSIST_FN(l_assist_ioport_out);
+L_ASSIST_FN(l_assist_pause);
+L_ASSIST_FN(l_assist_popcnt);
+#ifdef INTEL_TSX
+L_ASSIST_FN(l_assist_xbegin);
+L_ASSIST_FN(l_assist_xend);
+L_ASSIST_FN(l_assist_xabort);
+L_ASSIST_FN(l_assist_xtest);
+#endif
 
 //
 // Global functions

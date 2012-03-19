@@ -994,6 +994,111 @@ static inline void vm_func(TraceDecoder& dec, int assist) {
 	}
 }
 
+#ifdef INTEL_TSX
+W64 l_assist_xbegin(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
+        W16 rbflags, W16 rcflags, W16& flags)
+{
+    int new_tsx_count;
+
+    new_tsx_count = ctx.tsx_mode + 1;
+
+    if (new_tsx_count > TSX_MAX_NESTING) {
+        /* Reached Max nesting of TSX, return -1 so core will abort */
+        return -1;
+    }
+
+    /* Check if we are entring in TSX mode right now */
+    if (new_tsx_count == 1) {
+
+        /* Now backup the context */
+        ctx.tsx_backup();
+
+        /* Get the abort address from rb */
+        ctx.tsx_abort_addr = rb;
+    }
+
+    ctx.tsx_mode = new_tsx_count;
+
+    return 0;
+}
+
+W64 l_assist_xend(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
+        W16 rbflags, W16 rcflags, W16& flags)
+{
+    /* ra : REG_rax - merge the updated register status to lower 32 bits of
+     *      REG_rax.
+     * rb : Core will send Sucess/Failure status in rb */
+
+    if (ctx.tsx_mode == 0) {
+        /* TODO: generate GP Fault */
+        return ra;
+    }
+
+    if (rb > 0) {
+        /* Simply call abort assist function */
+        rb &= (-1 << 1);  /* Clear 1st bit to indicate its not xabort insns */
+        return l_assist_xabort(ctx, ra, rb, rc, raflags, rbflags, rcflags,
+                flags);
+    }
+
+    /* Update tsx_mode count, if > 0 then simply return */
+    ctx.tsx_mode--;
+    assert(ctx.tsx_mode >= 0);
+
+    if (ctx.tsx_mode == 0) {
+        /* On success Clear backup context and tsx variables */
+        ctx.tsx_abort_addr = 0;
+        ctx.tsx_clear_backup();
+    }
+
+    /* On success REG_rax is unchanged */
+    return ra;
+}
+
+W64 l_assist_xabort(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
+        W16 rbflags, W16 rcflags, W16& flags)
+{
+    bool nested_abort;
+    W64 abort_addr;
+
+    /* ra : REG_rax - Update lower 32 bits with abort status */
+
+    W32 eax;
+
+    if (ctx.tsx_mode == 0) {
+        /* Treat it as NOP */
+        return ra;
+    }
+
+    abort_addr = ctx.tsx_abort_addr;
+    nested_abort = (ctx.tsx_mode > 1) ? 1 : 0;
+    rb = (rb & ~(0x20)) | (nested_abort << 5);
+
+    /* Restore Context from backup */
+    ctx.tsx_restore();
+
+    ctx.reg_nextrip = abort_addr;
+
+    /* Generate eax based on flags and abort value */
+    eax = ((rc & 0xff) << 24);           /* Store Abort value */
+    eax = (eax & ~(0x3f)) | (rb & 0x3f); /* Set flags from rb */
+
+    return ((ra & ~(W64)(W32)(-1)) | eax);
+}
+
+W64 l_assist_xtest(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
+        W16 rbflags, W16 rcflags, W16& flags)
+{
+    if (ctx.tsx_mode > 0) {
+        flags |= FLAG_ZF;
+    } else {
+        flags &= ~(FLAG_ZF);
+    }
+
+    return ra;
+}
+#endif
+
 bool TraceDecoder::decode_complex() {
   DecodedOperand rd;
   DecodedOperand ra;
@@ -1641,6 +1746,42 @@ bool TraceDecoder::decode_complex() {
     break;
   }
 
+#ifdef INTEL_TSX
+  case 0xc6: {
+    // xabort imm8
+    assert(byte(modrm) == 0xf8);
+    byte arg = fetch1();
+    EndOfDecode();
+
+    TransOp ast(OP_ast, REG_rax, REG_rax, REG_zero, REG_imm, 2, 0, arg);
+    ast.riptaken = L_ASSIST_XABORT;
+    this << ast;
+
+    end_of_block = 1;
+    break;
+  }
+
+  case 0xc7: {
+    // xbegin rel32
+    assert(byte(modrm) == 0xf8);
+    assert(use64); /* TODO: Add support for 32 bit mode */
+    DECODE(iform64, ra, d_mode);
+    EndOfDecode();
+
+    this << TransOp(OP_collcc, REG_temp5, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
+
+    TransOp ast(OP_ast, REG_temp0, REG_temp0, REG_imm, REG_zero, 3, (rip + ra.imm.imm));
+    ast.riptaken = L_ASSIST_XBEGIN;
+    this << ast;
+
+    TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
+    mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE;
+    this << mf;
+
+    break;
+  }
+#endif
+
   case 0xca ... 0xcb: {
     // ret far, with and without pop count (not supported)
     MakeInvalid();
@@ -2182,6 +2323,25 @@ bool TraceDecoder::decode_complex() {
 	int sizeshift;
 	TransOp* st1;
 	TransOp* st2;
+
+#ifdef INTEL_TSX
+    if (byte(modrm) == 0xd5) {
+        // xend
+        EndOfDecode();
+        TransOp ast(OP_ast, REG_rax, REG_rax, REG_zero, REG_zero, 3);
+        ast.riptaken = L_ASSIST_XEND;
+        this << ast;
+        break;
+    } else if (byte(modrm) == 0xd6) {
+        // xtest
+        EndOfDecode();
+        TransOp ast(OP_ast, REG_zf, REG_zf, REG_zero, REG_zero, 3);
+        ast.riptaken = L_ASSIST_XTEST;
+        this << ast;
+        break;
+    }
+#endif
+
 	switch(modrm.reg) {
 		case 0: { // sgdt
 			// Get the address in ra

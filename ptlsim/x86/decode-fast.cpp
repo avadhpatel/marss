@@ -529,6 +529,12 @@ bool TraceDecoder::decode_fast() {
   }
 
   case 0xc6 ... 0xc7: {
+#ifdef INTEL_TSX
+    if (byte(modrm) == 0xf8) {
+        // Its TSX instruction it will be handled in decode-complex
+        return false;
+    }
+#endif
     // move reg_or_mem,imm8|imm16|imm32|imm64 (signed imm for 32-bit to 64-bit form)
     int bytemode = bit(op, 0) ? v_mode : b_mode;
     DECODE(eform, rd, bytemode); DECODE(iform, ra, bytemode);

@@ -321,6 +321,12 @@ const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT] = {
     l_assist_ioport_out,
     l_assist_pause,
     l_assist_popcnt,
+#ifdef INTEL_TSX
+    l_assist_xbegin,
+    l_assist_xend,
+    l_assist_xabort,
+    l_assist_xtest,
+#endif
 };
 
 const char* light_assist_names[L_ASSIST_COUNT] = {
@@ -331,7 +337,13 @@ const char* light_assist_names[L_ASSIST_COUNT] = {
 	"l_io_in",
 	"l_io_out",
 	"l_pause",
-    "l_popcnt"
+    "l_popcnt",
+#ifdef INTEL_TSX
+    "l_xbegin",
+    "l_xend",
+    "l_xabort",
+    "l_xtest",
+#endif
 };
 
 int light_assist_index(light_assist_func_t assist) {
@@ -552,8 +564,8 @@ static const byte onebyte_has_modrm[256] = {
     /* d0 */ 1,1,1,1,_,_,_,_,1,1,1,1,1,1,1,1, /* d0 */
     /* e0 */ _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_, /* e0 */
     /* f0 */ _,_,_,_,_,_,1,1,_,_,_,_,_,_,1,1  /* f0 */
-        /*       -------------------------------        */
-        /*       0 1 2 3 4 5 6 7 8 9 a b c d e f        */
+        /*   -------------------------------        */
+        /*   0 1 2 3 4 5 6 7 8 9 a b c d e f        */
 };
 
 static const byte twobyte_has_modrm[256] = {
@@ -575,8 +587,8 @@ static const byte twobyte_has_modrm[256] = {
     /* d0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* df */
     /* e0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ef */
     /* f0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,_  /* ff */
-        /*       -------------------------------        */
-        /*       0 1 2 3 4 5 6 7 8 9 a b c d e f        */
+        /*   -------------------------------        */
+        /*   0 1 2 3 4 5 6 7 8 9 a b c d e f        */
 };
 
 static const byte twobyte_uses_SSE_prefix[256] = {
@@ -598,8 +610,8 @@ static const byte twobyte_uses_SSE_prefix[256] = {
     /* d0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* df */
     /* e0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ef */
     /* f0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,_  /* ff */
-        /*       -------------------------------        */
-        /*       0 1 2 3 4 5 6 7 8 9 a b c d e f        */
+        /*   -------------------------------        */
+        /*   0 1 2 3 4 5 6 7 8 9 a b c d e f        */
 };
 
 //
