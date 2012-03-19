@@ -48,6 +48,8 @@ extern "C" {
 #define __INSIDE_MARSS_QEMU__
 #include <ptlcalls.h>
 
+#include <test.h>
+
 /*
  * Physical address of the PTLsim PTLCALL hypercall page
  * used to communicate with the outside world:
@@ -1622,6 +1624,11 @@ void ptl_simpoint_reached(int cpuid)
 void ptl_qemu_initialized(void)
 {
     qemu_initialized = 1;
+
+    // If config.run_tests is enabled, then run testcases
+    if(config.run_tests) {
+        run_tests();
+    }
 
     if (simpoint_enabled) {
         set_next_simpoint(&contextof(0));
