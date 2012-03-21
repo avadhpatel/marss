@@ -4,6 +4,9 @@
 #ifdef ENABLE_TESTS
 
 #include <gtest/gtest.h>
+#include <iostream>
+
+using namespace std;
 
 void run_tests()
 {
@@ -16,6 +19,7 @@ void run_tests()
 
     ::testing::InitGoogleTest(&argc, argv);
     tests_passed = RUN_ALL_TESTS();
+    cout << "Testing " << (tests_passed ? "failed\n" : "passed\n");
 
     exit(0);
 }
