@@ -226,7 +226,7 @@ static const int MAX_BB_X86_INSNS = 60;
 static const int MAX_BB_UOPS = 63;
 static const int MAX_BB_PER_PAGE = 4096;
 
-static const int MAX_TRANSOPS_PER_USER_INSN = 16;
+static const int MAX_TRANSOPS_PER_USER_INSN = 24;
 
 extern const char* exception_names[EXCEPTION_COUNT];
 
