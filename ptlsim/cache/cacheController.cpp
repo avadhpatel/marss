@@ -598,6 +598,7 @@ bool CacheController::cache_access_cb(void *arg)
                  */
                 signal = &cacheInsertComplete_;
                 delay = cacheAccessLatency_;
+                line->state = LINE_MODIFIED;
                 queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
 
                 if(!wt_disabled_) {

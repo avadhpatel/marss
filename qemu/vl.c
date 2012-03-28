@@ -1387,11 +1387,6 @@ static void main_loop(void)
 
     for (;;) {
 #ifdef MARSS_QEMU
-            if (!vm_running && simulation_configured) {
-                simulation_configured = 0;
-                vm_start();
-            }
-
             ptl_check_ptlcall_queue();
 
             if (start_simulation) {
@@ -1399,7 +1394,11 @@ static void main_loop(void)
                 in_simulation = 1;
                 start_simulation = 0;
                 tb_flush(first_cpu);
+
+                if (!vm_running)
+                    vm_start();
             }
+
 #endif
 
 #ifndef CONFIG_IOTHREAD
