@@ -134,6 +134,7 @@ class BusInterconnect : public Interconnect
 	private:
 		dynarray<BusControllerQueue*> controllers;
 		BusControllerQueue* lastAccessQueue;
+		FixStateList<PendingQueueEntry, 32> pendingRequests_;
 		FixStateList<PendingQueueEntry, 8> pendingRequests_;
 		bool busBusy_;
 		bool dataBusBusy_;

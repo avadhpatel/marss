@@ -263,7 +263,7 @@ void MESILogic::handle_cache_insert(CacheQueueEntry *queueEntry, W64 oldTag)
      * memory request of type MEMORY_OP_UPDATE and send it to
      * lower cache/memory
      */
-    if(oldState == MESI_MODIFIED && controller->is_lowest_private()) {
+    if(oldState == MESI_MODIFIED) {
         controller->send_update_to_lower(queueEntry, oldTag);
     }
 
