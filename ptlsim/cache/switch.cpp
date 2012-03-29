@@ -149,19 +149,20 @@ bool Switch::send_complete_cb(void *arg)
 
     memdebug("Switch sending message success: " << success << endl);
 
-    if (success) {
-        dest_cq->recv_busy = 0;
-        queueEntry->request->decRefCounter();
-        ADD_HISTORY_REM(queueEntry->request);
-        cq->queue.free(queueEntry);
+	/* If destination is not accepting current controller's request
+	 * so retry after AVG_WAIT_DELAY and meanwhile mark the
+	 * destination controller as available , else on success
+	 * remove the entry from queue. */
 
-        /* Try to send new packet arrived in queue */
-        memoryHierarchy_->add_event(&send, latency_, cq);
-        return true;
-    }
+	if (success) {
+		queueEntry->request->decRefCounter();
+		ADD_HISTORY_REM(queueEntry->request);
+		cq->queue.free(queueEntry);
+	}
 
-    memoryHierarchy_->add_event(&send_complete, 1, cq);
-    return true;
+	dest_cq->recv_busy = 0;
+	memoryHierarchy_->add_event(&send, 1, cq);
+	return true;
 }
 
 ControllerQueue* Switch::get_queue(Controller *cont)
