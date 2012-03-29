@@ -134,9 +134,9 @@ bool DirectoryController::handle_interconnect_cb(void *arg)
     Message *message = (Message*)arg;
     MemoryRequest *request = message->request;
 
-    if (is_full()) {
-        return false;
-    }
+	if (is_full() && !find_entry(message->request)) {
+		return false;
+	}
 
     memdebug("DirCont["<< get_name() << "] received message: " <<
             *message << endl);
