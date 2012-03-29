@@ -100,9 +100,12 @@ void MOESILogic::handle_local_miss(CacheQueueEntry *queueEntry)
 
     if (queueEntry->line) queueEntry->line->state = MOESI_INVALID;
 
-    /* Go to directory if its lowest private */
-    if (controller->is_lowest_private()) {
+    /* Go to directory if its lowest private and not UPDATE */
+    if (controller->is_lowest_private() &&
+            queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
         queueEntry->dest = controller->get_directory();
+    } else {
+        queueEntry->dest = controller->get_lower_cont();
     }
 
     queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
