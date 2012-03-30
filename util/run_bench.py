@@ -10,7 +10,7 @@
 # Contact : apatel at cs.binghamton.edu
 #
 
-
+import tempfile
 import os
 import subprocess
 import sys
@@ -156,7 +156,7 @@ if conf_parser.has_option(run_sec, 'qemu_args'):
 if 'snapshot' not in qemu_args:
     qemu_args = '%s -snapshot' % qemu_args
 
-num_threads = min(int(options.num_insts), len(check_list))
+num_threads = min(int(options.num_insts), options.iterate * len(check_list))
 
 # If user give argument 'out' then print the output of simulation run
 # to stdout else ignore it
@@ -279,7 +279,7 @@ class RunSim(Thread):
             output_dir = checkpoint[0]
             checkpoint = checkpoint[1]
 
-            sim_file_cmd_name = "/tmp/%s.simconfig" % checkpoint
+            _, sim_file_cmd_name = tempfile.mkstemp()
             sim_file_cmd = open(sim_file_cmd_name, "w")
             config_args = copy.copy(conf_parser.defaults())
             config_args['out_dir'] = os.path.realpath(output_dir)
@@ -342,6 +342,8 @@ class RunSim(Thread):
             # Wait for simulation to complete
             p.wait()
 
+            # Delete the temp file
+            os.remove(sim_file_cmd_name)
             serial_thread.join()
             stdout_thread.join()
 
