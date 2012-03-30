@@ -646,8 +646,6 @@ bool TraceDecoder::decode_fast() {
     if (iscall) {
       /* Remove the CS base address from rip */
       abs_code_addr_immediate(REG_temp0, 3, (Waddr)(rip - cs_base));
-//	  this << TransOp(OP_sub, REG_temp0, REG_temp0, REG_imm, REG_zero,
-//			  sizeshift, cs_base);
       this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, REG_temp0, sizeshift, -(1 << sizeshift));
       this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, sizeshift, (1 << sizeshift));
     }
@@ -664,8 +662,8 @@ bool TraceDecoder::decode_fast() {
   }
 
  /*
-  *     NOTE: Some forms of this are handled by the complex decoder:
-  */
+ *     NOTE: Some forms of this are handled by the complex decoder:
+ */
 
   case 0xf6 ... 0xf7: {
     /* COMPLEX: handle mul and div in the complex decoder */
