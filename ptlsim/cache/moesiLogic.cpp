@@ -49,6 +49,17 @@ void MOESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
         return;
     }
 
+	if (type == MEMORY_OP_UPDATE && oldState != MOESI_MODIFIED) {
+		/* If we receive update from upper cache and local cache line state
+		 * is not MODIFIED, then send the response down because cache update
+		 * must have been initiated from this level, or lower level cache. */
+		queueEntry->dest = controller->get_lower_cont();
+		queueEntry->sendTo = controller->get_lower_intrconn();
+		queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
+		controller->wait_interconnect_cb(queueEntry);
+		return;
+	}
+
     switch (oldState) {
         case MOESI_INVALID:
             controller->cache_miss_cb(queueEntry);
