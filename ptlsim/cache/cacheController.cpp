@@ -296,7 +296,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 					memoryHierarchy_->add_event(&waitInterconnect_, 0,
 							(void*)(queueEntry));
 				}
-			} else {
+			} else if (!is_lowest_private()) {
                 /*
 				 * if request is cache update, then access the cache
 				 * and update its data
