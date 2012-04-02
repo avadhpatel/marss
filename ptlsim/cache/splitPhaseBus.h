@@ -137,6 +137,7 @@ class BusInterconnect : public Interconnect
 		FixStateList<PendingQueueEntry, 32> pendingRequests_;
 		bool busBusy_;
 		bool dataBusBusy_;
+		bool snoopDisabled_;
 		Signal broadcast_;
 		Signal dataBroadcast_;
 		Signal broadcastCompleted_;

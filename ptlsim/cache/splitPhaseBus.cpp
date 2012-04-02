@@ -70,6 +70,11 @@ BusInterconnect::BusInterconnect(const char *name,
                 arbitrate_latency_)) {
         arbitrate_latency_ = BUS_ARBITRATE_DELAY;
     }
+
+	if (!memoryHierarchy_->get_machine().get_option(name, "snoop_disable",
+				snoopDisabled_)) {
+		snoopDisabled_ = false;
+	}
 }
 
 BusInterconnect::~BusInterconnect()
@@ -182,7 +187,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
                 foreach(x, pendingEntry->responseReceived.count()) {
                     all_set &= pendingEntry->responseReceived[x];
                 }
-                if(all_set) {
+                if(all_set || (snoopDisabled_ && pendingEntry->controllerWithData)) {
                     dataBusBusy_ = true;
                     memoryHierarchy_->add_event(&dataBroadcast_, 1,
                             pendingEntry);
@@ -428,7 +433,7 @@ void BusInterconnect::set_data_bus()
         foreach(x, pendingEntry->responseReceived.count()) {
             all_set &= pendingEntry->responseReceived[x];
         }
-        if(all_set) {
+        if(all_set || (snoopDisabled_ && pendingEntry->controllerWithData)) {
             dataBusBusy_ = true;
             memoryHierarchy_->add_event(&dataBroadcast_, 1,
                     pendingEntry);
