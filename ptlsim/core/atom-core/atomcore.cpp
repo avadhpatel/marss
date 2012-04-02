@@ -3126,8 +3126,6 @@ bool AtomCore::runcycle()
         running_thread->set_default_stats(user_stats);
     }
 
-    running_thread->st_cycles++;
-
     exit_requested = writeback();
 
     if(exit_requested) {
@@ -3148,6 +3146,8 @@ bool AtomCore::runcycle()
     if(in_thread_switch) {
         try_thread_switch();
     }
+
+    running_thread->st_cycles++;
 
     // If we are still in thread switch mode then return from this function
     // nothing else to do untill next clock cycle.
