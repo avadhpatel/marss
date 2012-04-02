@@ -583,6 +583,15 @@ bool DirectoryController::send_evict_cb(void *arg)
         return true;
     }
 
+	/* While handling this request, if all other cache lines are
+	 * evicted then send response to this request. */
+	if (queueEntry->entry->present.iszero()) {
+		DirectoryController *sig_dir = dir_controllers[
+			queueEntry->cont->idx];
+		memoryHierarchy_->add_event(&sig_dir->send_response, 1, queueEntry);
+		return true;
+	}
+
     /* Now for each cached entry, send evict message to that
      * controller */
     foreach (i, NUM_SIM_CORES) {
