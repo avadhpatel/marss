@@ -1,0 +1,64 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic libraries
+*.so
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+
+*.py[co]
+
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+bin
+var
+sdist
+develop-eggs
+.installed.cfg
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+nosetests.xml
+
+# Marss log/stats/out files
+*.log
+*.stats
+*.yml
+*.out
+
+# Graphs generated in utils
+*.pdf
+*.png
+*.eps
+
+# Vim's swp files
+*.swp
+
+# cscope database
+cscope.files
+cscope.out
+
+# gdb history etc.
+.gdb_history
+gdb.txt
+
+# scons temporary/db files
+.sconf_temp*
+.sconsign.dblite
+
+# Any patch files
+*.patch
