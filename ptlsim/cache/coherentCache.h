@@ -300,6 +300,7 @@ namespace Memory {
 
                 Interconnect* get_lower_intrconn() { return lowerInterconnect_;}
                 Controller* get_directory() { return directory_; }
+				Controller* get_lower_cont() { return lowerCont_; }
                 CacheQueueEntry* get_new_queue_entry();
 
         };

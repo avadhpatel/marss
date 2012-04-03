@@ -49,6 +49,17 @@ void MOESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
         return;
     }
 
+	if (type == MEMORY_OP_UPDATE && oldState != MOESI_MODIFIED) {
+		/* If we receive update from upper cache and local cache line state
+		 * is not MODIFIED, then send the response down because cache update
+		 * must have been initiated from this level, or lower level cache. */
+		queueEntry->dest = controller->get_lower_cont();
+		queueEntry->sendTo = controller->get_lower_intrconn();
+		queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
+		controller->wait_interconnect_cb(queueEntry);
+		return;
+	}
+
     switch (oldState) {
         case MOESI_INVALID:
             controller->cache_miss_cb(queueEntry);
@@ -100,9 +111,12 @@ void MOESILogic::handle_local_miss(CacheQueueEntry *queueEntry)
 
     if (queueEntry->line) queueEntry->line->state = MOESI_INVALID;
 
-    /* Go to directory if its lowest private */
-    if (controller->is_lowest_private()) {
+    /* Go to directory if its lowest private and not UPDATE */
+    if (controller->is_lowest_private() &&
+            queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
         queueEntry->dest = controller->get_directory();
+    } else {
+        queueEntry->dest = controller->get_lower_cont();
     }
 
     queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
@@ -282,8 +296,10 @@ void MOESILogic::handle_cache_insert(CacheQueueEntry *queueEntry,
         if (oldState != MOESI_INVALID) {
             if (controller->is_lowest_private()) {
                 send_evict(queueEntry, oldTag, 1);
-            }
-        }
+			} else if (oldState == MOESI_MODIFIED) {
+				controller->send_update_to_lower(queueEntry, oldTag);
+			}
+		}
     }
 
     /* Now set the new line state */

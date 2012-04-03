@@ -134,9 +134,9 @@ bool DirectoryController::handle_interconnect_cb(void *arg)
     Message *message = (Message*)arg;
     MemoryRequest *request = message->request;
 
-    if (is_full()) {
-        return false;
-    }
+	if (is_full() && !find_entry(message->request)) {
+		return false;
+	}
 
     memdebug("DirCont["<< get_name() << "] received message: " <<
             *message << endl);
@@ -582,6 +582,15 @@ bool DirectoryController::send_evict_cb(void *arg)
         memoryHierarchy_->add_event(&send_evict, 1, queueEntry);
         return true;
     }
+
+	/* While handling this request, if all other cache lines are
+	 * evicted then send response to this request. */
+	if (queueEntry->entry->present.iszero()) {
+		DirectoryController *sig_dir = dir_controllers[
+			queueEntry->cont->idx];
+		memoryHierarchy_->add_event(&sig_dir->send_response, 1, queueEntry);
+		return true;
+	}
 
     /* Now for each cached entry, send evict message to that
      * controller */
