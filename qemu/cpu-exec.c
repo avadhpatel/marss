@@ -737,7 +737,7 @@ int cpu_exec(CPUState *env)
 
                         insns_left = env->simpoint_decr;
                         if (insns_left > 0) {
-                            cpu_exec_nocache(insns_left, tb);
+                            cpu_exec_nocache(env, insns_left, tb);
                         }
 
                         /* Reached to simpoint take appropriate action */

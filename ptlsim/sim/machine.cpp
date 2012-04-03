@@ -265,9 +265,9 @@ int BaseMachine::run(PTLsimConfig& config)
         }
 
         // Collect total number of instructions committed
-        total_user_insns_committed = 0;
+        total_insns_committed = 0;
         foreach(i, cores.count()) {
-            total_user_insns_committed += cores[i]->get_insns_committed();
+            total_insns_committed += cores[i]->get_insns_committed();
         }
 
         sim_cycle++;
@@ -352,18 +352,18 @@ bool BaseMachine::run_threaded()
         pthread_mutex_unlock(exit_mutex);
 
         // Collect total number of instructions committed
-        total_user_insns_committed = 0;
+        total_insns_committed = 0;
         foreach(i, cores.count()) {
-            total_user_insns_committed += cores[i]->get_insns_committed();
+            total_insns_committed += cores[i]->get_insns_committed();
         }
 
         sim_cycle++;
         iterations++;
 
-        if unlikely (config.stop_at_user_insns <= total_user_insns_committed ||
+        if unlikely (config.stop_at_insns <= total_insns_committed ||
                 config.stop_at_cycle <= sim_cycle) {
             ptl_logfile << "Stopping simulation loop at specified limits (",
-                        iterations, " iterations, ", total_user_insns_committed,
+                        iterations, " iterations, ", total_insns_committed,
                         " commits)", endl;
             exiting = 1;
             break;
@@ -377,7 +377,7 @@ bool BaseMachine::run_threaded()
     }
 
     if(logable(1))
-        ptl_logfile << "Exiting machine::run at ", total_user_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
+        ptl_logfile << "Exiting machine::run at ", total_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
 
     config.dump_state_now = 0;
 
