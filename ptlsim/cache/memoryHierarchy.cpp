@@ -438,7 +438,7 @@ bool MemoryHierarchy::grab_lock(W64 lockaddr, W8 ctx_id)
 
     MemoryInterlockEntry* lock = interlocks.select_and_lock(lockaddr);
 
-    if(lock && lock->ctx_id == (W8)-1) {
+    if likely (lock && lock->ctx_id == (W8)-1) {
         lock->ctx_id = ctx_id;
         ret = true;
     }
@@ -487,7 +487,7 @@ bool MemoryHierarchy::probe_lock(W64 lockaddr, W8 ctx_id)
 
     MemoryInterlockEntry* lock = interlocks.probe(lockaddr);
 
-    if(!lock) { // If no one has grab the lock
+    if likely (!lock) { // If no one has grab the lock
         ret = true;
     } else if(lock && lock->ctx_id == ctx_id) {
         ret = true;
