@@ -1403,25 +1403,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         return ISSUE_NEEDS_REPLAY;
     }
 
-#ifdef ENFORCE_L1_DCACHE_BANK_CONFLICTS
-    foreach (i, thread.loads_in_this_cycle) {
-        W64 prevaddr = thread.load_to_store_parallel_forwarding_buffer[i];
-        //
-        // Replay any loads that collide on the same bank.
-        //
-        // Two or more loads from the exact same 8-byte chunk are still
-        // allowed since the chunk has been loaded anyway, so we might
-        // as well use it.
-        //
-        if unlikely ((prevaddr != state.physaddr) && (lowbits(prevaddr, log2(CacheSubsystem::L1_DCACHE_BANKS)) == lowbits(state.physaddr, log2(CacheSubsystem::L1_DCACHE_BANKS)))) {
-            thread.thread_stats.dcache.load.issue.replay.bank_conflict++;
-
-            replay();
-            load_store_second_phase = 1;
-            return ISSUE_NEEDS_REPLAY;
-        }
-    }
-#endif
     //
     // Guarantee that we have at least one LFRQ entry reserved for us.
     // Technically this is only needed later, but it simplifies the

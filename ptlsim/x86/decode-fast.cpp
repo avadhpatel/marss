@@ -957,7 +957,7 @@ bool TraceDecoder::decode_fast() {
      */
 	EndOfDecode();
 
-	int sizeshift = 2; /* fix 32 bit shift of stack */
+	int sizeshift = (opsize_prefix) ? 1 : ((use64) ? 3 : 2);
 	int size = (1 << sizeshift);
 	int seg_reg = (op >> 3) & 7;
 	int r = REG_temp0;
@@ -969,14 +969,17 @@ bool TraceDecoder::decode_fast() {
 
     this << TransOp(OP_st, REG_mem, REG_rsp, REG_imm, r, sizeshift, -size);
     this << TransOp(OP_sub, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, size);
+
 	break;
   }
 
-  case 0x1a1: {
+  case 0x1a1:
+  case 0x1a9: {
       /* pop fs */
+	  /* pop gs */
       EndOfDecode();
 
-      int sizeshift = 2;
+	int sizeshift = (opsize_prefix) ? 1 : ((use64) ? 3 : 2);
       int size = (1 << sizeshift);
       int seg_reg = (op >> 3) & 7;
       int r = REG_temp0;
