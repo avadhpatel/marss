@@ -36,10 +36,10 @@
 namespace Memory {
 
 enum OP_TYPE {
-	MEMORY_OP_READ,
-	MEMORY_OP_WRITE,
-	MEMORY_OP_UPDATE,
-	MEMORY_OP_EVICT,
+	MEMORY_OP_READ,   /* Indicates cache miss on a read/load operation */
+	MEMORY_OP_WRITE,  /* Indicates cache miss on a write/store operation */
+	MEMORY_OP_UPDATE, /* Indicates cache write-back request */
+	MEMORY_OP_EVICT,  /* Indicates cache evict request */
 	NUM_MEMORY_OP
 };
 
