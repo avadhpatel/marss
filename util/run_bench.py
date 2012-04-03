@@ -19,6 +19,7 @@ import itertools
 
 from optparse import OptionParser
 from threading import Thread, Lock
+from sets import Set
 
 import config
 
@@ -109,6 +110,15 @@ def get_run_configs(run_name, options, conf_parser):
 
     check_list = conf_parser.get(suite, 'checkpoints')
     check_list = get_list_from_conf(check_list)
+
+    # Filter checkpoint list from user specified ones
+    if options.chk_names != "":
+        check_sel = options.chk_names.split(',')
+        chk_st = Set(check_list)
+        chk_sel_st = Set(check_sel)
+        chk_st = chk_st & chk_sel_st
+        check_list = list(chk_st)
+
     print("Checkpoints: %s" % str(check_list))
 
     # Get the simconfig
@@ -174,6 +184,9 @@ opt_parser.add_option("-i", "--iterate", action="store", default=1, type=int,
         help="Run simulation N times")
 opt_parser.add_option("-n", "--num-insts", dest="num_insts", default=1,
         type=int, help="Run N instance of simulations in parallel")
+opt_parser.add_option("--chk-names", dest="chk_names", type="string",
+        help="Comma separated names of checkpoints to run, this overrides " +
+        "default sets of checkpoints specified in config file.", default="")
 
 (options, args) = opt_parser.parse_args()
 
@@ -283,20 +296,16 @@ class RunSim(Thread):
 
         # Start simulation from checkpoints
         pty_prefix = 'char device redirected to '
-        print("Started a run thread")
         while True:
             run_cfg = None
             self.qemu_cmd = ''
 
-            print("Grabbing a run_cfg")
             try:
                 checkpoint_lock.acquire()
                 run_cfg = run_configs[run_idx]
                 run_idx += 1
-                print("Run config found: %s" % str(run_cfg))
             except:
                 run_cfg = None
-                print("Run config exception")
             finally:
                 checkpoint_lock.release()
 
