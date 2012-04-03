@@ -276,7 +276,9 @@ bool CacheController::handle_interconnect_cb(void *arg)
 				if(queueEntry->prefetch) {
 					/* In case of prefetch just wakeup the dependents entries */
 					queueEntry->prefetchCompleted = true;
-					clear_entry_cb(queueEntry);
+					queueEntry->eventFlags[CACHE_INSERT_EVENT]++;
+					memoryHierarchy_->add_event(&cacheInsert_, 1,
+							(void*)(queueEntry));
 				} else if(msg->request == queueEntry->request ||
 						(msg->request != queueEntry->request &&
 						 queueEntry->request->get_type() ==
