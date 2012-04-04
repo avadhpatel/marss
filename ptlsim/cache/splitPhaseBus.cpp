@@ -317,7 +317,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
         memdebug("Bus cant do addr broadcast\n");
         set_bus_busy(true);
         memoryHierarchy_->add_event(&broadcast_,
-                latency_, queueEntry);
+                latency_, NULL);
         return true;
     }
 

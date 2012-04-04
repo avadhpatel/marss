@@ -240,11 +240,6 @@ bool CacheController::handle_lower_interconnect(Message &message)
         }
     }
 
-    /* Check if we have any free entry pending or not */
-    if (is_full(true)) {
-        return false;
-    }
-
     if(isLowestPrivate_) {
 
         /* Ignore response that is not for this controller */
