@@ -71,7 +71,7 @@ BusInterconnect::BusInterconnect(const char *name,
         arbitrate_latency_ = BUS_ARBITRATE_DELAY;
     }
 
-	if (!memoryHierarchy_->get_machine().get_option(name, "snoop_disable",
+	if (!memoryHierarchy_->get_machine().get_option(name, "disable_snoop",
 				snoopDisabled_)) {
 		snoopDisabled_ = false;
 	}
