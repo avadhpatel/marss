@@ -149,6 +149,9 @@ def get_run_configs(run_name, options, conf_parser):
             output_dirs.append(i_dir)
             if not os.path.exists(i_dir):
                 os.makedirs(i_dir)
+    else:
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
 
     # For each checkpoint create a run_config dict and add to list
     img_idx = 0
