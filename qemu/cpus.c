@@ -929,7 +929,11 @@ bool cpu_exec_all(void)
                 break;
             }
         } else if (env->stop) {
+#ifdef MARSS_QEMU
+			continue; /* Let other CPUS execute */
+#else
             break;
+#endif
         }
 
 #ifdef MARSS_QEMU
