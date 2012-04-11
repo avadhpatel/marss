@@ -19,6 +19,7 @@ env['CPPPATH'] = []
 env['CPPPATH'].append([".", "..", target_path, env['source_path']])
 env['CPPPATH'].append(target['dir'])
 env['CPPPATH'].append(ptlsim_inc_dir)
+env['CPPPATH'].append("%s/linux-headers" % env['source_path'])
 env.Append(CCFLAGS = "-MMD -MP -DNEED_CPU_H")
 env.Append(CCFLAGS = "-DMARSS_QEMU")
 

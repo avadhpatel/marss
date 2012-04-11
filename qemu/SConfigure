@@ -333,10 +333,6 @@ def CheckKVM(context):
     #if !defined(KVM_API_VERSION) || KVM_API_VERSION < 12 || KVM_API_VERSION > 12
     #error Invalid KVM Version
     #endif
-    #include <asm/kvm_para.h>
-    #if !defined(KVM_FEATURE_ASYNC_PF)
-    #error KVM Feature not supported
-    #endif
     int main() { return 0;}
     """
     res = context.TryRun(src, '.cpp')[0]
@@ -969,6 +965,20 @@ env.Append(LINKFLAGS = LDFLAGS.split())
 env['aiolibs'] = AIOLIBS
 env['ARLIB_BEGIN'] = "-Wl,--whole-archive"
 env['ARLIB_END'] = "-Wl,--no-whole-archive"
+
+# Create symlink to 'linux-headers/asm' directory
+try:
+    if env['cpu'] in ["i386", "x86_64"]:
+        os.symlink("%s/linux-headers/asm-x86" % env['source_path'],
+                "linux-headers/asm")
+    elif env['cpu'] in ["ppcemb", "ppc", "ppc64"]:
+        os.symlink("%s/linux-headers/asm-powerpc" % env['source_path'],
+                "linux-headers/asm")
+    elif env['cpu'] == "s390x":
+        os.symlink("%s/linux-headers/asm-s390" % env['source_path'],
+                "linux-headers/asm")
+except:
+    pass
 
 env['targets'] = []
 for target in env['target_list'].split():
