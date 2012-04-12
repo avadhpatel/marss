@@ -1485,7 +1485,7 @@ static void adjust_fwd_insts(Context& ctx)
 
         Context& t_ctx = contextof(i);
 
-		if ((t_ctx.halted || !qemu_cpu_has_work(&t_ctx)) &&
+		if (t_ctx.halted && !qemu_cpu_has_work(&t_ctx) &&
 				!t_ctx.stopped && t_ctx.simpoint_decr > 0) {
             min_remaining = min((W64)t_ctx.simpoint_decr, min_remaining);
             if (min_remaining == t_ctx.simpoint_decr)
@@ -1533,9 +1533,9 @@ static void cpu_fast_fwded(Context& ctx)
         insns_remaining += t_ctx.simpoint_decr;
 
         if (i != ctx.cpu_index)
-            others_halted |= (t_ctx.halted || !qemu_cpu_has_work(&t_ctx));
+            others_halted |= (t_ctx.halted);
 
-        all_halted_or_stopped &= (t_ctx.stopped || t_ctx.halted ||
+		all_halted_or_stopped &= (t_ctx.stopped || t_ctx.halted ||
 				!qemu_cpu_has_work(&t_ctx));
     }
 
@@ -1565,6 +1565,9 @@ static void cpu_fast_fwded(Context& ctx)
          * to logfile indicating that we are switching to simulation
          * earlier than expected. */
         if (insns_remaining > 1000) {
+			/* Restore this counter for debugging only */
+			ctx.simpoint_decr = insns_remaining;
+
             ptl_logfile << "WARNING: Early switching to simulation mode. ";
             ptl_logfile << "Instrucitons remaining in each CPU context to fast-forward are:\n";
 
