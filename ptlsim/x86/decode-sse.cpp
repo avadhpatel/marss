@@ -1133,6 +1133,7 @@ bool TraceDecoder::decode_sse() {
     break;
   }
 
+  case 0x370: // pshufw (MMX)
   case 0x470: // pshuflw (0xf2)
   case 0x270: { // pshufhw (0xf3)
     DECODE(gform, rd, x_mode);
