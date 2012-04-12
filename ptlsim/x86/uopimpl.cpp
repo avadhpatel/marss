@@ -1366,7 +1366,7 @@ void name(IssueState& state, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W
   W64 rd = 0xdeadbeefdeadbeef; \
   vec16b va = buildvec(rb, ra); \
   vec16b vb = buildvec(0, 0); \
-  ptl_logfile << "va = ", va, ", vb = ", vb, endl; \
+  /*ptl_logfile << "va = ", va, ", vb = ", vb, endl;*/ \
   if ((size == 0) & bit(sizemask, 0)) asm(#opcode0 " " extra "%[vb],%[va]; movq %[va],%[rd];" \
      : [rd] "=" W64_CONSTRAINT (rd): [va] "x" (va), [vb] "x" (vb)); \
   if ((size == 1) & bit(sizemask, 1)) asm(#opcode1 " " extra "%[vb],%[va]; movq %[va],%[rd];" \
