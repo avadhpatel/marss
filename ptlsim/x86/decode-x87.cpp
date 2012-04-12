@@ -17,6 +17,24 @@
 
 #define FP_STACK_MASK 0x3f
 
+W64 l_assist_x87_fist(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags, W16& flags)
+{
+	W64 result;
+	int size = (int)rb;
+
+	ctx.setup_qemu_switch();
+
+	switch (size) {
+		case 1: result = (W64)helper_fist_ST0(); break;
+		case 2: result = (W64)helper_fistl_ST0(); break;
+		default: assert(0);
+	}
+
+	ctx.setup_ptlsim_switch();
+
+	return result;
+}
+
 bool assist_x87_fprem(Context& ctx) {
     ASSIST_IN_QEMU(helper_fprem);
     ctx.eip = ctx.reg_nextrip;
@@ -632,11 +650,25 @@ bool TraceDecoder::decode_x87() {
   case 0x677: { // fistp
     if (modrm.rm == 3) {
       MakeInvalid();
-    } else {
+    } else if (op == 0x677) {
+      DECODE(eform, rd, q_mode);
+      EndOfDecode();
+
+	  /* Call Light assist to convert floating to integer */
+	  TransOp ast(OP_ast, REG_temp0, REG_zero, REG_imm, REG_zero, 3, rd.mem.size);
+	  ast.riptaken = L_ASSIST_X87_FIST;
+	  ast.nouserflags = 1;
+	  this << ast;
+
+	  /* Store the result */
+	  result_store(REG_temp0, REG_temp1, rd, DATATYPE_DOUBLE);
+
+	  x87_pop_stack();
+	} else {
       DECODE(eform, rd, q_mode);
       EndOfDecode();
       x87_load_stack(REG_temp0, REG_fptos);
-      this << TransOp(OP_fcvt_d2q, REG_temp0, REG_zero, REG_temp0, REG_zero, (op == 0x651) ? 3 : 2);
+      this << TransOp(OP_fcvt_d2q, REG_temp0, REG_zero, REG_temp0, REG_zero, 3);
       result_store(REG_temp0, REG_temp1, rd, DATATYPE_DOUBLE);
       x87_pop_stack();
     }
@@ -840,16 +872,29 @@ bool TraceDecoder::decode_x87() {
     break;
   }
 
-  case 0x671 ... 0x673: { // [fisttp | fist | fistp] mem16
-    DECODE(eform, rd, w_mode);
+  case 0x671 ... 0x673: { // [fisttp | fist | fistp] mem16/mem32
+    DECODE(eform, rd, v_mode);
     EndOfDecode();
-    x87_load_stack(REG_temp0, REG_fptos);
-    this << TransOp(OP_fcvt_d2i, REG_temp0, REG_zero, REG_temp0, REG_zero, 0);
-    result_store(REG_temp0, REG_temp1, rd);
+	if (op == 0x671) { /* fisttp */
+		x87_load_stack(REG_temp0, REG_fptos);
+		this << TransOp(OP_fcvt_d2i, REG_temp0, REG_zero, REG_temp0,
+				REG_zero, 1);
+		result_store(REG_temp0, REG_temp1, rd);
 
-    int x87op = modrm.rm;
-    if ((x87op == 1) | (x87op == 3)) {
-      x87_pop_stack();
+		x87_pop_stack();
+	} else { /* fist | fistp */
+		/* Call Light assist to convert floating to integer */
+		TransOp ast(OP_ast, REG_temp0, REG_zero, REG_imm, REG_zero, 3, rd.mem.size);
+		ast.riptaken = L_ASSIST_X87_FIST;
+		ast.nouserflags = 1;
+		this << ast;
+
+		/* Store the result */
+		result_store(REG_temp0, REG_temp1, rd);
+
+		/* If its fistp (0x673) then pop */
+		if (op == 0x673)
+			x87_pop_stack();
     }
     break;
   }
@@ -1049,14 +1094,29 @@ bool TraceDecoder::decode_x87() {
       case 1:   // fisttp w32
       case 2:   // fist w32
       case 3: { // fistp w32
-        x87_load_stack(REG_temp0, REG_fptos);
-        this << TransOp(OP_fcvt_d2i, REG_temp0, REG_zero, REG_temp0, REG_zero, (x87op == 1));
-        result_store(REG_temp0, REG_temp1, rd);
+		DECODE(eform, rd, v_mode);
+		EndOfDecode();
+		if (op == 0x631) { /* fisttp */
+		  x87_load_stack(REG_temp0, REG_fptos);
+		  this << TransOp(OP_fcvt_d2i, REG_temp0, REG_zero, REG_temp0,
+									   REG_zero, 1);
+		  result_store(REG_temp0, REG_temp1, rd);
 
-        if ((x87op == 1) | (x87op == 3)) {
-          x87_pop_stack();
-        }
+		  x87_pop_stack();
+		} else { /* fist | fistp */
+		  /* Call Light assist to convert floating to integer */
+		  TransOp ast(OP_ast, REG_temp0, REG_zero, REG_imm, REG_zero, 3, rd.mem.size);
+		  ast.riptaken = L_ASSIST_X87_FIST;
+		  ast.nouserflags = 1;
+		  this << ast;
 
+		  /* Store the result */
+		  result_store(REG_temp0, REG_temp1, rd);
+
+		  /* If its fistp (0x673) then pop */
+		  if (op == 0x633)
+			  x87_pop_stack();
+		}
         break;
       }
       }
