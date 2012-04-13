@@ -1404,6 +1404,7 @@ bool TraceDecoder::decode_sse() {
   }
 
   case 0x37f:   // movq mm/mm64,mm mmx
+  case 0x4d6:   // movdq2q xmmlo, mmx
   case 0x5d6: { // movq xmmlo|mem64,xmm with zero extension
     DECODE(eform, rd, x_mode);
     DECODE(gform, ra, x_mode);
