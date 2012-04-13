@@ -558,58 +558,8 @@ bool TraceDecoder::decode_sse() {
     break;
   }
 
-			  /*
-  case 0x56c: { // punpcklqdq
-	// Copy dest[63:0] to dest[63:0]
-	// Copy src[63:0] to dest[127:64]
-
-    DECODE(gform, rd, x_mode);
-    DECODE(eform, ra, x_mode);
-    EndOfDecode();
-
-    int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
-    int rareg;
-
-	if(ra.type == OPTYPE_MEM) {
-      rareg = REG_temp0;
-      operand_load(REG_temp0, ra, OP_ld, DATATYPE_VEC_128BIT);
-	} else {
-      rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg];
-	}
-
-	this << TransOp(OP_mov, rdreg+0, rdreg+0, REG_zero, REG_zero, 3);
-	this << TransOp(OP_mov, rdreg+1, rareg, REG_zero, REG_zero, 3);
-
-	break;
-  }
-  case 0x56d: { // punpckhqdq
-	// Copy dest[127:64] to dest[63:0]
-	// Copy src[127:64] to dest[127:64]
-
-    DECODE(gform, rd, x_mode);
-    DECODE(eform, ra, x_mode);
-    EndOfDecode();
-
-    int rdreg = arch_pseudo_reg_to_arch_reg[rd.reg.reg];
-    int rareg;
-
-	if(ra.type == OPTYPE_MEM) {
-      rareg = REG_temp0;
-      ra.mem.offset += 8;
-      operand_load(REG_temp0, ra, OP_ld, DATATYPE_VEC_128BIT);
-	} else {
-      rareg = arch_pseudo_reg_to_arch_reg[ra.reg.reg] + 1;
-	}
-
-	this << TransOp(OP_mov, rdreg+0, rdreg+1, REG_zero, REG_zero, 3);
-	this << TransOp(OP_mov, rdreg+1, rareg, REG_zero, REG_zero, 3);
-
-	break;
-  }
-  */
-
-  case 0x57c: // haddpd (SSE3)
-  case 0x57d: { // hsubpd (SSE3)
+  case 0x57c: /* haddpd (SSE3) */
+  case 0x57d: { /* hsubpd (SSE3) */
     DECODE(gform, rd, x_mode);
     DECODE(eform, ra, x_mode);
     EndOfDecode();
