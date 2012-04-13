@@ -2179,6 +2179,9 @@ bool TraceDecoder::translate() {
                     use_mmx = true;
                 op |= 0x300; // no prefix byte, typically OPps
             }
+
+			if (op == 0x4d6)
+				use_mmx = true;
         } else {
             op |= 0x100;
         }
