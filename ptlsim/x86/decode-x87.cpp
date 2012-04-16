@@ -140,32 +140,12 @@ make_two_output_x87_func_with_push(fxtract, (st1u.d = significand(st0u.d), st0u.
 
 bool assist_x87_fprem1(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fprem1);
-//	ctx.setup_qemu_switch();
-//	helper_fprem1();
 	ctx.eip = ctx.reg_nextrip;
   return true;
 }
-//  W64& tos = ctx.fpstt;
-//  W64& st0 = ctx.fpregs[tos >> 3];
-//  W64& st1 = ctx.fpregs[((tos >> 3) - 1) & 0x7];
-//  SSEType st0u(st0); SSEType st1u(st1);
-//
-//  X87StatusWord fpsw;
-//  asm("fldl %[st1]; fldl %[st0]; fprem1; fstsw %%ax; fstpl %[st0]; ffree %%st(0); fincstp;" : [st0] "+m" (st0u.d), "=a" (*(W16*)&fpsw) : [st1] "m" (st1u.d));
-//  st0 = st0u.w64;
-//
-//  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
-//  sw->c0 = fpsw.c0;
-//  sw->c1 = fpsw.c1;
-//  sw->c2 = fpsw.c2;
-//  sw->c3 = fpsw.c3;
-//  ctx.eip = ctx.reg_nextrip;
-//}
 
 bool assist_x87_fxam(Context& ctx) {
     ASSIST_IN_QEMU(helper_fxam_ST0);
-//	ctx.setup_qemu_switch();
-//	helper_fxam_ST0();
 	ctx.eip = ctx.reg_nextrip;
   return true;
 }
@@ -188,10 +168,6 @@ bool assist_x87_fxam(Context& ctx) {
 bool assist_x87_fld80(Context& ctx) {
     /* Virtual address is in sr2 */
     Waddr addr = ctx.reg_ar1;
-
-    // ASSIST_IN_QEMU(helper_fldt_ST0, addr);
-    //  ctx.setup_qemu_switch();
-    //  helper_fldt_ST0(addr);
 
     X87Reg data;
     PageFaultErrorCode pfec;
@@ -218,8 +194,6 @@ bool assist_x87_fld80(Context& ctx) {
 bool assist_x87_fstp80(Context& ctx) {
     /* Store and pop from stack */
     W64& tos = ctx.reg_fptos;
-    //  CPU86_LDoubleU data;
-    //  x87_fp_64bit_to_80bit((X87Reg*)&data, ctx.fpregs[tos >> 3]);
 
     /* Virtual address is in sr2 */
     Waddr addr = ctx.reg_ar1;
@@ -234,19 +208,7 @@ bool assist_x87_fstp80(Context& ctx) {
     }
     ptl_stable_state = 0;
     setup_ptlsim_switch_all_ctx(ctx);
-
-    //  PageFaultErrorCode pfec;
-    //  Waddr faultaddr;
-    //  int bytes = ctx.copy_to_user(addr, data, sizeof(X87Reg), pfec, faultaddr);
-    //
-    //  if (bytes < sizeof(X87Reg)) {
-    //    ctx.eip = ctx.reg_selfrip;
-    //    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
-    //    return;
-    //  }
-
     clearbit(ctx.reg_fptag, tos);
-    // ctx.fptags[tos] = 0;
     tos = (tos + 8) & FP_STACK_MASK;
     ctx.eip = ctx.reg_nextrip;
     return true;
@@ -271,25 +233,9 @@ bool assist_x87_frstor(Context& ctx) {
 
 bool assist_x87_fclex(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fclex);
-//	ctx.setup_qemu_switch();
-//	helper_fclex();
 	ctx.eip = ctx.reg_nextrip;
   return true;
 }
-//  X87StatusWord fpsw = ctx.fpus;
-//  fpsw.pe = 0;
-//  fpsw.ue = 0;
-//  fpsw.oe = 0;
-//  fpsw.ze = 0;
-//  fpsw.de = 0;
-//  fpsw.ie = 0;
-//  fpsw.sf = 0;
-//  fpsw.es = 0;
-//  fpsw.b = 0;
-//  ctx.fpus = fpsw;
-//  ctx.eip = ctx.reg_nextrip;
-//}
-
 bool assist_x87_finit(Context& ctx) {
   ctx.fpuc = 0x037f;
   ctx.fpus = 0;
@@ -871,7 +817,6 @@ bool TraceDecoder::decode_x87() {
           ASSIST_X87_FRNDINT, ASSIST_X87_FSCALE, ASSIST_X87_FSIN, ASSIST_X87_FCOS
         };
 
-//        if (x87op == 0) MakeInvalid(); // we don't support very old fprem form
         microcode_assist(x87op_to_assist_idx[x87op], ripstart, rip);
         end_of_block = 1;
       }
