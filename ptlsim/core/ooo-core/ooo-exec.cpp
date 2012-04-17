@@ -2262,6 +2262,11 @@ int OooCore::issue(int cluster) {
         assert(inrange(idx, 0, ROB_SIZE-1));
         ReorderBufferEntry& rob = thread->ROB[idx];
 
+		if unlikely (opclassof(rob.uop.opcode) == OPCLASS_FP)
+			core_stats.iq_fp_reads++;
+		else
+			core_stats.iq_reads++;
+
         rob.iqslot = iqslot;
         int rc = rob.issue();
         switch(rc) {

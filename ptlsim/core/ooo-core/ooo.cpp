@@ -1451,6 +1451,7 @@ void OooCore::check_ctx_changes()
 
             // IP address is changed, so flush the pipeline
             threads[i]->flush_pipeline();
+			threads[i]->thread_stats.ctx_switches++;
         }
     }
 }
