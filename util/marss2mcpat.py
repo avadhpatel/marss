@@ -79,7 +79,7 @@ class XMLWriter:
     # Copy the input XML to the output file so we don't clobber it
     try:
       shutil.copyfile(xml_in, out_filename)
-    except Error, e:
+    except Exception as e:
       print "Couldn't open copy input XML to output file: ", str(e)
       sys.exit(-1)
 
@@ -88,7 +88,7 @@ class XMLWriter:
     try:
       self.tree = ET.ElementTree()
       rootElem = self.tree.parse(out_filename)
-    except Error, e:
+    except Exception as e:
       print "Couldn't parse XML tree: ", str(e)
 
     print "XML parsed..."
