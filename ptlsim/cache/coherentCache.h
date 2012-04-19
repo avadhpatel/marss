@@ -274,6 +274,7 @@ namespace Memory {
                 }
 
                 void annul_request(MemoryRequest *request);
+				void dump_configuration(YAML::Emitter &out) const;
 
                 // Callback functions for signals of cache
                 virtual bool cache_hit_cb(void *arg);

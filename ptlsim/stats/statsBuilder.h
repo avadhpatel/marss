@@ -147,6 +147,16 @@ class Statable {
             name = str;
         }
 
+		/**
+		 * @brief Get the name of Stats Object
+		 *
+		 * @return name of object
+		 */
+		char* get_name() const
+		{
+			return name.buf;
+		}
+
         /**
          * @brief get default Stats*
          *

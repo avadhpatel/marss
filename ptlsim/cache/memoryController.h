@@ -97,6 +97,7 @@ class MemoryController : public Controller
 		bool wait_interconnect_cb(void *arg);
 
 		void annul_request(MemoryRequest *request);
+		void dump_configuration(YAML::Emitter &out) const;
 
 		int get_no_pending_request(W8 coreid);
 
