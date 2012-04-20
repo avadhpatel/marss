@@ -110,7 +110,7 @@ void BaseMachine::dump_configuration(ostream& os) const
 {
 	YAML::Emitter *config_yaml;
 
-	ptl_logfile << "\n==Machine Configuration==\n";
+	os << "#\n# Simulated Machine Configuration\n#\n";
 
 	config_yaml = new YAML::Emitter();
 
@@ -140,7 +140,7 @@ void BaseMachine::dump_configuration(ostream& os) const
 	*config_yaml << YAML::EndMap;
 
 	os << config_yaml->c_str() << "\n";
-	ptl_logfile << "\n\n==End Machine Configuration==\n\n";
+	os << "\n# End Machine Configuration\n";
 
 	ptl_logfile << "Dumped all machine configuration\n";
 }
