@@ -122,6 +122,7 @@ class Controller
 		virtual void print(ostream& os) const =0;
 		virtual bool is_full(bool fromInterconnect = false) const = 0;
 		virtual void annul_request(MemoryRequest* request) = 0;
+		virtual void dump_configuration(YAML::Emitter &out) const = 0;
 
 		int flush() {
 			return 0;

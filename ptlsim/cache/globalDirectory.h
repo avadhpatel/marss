@@ -192,6 +192,7 @@ class DirectoryController : public Controller {
         void print(ostream &os) const;
         bool is_full(bool flag=false) const;
         void annul_request(MemoryRequest *request);
+		void dump_configuration(YAML::Emitter &out) const;
 
         bool handle_read_miss(Message *message);
         bool handle_write_miss(Message *message);

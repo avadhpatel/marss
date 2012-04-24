@@ -326,6 +326,25 @@ int MemoryController::get_no_pending_request(W8 coreid)
 	return count;
 }
 
+/**
+ * @brief Dump Memory Controller in YAML Format
+ *
+ * @param out YAML Object
+ */
+void MemoryController::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "dram_cont");
+	YAML_KEY_VAL(out, "RAM_size", ram_size); /* ram_size is from QEMU */
+	YAML_KEY_VAL(out, "number_of_banks", MEM_BANKS);
+	YAML_KEY_VAL(out, "latency", latency_);
+	YAML_KEY_VAL(out, "latency_ns", simcycles_to_ns(latency_));
+	YAML_KEY_VAL(out, "pending_queue_size", pendingRequests_.size());
+
+	out << YAML::EndMap;
+}
+
 /* Memory Controller Builder */
 struct MemoryControllerBuilder : public ControllerBuilder
 {

@@ -88,6 +88,63 @@ bool BaseMachine::init(PTLsimConfig& config)
     return 1;
 }
 
+/**
+ * @brief Dump Machine and all module configuration
+ *
+ * @param os Output stream
+ *
+ * This function iterates over all modules in Machine and dump each module's
+ * configuration in YAML format. Configuration tree structure is like below:
+ *
+ * machine:
+ *	name: Machine Name
+ *	cpu_contexts: Total CPU Contexts that are simulated
+ *	freq: Simulated Machine Core Frequency
+ *	module0:
+ *		module0 specific Parameters
+ *	module1:
+ *		module1 Specific Parameters
+ *
+ */
+void BaseMachine::dump_configuration(ostream& os) const
+{
+	YAML::Emitter *config_yaml;
+
+	os << "#\n# Simulated Machine Configuration\n#\n";
+
+	config_yaml = new YAML::Emitter();
+
+	*config_yaml << YAML::BeginMap;
+	*config_yaml << YAML::Key << "machine";
+	*config_yaml << YAML::Value << YAML::BeginMap;
+
+	/* Some machine specific parameters */
+	*config_yaml << YAML::Key << "name" << YAML::Value << config.machine_config;
+	*config_yaml << YAML::Key << "cpu_contexts" << YAML::Value << NUM_SIM_CORES;
+	*config_yaml << YAML::Key << "freq" << YAML::Value << config.core_freq_hz;
+
+	/* Now go through all cores */
+	foreach (i, cores.count())
+		cores[i]->dump_configuration(*config_yaml);
+
+	/* Next is all controllers/caches */
+	foreach (i, controllers.count())
+		controllers[i]->dump_configuration(*config_yaml);
+
+	/* Now dump all interconnections */
+	foreach (i, interconnects.count())
+		interconnects[i]->dump_configuration(*config_yaml);
+
+	/* Finalize YAML */
+	*config_yaml << YAML::EndMap;
+	*config_yaml << YAML::EndMap;
+
+	os << config_yaml->c_str() << "\n";
+	os << "\n# End Machine Configuration\n";
+
+	ptl_logfile << "Dumped all machine configuration\n";
+}
+
 int BaseMachine::run(PTLsimConfig& config)
 {
     if(logable(1))

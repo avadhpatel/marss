@@ -30,7 +30,7 @@ namespace {
                 queueEntry = new CacheQueueEntry();
                 queueEntry->init();
 
-                MemoryRequest *request = memoryHierarchy_->get_free_request();
+                MemoryRequest *request = memoryHierarchy_->get_free_request(0);
                 request->init(0, 0, 0x1234567, 0, 0, true, 0xffffff0,
                         0, MEMORY_OP_READ);
                 queueEntry->request = request;
