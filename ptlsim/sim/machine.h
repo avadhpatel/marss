@@ -14,6 +14,10 @@
 #include <ptlsim.h>
 
 #include <pthread.h>
+
+#define YAML_KEY_VAL(out, key, val) \
+	out << YAML::Key << key << YAML::Value << val;
+
 #define THREAD_PAUSE_CYCLES 10000
 
 namespace Core {
@@ -105,6 +109,7 @@ struct BaseMachine: public PTLsimMachine {
     virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);
     void flush_all_pipelines();
     virtual void reset();
+	virtual void dump_configuration(ostream& os) const;
     virtual ~BaseMachine();
 
     bitvec<NUM_SIM_CORES> context_used;

@@ -964,6 +964,24 @@ void DirectoryController::annul_request(MemoryRequest *request)
 }
 
 /**
+ * @brief Dump Directory Configuration in YAML Format
+ *
+ * @param out YAML Object
+ */
+void DirectoryController::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "directory");
+	YAML_KEY_VAL(out, "size", DIR_SET * DIR_WAY);
+	YAML_KEY_VAL(out, "line_size", DIR_LINE_SIZE);
+	YAML_KEY_VAL(out, "sets", DIR_SET);
+	YAML_KEY_VAL(out, "ways", DIR_WAY);
+
+	out << YAML::EndMap;
+}
+
+/**
  * @brief A Builder plugin for Global Directory Controller
  */
 struct GlobalDirContBuilder : public ControllerBuilder

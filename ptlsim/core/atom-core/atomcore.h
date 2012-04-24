@@ -1030,6 +1030,7 @@ namespace ATOM_CORE_MODEL {
         void flush_pipeline();
         W64  get_insns_committed();
         W8   get_coreid();
+		void dump_configuration(YAML::Emitter &out) const;
 
         // Pipeline related functions
         void fetch();

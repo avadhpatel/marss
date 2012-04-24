@@ -888,6 +888,26 @@ void CacheController::do_prefetch(MemoryRequest *request, int additional_delay)
 		   new_entry);
 }
 
+/**
+ * @brief Dump Cache Configuration in YAML Format
+ *
+ * @param out YAML Object
+ */
+void CacheController::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "cache");
+	YAML_KEY_VAL(out, "size", cacheLines_->get_size());
+	YAML_KEY_VAL(out, "sets", cacheLines_->get_set_count());
+	YAML_KEY_VAL(out, "ways", cacheLines_->get_way_count());
+	YAML_KEY_VAL(out, "line_size", cacheLines_->get_line_size());
+	YAML_KEY_VAL(out, "latency", cacheLines_->get_access_latency());
+	YAML_KEY_VAL(out, "pending_queue_size", pendingRequests_.size());
+
+	out << YAML::EndMap;
+}
+
 
 /* Cache Controller Builder */
 

@@ -1128,7 +1128,7 @@ bool cpu_exec_all(void)
 
     }
 #ifdef MARSS_QEMU
-	if (!any_cpu_has_work()) {
+	if (all_cpu_threads_idle()) {
 		/* All CPUs are paused, call ptl_simpoint reached
 		 * to check if we need to switch to simulation or not */
 		ptl_simpoint_reached(0);

@@ -417,6 +417,16 @@ void MOESILogic::handle_response(CacheQueueEntry *queueEntry,
     }
 }
 
+/**
+ * @brief Dump MOESI Cache Coherence Configuration
+ *
+ * @param out YAML Object
+ */
+void MOESILogic::dump_configuration(YAML::Emitter &out) const
+{
+	YAML_KEY_VAL(out, "coherence", "MOESI");
+}
+
 void MOESILogic::send_response(CacheQueueEntry *queueEntry,
         Interconnect *sendTo)
 {

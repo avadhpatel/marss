@@ -1265,6 +1265,8 @@ namespace OOO_CORE_MODEL {
 
             return ret;
         }
+
+		void dump_configuration(YAML::Emitter &out) const;
     };
 
     /* Checker - saved stores to compare after executing emulated instruction */

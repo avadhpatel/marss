@@ -66,6 +66,7 @@ namespace Memory {
                 virtual void invalidate_line(CacheLine *line)              = 0;
                 virtual void handle_response(CacheQueueEntry *entry,
                         Message &message) = 0;
+				virtual void dump_configuration(YAML::Emitter &out) const = 0;
 
                 CacheController* controller;
                 MemoryHierarchy* memoryHierarchy;
