@@ -1650,7 +1650,7 @@ bool TraceDecoder::decode_complex() {
   case 0xcc: {
     // INT3 (breakpoint)
     EndOfDecode();
-    immediate(REG_ar1, 3, 0);
+    immediate(REG_ar1, 3, 3);
     microcode_assist(ASSIST_INT, ripstart, rip);
     end_of_block = 1;
     break;
