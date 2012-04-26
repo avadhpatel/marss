@@ -1249,6 +1249,8 @@ namespace OOO_CORE_MODEL {
         void check_ctx_changes();
 
         W8 get_coreid() { return coreid; }
+
+		void dump_configuration(YAML::Emitter &out) const;
     };
 
     /* Checker - saved stores to compare after executing emulated instruction */

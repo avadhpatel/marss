@@ -154,6 +154,7 @@ class CPUController : public Controller
 		bool is_cache_availabe(bool is_icache);
 		void annul_request(MemoryRequest *request);
 		int flush();
+		void dump_configuration(YAML::Emitter &out) const;
 
         void set_icacheLineBits(int i) {
             icacheLineBits_ = i;

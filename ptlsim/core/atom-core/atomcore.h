@@ -1026,6 +1026,7 @@ namespace ATOM_CORE_MODEL {
         void update_stats();
         void flush_pipeline();
         W8   get_coreid();
+		void dump_configuration(YAML::Emitter &out) const;
 
         // Pipeline related functions
         void fetch();

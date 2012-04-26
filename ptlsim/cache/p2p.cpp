@@ -121,6 +121,22 @@ bool P2PInterconnect::send_request(Controller *sender,
 	return false;
 }
 
+/**
+ * @brief Dump P2P Configuration in YAML Format
+ *
+ * @param out YAML Object
+ */
+void P2PInterconnect::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "interconnect");
+	/* Currently we have 0 latency */
+	YAML_KEY_VAL(out, "latency", 0);
+
+	out << YAML::EndMap;
+}
+
 struct P2PBuilder : public InterconnectBuilder
 {
     P2PBuilder(const char* name) :

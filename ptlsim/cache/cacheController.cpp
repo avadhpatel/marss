@@ -815,7 +815,8 @@ void CacheController::annul_request(MemoryRequest *request)
 bool CacheController::send_update_message(CacheQueueEntry *queueEntry,
 		W64 tag)
 {
-	MemoryRequest *request = memoryHierarchy_->get_free_request();
+	MemoryRequest *request = memoryHierarchy_->get_free_request(
+            queueEntry->request->get_coreid());
 	assert(request);
 
 	request->init(queueEntry->request);
@@ -861,7 +862,8 @@ void CacheController::do_prefetch(MemoryRequest *request, int additional_delay)
 	if(pendingRequests_.count() > pendingRequests_.size() * 0.7)
 		return;
 
-	MemoryRequest *new_request = memoryHierarchy_->get_free_request();
+	MemoryRequest *new_request = memoryHierarchy_->get_free_request(
+            request->get_coreid());
 	assert(new_request);
 
 	new_request->init(request);
@@ -884,6 +886,26 @@ void CacheController::do_prefetch(MemoryRequest *request, int additional_delay)
 
 	memoryHierarchy_->add_event(&cacheAccess_, prefetchDelay_+additional_delay,
 		   new_entry);
+}
+
+/**
+ * @brief Dump Cache Configuration in YAML Format
+ *
+ * @param out YAML Object
+ */
+void CacheController::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "cache");
+	YAML_KEY_VAL(out, "size", cacheLines_->get_size());
+	YAML_KEY_VAL(out, "sets", cacheLines_->get_set_count());
+	YAML_KEY_VAL(out, "ways", cacheLines_->get_way_count());
+	YAML_KEY_VAL(out, "line_size", cacheLines_->get_line_size());
+	YAML_KEY_VAL(out, "latency", cacheLines_->get_access_latency());
+	YAML_KEY_VAL(out, "pending_queue_size", pendingRequests_.size());
+
+	out << YAML::EndMap;
 }
 
 

@@ -85,6 +85,10 @@ namespace Memory {
             virtual void print(ostream& os) const =0;
             virtual int get_line_bits() const=0;
             virtual int get_access_latency() const=0;
+			virtual int get_size() const=0;
+			virtual int get_set_count() const=0;
+			virtual int get_way_count() const=0;
+			virtual int get_line_size() const=0;
     };
 
     template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
@@ -115,6 +119,42 @@ namespace Memory {
             int invalidate(MemoryRequest *request);
             bool get_port(MemoryRequest *request);
             void print(ostream& os) const;
+
+			/**
+			 * @brief Get Cache Size
+			 *
+			 * @return Size of Cache in bytes
+			 */
+			int get_size() const {
+				return (SET_COUNT * WAY_COUNT * LINE_SIZE);
+			}
+
+			/**
+			 * @brief Get Number of Sets in Cache
+			 *
+			 * @return Sets in Cache
+			 */
+			int get_set_count() const {
+				return SET_COUNT;
+			}
+
+			/**
+			 * @brief Get Cache Lines per Set (Number of Ways)
+			 *
+			 * @return Number of Cache Lines in one Set
+			 */
+			int get_way_count() const {
+				return WAY_COUNT;
+			}
+
+			/**
+			 * @brief Get number of bytes in a cache line
+			 *
+			 * @return Number of bytes in Cache Line
+			 */
+			int get_line_size() const {
+				return LINE_SIZE;
+			}
 
             int get_line_bits() const {
                 return log2(LINE_SIZE);
