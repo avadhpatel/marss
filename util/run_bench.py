@@ -245,6 +245,13 @@ def gen_simconfig(args, simconfig):
         recursive_count += 1
     return gen_cfg
 
+def get_log_file(simconfig):
+    for line in simconfig.split('\n'):
+        params = line.split()
+        for param in params:
+            if "-logfile" in param:
+                return params[params.index(param)+1]
+
 # Thread class that will store the output on the serial port of qemu to file
 class SerialOut(Thread):
 
@@ -335,8 +342,8 @@ class RunSim(Thread):
             config_args['out_dir'] = os.path.realpath(run_cfg['out_dir'])
             config_args['bench'] = checkpoint
             t_simconfig = gen_simconfig(config_args, run_cfg['simcfg'])
-            sim_file_cmd_name = "%s/%s.simcfg" % (config_args['out_dir'],
-                    checkpoint)
+            log_file = get_log_file(t_simconfig)
+            sim_file_cmd_name = log_file.replace(".log", ".simcfg")
             sim_file_cmd = open(sim_file_cmd_name, "w")
             print("simconfig: %s" % t_simconfig)
             sim_file_cmd.write(t_simconfig)
