@@ -379,6 +379,9 @@ static const byte translate_fcmpcc_to_x87[128] = {
 
 W64 warned_about_x87 = 0;
 
+/**
+  @brief Print a Warning messege when there are too many x87 instructions
+ */
 void check_warned_about_x87() {
   warned_about_x87++;
   if (warned_about_x87 == 1000) {
@@ -408,6 +411,11 @@ void check_warned_about_x87() {
 #define x87_pop_stack() { this << TransOp(OP_btr, REG_fptags, REG_fptags, REG_fptos, REG_zero, 3); \
   this << TransOp(OP_addm, REG_fptos, REG_fptos, REG_imm, REG_imm, 3, 8, FP_STACK_MASK); }
 
+/**
+ * @brief Decode x87 floating poitnt instructions
+ *
+ * @return true if the instruction decoder successfully
+ */
 bool TraceDecoder::decode_x87() {
   DecodedOperand rd;
   DecodedOperand ra;
