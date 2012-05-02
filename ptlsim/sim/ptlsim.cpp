@@ -167,6 +167,7 @@ void PTLsimConfig::reset() {
   log_file_size = 1<<26;
   screenshot_file = "";
   log_user_only = 0;
+  dump_config_filename = "";
 
   dump_state_now = 0;
 
@@ -263,6 +264,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   add(dump_state_now,               "dump-state-now",       "Dump the event log ring buffer and internal state of the active core");
   add(screenshot_file,              "screenshot",           "Takes screenshot of VM window at the end of simulation");
   add(log_user_only,                "log-user-only",        "Only log the user mode activities");
+  add(dump_config_filename,			"dump-config-file",		"Dump Simulated Machine Configuration into Specified file instead of log file");
 
   section("Statistics Database");
   add(stats_filename,               "stats",                "Statistics data store hierarchy root");
@@ -746,6 +748,7 @@ void PTLsimMachine::update_stats() { return; }
 void PTLsimMachine::dump_state(ostream& os) { return; }
 void PTLsimMachine::flush_tlb(Context& ctx) { return; }
 void PTLsimMachine::flush_tlb_virt(Context& ctx, Waddr virtaddr) { return; }
+void PTLsimMachine::dump_configuration(ostream& os) const { return; }
 
 void PTLsimMachine::addmachine(const char* name, PTLsimMachine* machine) {
   if unlikely (!machinetable) {
@@ -1184,6 +1187,39 @@ static void setup_sim_stats()
 #undef COLLECT_SYSINFO
 }
 
+/**
+ * @brief Dump Simulated Machine Configuration
+ *
+ * @param machine Simulated Machine
+ *
+ * By default it dumps the machine configuration into logfile. If dump
+ * configuration file is specified via "-dump-config-file" in simconfig then
+ * machine configuration will be written to specified file.
+ *
+ * Machine configuration is written in YAML format.
+ */
+static void dump_machine_configuration(PTLsimMachine *machine)
+{
+	ofstream *dump_file;
+	bool close_at_end;
+
+	if (config.dump_config_filename.set()) {
+		dump_file = new ofstream();
+		dump_file->open(config.dump_config_filename);
+		close_at_end = true;
+	} else {
+		dump_file = &ptl_logfile;
+		close_at_end = false;
+	}
+
+	machine->dump_configuration(*dump_file);
+
+	if (close_at_end) {
+		dump_file->close();
+		delete dump_file;
+	}
+}
+
 extern "C" uint8_t ptl_simulate() {
 	PTLsimMachine* machine = NULL;
 	char* machinename = config.core_name;
@@ -1220,6 +1256,9 @@ extern "C" uint8_t ptl_simulate() {
 			ptl_logfile << "Stopping after ", config.stop_at_insns, " commits", endl, flush;
 			cerr << "Stopping after ", config.stop_at_insns, " commits", endl, flush;
 		}
+
+		/* Dump Machine configuration */
+		dump_machine_configuration(machine);
 
 		/* Update stats every half second: */
 		ticks_per_update = seconds_to_ticks(0.2);
@@ -1480,6 +1519,18 @@ extern "C" void add_qemu_io_event(QemuIOCB fn, void *arg, int delay)
 W64 ns_to_simcycles(W64 ns)
 {
     return (config.core_freq_hz/1e9) * ns;
+}
+
+/**
+ * @brief Convert Simulation cycles to Nano-Seconds based on CPU Frequency
+ *
+ * @param cycles Cycles to convert
+ *
+ * @return Nano-second value
+ */
+float simcycles_to_ns(W64 cycles)
+{
+	return (1e9/float(config.core_freq_hz)) * float(cycles);
 }
 
 #endif // CONFIG_ONLY

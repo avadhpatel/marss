@@ -143,6 +143,7 @@ namespace SwitchInterconnect {
                     MemoryRequest *request);
             void annul_request(MemoryRequest *request);
             int  get_delay() { return latency_; }
+			void dump_configuration(YAML::Emitter &out) const;
 
             ControllerQueue* get_queue(Controller *cont);
 

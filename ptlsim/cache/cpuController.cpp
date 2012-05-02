@@ -473,6 +473,27 @@ void CPUController::register_interconnect_L1_d(Interconnect *interconnect)
 	int_L1_d_ = interconnect;
 }
 
+/**
+ * @brief Dump CPUController Configuration
+ *
+ * @param out YAML object
+ *
+ * Dump CPU Controller configuration in YAML format
+ */
+void CPUController::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	out << YAML::Comment("This is a software related structure which \
+has no relevence to any hardware module.\n");
+
+	YAML_KEY_VAL(out, "type", "core_controller");
+	YAML_KEY_VAL(out, "pending_queue_size", pendingRequests_.size());
+	YAML_KEY_VAL(out, "icache_buffer_size", icacheBuffer_.size());
+
+	out << YAML::EndMap;
+}
+
 /* CPU Controller Builder */
 struct CPUControllerBuilder : public ControllerBuilder
 {

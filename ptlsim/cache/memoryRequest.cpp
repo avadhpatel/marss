@@ -141,6 +141,7 @@ MemoryRequest* RequestPool::get_free_request()
 	MemoryRequest* memoryRequest = (MemoryRequest*)freeRequestList_.peek();
 	freeRequestList_.remove((selfqueuelink*)memoryRequest);
 	usedRequestsList_.enqueue((selfqueuelink*)memoryRequest);
+
 	return memoryRequest;
 }
 

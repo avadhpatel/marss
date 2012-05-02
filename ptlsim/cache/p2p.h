@@ -69,6 +69,8 @@ class P2PInterconnect : public Interconnect
 
 		void annul_request(MemoryRequest *request) {
 		}
+
+		void dump_configuration(YAML::Emitter &out) const;
 };
 
 static inline ostream& operator << (ostream& os, const P2PInterconnect&

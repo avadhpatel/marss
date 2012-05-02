@@ -272,6 +272,25 @@ void BusInterconnect::print_map(ostream& os)
 	}
 }
 
+/**
+ * @brief Dump Bus Configuration in YAML Format
+ *
+ * @param out YAML Object
+ */
+void BusInterconnect::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "interconnect");
+	YAML_KEY_VAL(out, "latency", latency_);
+	YAML_KEY_VAL(out, "arbitrate_latency", arbitrate_latency_);
+	if (controllers.size() > 0)
+		YAML_KEY_VAL(out, "per_cont_queue_size",
+				controllers[0]->queue.size());
+
+	out << YAML::EndMap;
+}
+
 struct BusBuilder : public InterconnectBuilder
 {
     BusBuilder(const char* name) :

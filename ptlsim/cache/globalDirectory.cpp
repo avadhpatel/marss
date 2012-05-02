@@ -547,7 +547,8 @@ bool DirectoryController::send_update_cb(void *arg)
         return true;
     }
 
-    newEntry->request = memoryHierarchy_->get_free_request();
+    newEntry->request = memoryHierarchy_->get_free_request(
+            queueEntry->request->get_coreid());
     newEntry->request->init(queueEntry->request);
     newEntry->request->incRefCounter();
     newEntry->request->set_op_type(MEMORY_OP_UPDATE);
@@ -602,7 +603,8 @@ bool DirectoryController::send_evict_cb(void *arg)
 
         assert(newEntry);
 
-        newEntry->request = memoryHierarchy_->get_free_request();
+        newEntry->request = memoryHierarchy_->get_free_request(
+                queueEntry->request->get_coreid());
         newEntry->request->init(queueEntry->request);
         newEntry->request->incRefCounter();
         newEntry->request->set_op_type(MEMORY_OP_EVICT);
@@ -814,7 +816,8 @@ DirectoryEntry* DirectoryController::get_directory_entry(
 
             assert(newEntry);
 
-            newEntry->request = memoryHierarchy_->get_free_request();
+            newEntry->request = memoryHierarchy_->get_free_request(
+                    req->get_coreid());
             newEntry->request->init(req);
             newEntry->request->incRefCounter();
             newEntry->request->set_physical_address(old_tag);
@@ -958,6 +961,24 @@ void DirectoryController::annul_request(MemoryRequest *request)
             pendingRequests_->free(entry);
         }
     }
+}
+
+/**
+ * @brief Dump Directory Configuration in YAML Format
+ *
+ * @param out YAML Object
+ */
+void DirectoryController::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "directory");
+	YAML_KEY_VAL(out, "size", DIR_SET * DIR_WAY);
+	YAML_KEY_VAL(out, "line_size", DIR_LINE_SIZE);
+	YAML_KEY_VAL(out, "sets", DIR_SET);
+	YAML_KEY_VAL(out, "ways", DIR_WAY);
+
+	out << YAML::EndMap;
 }
 
 /**

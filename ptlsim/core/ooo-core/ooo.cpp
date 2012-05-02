@@ -1451,12 +1451,68 @@ void OooCore::check_ctx_changes()
 
             // IP address is changed, so flush the pipeline
             threads[i]->flush_pipeline();
+			threads[i]->thread_stats.ctx_switches++;
         }
     }
 }
 
 void OooCore::update_stats()
 {
+}
+
+/**
+ * @brief Dump OOO Core configuration parameters
+ *
+ * @param out YAML Object to dump configuration
+ *
+ * Dump various core parameters to YAML::Emitter which will
+ * be stored in log file or config dump file in YAML format.
+ */
+void OooCore::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name();
+
+	out << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "core");
+	YAML_KEY_VAL(out, "threads", threadcount);
+	YAML_KEY_VAL(out, "iq_size", ISSUE_QUEUE_SIZE);
+	YAML_KEY_VAL(out, "phys_reg_files", PHYS_REG_FILE_COUNT);
+#ifdef UNIFIED_INT_FP_PHYS_REG_FILE
+	YAML_KEY_VAL(out, "phys_reg_file_int_fp_size", PHYS_REG_FILE_SIZE);
+#else
+	YAML_KEY_VAL(out, "phys_reg_file_int_size", PHYS_REG_FILE_SIZE);
+	YAML_KEY_VAL(out, "phys_reg_file_fp_size", PHYS_REG_FILE_SIZE);
+#endif
+	YAML_KEY_VAL(out, "phys_reg_file_st_size", STQ_SIZE * threadcount);
+	YAML_KEY_VAL(out, "phys_reg_file_br_size", MAX_BRANCHES_IN_FLIGHT *
+			threadcount);
+	YAML_KEY_VAL(out, "fetch_q_size", FETCH_QUEUE_SIZE);
+	YAML_KEY_VAL(out, "frontend_stages", FRONTEND_STAGES);
+	YAML_KEY_VAL(out, "itlb_size", ITLB_SIZE);
+	YAML_KEY_VAL(out, "dtlb_size", DTLB_SIZE);
+
+	YAML_KEY_VAL(out, "total_FUs", (ALU_FU_COUNT + FPU_FU_COUNT +
+				LOAD_FU_COUNT + STORE_FU_COUNT));
+	YAML_KEY_VAL(out, "int_FUs", ALU_FU_COUNT);
+	YAML_KEY_VAL(out, "fp_FUs", FPU_FU_COUNT);
+	YAML_KEY_VAL(out, "ld_FUs", LOAD_FU_COUNT);
+	YAML_KEY_VAL(out, "st_FUs", STORE_FU_COUNT);
+	YAML_KEY_VAL(out, "frontend_width", FRONTEND_WIDTH);
+	YAML_KEY_VAL(out, "dispatch_width", DISPATCH_WIDTH);
+	YAML_KEY_VAL(out, "issue_width", MAX_ISSUE_WIDTH);
+	YAML_KEY_VAL(out, "writeback_width", WRITEBACK_WIDTH);
+	YAML_KEY_VAL(out, "commit_width", COMMIT_WIDTH);
+	YAML_KEY_VAL(out, "max_branch_in_flight", MAX_BRANCHES_IN_FLIGHT);
+
+	out << YAML::Key << "per_thread" << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "rob_size", ROB_SIZE);
+	YAML_KEY_VAL(out, "lsq_size", LSQ_SIZE);
+
+	out << YAML::EndMap;
+
+	out << YAML::EndMap;
 }
 
 OooCoreBuilder::OooCoreBuilder(const char* name)

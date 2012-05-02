@@ -176,6 +176,24 @@ ControllerQueue* Switch::get_queue(Controller *cont)
     return NULL;
 }
 
+/**
+ * @brief Dump Switch Interconnect Configuration in YAML Format
+ *
+ * @param out YAML Object
+ */
+void Switch::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "interconnect");
+	YAML_KEY_VAL(out, "latency", latency_);
+	if (controllers.size() > 0)
+		YAML_KEY_VAL(out, "per_cont_queue_size",
+				controllers[0]->queue.size());
+
+	out << YAML::EndMap;
+}
+
 struct SwitchBuilder : public InterconnectBuilder
 {
     SwitchBuilder(const char *name) :
