@@ -28,6 +28,7 @@ void DirectoryEntry::reset()
     tag   = -1;
     owner = -1;
     dirty = 0;
+	locked = 0;
 }
 
 void DirectoryEntry::init(W64 tag_)
@@ -35,6 +36,7 @@ void DirectoryEntry::init(W64 tag_)
     tag   = tag_;
     dirty = 0;
     owner = -1;
+	locked = 0;
     present.reset();
 }
 
@@ -368,7 +370,7 @@ bool DirectoryController::write_miss_cb(void *arg)
     DirectoryEntry *dir_entry = get_directory_entry(queueEntry->request);
     DirectoryController *sig_dir = this;
 
-    if (!dir_entry) {
+    if (!dir_entry || dir_entry->locked) {
         // Retry after 1 cycle
         memoryHierarchy_->add_event(&write_miss, 1, queueEntry);
         return true;
@@ -592,6 +594,8 @@ bool DirectoryController::send_evict_cb(void *arg)
 		return true;
 	}
 
+	queueEntry->entry->locked = 1;
+
     /* Now for each cached entry, send evict message to that
      * controller */
     foreach (i, NUM_SIM_CORES) {
@@ -637,6 +641,8 @@ bool DirectoryController::send_response_cb(void *arg)
     queueEntry->entry->present.reset(queueEntry->cont->idx);
     queueEntry->shared = queueEntry->entry->present.nonzero();
     queueEntry->entry->present.set(queueEntry->cont->idx);
+
+	queueEntry->entry->locked = 0;
 
     if (queueEntry->request->get_type() == MEMORY_OP_WRITE) {
         queueEntry->entry->owner = queueEntry->cont->idx;
