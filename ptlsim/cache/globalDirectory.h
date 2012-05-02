@@ -35,6 +35,7 @@ struct DirectoryEntry {
     bool dirty;
     W64  tag;
     W8   owner;
+	bool locked;
 
     DirectoryEntry() { reset(); }
     void reset();
