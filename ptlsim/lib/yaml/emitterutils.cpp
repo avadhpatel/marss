@@ -268,7 +268,6 @@ namespace YAML
 		bool WriteComment(ostream& out, const std::string& str, int postCommentIndent)
 		{
 			bool hash_needed = true;
-			unsigned curIndent = out.col();
 			int codePoint;
 			for(std::string::const_iterator i = str.begin();
 				GetNextCodePointAndAdvance(codePoint, i, str.end());

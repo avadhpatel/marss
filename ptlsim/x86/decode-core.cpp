@@ -9,6 +9,7 @@
 #include <ptlsim.h>
 #include <decode.h>
 
+#include <setjmp.h>
 
 BasicBlockCache bbcache[NUM_SIM_CORES];
 W8 BasicBlockCache::cpuid_counter = 0;
@@ -33,6 +34,10 @@ BasicBlockPageCache bbpages;
 CycleTimer translate_timer("translate");
 
 ofstream bbcache_dump_file;
+
+static jmp_buf decode_jmp_buf;
+
+#define DECODE_EXCEPTION() longjmp(decode_jmp_buf, 1)
 
 //
 // Calling convention:
@@ -1219,6 +1224,8 @@ void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, c
 
     int imm_bits = (memop) ? 32 : 64;
 
+	if (memref.type != OPTYPE_MEM) DECODE_EXCEPTION();
+
     int basereg = arch_pseudo_reg_to_arch_reg[memref.mem.basereg];
     int indexreg = arch_pseudo_reg_to_arch_reg[memref.mem.indexreg];
     // ld rd = ra,rb,rc
@@ -2220,38 +2227,52 @@ bool TraceDecoder::translate() {
         return false;
     }
 
-    switch (op >> 8) {
-        case 0:
-        case 1: {
-                    rc = decode_fast();
+	if (setjmp(decode_jmp_buf) == 0) {
+		switch (op >> 8) {
+			case 0:
+			case 1: {
+						rc = decode_fast();
 
-                    // Try again with the complex decoder if needed
-                    bool iscomplex = ((rc == 0) & (!invalid));
-                    some_insns_complex |= iscomplex;
-                    if (iscomplex) rc = decode_complex();
+						// Try again with the complex decoder if needed
+						bool iscomplex = ((rc == 0) & (!invalid));
+						some_insns_complex |= iscomplex;
+						if (iscomplex) rc = decode_complex();
 
-                    if unlikely (used_microcode_assist) {
-                        DECODERSTAT->x86_decode_type[DECODE_TYPE_ASSIST]++;
-                    } else {
-                        DECODERSTAT->x86_decode_type[DECODE_TYPE_FAST] += (!iscomplex);
-                        DECODERSTAT->x86_decode_type[DECODE_TYPE_COMPLEX] += iscomplex;
-                    }
+						if unlikely (used_microcode_assist) {
+							DECODERSTAT->x86_decode_type[DECODE_TYPE_ASSIST]++;
+						} else {
+							DECODERSTAT->x86_decode_type[DECODE_TYPE_FAST] += (!iscomplex);
+							DECODERSTAT->x86_decode_type[DECODE_TYPE_COMPLEX] += iscomplex;
+						}
 
-                    break;
-                }
-        case 2:
-        case 3:
-        case 4:
-        case 5:
-                DECODERSTAT->x86_decode_type[DECODE_TYPE_SSE]++;
-                rc = decode_sse(); break;
-        case 6:
-                DECODERSTAT->x86_decode_type[DECODE_TYPE_X87]++;
-                rc = decode_x87(); break;
-        default: {
-                     assert(false);
-                 }
-    } // switch
+						break;
+					}
+			case 2:
+			case 3:
+			case 4:
+			case 5:
+					DECODERSTAT->x86_decode_type[DECODE_TYPE_SSE]++;
+					rc = decode_sse(); break;
+			case 6:
+					DECODERSTAT->x86_decode_type[DECODE_TYPE_X87]++;
+					rc = decode_x87(); break;
+			default: {
+						 assert(false);
+					 }
+		} // switch
+	} else {
+		/* Decoder Exception occured!! Something must have gone wrong while
+		 * decoding an instruciton. Mark this instruction as invalid and
+		 * return, if this decoding is on wrong path then simulator will not
+		 * come back on this same instruction address. */
+		ptl_logfile << "[EXCEPTION] Decoder Exception while decoding " <<
+			"instruction at address: " << hexstring(rip, 48) << endl;
+		invalidate();
+		user_insn_count++;
+		end_of_block = 1;
+		flush();
+		return false;
+	}
 
     if (!rc) return rc;
 

@@ -127,6 +127,15 @@ def get_run_configs(run_name, options, conf_parser):
         exit(-1)
 
     simconfig = conf_parser.get(run_sec, 'simconfig', True)
+
+    # If user has specified simconfig option in command line then
+    # add it to the config read from file.
+    if options.simconfig != None:
+        simconfig += "\n# Simconfig options specified in run_bench " +\
+                "command line which will override any previously " +\
+                "specified options\n"
+        simconfig += options.simconfig
+
     print("simconfig: %s" % simconfig)
 
     # Get optional qemu arguments
@@ -190,6 +199,8 @@ opt_parser.add_option("-n", "--num-insts", dest="num_insts", default=1,
 opt_parser.add_option("--chk-names", dest="chk_names", type="string",
         help="Comma separated names of checkpoints to run, this overrides " +
         "default sets of checkpoints specified in config file.", default="")
+opt_parser.add_option("-s", "--simconfig",
+        help="Override/Add simulation config parameter")
 
 (options, args) = opt_parser.parse_args()
 
@@ -233,6 +244,13 @@ def gen_simconfig(args, simconfig):
         gen_cfg = gen_cfg % args
         recursive_count += 1
     return gen_cfg
+
+def get_log_file(simconfig):
+    for line in simconfig.split('\n'):
+        params = line.split()
+        for param in params:
+            if "-logfile" in param:
+                return params[params.index(param)+1]
 
 # Thread class that will store the output on the serial port of qemu to file
 class SerialOut(Thread):
@@ -320,12 +338,13 @@ class RunSim(Thread):
             output_dir = run_cfg['out_dir']
             checkpoint = run_cfg['checkpoint']
 
-            _, sim_file_cmd_name = tempfile.mkstemp()
-            sim_file_cmd = open(sim_file_cmd_name, "w")
             config_args = copy.copy(conf_parser.defaults())
             config_args['out_dir'] = os.path.realpath(run_cfg['out_dir'])
             config_args['bench'] = checkpoint
             t_simconfig = gen_simconfig(config_args, run_cfg['simcfg'])
+            log_file = get_log_file(t_simconfig)
+            sim_file_cmd_name = log_file.replace(".log", ".simcfg")
+            sim_file_cmd = open(sim_file_cmd_name, "w")
             print("simconfig: %s" % t_simconfig)
             sim_file_cmd.write(t_simconfig)
             sim_file_cmd.write("\n")
@@ -383,8 +402,6 @@ class RunSim(Thread):
             # Wait for simulation to complete
             p.wait()
 
-            # Delete the temp file
-            os.remove(sim_file_cmd_name)
             serial_thread.join()
             stdout_thread.join()
 

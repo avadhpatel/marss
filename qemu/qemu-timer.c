@@ -254,6 +254,10 @@ static void qemu_rearm_alarm_timer(struct qemu_alarm_timer *t)
 /* TODO: MIN_TIMER_REARM_NS should be optimized */
 #define MIN_TIMER_REARM_NS 250000
 
+#ifdef MARSS_QEMU
+#define SIM_MIN_TIMER_REARM_NS (MIN_TIMER_REARM_NS * 4)
+#endif
+
 #ifdef _WIN32
 
 static int mm_start_timer(struct qemu_alarm_timer *t);
@@ -949,6 +953,11 @@ static void dynticks_rearm_timer(struct qemu_alarm_timer *t)
     nearest_delta_ns = qemu_next_alarm_deadline();
     if (nearest_delta_ns < MIN_TIMER_REARM_NS)
         nearest_delta_ns = MIN_TIMER_REARM_NS;
+
+#ifdef MARSS_QEMU
+	if (in_simulation && nearest_delta_ns < SIM_MIN_TIMER_REARM_NS)
+		nearest_delta_ns = SIM_MIN_TIMER_REARM_NS;
+#endif
 
     /* check whether a timer is already running */
     if (timer_gettime(host_timer, &timeout)) {

@@ -441,7 +441,9 @@ if not conf.TryLink(compile_test_src, '.cpp'):
 
 # Get the CPU type
 if conf.CheckCPUDefine("__i386__"):
-    env['cpu'] = "i386"
+    print("ERROR: Marss does not support 32 bit x86 machine.")
+    print("ERROR: Please compile/run Marss on 64 bit x86 machine.")
+    exit_with_error()
 elif conf.CheckCPUDefine("__x86_64__"):
     env['cpu'] = "x86_64"
 else :

@@ -674,8 +674,10 @@ bool CacheController::wait_interconnect_cb(void *arg)
 
 	queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]--;
 
-	if(!queueEntry->sendTo)
+	if(!queueEntry->sendTo) {
+		clear_entry_cb(queueEntry);
 		return true;
+	}
 
 	memdebug("Queue Entry: " << *queueEntry << endl);
 
@@ -904,6 +906,7 @@ void CacheController::dump_configuration(YAML::Emitter &out) const
 	YAML_KEY_VAL(out, "line_size", cacheLines_->get_line_size());
 	YAML_KEY_VAL(out, "latency", cacheLines_->get_access_latency());
 	YAML_KEY_VAL(out, "pending_queue_size", pendingRequests_.size());
+	YAML_KEY_VAL(out, "config", (wt_disabled_ ? "writeback" : "writethrough"));
 
 	out << YAML::EndMap;
 }
