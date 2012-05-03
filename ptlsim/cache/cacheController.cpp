@@ -674,8 +674,10 @@ bool CacheController::wait_interconnect_cb(void *arg)
 
 	queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]--;
 
-	if(!queueEntry->sendTo)
+	if(!queueEntry->sendTo) {
+		clear_entry_cb(queueEntry);
 		return true;
+	}
 
 	memdebug("Queue Entry: " << *queueEntry << endl);
 
