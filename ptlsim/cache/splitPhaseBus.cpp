@@ -339,6 +339,13 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
         return true;
     }
 
+	if(!can_broadcast(queueEntry->controllerQueue)) {
+		set_bus_busy(true);
+		memoryHierarchy_->add_event(&broadcastCompleted_,
+				2, NULL);
+		return true;
+	}
+
     memdebug("Broadcasing entry: ", *queueEntry, endl);
 
     /* now create an entry into pendingRequests_ */
