@@ -27,6 +27,7 @@ W64 l_assist_x87_fist(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbf
 	switch (size) {
 		case 1: result = (W64)helper_fist_ST0(); break;
 		case 2: result = (W64)helper_fistl_ST0(); break;
+		case 3: result = (W64)helper_fistll_ST0(); break;
 		default: assert(0);
 	}
 
