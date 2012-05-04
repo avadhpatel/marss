@@ -1493,7 +1493,7 @@ bool TraceDecoder::decode_complex() {
         original value of %rsp at trace entry.
 
         */
-        if (rep) {
+        if (rep && rep != PFX_REPZ) {
 			MakeInvalid();
 			break;
 		}
