@@ -306,8 +306,11 @@ StatObjBase* Statable::get_stat_obj(dynarray<stringbuf*> &names, int idx)
 	/* if idx is -1 means its root node so ignore that start searching from
 	 * its child nodes. */
 	if (idx == -1) {
-		assert(childNodes.size() == 1);
-		return childNodes[0]->get_stat_obj(names, idx + 1);
+		foreach (i, childNodes.size()) {
+			if (strequal(childNodes[i]->get_name(), names[0]->buf))
+				return childNodes[i]->get_stat_obj(names, idx + 1);
+		}
+		assert(0);
 	}
 
 	/* Match the name of this node with name in array with given index */
@@ -326,8 +329,11 @@ StatObjBase* Statable::get_stat_obj(dynarray<stringbuf*> &names, int idx)
 			}
 		} else {
 			/* Search Child nodes */
+			StatObjBase *ret = NULL;
 			foreach (i, childNodes.size()) {
-				return childNodes[i]->get_stat_obj(names, idx+1);
+				ret = childNodes[i]->get_stat_obj(names, idx+1);
+				if (ret)
+					return ret;
 			}
 		}
 	}
@@ -452,8 +458,8 @@ bson_buffer* StatsBuilder::dump(Stats *stats, bson_buffer *bb) const
 StatObjBase* StatsBuilder::get_stat_obj(stringbuf &name)
 {
 	dynarray<stringbuf*> name_split;
-	char split = ':';
-    name.split(name_split, &split);
+	char split[] = ":\0";
+	name.split(name_split, split);
 
 	if (name_split.size() <= 0)
 		return NULL;
