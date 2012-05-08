@@ -233,6 +233,23 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                         arg5);
                 break;
             }
+        case PTLCALL_LOG:
+            {
+                char* log_ptr = (char*)arg1;
+                W64 size = arg2;
+                stringbuf vm_log(size+1);
+                char tmp;
+
+                foreach (i, (int)size) {
+                    tmp = (char)ldub_kernel((target_ulong)(log_ptr));
+                    vm_log.buf[i] = tmp;
+                    log_ptr++;
+                }
+                vm_log.buf[size] = '\0';
+
+                ptl_logfile << "[VM] " << vm_log;
+                break;
+            }
         default :
             cout << "PTLCALL type unknown : ", calltype, endl;
             cpu->regs[REG_rax] = -EINVAL;

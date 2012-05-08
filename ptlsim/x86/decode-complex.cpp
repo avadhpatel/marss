@@ -1493,7 +1493,10 @@ bool TraceDecoder::decode_complex() {
         original value of %rsp at trace entry.
 
         */
-        if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
+        if (rep && rep != PFX_REPZ) {
+			MakeInvalid();
+			break;
+		}
 
         this << TransOp(OP_ld,     REG_temp0, REG_rsi,    REG_imm,  REG_zero,  sizeshift, 0);
         this << TransOp(OP_st,     REG_mem,   REG_rdi,    REG_imm,  REG_temp0, sizeshift, 0);
