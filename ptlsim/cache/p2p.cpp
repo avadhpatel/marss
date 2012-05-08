@@ -39,6 +39,12 @@
 
 using namespace Memory;
 
+/**
+ * @brief Initialize the P2PInterconnect module instance
+ *
+ * @param name Unique name assigend to this interconnect instance
+ * @param memoryHierarchy Pointer to global memory hierarchy
+ */
 P2PInterconnect::P2PInterconnect(const char *name,
 		MemoryHierarchy *memoryHierarchy) :
 	Interconnect(name, memoryHierarchy)
@@ -49,6 +55,14 @@ P2PInterconnect::P2PInterconnect(const char *name,
     memoryHierarchy->add_interconnect(this);
 }
 
+/**
+ * @brief Register Controller module to this interconnect
+ *
+ * @param controller Controller module instance
+ *
+ * This interconnect is designed to connect only 2 controllers, so it must be
+ * called no more than 2 times.
+ */
 void P2PInterconnect::register_controller(Controller *controller)
 {
 	if(controllers_[0] == NULL) {
@@ -64,6 +78,13 @@ void P2PInterconnect::register_controller(Controller *controller)
 	assert(0);
 }
 
+/**
+ * @brief Controller Request entry point
+ *
+ * @param arg Message sent from Controller containing request
+ *
+ * @return True if message is successfully forwared else False
+ */
 bool P2PInterconnect::controller_request_cb(void *arg)
 {
     /*
@@ -91,6 +112,14 @@ bool P2PInterconnect::controller_request_cb(void *arg)
 
 }
 
+/**
+ * @brief Provides interface to fast access another controller
+ *
+ * @param controller Sender
+ * @param request Memory Request
+ *
+ * @return Access cycle delay for fast path access
+ */
 int P2PInterconnect::access_fast_path(Controller *controller,
 		MemoryRequest *request)
 {
@@ -98,6 +127,11 @@ int P2PInterconnect::access_fast_path(Controller *controller,
 	return receiver->access_fast_path(this, request);
 }
 
+/**
+ * @brief Print connections of this instance
+ *
+ * @param os Output string stream
+ */
 void P2PInterconnect::print_map(ostream &os)
 {
 	os << "Interconnect: " , get_name(), endl;
@@ -137,6 +171,12 @@ void P2PInterconnect::dump_configuration(YAML::Emitter &out) const
 	out << YAML::EndMap;
 }
 
+/**
+ * @brief P2P Interconnect Builder to export P2P interconnect to machine
+ *
+ * This builder creates an Interconnect module named 'p2p' that can be used in
+ * machine configuration file.
+ */
 struct P2PBuilder : public InterconnectBuilder
 {
     P2PBuilder(const char* name) :
