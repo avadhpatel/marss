@@ -321,7 +321,7 @@ static inline W64 ptlcall_switch_to_sim() {
 }
 
 static inline W64 ptlcall_switch_to_native() {
-  return ptlcall_single_flush("-native");
+  return ptlcall_single_flush("-stop");
 }
 
 static inline W64 ptlcall_kill() {
@@ -425,7 +425,7 @@ static inline W64 ptlcall_core_dump(const char* dump, const W64 size,
 static inline void ptlcall_log(const char* log)
 {
 	int length = strlen(log);
-	ptlcall_write(PTLCALL_LOG, (W64)log_string, length, 0, 0, 0, 0);
+	ptlcall_write(PTLCALL_LOG, (W64)log, length, 0, 0, 0, 0);
 }
 
 #endif // PTLCALLS_USERSPACE
