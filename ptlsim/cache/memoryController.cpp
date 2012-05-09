@@ -67,9 +67,19 @@ MemoryController::MemoryController(W8 coreid, const char *name,
 	}
 }
 
+/*
+ * @brief: get bank id from input address using
+ *         cache line interleaving address mapping
+ *         using lower bits for bank id
+ *
+ * @param: addr - input address of the memory request
+ *
+ * @return: bank id of input address
+ *
+ */
 int MemoryController::get_bank_id(W64 addr)
 {
-	return lowbits(addr >> 16, bankBits_);
+    return lowbits(addr >> 6, bankBits_);
 }
 
 void MemoryController::register_interconnect(Interconnect *interconnect,
