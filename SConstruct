@@ -82,7 +82,7 @@ link_shared_library_message = '%sLinking Shared Library %s==> %s$TARGET%s' % \
 
 pretty_printing=ARGUMENTS.get('pretty',1)
 
-config_file = ARGUMENTS.get('config', "config/default.conf")
+config_file = ARGUMENTS.get('config', "config")
 config_debug = ARGUMENTS.get('config-debug', False)
 
 # Base Environment used to compile Marss code (QEMU and PTLSIM both)
