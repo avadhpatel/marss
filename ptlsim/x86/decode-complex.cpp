@@ -2274,10 +2274,6 @@ bool TraceDecoder::decode_complex() {
 								REG_cf, REG_of, 3, 0, 0,
 								FLAGS_DEFAULT_ALU);
 
-						this << TransOp(OP_jmp, REG_rip, REG_zero,
-								REG_imm, REG_zero, 3,
-								ripstart);
-
 						this << TransOp(OP_mov, REG_ar1, REG_zero,
 								REG_imm, REG_zero, 3, rip - cs_base);
 						microcode_assist(ASSIST_MWAIT,
