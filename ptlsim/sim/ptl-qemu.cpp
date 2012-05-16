@@ -328,7 +328,10 @@ void ptl_config_from_file(const char *filename) {
     for (;;) {
 
         line.reset();
-        cmd_file.getline(line.buf, line.length);
+
+		std::string temp;
+		std::getline(cmd_file, temp);
+		line << temp.c_str();
 
         if (!cmd_file)
             break;
