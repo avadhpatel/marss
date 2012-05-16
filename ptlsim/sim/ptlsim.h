@@ -63,6 +63,7 @@ struct PTLsimMachine : public Statable {
   virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);
   virtual void dump_configuration(ostream& os) const;
   virtual void reset(){};
+  virtual void shutdown(){};
   static void addmachine(const char* name, PTLsimMachine* machine);
   static void removemachine(const char* name, PTLsimMachine* machine);
   static PTLsimMachine* getmachine(const char* name);

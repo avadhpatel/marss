@@ -61,6 +61,35 @@ void BaseMachine::reset()
     }
 }
 
+void BaseMachine::shutdown()
+{
+	foreach (i, cores.count()) {
+		BaseCore* core = cores[i];
+		delete core;
+	}
+
+	cores.clear();
+
+	foreach (i, controllers.count()) {
+		Controller* cont = controllers[i];
+		delete cont;
+	}
+
+	controllers.clear();
+
+	foreach (i, interconnects.count()) {
+		Interconnect* intercon = interconnects[i];
+		delete intercon;
+	}
+
+	interconnects.clear();
+
+	if (memoryHierarchyPtr) {
+		delete memoryHierarchyPtr;
+		memoryHierarchyPtr = NULL;
+	}
+}
+
 W8 BaseMachine::get_num_cores()
 {
     return cores.count();

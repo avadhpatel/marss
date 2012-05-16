@@ -108,7 +108,6 @@ CacheController::CacheController(W8 coreid, const char *name,
 
 CacheController::~CacheController()
 {
-    delete &new_stats;
 }
 
 CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
