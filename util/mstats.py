@@ -766,7 +766,26 @@ def execute(options, args):
 
     Writers.write(stats, options)
 
+def load_plugins():
+    exec_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
+    sys.path.append(exec_dir)
+    path = "%s/mstats_plugins" % (exec_dir)
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            if name.endswith(".py") and not name.startswith("__"):
+                path = os.path.join("mstats_plugins", name)
+                path = path [1:] if path[0] == '/' else path
+                plugin_name = path.rsplit('.',1)[0].replace('/','.')
+                try:
+                    __import__(plugin_name)
+                except Exception as e:
+                    debug("Unable to load plugin: %s" % plugin_name)
+                    debug("Exception %s" % str(e))
+                    pass
+
 if __name__ == "__main__":
+    load_plugins()
+
     opt = setup_options()
     (options, args) = opt.parse_args()
 
