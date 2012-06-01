@@ -293,6 +293,54 @@ stringbuf *Statable::get_full_stat_string() const
     }
 }
 
+/**
+ * @brief Find StatObj from given name array
+ *
+ * @param names Array of names in 'tree' to find specific object
+ * @param idx Index into array
+ *
+ * @return StatObjBase pointer if found, else NULL
+ */
+StatObjBase* Statable::get_stat_obj(dynarray<stringbuf*> &names, int idx)
+{
+	/* if idx is -1 means its root node so ignore that start searching from
+	 * its child nodes. */
+	if (idx == -1) {
+		foreach (i, childNodes.size()) {
+			if (strequal(childNodes[i]->get_name(), names[0]->buf))
+				return childNodes[i]->get_stat_obj(names, idx + 1);
+		}
+		assert(0);
+	}
+
+	/* Match the name of this node with name in array with given index */
+	if (name == *names[idx]) {
+
+		/* Search leafs if index + 1 is last name */
+		if (names.size() == idx + 2) {
+			stringbuf &l_name = *(names[idx+1]);
+			stringbuf leaf_name;
+			foreach (i, leafs.size()) {
+				leaf_name.reset();
+				leaf_name << leafs[i]->get_name();
+				if (l_name == leaf_name) {
+					return leafs[i];
+				}
+			}
+		} else {
+			/* Search Child nodes */
+			StatObjBase *ret = NULL;
+			foreach (i, childNodes.size()) {
+				ret = childNodes[i]->get_stat_obj(names, idx+1);
+				if (ret)
+					return ret;
+			}
+		}
+	}
+
+	return NULL;
+}
+
 StatsBuilder *StatsBuilder::_builder = NULL;
 
 Stats* StatsBuilder::get_new_stats()
@@ -398,6 +446,39 @@ YAML::Emitter& StatsBuilder::dump(Stats *stats, YAML::Emitter &out) const
 bson_buffer* StatsBuilder::dump(Stats *stats, bson_buffer *bb) const
 {
     return rootNode->dump(bb, stats);
+}
+
+/**
+ * @brief Get Statistic Object from name
+ *
+ * @param name A Name of object in format 'parent1:parent2:obj_name'
+ *
+ * @return Pointer to StatObjBase if found, else NULL
+ */
+StatObjBase* StatsBuilder::get_stat_obj(stringbuf &name)
+{
+	dynarray<stringbuf*> name_split;
+	char split[] = ":\0";
+	name.split(name_split, split);
+
+	if (name_split.size() <= 0)
+		return NULL;
+
+	return rootNode->get_stat_obj(name_split, -1);
+}
+
+/**
+ * @brief Get Statistic Object from name
+ *
+ * @param name A Name of object in format 'parent1:parent2:obj_name'
+ *
+ * @return Pointer to StatObjBase if found, else NULL
+ */
+StatObjBase* StatsBuilder::get_stat_obj(const char *name)
+{
+	stringbuf name_;
+	name_ << name;
+	return get_stat_obj(name_);
 }
 
 void StatObjBase::set_default_stats(Stats *stats)

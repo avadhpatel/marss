@@ -110,6 +110,7 @@ struct BaseMachine: public PTLsimMachine {
     void flush_all_pipelines();
     virtual void reset();
 	virtual void dump_configuration(ostream& os) const;
+	virtual void shutdown();
     virtual ~BaseMachine();
 
     bitvec<NUM_SIM_CORES> context_used;

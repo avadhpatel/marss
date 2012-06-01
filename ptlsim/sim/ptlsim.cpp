@@ -528,6 +528,10 @@ static void kill_simulation()
 
     shutdown_decode();
 
+	PTLsimMachine* machine = PTLsimMachine::getmachine(config.core_name.buf);
+	if (machine)
+		machine->shutdown();
+
     ptl_logfile.flush();
     ptl_logfile.close();
 

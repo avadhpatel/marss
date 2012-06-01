@@ -10,7 +10,7 @@
 /* Use to remove escape char passed into configuration string */
 static void unescape_string(stringbuf& str)
 {
-    stringbuf tmp(str.size());
+    stringbuf tmp(str.size() + 1);
     int j = 0;
 
     foreach(i, str.size()) {

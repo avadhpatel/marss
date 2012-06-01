@@ -1489,7 +1489,10 @@ bool TraceDecoder::decode_complex() {
         original value of %rsp at trace entry.
 
         */
-        if (rep) assert(rep == PFX_REPZ); // only rep is allowed for movs and rep == repz here
+        if (rep && rep != PFX_REPZ) {
+			MakeInvalid();
+			break;
+		}
 
         this << TransOp(OP_ld,     REG_temp0, REG_rsi,    REG_imm,  REG_zero,  sizeshift, 0);
         this << TransOp(OP_st,     REG_mem,   REG_rdi,    REG_imm,  REG_temp0, sizeshift, 0);
@@ -2232,9 +2235,6 @@ bool TraceDecoder::decode_complex() {
 						this << TransOp(OP_collcc, REG_temp0, REG_zf,
 								REG_cf, REG_of, 3, 0, 0,
 								FLAGS_DEFAULT_ALU);
-						this << TransOp(OP_jmp, REG_rip, REG_zero,
-								REG_imm, REG_zero, 3,
-								ripstart);
 
 						sizeshift = (use64) ? 3 : 2;
 						this << TransOp(OP_mov, REG_ar1, REG_rax,
@@ -2266,10 +2266,6 @@ bool TraceDecoder::decode_complex() {
 						this << TransOp(OP_collcc, REG_temp0, REG_zf,
 								REG_cf, REG_of, 3, 0, 0,
 								FLAGS_DEFAULT_ALU);
-
-						this << TransOp(OP_jmp, REG_rip, REG_zero,
-								REG_imm, REG_zero, 3,
-								ripstart);
 
 						this << TransOp(OP_mov, REG_ar1, REG_zero,
 								REG_imm, REG_zero, 3, rip - cs_base);
@@ -2322,8 +2318,6 @@ bool TraceDecoder::decode_complex() {
 				EndOfDecode();
 				this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf,
 						REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
-				this << TransOp(OP_jmp, REG_rip, REG_zero,
-						REG_imm, REG_zero, 3, ripstart);
 				switch(modrm.rm) {
 					case 0: // VMRUN
 						if (!(hflags & HF_SVME_MASK) || !pe)
