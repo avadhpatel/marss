@@ -222,6 +222,7 @@ struct PTLsimConfig {
   stringbuf snapshot_now;
   stringbuf time_stats_logfile;
   W64 time_stats_period;
+  stringbuf stats_format;
 
   // memory model:
   bool use_memory_model;

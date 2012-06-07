@@ -174,6 +174,7 @@ void PTLsimConfig::reset() {
   verify_cache = 0;
   stats_filename.reset();
   yaml_stats_filename="";
+  stats_format = "yaml";
   snapshot_cycles = infinity;
   snapshot_now.reset();
   time_stats_logfile = "";
@@ -269,6 +270,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   section("Statistics Database");
   add(stats_filename,               "stats",                "Statistics data store hierarchy root");
   add(yaml_stats_filename,          "yamlstats",                "Statistics data stores in YAML format");
+  add(stats_format,					"stats-format",          "Statistics output format, default is YAML");
   add(snapshot_cycles,              "snapshot-cycles",      "Take statistical snapshot and reset every <snapshot> cycles");
   add(snapshot_now,                 "snapshot-now",         "Take statistical snapshot immediately, using specified name");
   add(time_stats_logfile,           "time-stats-logfile",   "File to write time-series statistics (new)");
@@ -472,6 +474,21 @@ void dump_yaml_stats()
     yaml_stats_file.flush();
 }
 
+/**
+ * @brief Save stats in flat plain text format
+ */
+void dump_text_stats()
+{
+	if (!config.yaml_stats_filename)
+		return;
+
+	(StatsBuilder::get()).dump(user_stats, yaml_stats_file, "user.");
+	(StatsBuilder::get()).dump(kernel_stats, yaml_stats_file, "kernel.");
+	(StatsBuilder::get()).dump(global_stats, yaml_stats_file, "total.");
+
+	yaml_stats_file.flush();
+}
+
 static void flush_stats()
 {
     if(config.screenshot_file.set()) {
@@ -485,7 +502,14 @@ static void flush_stats()
     // Call this function to setup tags and other info
     setup_sim_stats();
 
-    dump_yaml_stats();
+	if (config.stats_format == "text") {
+		dump_text_stats();
+	} else {
+		if (config.stats_format != "yaml")
+			ptl_logfile << "Unknown Stats format: " << config.stats_format <<
+				" dumping in default YAML format." << endl;
+		dump_yaml_stats();
+	}
 
     if(config.enable_mongo)
         write_mongo_stats();
