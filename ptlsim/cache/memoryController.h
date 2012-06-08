@@ -84,7 +84,6 @@ class MemoryController : public Controller
 	public:
 		MemoryController(W8 coreid, const char *name,
 				 MemoryHierarchy *memoryHierarchy);
-		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);

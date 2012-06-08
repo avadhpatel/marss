@@ -125,12 +125,6 @@ DirectoryController::DirectoryController(W8 idx, const char *name,
             &DirectoryController::send_msg_cb);
 }
 
-bool DirectoryController::handle_request_cb(void *arg)
-{
-    assert(0);
-    return false;
-}
-
 bool DirectoryController::handle_interconnect_cb(void *arg)
 {
     Message *message = (Message*)arg;

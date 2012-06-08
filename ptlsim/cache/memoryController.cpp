@@ -100,13 +100,6 @@ void MemoryController::register_cache_interconnect(
 	cacheInterconnect_ = interconnect;
 }
 
-bool MemoryController::handle_request_cb(void *arg)
-{
-	memdebug("Received message in controller: ", get_name(), endl);
-	assert(0);
-	return false;
-}
-
 bool MemoryController::handle_interconnect_cb(void *arg)
 {
 	Message *message = (Message*)arg;

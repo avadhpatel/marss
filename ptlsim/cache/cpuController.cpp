@@ -57,13 +57,6 @@ CPUController::CPUController(W8 coreid, const char *name,
     SET_SIGNAL_CB(name, "_Queue_Access", queueAccess_, &CPUController::queue_access_cb);
 }
 
-bool CPUController::handle_request_cb(void *arg)
-{
-	memdebug("Received message in controller: ", get_name(), endl);
-	assert(0);
-	return false;
-}
-
 bool CPUController::handle_interconnect_cb(void *arg)
 {
 	Message *message = (Message*)arg;

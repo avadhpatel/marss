@@ -160,12 +160,6 @@ void CacheController::print(ostream& os) const
     os << "---End Cache-Controller : " << get_name() << endl;
 }
 
-bool CacheController::handle_request_cb(void *arg)
-{
-    assert(0);
-    return false;
-}
-
 bool CacheController::handle_upper_interconnect(Message &message)
 {
     memdebug(get_name() <<

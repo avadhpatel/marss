@@ -183,7 +183,6 @@ class DirectoryController : public Controller {
 
         static FixStateList<DirContBufferEntry, REQ_Q_SIZE> *pendingRequests_;
 
-        bool handle_request_cb(void *arg);
         bool handle_interconnect_cb(void *arg);
         int  access_fast_path(Interconnect *interconnect,
                 MemoryRequest *request);
