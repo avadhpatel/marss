@@ -373,6 +373,8 @@ void setup_defualt_config()
 	config.reset();
 }
 
+extern "C" {
+
 /**
  * @brief Add new configuration Section
  *
@@ -394,7 +396,7 @@ void marss_add_config_section(const char* name)
  * @param name Name of configuration option
  * @param description Description of option used in -help
  */
-void marss_add_config(W64& field, const char* name, const char* description)
+void marss_add_config_W64(W64& field, const char* name, const char* description)
 {
 	config.add(field, name, description);
 }
@@ -406,7 +408,7 @@ void marss_add_config(W64& field, const char* name, const char* description)
  * @param name Name of configuration option
  * @param description Description of option used in -help
  */
-void marss_add_config(double& field, const char* name, const char* description)
+void marss_add_config_double(double& field, const char* name, const char* description)
 {
 	config.add(field, name, description);
 }
@@ -418,7 +420,7 @@ void marss_add_config(double& field, const char* name, const char* description)
  * @param name Name of configuration option
  * @param description Description of option used in -help
  */
-void marss_add_config(bool& field, const char* name, const char* description)
+void marss_add_config_bool(bool& field, const char* name, const char* description)
 {
 	config.add(field, name, description);
 }
@@ -430,7 +432,9 @@ void marss_add_config(bool& field, const char* name, const char* description)
  * @param name Name of configuration option
  * @param description Description of option used in -help
  */
-void marss_add_config(stringbuf& field, const char* name, const char* description)
+void marss_add_config_str(stringbuf& field, const char* name, const char* description)
 {
 	config.add(field, name, description);
 }
+
+} // extern "C"

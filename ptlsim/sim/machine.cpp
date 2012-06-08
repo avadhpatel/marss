@@ -666,6 +666,8 @@ void InterconnectBuilder::create_new_int(BaseMachine& machine, W8 id,
     va_end(ap);
 }
 
+extern "C" {
+
 /**
  * @brief Add an Event to simulate after specific cycles
  *
@@ -690,3 +692,5 @@ void marss_register_per_cycle_event(Signal *signal)
 {
 	coremodel.per_cycle_signals.push(signal);
 }
+
+} // extern "C"

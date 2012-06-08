@@ -145,7 +145,9 @@ struct InterconnectBuilder {
 	virtual void config_changed() {}
 };
 
+extern "C" {
 void marss_add_event(Signal* signal, int delay, void* arg);
 void marss_register_per_cycle_event(Signal *signal);
+}
 
 #endif // MACHINE_H

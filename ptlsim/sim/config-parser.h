@@ -69,7 +69,7 @@ template <typename T>
 struct ConfigurationParser: public T {
   ConfigurationParserBase options;
 
-  ConfigurationParser() { }
+  ConfigurationParser() { reset(); }
 
   void add(W64& field, const char* name, const char* description) {
     options.addentry(this, &field, OPTION_TYPE_W64, name, description);
@@ -118,14 +118,16 @@ void free_command_list(dynarray<char*>& list);
 
 /* APIs for Plugin Modules to add runtime simulation configuration parameters */
 
+extern "C" {
 void marss_add_config_section(const char* name);
 
-void marss_add_config(W64& field, const char* name, const char* description);
+void marss_add_config_W64(W64& field, const char* name, const char* description);
 
-void marss_add_config(bool& field, const char* name, const char* description);
+void marss_add_config_bool(bool& field, const char* name, const char* description);
 
-void marss_add_config(double& field, const char* name, const char* description);
+void marss_add_config_double(double& field, const char* name, const char* description);
 
-void marss_add_config(stringbuf& field, const char* name, const char* description);
+void marss_add_config_str(stringbuf& field, const char* name, const char* description);
+}
 
 #endif // _CONFIG_H_
