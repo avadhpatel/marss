@@ -184,8 +184,6 @@ class DirectoryController : public Controller {
         static FixStateList<DirContBufferEntry, REQ_Q_SIZE> *pendingRequests_;
 
         bool handle_interconnect_cb(void *arg);
-        int  access_fast_path(Interconnect *interconnect,
-                MemoryRequest *request);
         void register_interconnect(Interconnect *interconnect,
                 int type);
         void print_map(ostream &os);

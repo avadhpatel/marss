@@ -109,7 +109,7 @@ class Controller
 
 		virtual bool handle_interconnect_cb(void* arg)=0;
 		virtual int access_fast_path(Interconnect *interconnect,
-				MemoryRequest *request)=0;
+				MemoryRequest *request) { return -1; };
         virtual void register_interconnect(Interconnect* interconnect,
                 int conn_type)=0;
 		virtual void print_map(ostream& os)=0;

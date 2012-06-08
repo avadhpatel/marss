@@ -94,12 +94,6 @@ void MemoryController::register_interconnect(Interconnect *interconnect,
     }
 }
 
-void MemoryController::register_cache_interconnect(
-		Interconnect *interconnect)
-{
-	cacheInterconnect_ = interconnect;
-}
-
 bool MemoryController::handle_interconnect_cb(void *arg)
 {
 	Message *message = (Message*)arg;
@@ -182,13 +176,6 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 	}
 
 	return true;
-}
-
-int MemoryController::access_fast_path(Interconnect *interconnect,
-		MemoryRequest *request)
-{
-	assert(0);
-	return -1;
 }
 
 void MemoryController::print(ostream& os) const

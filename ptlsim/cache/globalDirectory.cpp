@@ -140,14 +140,6 @@ bool DirectoryController::handle_interconnect_cb(void *arg)
     return (this->*req_handlers[request->get_type()])(message);
 }
 
-/* This function should never be called for Directory */
-int DirectoryController::access_fast_path(Interconnect *interconn,
-        MemoryRequest *request)
-{
-    assert(0);
-    return 0;
-}
-
 void DirectoryController::register_interconnect(Interconnect *interconn,
         int type)
 {
