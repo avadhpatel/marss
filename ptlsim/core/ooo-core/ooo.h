@@ -1213,7 +1213,7 @@ namespace OOO_CORE_MODEL {
         void set_unaligned_hint(const RIPVirtPhysBase& rvp, bool value);
 
         // Pipeline Stages
-        bool runcycle();
+        bool runcycle(void*);
         void flush_pipeline();
         bool fetch();
         void rename();
@@ -1231,6 +1231,7 @@ namespace OOO_CORE_MODEL {
         // Cache Signals and Callbacks
         Signal dcache_signal;
         Signal icache_signal;
+		Signal run_cycle;
 
         bool dcache_wakeup(void *arg);
         bool icache_wakeup(void *arg);

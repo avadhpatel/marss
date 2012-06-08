@@ -191,7 +191,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
 	if unlikely (queueEntry == NULL) {
-		memoryHierarchy_->add_event(&queueAccess_, 1, request);
+		marss_add_event(&queueAccess_, 1, request);
 		return -1;
 	}
 
@@ -362,7 +362,7 @@ bool CPUController::cache_access_cb(void *arg)
 	memoryHierarchy_->free_message(&message);
 
 	if(!success) {
-		memoryHierarchy_->add_event(&cacheAccess_, 1, queueEntry);
+		marss_add_event(&cacheAccess_, 1, queueEntry);
 	}
 
 	return true;
@@ -375,7 +375,7 @@ bool CPUController::queue_access_cb(void *arg)
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
 	if(queueEntry == NULL) {
-		memoryHierarchy_->add_event(&queueAccess_, 1, request);
+		marss_add_event(&queueAccess_, 1, request);
 		return true;
 	}
 

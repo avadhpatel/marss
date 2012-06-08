@@ -184,7 +184,7 @@ bool MemoryController::handle_interconnect_cb(void *arg)
 	if(banksUsed_[bank_no] == 0) {
 		banksUsed_[bank_no] = 1;
 		queueEntry->inUse = true;
-		memoryHierarchy_->add_event(&accessCompleted_, latency_,
+		marss_add_event(&accessCompleted_, latency_,
 				queueEntry);
 	}
 
@@ -243,7 +243,7 @@ bool MemoryController::access_completed_cb(void *arg)
                 get_physical_address());
         if(bank_no == bank_no_2 && entry->inUse == false) {
             entry->inUse = true;
-            memoryHierarchy_->add_event(&accessCompleted_,
+            marss_add_event(&accessCompleted_,
                     latency_, entry);
             banksUsed_[bank_no] = 1;
             break;
@@ -295,7 +295,7 @@ bool MemoryController::wait_interconnect_cb(void *arg)
 
 	if(!success) {
 		/* Failed to response to cache, retry after 1 cycle */
-		memoryHierarchy_->add_event(&waitInterconnect_, 1, queueEntry);
+		marss_add_event(&waitInterconnect_, 1, queueEntry);
 	} else {
 		queueEntry->request->decRefCounter();
 		ADD_HISTORY_REM(queueEntry->request);

@@ -48,6 +48,7 @@ struct BaseMachine: public PTLsimMachine {
     dynarray<Memory::Controller*> controllers;
     dynarray<Memory::Interconnect*> interconnects;
     dynarray<ConnectionDef*> connections;
+	dynarray<Signal*> per_cycle_signals;
 
     Hashtable<const char*, Memory::Controller*, 1> controller_hash;
     Hashtable<const char*, BoolOptions*, 1> bool_options;
@@ -143,5 +144,8 @@ struct InterconnectBuilder {
             const char* name, const char* int_name, int count, ...);
 	virtual void config_changed() {}
 };
+
+void marss_add_event(Signal* signal, int delay, void* arg);
+void marss_register_per_cycle_event(Signal *signal);
 
 #endif // MACHINE_H
