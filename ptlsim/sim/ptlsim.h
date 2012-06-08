@@ -288,11 +288,10 @@ struct PTLsimConfig {
   stringbuf simpoint_chk_name;
 
   void reset();
+
 };
 
-extern PTLsimConfig config;
-
-extern ConfigurationParser<PTLsimConfig> configparser;
+extern ConfigurationParser<PTLsimConfig> config;
 
 ostream& operator <<(ostream& os, const PTLsimConfig& config);
 
@@ -315,7 +314,22 @@ void force_logging_enabled();
 void init_qemu_io_events();
 void clock_qemu_io_events();
 
+/**
+ * @brief Convert nano-seconds to Simulation Cycles
+ *
+ * @param ns Nano-seconds used for conversion
+ *
+ * @return Simulation Cycles based on simulation machine's frequency
+ */
 W64 ns_to_simcycles(W64 ns);
+
+/**
+ * @brief Conert simulated cycles to nano-seconds
+ *
+ * @param cycles Cycles used for conversion
+ *
+ * @return Simulated nano-seconds based on simulated machine's frequency
+ */
 float simcycles_to_ns(W64 cycles);
 
 void set_next_simpoint(Context& ctx);

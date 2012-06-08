@@ -90,6 +90,28 @@ void BaseMachine::shutdown()
 	}
 }
 
+/**
+ * @brief Simulation runtime configuration is changed
+ *
+ * All modules are notified that configuration is changed so they can update
+ * their state if needed.
+ */
+void BaseMachine::config_changed()
+{
+#define BUILDER_CONFIG_CHANGED(BuilderType, builders) \
+	{ \
+		Hashtable<const char*, BuilderType*, 1>::Iterator iter(BuilderType::builders); \
+		KeyValuePair<const char*, BuilderType*> *kv; \
+		while ((kv = iter.next())) { \
+			kv->value->config_changed(); \
+		} \
+	}
+
+	BUILDER_CONFIG_CHANGED(CoreBuilder, coreBuilders);
+	BUILDER_CONFIG_CHANGED(ControllerBuilder, controllerBuilders);
+	BUILDER_CONFIG_CHANGED(InterconnectBuilder, interconnectBuilders);
+}
+
 W8 BaseMachine::get_num_cores()
 {
     return cores.count();

@@ -144,10 +144,15 @@ if ptlsim_lib == None:
 
 #print("--PTLsim Compiliation Done--")
 
+# Get plugin modules
+plugin_compile_script = "plugins/SConscript"
+plugins = SConscript(plugin_compile_script)
+
 # 3. Compile QEMU
 qemu_compile_script = "%s/SConstruct" % qemu_dir
 qemu_target = {}
 Export('ptlsim_lib')
+Export('plugins')
 ptlsim_inc_dir = "%s/sim" % ptl_dir
 Export('ptlsim_inc_dir')
 
