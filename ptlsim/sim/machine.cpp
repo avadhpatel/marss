@@ -23,6 +23,8 @@ using namespace Memory;
 
 /* Machine Generator Functions */
 MachineBuilder machineBuilder("_default_", NULL);
+BaseMachine coremodel("base");
+
 
 BaseMachine::BaseMachine(const char *name)
 {
@@ -61,6 +63,57 @@ void BaseMachine::reset()
     }
 }
 
+void BaseMachine::shutdown()
+{
+	foreach (i, cores.count()) {
+		BaseCore* core = cores[i];
+		delete core;
+	}
+
+	cores.clear();
+
+	foreach (i, controllers.count()) {
+		Controller* cont = controllers[i];
+		delete cont;
+	}
+
+	controllers.clear();
+
+	foreach (i, interconnects.count()) {
+		Interconnect* intercon = interconnects[i];
+		delete intercon;
+	}
+
+	interconnects.clear();
+
+	if (memoryHierarchyPtr) {
+		delete memoryHierarchyPtr;
+		memoryHierarchyPtr = NULL;
+	}
+}
+
+/**
+ * @brief Simulation runtime configuration is changed
+ *
+ * All modules are notified that configuration is changed so they can update
+ * their state if needed.
+ */
+void BaseMachine::config_changed()
+{
+#define BUILDER_CONFIG_CHANGED(BuilderType, builders) \
+	{ \
+		Hashtable<const char*, BuilderType*, 1>::Iterator iter(BuilderType::builders); \
+		KeyValuePair<const char*, BuilderType*> *kv; \
+		while ((kv = iter.next())) { \
+			kv->value->config_changed(); \
+		} \
+	}
+
+	BUILDER_CONFIG_CHANGED(CoreBuilder, coreBuilders);
+	BUILDER_CONFIG_CHANGED(ControllerBuilder, controllerBuilders);
+	BUILDER_CONFIG_CHANGED(InterconnectBuilder, interconnectBuilders);
+}
+
 W8 BaseMachine::get_num_cores()
 {
     return cores.count();
@@ -86,6 +139,63 @@ bool BaseMachine::init(PTLsimConfig& config)
     init_qemu_io_events();
 
     return 1;
+}
+
+/**
+ * @brief Dump Machine and all module configuration
+ *
+ * @param os Output stream
+ *
+ * This function iterates over all modules in Machine and dump each module's
+ * configuration in YAML format. Configuration tree structure is like below:
+ *
+ * machine:
+ *	name: Machine Name
+ *	cpu_contexts: Total CPU Contexts that are simulated
+ *	freq: Simulated Machine Core Frequency
+ *	module0:
+ *		module0 specific Parameters
+ *	module1:
+ *		module1 Specific Parameters
+ *
+ */
+void BaseMachine::dump_configuration(ostream& os) const
+{
+	YAML::Emitter *config_yaml;
+
+	os << "#\n# Simulated Machine Configuration\n#\n";
+
+	config_yaml = new YAML::Emitter();
+
+	*config_yaml << YAML::BeginMap;
+	*config_yaml << YAML::Key << "machine";
+	*config_yaml << YAML::Value << YAML::BeginMap;
+
+	/* Some machine specific parameters */
+	*config_yaml << YAML::Key << "name" << YAML::Value << config.machine_config;
+	*config_yaml << YAML::Key << "cpu_contexts" << YAML::Value << NUM_SIM_CORES;
+	*config_yaml << YAML::Key << "freq" << YAML::Value << config.core_freq_hz;
+
+	/* Now go through all cores */
+	foreach (i, cores.count())
+		cores[i]->dump_configuration(*config_yaml);
+
+	/* Next is all controllers/caches */
+	foreach (i, controllers.count())
+		controllers[i]->dump_configuration(*config_yaml);
+
+	/* Now dump all interconnections */
+	foreach (i, interconnects.count())
+		interconnects[i]->dump_configuration(*config_yaml);
+
+	/* Finalize YAML */
+	*config_yaml << YAML::EndMap;
+	*config_yaml << YAML::EndMap;
+
+	os << config_yaml->c_str() << "\n";
+	os << "\n# End Machine Configuration\n";
+
+	ptl_logfile << "Dumped all machine configuration\n";
 }
 
 int BaseMachine::run(PTLsimConfig& config)
@@ -148,14 +258,12 @@ int BaseMachine::run(PTLsimConfig& config)
         memoryHierarchyPtr->clock();
         clock_qemu_io_events();
 
-        foreach (cur_core, cores.count()){
-            BaseCore& core =* cores[cur_core];
-
-            if(logable(4))
-                ptl_logfile << "cur_core: ", cur_core, " running [core ",
-                            core.get_coreid(), "]", endl;
-            exiting |= core.runcycle();
-        }
+		foreach (i, coremodel.per_cycle_signals.size()) {
+			if (logable(4))
+				ptl_logfile << "Per-Cycle-Signal : " <<
+					coremodel.per_cycle_signals[i]->get_name() << endl;
+			exiting |= coremodel.per_cycle_signals[i]->emit(NULL);
+		}
 
         sim_cycle++;
         iterations++;
@@ -403,8 +511,6 @@ bool BaseMachine::get_option(const char* name, const char* opt_name,
     return false;
 }
 
-BaseMachine coremodel("base");
-
 /* Machine Builder */
 MachineBuilder::MachineBuilder(const char* name, machine_gen gen)
 {
@@ -559,3 +665,32 @@ void InterconnectBuilder::create_new_int(BaseMachine& machine, W8 id,
     }
     va_end(ap);
 }
+
+extern "C" {
+
+/**
+ * @brief Add an Event to simulate after specific cycles
+ *
+ * @param signal Call signal's callback when event is simualted
+ * @param delay Number of cycles to delay the event
+ * @param arg Argument passed to callback function
+ */
+void marss_add_event(Signal* signal, int delay, void* arg)
+{
+	coremodel.memoryHierarchyPtr->add_event(signal, delay, arg);
+}
+
+/**
+ * @brief Register Signal to call at each cycle
+ *
+ * @param signal Signal object to register
+ *
+ * Use this registration function to add an event that will be executed at each
+ * simulation cycle.
+ */
+void marss_register_per_cycle_event(Signal *signal)
+{
+	coremodel.per_cycle_signals.push(signal);
+}
+
+} // extern "C"

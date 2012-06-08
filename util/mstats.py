@@ -169,7 +169,7 @@ class YAMLReader(Readers):
 
     def set_options(self, parser):
         """ Add options to parser"""
-        parser.add_option("-y", "--yaml", action="store_true", default="False",
+        parser.add_option("-y", "--yaml", action="store_true", default=False,
                 dest="yaml_file",
                 help="Treat arguments as input YAML files")
 
@@ -204,7 +204,7 @@ class TimeGraphRead(Readers):
     def set_options(self, parser):
         if self.enabled == False:
             return
-        parser.add_option("--time-stats", action="store_true", default="False",
+        parser.add_option("--time-stats", action="store_true", default=False,
                 help="Input time stats file")
 
     def read(self, options, args):
@@ -229,7 +229,7 @@ class TimeGraphGen(Writers):
         parser.add_option("--time-graph", type="string", default="time.png",
                 help="Output file name")
         parser.add_option("--time-list-idx", action="store_true",
-                default="False", help="Print the column title and its index")
+                default=False, help="Print the column title and its index")
 
     def write(self, stats, options):
         if self.enabled and options.sg and options.time_list_idx == True:
@@ -401,7 +401,7 @@ class Summation(Process):
         pass
 
     def set_options(self, parser):
-        parser.add_option("--sum", action="store_true", default="False",
+        parser.add_option("--sum", action="store_true", default=False,
                 dest="sum", help="Sum of all selected nodes")
         parser.add_option("--sum-all", type="string" , default="",
                 dest="sum_all", help="Sum of all stats")
@@ -476,7 +476,7 @@ class YAMLWriter(Writers):
         pass
 
     def set_options(self, parser):
-        parser.add_option("--yaml-out", action="store_true", default="False",
+        parser.add_option("--yaml-out", action="store_true", default=False,
                 dest="yaml_out",
                 help="Print output in YAML format")
 
@@ -491,22 +491,25 @@ class FlattenWriter(Writers):
     """
 
     def set_options(self, parser):
-        parser.add_option("--flatten", action="store_true", default="False",
+        parser.add_option("--flatten", action="store_true", default=False,
+                help="Print result in flattened format")
+        parser.add_option("--flatten-sep", default=":", dest="flatten_sep",
                 help="Print result in flattened format")
 
     def flatten_dict(self, node, str_pfx=None):
         for key,val in node.items():
             if str_pfx:
-                str_pfx1 = str_pfx + "::" + str(key)
+                str_pfx1 = str_pfx + self.sep + str(key)
             else:
                 str_pfx1 = str(key)
             if type(val) == dict:
                 self.flatten_dict(val, str_pfx1)
             else:
-                print("%s : %s" % (str_pfx1, str(val)))
+                print("%s%s%s" % (str_pfx1, self.sep, str(val)))
 
     def write(self, stats, options):
         if options.flatten == True:
+            self.sep = options.flatten_sep
             for stat in stats:
                 self.flatten_dict(stat)
 
@@ -517,7 +520,7 @@ class HistogramWriter(Writers):
     """
 
     def set_options(self, parser):
-        parser.add_option("--hist", action="store_true", default="False",
+        parser.add_option("--hist", action="store_true", default=False,
                 help="Print Histogram of given node")
 
     def get_hist_of_node(self, node, pad):
@@ -766,7 +769,26 @@ def execute(options, args):
 
     Writers.write(stats, options)
 
+def load_plugins():
+    exec_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
+    sys.path.append(exec_dir)
+    path = "%s/mstats_plugins" % (exec_dir)
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            if name.endswith(".py") and not name.startswith("__"):
+                path = os.path.join("mstats_plugins", name)
+                path = path [1:] if path[0] == '/' else path
+                plugin_name = path.rsplit('.',1)[0].replace('/','.')
+                try:
+                    __import__(plugin_name)
+                except Exception as e:
+                    debug("Unable to load plugin: %s" % plugin_name)
+                    debug("Exception %s" % str(e))
+                    pass
+
 if __name__ == "__main__":
+    load_plugins()
+
     opt = setup_options()
     (options, args) = opt.parse_args()
 

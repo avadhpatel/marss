@@ -233,7 +233,6 @@ namespace Memory {
                 CacheController(W8 coreid, const char *name,
                         MemoryHierarchy *memoryHierarchy, CacheType type);
                 ~CacheController();
-                bool handle_request_cb(void *arg);
                 bool handle_interconnect_cb(void *arg);
                 int access_fast_path(Interconnect *interconnect,
                         MemoryRequest *request);
@@ -274,6 +273,7 @@ namespace Memory {
                 }
 
                 void annul_request(MemoryRequest *request);
+				void dump_configuration(YAML::Emitter &out) const;
 
                 // Callback functions for signals of cache
                 virtual bool cache_hit_cb(void *arg);

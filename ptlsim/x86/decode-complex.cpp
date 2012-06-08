@@ -2239,9 +2239,6 @@ bool TraceDecoder::decode_complex() {
 						this << TransOp(OP_collcc, REG_temp0, REG_zf,
 								REG_cf, REG_of, 3, 0, 0,
 								FLAGS_DEFAULT_ALU);
-						this << TransOp(OP_jmp, REG_rip, REG_zero,
-								REG_imm, REG_zero, 3,
-								ripstart);
 
 						sizeshift = (use64) ? 3 : 2;
 						this << TransOp(OP_mov, REG_ar1, REG_rax,
@@ -2325,8 +2322,6 @@ bool TraceDecoder::decode_complex() {
 				EndOfDecode();
 				this << TransOp(OP_collcc, REG_temp0, REG_zf, REG_cf,
 						REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
-				this << TransOp(OP_jmp, REG_rip, REG_zero,
-						REG_imm, REG_zero, 3, ripstart);
 				switch(modrm.rm) {
 					case 0: // VMRUN
 						if (!(hflags & HF_SVME_MASK) || !pe)

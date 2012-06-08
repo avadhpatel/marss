@@ -189,7 +189,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
                 }
                 if(all_set || (snoopDisabled_ && pendingEntry->controllerWithData)) {
                     dataBusBusy_ = true;
-                    memoryHierarchy_->add_event(&dataBroadcast_, 1,
+                    marss_add_event(&dataBroadcast_, 1,
                             pendingEntry);
                 }
             } else {
@@ -228,7 +228,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
 
     if(!is_busy()) {
         /* address bus */
-        memoryHierarchy_->add_event(&broadcast_, 1, NULL);
+        marss_add_event(&broadcast_, 1, NULL);
         set_bus_busy(true);
     } else {
         N_STAT_UPDATE(new_stats->bus_not_ready, ++, kernel);
@@ -286,7 +286,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
         queueEntry = (BusQueueEntry*)arg;
     else {
         queueEntry = arbitrate_round_robin();
-        memoryHierarchy_->add_event(&broadcast_, arbitrate_latency_, queueEntry);
+        marss_add_event(&broadcast_, arbitrate_latency_, queueEntry);
         return true;
     }
 
@@ -302,7 +302,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
     if(pendingRequests_.isFull() &&
             queueEntry->request->get_type() != MEMORY_OP_UPDATE) {
         memdebug("Bus cant do addr broadcast, pending queue full\n");
-        memoryHierarchy_->add_event(&broadcast_,
+        marss_add_event(&broadcast_,
                 latency_, NULL);
         return true;
     }
@@ -316,14 +316,14 @@ bool BusInterconnect::broadcast_cb(void *arg)
     if(!can_broadcast(queueEntry->controllerQueue)) {
         memdebug("Bus cant do addr broadcast\n");
         set_bus_busy(true);
-        memoryHierarchy_->add_event(&broadcast_,
+        marss_add_event(&broadcast_,
                 latency_, NULL);
         return true;
     }
 
     set_bus_busy(true);
 
-    memoryHierarchy_->add_event(&broadcastCompleted_,
+    marss_add_event(&broadcastCompleted_,
             latency_, queueEntry);
 
     return true;
@@ -341,7 +341,7 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
 
 	if(!can_broadcast(queueEntry->controllerQueue)) {
 		set_bus_busy(true);
-		memoryHierarchy_->add_event(&broadcastCompleted_,
+		marss_add_event(&broadcastCompleted_,
 				2, NULL);
 		return true;
 	}
@@ -442,7 +442,7 @@ void BusInterconnect::set_data_bus()
         }
         if(all_set || (snoopDisabled_ && pendingEntry->controllerWithData)) {
             dataBusBusy_ = true;
-            memoryHierarchy_->add_event(&dataBroadcast_, 1,
+            marss_add_event(&dataBroadcast_, 1,
                     pendingEntry);
             return;
         }
@@ -464,7 +464,7 @@ bool BusInterconnect::data_broadcast_cb(void *arg)
      * signal so next time it doesn't need to arbitrate
      */
     if(!can_broadcast(pendingEntry->controllerQueue)) {
-        memoryHierarchy_->add_event(&dataBroadcast_,
+        marss_add_event(&dataBroadcast_,
                 latency_, arg);
         return true;
     }
@@ -474,7 +474,7 @@ bool BusInterconnect::data_broadcast_cb(void *arg)
         return true;
     }
 
-    memoryHierarchy_->add_event(&dataBroadcastCompleted_,
+    marss_add_event(&dataBroadcastCompleted_,
             latency_, pendingEntry);
 
     return true;
@@ -531,6 +531,25 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
     set_data_bus();
 
     return true;
+}
+
+/**
+ * @brief Dump Split Bus Interconnect Configuration in YAML Format
+ *
+ * @param out YAML Object
+ */
+void BusInterconnect::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "interconnect");
+	YAML_KEY_VAL(out, "latency", latency_);
+	YAML_KEY_VAL(out, "arbitrate_latency", arbitrate_latency_);
+	if (controllers.size() > 0)
+		YAML_KEY_VAL(out, "per_cont_queue_size",
+				controllers[0]->queue.size());
+
+	out << YAML::EndMap;
 }
 
 struct SplitPhaseBusBuilder : public InterconnectBuilder

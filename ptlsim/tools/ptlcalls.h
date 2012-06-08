@@ -239,7 +239,7 @@ static inline W64 ptlcall_marker(W64 marker) {
 //
 // For utility usage in benchmarks:
 //
-static W64 ptlsim_marker_id = 0;
+//static W64 ptlsim_marker_id = 0;
 #endif // !PTLCALLS_USERSPACE
 
 //
@@ -273,7 +273,7 @@ struct PTLsimCommandDescriptor {
 static inline W64 ptlcall_multi(char* const list[], size_t length, int flush) {
   struct PTLsimCommandDescriptor* desc = (struct PTLsimCommandDescriptor*)malloc(length * sizeof(struct PTLsimCommandDescriptor));
   W64 rc;
-  int i;
+  size_t i;
 
   for (i = 0; i < length; i++) {
     desc[i].command = (W64)list[i];
@@ -321,7 +321,7 @@ static inline W64 ptlcall_switch_to_sim() {
 }
 
 static inline W64 ptlcall_switch_to_native() {
-  return ptlcall_single_flush("-native");
+  return ptlcall_single_flush("-stop");
 }
 
 static inline W64 ptlcall_kill() {
@@ -414,6 +414,18 @@ static inline W64 ptlcall_core_dump(const char* dump, const W64 size,
         const char* name, const int signum) {
     return ptlcall(PTLCALL_CORE_DUMP, (W64)dump, size,
             (W64)name, strlen(name), (W64)signum, 0);
+}
+
+#endif // PTLCALLS_USERSPACE
+
+#define PTLCALL_LOG 5
+
+#ifdef PTLCALLS_USERSPACE
+
+static inline void ptlcall_log(const char* log)
+{
+	int length = strlen(log);
+	ptlcall(PTLCALL_LOG, (W64)log, length, 0, 0, 0, 0);
 }
 
 #endif // PTLCALLS_USERSPACE

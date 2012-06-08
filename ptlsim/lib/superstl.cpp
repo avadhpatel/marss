@@ -90,7 +90,7 @@ abort:
 
 W64 core_freq_hz = 0;
 
-W64 get_core_freq_hz() {
+W64 get_native_core_freq_hz() {
   if likely (core_freq_hz) return core_freq_hz;
 
   W64 hz = 0;
@@ -113,7 +113,7 @@ W64 get_core_freq_hz() {
   ifstream is("/proc/cpuinfo");
 
   if (!is.is_open()) {
-    cerr << "get_core_freq_hz(): warning: cannot open /proc/cpuinfo. Is this a Linux machine?", endl;
+    cerr << "get_native_core_freq_hz(): warning: cannot open /proc/cpuinfo. Is this a Linux machine?", endl;
     core_freq_hz = hz;
     return hz;
   }
@@ -562,7 +562,7 @@ namespace superstl {
     if (hz)
       return hz;
 
-    hz = get_core_freq_hz();
+    hz = get_native_core_freq_hz();
 
     return hz;
   }

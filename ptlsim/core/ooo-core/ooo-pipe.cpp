@@ -115,7 +115,7 @@ itlb_walk_finish:
         return;
     }
 
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
     assert(request != NULL);
 
     request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
@@ -344,6 +344,13 @@ void ThreadContext::external_to_core_state() {
         physreg->data = ctx.get(i);
         physreg->flags = 0;
         commitrrt[i] = physreg;
+
+		thread_stats.physreg_writes[physreg->rfid]++;
+
+		if (fp)
+			thread_stats.fp_reg_reads++;
+		else
+			thread_stats.reg_reads++;
     }
 
     commitrrt[REG_flags]->flags = (W16)commitrrt[REG_flags]->data;
@@ -552,7 +559,7 @@ bool ThreadContext::fetch() {
             bool hit;
             assert(!waiting_for_icache_fill);
 
-            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
             assert(request != NULL);
 
             request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
@@ -828,6 +835,9 @@ void ThreadContext::rename() {
         thread_stats.frontend.alloc.ldreg+=ld;
         thread_stats.frontend.alloc.sfr+=st;
         thread_stats.frontend.alloc.br+=br;
+
+		thread_stats.rob_writes++;
+
         //
         // Rename operands:
         //
@@ -848,6 +858,9 @@ void ThreadContext::rename() {
                     (rob.operands[i]->state == PHYSREG_WRITTEN)) {
                 rob.operands[i]->rob->consumer_count = min(rob.operands[i]->rob->consumer_count + 1, 255);
             }
+
+			if (i != RS)
+				thread_stats.physreg_reads[rob.operands[i]->rfid]++;
         }
 
         //
@@ -886,6 +899,8 @@ void ThreadContext::rename() {
         physreg->rob = &rob;
         physreg->archreg = rob.uop.rd;
         rob.physreg = physreg;
+
+		thread_stats.physreg_writes[physreg->rfid]++;
 
         bool renamed_reg = 0;
         bool renamed_flags = 0;
@@ -944,6 +959,7 @@ void ThreadContext::rename() {
         thread_stats.frontend.renamed.reg += ((renamed_reg) && (!renamed_flags));
         thread_stats.frontend.renamed.flags += ((!renamed_reg) && (renamed_flags));
         thread_stats.frontend.renamed.flags += ((!renamed_reg) && (renamed_flags));
+		thread_stats.rename_table_writes += ((renamed_reg) || (renamed_flags));
         rob.changestate(rob_frontend_list);
 
         prepcount++;
@@ -1313,6 +1329,13 @@ int ThreadContext::dispatch() {
         }
 
         core.dispatchcount++;
+
+		if unlikely (opclassof(rob->uop.opcode) == OPCLASS_FP)
+			CORE_STATS(iq_fp_writes)++;
+		else
+			CORE_STATS(iq_writes)++;
+
+		CORE_STATS(dispatch.opclass)[opclassof(rob->uop.opcode)]++;
     }
 
     CORE_STATS(dispatch.width)[core.dispatchcount]++;
@@ -1389,6 +1412,8 @@ int ThreadContext::transfer(int cluster) {
             rob->forward_cycle = MAX_FORWARDING_LATENCY;
             rob->changestate(rob_ready_to_writeback_list[rob->cluster]);
         }
+
+		thread_stats.rob_reads++;
     }
 
     return 0;
@@ -1445,6 +1470,8 @@ int ThreadContext::writeback(int cluster) {
         rob->physreg->writeback();
         rob->cycles_left = -1;
         rob->changestate(rob_ready_to_commit_queue);
+
+		thread_stats.physreg_writes[rob->physreg->rfid]++;
     }
 
     per_cluster_stats_update(writeback.width,
@@ -1534,6 +1561,7 @@ int ThreadContext::commit() {
         if likely (rc == COMMIT_RESULT_OK) {
             core.commitcount++;
             last_commit_at_cycle = sim_cycle;
+			thread_stats.rob_reads++;
         } else {
             break;
         }
@@ -1775,6 +1803,9 @@ int ReorderBufferEntry::commit() {
 
     PhysicalRegister* oldphysreg = thread.commitrrt[uop.rd];
 
+	thread.thread_stats.rob_reads++;
+	thread.thread_stats.rename_table_reads++;
+
     bool ld = isload(uop.opcode);
     bool st = isstore(uop.opcode);
     bool br = isbranch(uop.opcode);
@@ -1966,6 +1997,13 @@ int ReorderBufferEntry::commit() {
             ctx.set_reg(uop.rd, physreg->data);
         }
 
+		if unlikely (opclassof(uop.opcode) == OPCLASS_FP)
+			thread.thread_stats.fp_reg_writes++;
+		else
+			thread.thread_stats.reg_writes++;
+
+		thread.thread_stats.physreg_reads[physreg->rfid]++;
+
         physreg->rob = NULL;
     }
 
@@ -2054,7 +2092,7 @@ int ReorderBufferEntry::commit() {
             // location in simulation and not here..
             assert(lsq->physaddr);
 
-            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
             assert(request != NULL);
 
             request->init(core.coreid, threadid, lsq->physaddr << 3, 0,

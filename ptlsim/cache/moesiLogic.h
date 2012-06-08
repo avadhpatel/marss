@@ -95,6 +95,7 @@ namespace CoherentCache {
                     Message &message);
             bool is_line_valid(CacheLine *line);
             void invalidate_line(CacheLine *line);
+			void dump_configuration(YAML::Emitter &out) const;
 
             void send_response(CacheQueueEntry *queueEntry,
                     Interconnect *sendTo);
