@@ -3119,8 +3119,8 @@ bool TraceDecoder::decode_complex() {
         TransOp mf(OP_mf, REG_temp0, REG_zero, REG_zero, REG_zero, 0);
         switch (modrm.reg) {
         case 5: mf.extshift = MF_TYPE_LFENCE; break;
-        case 6: mf.extshift = MF_TYPE_SFENCE; break;
-        case 7: mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE; break;
+        case 6: mf.extshift = MF_TYPE_SFENCE|MF_TYPE_LFENCE; break;
+        case 7: mf.extshift = MF_TYPE_SFENCE; break;
         }
         this << mf;
         split_after();
