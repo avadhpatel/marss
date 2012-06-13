@@ -1,0 +1,48 @@
+# SConscript for plugins subdirectory
+
+# Import envrionment
+try:
+	Import('ptl_env')
+	env = ptl_env
+except:
+    print("Plugin directory can't get base environment")
+    exit(0)
+
+import os
+from subprocess import call
+
+# Uncomment following line to see 'CPPPATH' used to compile your plugins
+# print("Plugin Env CPPPATH: %s" % str(env['CPPPATH']))
+
+lib_names = []
+
+# look for directories with 'SConscript' or 'Makefile'
+for root, dirs, files in os.walk(os.curdir):
+    for name in dirs:
+        # Now check if there is any 'SConscript/Makefile' file in that
+        # directory or not, if its present then call them and they should
+        # create .so file in 'plugins' folder
+        scons_path = os.path.join(name, "SConscript")
+        make_path = os.path.join(name, "Makefile")
+        make_path_2 = os.path.join(name, "makefile")
+        if os.path.exists(scons_path):
+            env.SConscript(scons_path)
+        elif os.path.exists(make_path) or os.path.exists(make_path_2):
+            call("cd %s && make" % name, shell=True)
+
+# Get list of .cpp files
+src_files = Glob('*.cpp')
+
+objs = [env.SharedLibrary(target='%s' % (os.path.splitext(src.rstr())[0]),
+        source=src)
+        for src in src_files]
+
+# Get list of .so files
+so_libs = Glob('*.so')
+for so_lib in so_libs:
+    lib_name = os.path.splitext(so_lib.rstr())[0]
+    lib_names.append(lib_name.replace('lib', ''))
+
+print("Plugins found : %s" % " ".join(lib_names))
+
+Return('lib_names')

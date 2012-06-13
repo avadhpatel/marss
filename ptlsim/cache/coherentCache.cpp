@@ -160,12 +160,6 @@ void CacheController::print(ostream& os) const
     os << "---End Cache-Controller : " << get_name() << endl;
 }
 
-bool CacheController::handle_request_cb(void *arg)
-{
-    assert(0);
-    return false;
-}
-
 bool CacheController::handle_upper_interconnect(Message &message)
 {
     memdebug(get_name() <<
@@ -256,7 +250,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
         newEntry->request->incRefCounter();
 
         newEntry->eventFlags[CACHE_ACCESS_EVENT]++;
-        memoryHierarchy_->add_event(&cacheAccess_, 0,
+        marss_add_event(&cacheAccess_, 0,
                 newEntry);
         ADD_HISTORY_ADD(newEntry->request);
     } else { // not lowestPrivate cache
@@ -273,7 +267,7 @@ bool CacheController::handle_lower_interconnect(Message &message)
                 evictEntry->isSnoop = true;
                 evictEntry->m_arg   = message.arg;
                 evictEntry->eventFlags[CACHE_ACCESS_EVENT]++;
-                memoryHierarchy_->add_event(&cacheAccess_, 1,
+                marss_add_event(&cacheAccess_, 1,
                         evictEntry);
                 ADD_HISTORY_ADD(evictEntry->request);
             }
@@ -321,7 +315,7 @@ void CacheController::send_message(CacheQueueEntry *queueEntry,
     ADD_HISTORY_ADD(evictEntry->request);
 
     evictEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
-    memoryHierarchy_->add_event(&waitInterconnect_, 1, evictEntry);
+    marss_add_event(&waitInterconnect_, 1, evictEntry);
 }
 
 void CacheController::send_evict_to_upper(CacheQueueEntry *entry, W64 oldTag)
@@ -393,12 +387,12 @@ bool CacheController::complete_request(Message &message,
 
     /* insert the updated line into cache */
     queueEntry->eventFlags[CACHE_INSERT_EVENT]++;
-    memoryHierarchy_->add_event(&cacheInsert_, 0,
+    marss_add_event(&cacheInsert_, 0,
             (void*)(queueEntry));
 
     /* send back the response */
     queueEntry->sendTo = queueEntry->sender;
-    memoryHierarchy_->add_event(&waitInterconnect_, 1, queueEntry);
+    marss_add_event(&waitInterconnect_, 1, queueEntry);
 
     memdebug("Cache Request completed: " << *queueEntry << endl);
 
@@ -540,7 +534,7 @@ bool CacheController::cache_hit_cb(void *arg)
                     pendingRequests_.size() - 4)) {
             /* Snoop hit can cause eviction in local cache and if we dont have
              * free queue entries we delay this by 2 cycles */
-            memoryHierarchy_->add_event(&cacheHit_, 2, queueEntry);
+            marss_add_event(&cacheHit_, 2, queueEntry);
         } else {
             coherence_logic_->handle_interconn_hit(queueEntry);
         }
@@ -604,13 +598,13 @@ bool CacheController::cache_insert_cb(void *arg)
     if(cacheLines_->get_port(queueEntry->request)) {
 
         queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]++;
-        memoryHierarchy_->add_event(&cacheInsertComplete_,
+        marss_add_event(&cacheInsertComplete_,
                 cacheAccessLatency_, queueEntry);
         return true;
     }
 
     queueEntry->eventFlags[CACHE_INSERT_EVENT]++;
-    memoryHierarchy_->add_event(&cacheInsert_, 1,
+    marss_add_event(&cacheInsert_, 1,
             (void*)(queueEntry));
     return true;
 }
@@ -624,7 +618,7 @@ bool CacheController::cache_insert_complete_cb(void *arg)
     queueEntry->eventFlags[CACHE_INSERT_COMPLETE_EVENT]--;
 
     queueEntry->eventFlags[CACHE_CLEAR_ENTRY_EVENT]++;
-    memoryHierarchy_->add_event(&clearEntry_,
+    marss_add_event(&clearEntry_,
             0, queueEntry);
 
     return true;
@@ -684,7 +678,7 @@ bool CacheController::cache_access_cb(void *arg)
 				}
 			}
         }
-        memoryHierarchy_->add_event(signal, delay,
+        marss_add_event(signal, delay,
                 (void*)queueEntry);
         return true;
     } else {
@@ -700,7 +694,7 @@ bool CacheController::cache_access_cb(void *arg)
 
     /* No port available yet, retry next cycle */
     queueEntry->eventFlags[CACHE_ACCESS_EVENT]++;
-    memoryHierarchy_->add_event(&cacheAccess_, 1, arg);
+    marss_add_event(&cacheAccess_, 1, arg);
 
     return true;
 }
@@ -745,7 +739,7 @@ bool CacheController::wait_interconnect_cb(void *arg)
         } else {
             /* Queue in interconnect is full so retry after interconnect delay */
             queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
-            memoryHierarchy_->add_event(&waitInterconnect_,
+            marss_add_event(&waitInterconnect_,
                     queueEntry->sendTo->get_delay(), (void*)queueEntry);
         }
     } else {
@@ -766,7 +760,7 @@ bool CacheController::wait_interconnect_cb(void *arg)
             int delay = lowerInterconnect_->get_delay();
             if(delay == 0) delay = AVG_WAIT_DELAY;
             queueEntry->eventFlags[CACHE_WAIT_INTERCONNECT_EVENT]++;
-            memoryHierarchy_->add_event(&waitInterconnect_,
+            marss_add_event(&waitInterconnect_,
                     delay, (void*)queueEntry);
         } else {
             /*
@@ -807,7 +801,7 @@ bool CacheController::clear_entry_cb(void *arg)
             CacheQueueEntry* depEntry = &pendingRequests_[
                 queueEntry->depends];
             depEntry->waitFor = -1;
-            memoryHierarchy_->add_event(&cacheAccess_, 1, depEntry);
+            marss_add_event(&cacheAccess_, 1, depEntry);
         }
 
         queueEntry->request->decRefCounter();
@@ -852,7 +846,7 @@ void CacheController::annul_request(MemoryRequest *request)
                         depEntry->idx;
                 } else {
                     depEntry->waitFor = -1;
-                    memoryHierarchy_->add_event(&cacheAccess_, 1, depEntry);
+                    marss_add_event(&cacheAccess_, 1, depEntry);
                 }
             } else if (queueEntry->waitFor >= 0) {
                 pendingRequests_[queueEntry->waitFor].depends = -1;

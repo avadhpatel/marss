@@ -259,6 +259,12 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
     icache_signal.connect(signal_mem_ptr(*this,
                 &OooCore::icache_wakeup));
 
+	sig_name.reset();
+	sig_name << core_name << "-run-cycle";
+	run_cycle.set_name(sig_name.buf);
+	run_cycle.connect(signal_mem_ptr(*this, &OooCore::runcycle));
+	marss_register_per_cycle_event(&run_cycle);
+
     threads = (ThreadContext**)malloc(sizeof(ThreadContext*) * threadcount);
 
     // Setup Threads
@@ -469,7 +475,7 @@ int ThreadContext::get_priority() const {
 //
 // Execute one cycle of the entire core state machine
 //
-bool OooCore::runcycle() {
+bool OooCore::runcycle(void* none) {
     bool exiting = 0;
     //
     // Detect edge triggered transition from 0->1 for

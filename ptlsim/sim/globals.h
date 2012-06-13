@@ -444,18 +444,33 @@ static inline W64 x86_ror(W64 r, int n) {
 template <typename T>
 static inline T dupb(const byte b) { return T(b) * T(0x0101010101010101ULL); }
 
-//
-// Get the frequency of the CPU core(s) in cycles per second
-// Defined differently depending on the (usermode vs bare hardware in kernel mode)
-//
-W64 get_core_freq_hz();
+/**
+ * @brief Get Host Machine's CPU Frequency
+ *
+ * @return Frequency of CPU in HZ
+ */
+W64 get_native_core_freq_hz();
 
-static inline double ticks_to_seconds(W64 ticks) {
-  return (double)ticks / (double)get_core_freq_hz();
+/**
+ * @brief Convert 'ticks' to Host seconds
+ *
+ * @param ticks Ticks/Cycles counter used for conversion
+ *
+ * @return Seconds of Host Machine
+ */
+static inline double ticks_to_native_seconds(W64 ticks) {
+  return (double)ticks / (double)get_native_core_freq_hz();
 }
 
-static inline W64 seconds_to_ticks(double seconds) {
-  return (W64)(seconds * (double)get_core_freq_hz());
+/**
+ * @brief Convert seconds to Host 'ticks'
+ *
+ * @param seconds value used for conversion
+ *
+ * @return Ticks/Cycles based on Host Machine's Frequency
+ */
+static inline W64 seconds_to_native_ticks(double seconds) {
+  return (W64)(seconds * (double)get_native_core_freq_hz());
 }
 
 template <int n> struct lg { static const int value = 1 + lg<n/2>::value; };

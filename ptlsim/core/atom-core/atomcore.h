@@ -459,7 +459,7 @@ namespace ATOM_CORE_MODEL {
         }
 
         int flush_virt(Waddr virtaddr, W64 threadid) {
-            return invalidate(tagof(virtaddr, threadid));
+            return this->invalidate(tagof(virtaddr, threadid));
         }
     };
 
@@ -1021,7 +1021,7 @@ namespace ATOM_CORE_MODEL {
         ~AtomCore();
         
         void reset();
-        bool runcycle();
+        bool runcycle(void*);
         void check_ctx_changes();
         void flush_tlb(Context& ctx);
         void flush_tlb_virt(Context& ctx, Waddr virtaddr);
@@ -1061,6 +1061,8 @@ namespace ATOM_CORE_MODEL {
 
         AtomThread** threads;
         AtomThread*  running_thread;
+
+		Signal run_cycle;
 
         /**
          * @brief Fetch/Decode Queue
