@@ -51,6 +51,7 @@ namespace {
        */
     TEST(Stats, TimeStats) {
         StatsBuilder &builder = StatsBuilder::get();
+		builder.delete_nodes();
 
         ostringstream os;
         TestStat st;
@@ -296,4 +297,25 @@ namespace {
 
         ASSERT_STREQ(os.str().c_str(), test_str.buf);
     }
+
+	TEST(Stats, GetStat) {
+        StatsBuilder &builder = StatsBuilder::get();
+		builder.delete_nodes();
+		user_stats->reset();
+		kernel_stats->reset();
+
+        TestStat st;
+		st.ct1.set_default_stats(user_stats);
+
+        foreach (i, 10) {
+            st.ct1++;
+        }
+
+		StatObj<W64>* m_ct1 = (StatObj<W64>*)builder.get_stat_obj("test:ct1");
+		ASSERT_EQ(m_ct1, &st.ct1);
+
+		W64 ct1_val = (W64&)(*m_ct1)(user_stats);
+
+		ASSERT_EQ(ct1_val, 10);
+	}
 };
