@@ -1,13 +1,15 @@
-//
-// PTLsim: Cycle Accurate x86-64 Simulator
-// Out-of-Order Core Simulator
-// Core Structures
-//
-// Copyright 2003-2008 Matt T. Yourst <yourst@yourst.com>
-// Copyright 2006-2008 Hui Zeng <hzeng@cs.binghamton.edu>
-//
-// Modifications for MARSSx86
-// Copyright 2009-2010 Avadh Patel <avadh4all@gmail.com>
+/*
+ *
+ *  PTLsim: Cycle Accurate x86-64 Simulator
+ *  Out-of-Order Core Simulator
+ *  Core Structures
+ *
+ *  Copyright 2003-2008 Matt T. Yourst <yourst@yourst.com>
+ *  Copyright 2006-2008 Hui Zeng <hzeng@cs.binghamton.edu>
+ *
+ *  Modifications for MARSSx86
+ *  Copyright 2009-2010 Avadh Patel <avadh4all@gmail.com>
+ */
 
 #include <globals.h>
 #include <elf.h>
@@ -76,15 +78,16 @@ namespace OOO_CORE_MODEL {
 
 };
 
-//
-// Initialize lookup tables used by the simulation
-//
+
+/*
+ * @brief Initialize lookup tables used by the simulation
+ */
 static void init_luts() {
 
     if(globals_initialized)
         return;
 
-    // Initialize opcode maps
+    /* Initialize opcode maps */
     foreach (i, OP_MAX_OPCODE) {
         W32 allowedfu = fuinfo[i].fu;
         W32 allowedcl = 0;
@@ -94,7 +97,7 @@ static void init_luts() {
         uop_executable_on_cluster[i] = allowedcl;
     }
 
-    // Initialize forward-at-cycle LUTs
+    /* Initialize forward-at-cycle LUTs */
     foreach (srcc, MAX_CLUSTERS) {
         foreach (destc, MAX_CLUSTERS) {
             foreach (lat, MAX_FORWARDING_LATENCY+1) {
@@ -116,10 +119,10 @@ ThreadContext::ThreadContext(OooCore& core_, W8 threadid_, Context& ctx_)
     stats_name << "thread" << threadid;
     thread_stats.update_name(stats_name.buf);
 
-    // Set decoder stats
+    /* Set decoder stats */
     set_decoder_stats(&thread_stats, ctx.cpu_index);
 
-    // Connect stats equations
+    /* Connect stats equations */
     thread_stats.issue.uipc.add_elem(&thread_stats.issue.uops);
     thread_stats.issue.uipc.add_elem(&core_.core_stats.cycles);
 
@@ -128,12 +131,15 @@ ThreadContext::ThreadContext(OooCore& core_, W8 threadid_, Context& ctx_)
 
     thread_stats.commit.ipc.add_elem(&thread_stats.commit.insns);
     thread_stats.commit.ipc.add_elem(&core_.core_stats.cycles);
-    // thread_stats.commit.ipc.enable_periodic_dump();
+    /* thread_stats.commit.ipc.enable_periodic_dump(); */
 
     thread_stats.set_default_stats(user_stats);
     reset();
 }
 
+/**
+ * @brief Reset thread context variables and structures
+ */
 void ThreadContext::reset() {
     setzero(specrrt);
     setzero(commitrrt);
@@ -191,11 +197,16 @@ void ThreadContext::setupTLB() {
     }
 }
 
+/**
+ * @brief Initialize thread context variables and structures
+ */
 void ThreadContext::init() {
     rob_states.reset();
-    //
-    // ROB states
-    //
+
+     /*
+      * ROB states
+      */
+
     rob_free_list("free", rob_states, 0);
     rob_frontend_list("frontend", rob_states, ROB_STATE_PRE_READY_TO_DISPATCH);
     rob_ready_to_dispatch_list("ready-to-dispatch", rob_states, 0);
@@ -211,7 +222,7 @@ void ThreadContext::init() {
     rob_memory_fence_list("memory-fence", rob_states, 0);
     rob_ready_to_commit_queue("ready-to-commit", rob_states, ROB_STATE_READY);
 
-    // Setup TLB of each thread
+    /* Setup TLB of each thread */
     setupTLB();
 
     reset();
@@ -234,7 +245,7 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
 
     assert(num_threads > 0 && "Core has atleast 1 thread");
 
-    // Rename the stats
+    /* Rename the stats */
     stringbuf core_name;
     if(name) {
         core_name << name << "_" << coreid;
@@ -244,7 +255,7 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
 
     update_name(core_name.buf);
 
-    // Setup Cache Signals
+    /* Setup Cache Signals */
     stringbuf sig_name;
     sig_name << core_name << "-dcache-wakeup";
 
@@ -261,9 +272,9 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
 
     threads = (ThreadContext**)malloc(sizeof(ThreadContext*) * threadcount);
 
-    // Setup Threads
+    /* Setup Threads */
     foreach(i, threadcount) {
-        Context& ctx = machine.get_next_context();//coreid + i);
+        Context& ctx = machine.get_next_context();
         ThreadContext* thread = new ThreadContext(*this, i, ctx);
         threads[i] = thread;
         thread->init();
@@ -274,6 +285,9 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
     init_luts();
 }
 
+/**
+ * @brief Initialize OOO core variables and structures
+ */
 void OooCore::reset() {
     round_robin_tid = 0;
     round_robin_reg_file_offset = 0;
@@ -336,6 +350,9 @@ static void OOO_CORE_MODEL::print_list_of_state_lists(ostream& os, const ListOfS
     }
 }
 
+/**
+ * @brief Initialize the Physical Register File
+ */
 void PhysicalRegisterFile::init(const char* name, W8 coreid, int rfid, int size, OooCore* core) {
     assert(rfid < PHYS_REG_FILE_COUNT);
     assert(size <= MAX_PHYS_REG_FILE_SIZE);
@@ -358,6 +375,9 @@ void PhysicalRegisterFile::init(const char* name, W8 coreid, int rfid, int size,
     }
 }
 
+/**
+ * @brief Allocate physical register to be used in the rename stage
+ */
 PhysicalRegister* PhysicalRegisterFile::alloc(W8 threadid, int r) {
     PhysicalRegister* physreg = (PhysicalRegister*)((r == 0) ? &(*this)[r] : states[PHYSREG_FREE].peek());
     if unlikely (!physreg) return NULL;
@@ -370,6 +390,13 @@ PhysicalRegister* PhysicalRegisterFile::alloc(W8 threadid, int r) {
     return physreg;
 }
 
+/**
+ * @brief print the physcial register file
+ *
+ * @param os the output stream
+ *
+ * @return the output stream
+ */
 ostream& PhysicalRegisterFile::print(ostream& os) const {
     os << "PhysicalRegisterFile<", name, ", rfid ", rfid, ", size ", size, ">:", endl;
     foreach (i, size) {
@@ -386,6 +413,12 @@ void PhysicalRegisterFile::reset(W8 threadid) {
     }
 }
 
+/**
+ * @brief check the physical register file for any registers that can be freed
+ * and free them
+ *
+ * @return number of freed registers
+ */
 bool PhysicalRegisterFile::cleanup() {
     int freed = 0;
     PhysicalRegister* physreg;
@@ -439,16 +472,30 @@ ostream& RegisterRenameTable::print(ostream& os) const {
     return os;
 }
 
-//
-// Get the thread priority, with lower numbers receiving higher priority.
-// This is used to regulate the order in which fetch, rename, frontend
-// and dispatch slots are filled in each cycle.
-//
-// The well known ICOUNT algorithm adds up the number of uops in
-// the frontend pipeline stages and gives highest priority to
-// the thread with the lowest number, since this thread is moving
-// uops through very quickly and can make more progress.
-//
+/*
+ *
+ *  Get the thread priority, with lower numbers receiving higher priority.
+ *  This is used to regulate the order in which fetch, rename, frontend
+ *  and dispatch slots are filled in each cycle.
+ *
+ *  The well known ICOUNT algorithm adds up the number of uops in
+ *  the frontend pipeline stages and gives highest priority to
+ *  the thread with the lowest number, since this thread is moving
+ *  uops through very quickly and can make more progress.
+ *
+ */
+/**
+ * @brief Get the thread priority, with lower numbers receiving higher priority.
+ *  This is used to regulate the order in which fetch, rename, frontend
+ *  and dispatch slots are filled in each cycle.
+ *
+ *  The well known ICOUNT algorithm adds up the number of uops in
+ *  the frontend pipeline stages and gives highest priority to
+ *  the thread with the lowest number, since this thread is moving
+ *  uops through very quickly and can make more progress.
+ *
+ * @return  thread priority
+ */
 int ThreadContext::get_priority() const {
     int priority =
         fetchq.count +
@@ -466,17 +513,23 @@ int ThreadContext::get_priority() const {
     return priority;
 }
 
-//
-// Execute one cycle of the entire core state machine
-//
+
+
+/**
+ * @brief Execute one cycle of the entire core state machine
+ *
+ * @return true if the core should stop simulating after this cycle
+ */
 bool OooCore::runcycle() {
     bool exiting = 0;
-    //
-    // Detect edge triggered transition from 0->1 for
-    // pending interrupt events, then wait for current
-    // x86 insn EOM uop to commit before redirecting
-    // to the interrupt handler.
-    //
+
+     /*
+      * Detect edge triggered transition from 0->1 for
+      * pending interrupt events, then wait for current
+      * x86 insn EOM uop to commit before redirecting
+      * to the interrupt handler.
+      */
+
 
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
@@ -491,15 +544,19 @@ bool OooCore::runcycle() {
         }
     }
 
-    // Each core's thread-shared stats counter will be added to
-    // the thread-0's counters for simplicity
+     /*
+      * Each core's thread-shared stats counter will be added to
+      * the thread-0's counters for simplicity
+      */
     set_default_stats(threads[0]->thread_stats.get_default_stats(), false);
 
-    //
-    // Compute reserved issue queue entries to avoid starvation:
-    //
+
+    /*
+     * Compute reserved issue queue entries to avoid starvation:
+     */
+
 #ifdef ENABLE_CHECKS_IQ
-    // at any cycle, for any issuq, total free entries == shared_free_entries + total_issueq_reserved_free
+    /* at any cycle, for any issuq, total free entries == shared_free_entries + total_issueq_reserved_free */
     MYDEBUG << " enable_checks_IQ : core[", coreid,"]:",endl;
 
 #ifndef MULTI_IQ
@@ -560,9 +617,10 @@ bool OooCore::runcycle() {
 
     fu_avail = bitmask(FU_COUNT);
 
-    //
-    // Backend and issue pipe stages run with round robin priority
-    //
+
+    /*
+     *  Backend and issue pipe stages run with round robin priority
+     */
     int commitrc[threadcount];
     commitcount = 0;
     writecount = 0;
@@ -604,11 +662,13 @@ bool OooCore::runcycle() {
         }
     }
 
-    //
-    // Clock the TLB miss page table walk state machine
-    // This may use up load ports, so do it before other
-    // loads can issue
-    //
+
+     /*
+      * Clock the TLB miss page table walk state machine
+      * This may use up load ports, so do it before other
+      * loads can issue
+      */
+
     foreach (permute, threadcount) {
         int tid = add_index_modulo(round_robin_tid, +permute, threadcount);
         ThreadContext* thread = threads[tid];
@@ -616,23 +676,21 @@ bool OooCore::runcycle() {
     }
 
 
-    /* svn 225
-       foreach (i, threadcount) {
-       threads[i]->tlbwalk();
-       }
-       */
-    //
-    // Issue whatever is ready
-    //
+    /*
+     * Issue whatever is ready
+     */
+
     if (logable(9)) {
         ptl_logfile << "OooCore::run():issue\n";
     }
 
     for_each_cluster(i) { issue(i); }
 
-    //
-    // Most of the frontend (except fetch!) also works with round robin priority
-    //
+
+    /*
+     * Most of the frontend (except fetch!) also works with round robin priority
+     */
+
     if (logable(9)) {
         ptl_logfile << "OooCore::run():dispatch\n";
     }
@@ -654,12 +712,14 @@ bool OooCore::runcycle() {
         }
     }
 
-    //
-    // Compute fetch priorities (default is ICOUNT algorithm)
-    //
-    // This means we sort in ascending order, with any unused threads
-    // (if any) given the lowest priority.
-    //
+
+    /*
+     *  Compute fetch priorities (default is ICOUNT algorithm)
+     *
+     *  This means we sort in ascending order, with any unused threads
+     *  (if any) given the lowest priority.
+     */
+
     if (logable(9)) {
         ptl_logfile << "OooCore::run():fetch\n";
     }
@@ -681,14 +741,16 @@ bool OooCore::runcycle() {
         sort(priority_index, threadcount, SortPrecomputedIndexListComparator<int, false>(priority_value));
     }
 
-    //
-    // Fetch in thread priority order
-    //
-    // NOTE: True ICOUNT only fetches the highest priority
-    // thread per cycle, since there is usually only one
-    // instruction cache port. In a banked i-cache, we can
-    // fetch from multiple threads every cycle.
-    //
+
+    /*
+     *  Fetch in thread priority order
+     *
+     *  NOTE: True ICOUNT only fetches the highest priority
+     *  thread per cycle, since there is usually only one
+     *  instruction cache port. In a banked i-cache, we can
+     *  fetch from multiple threads every cycle.
+     */
+
     bool fetch_exception[threadcount];
     foreach (j, threadcount) {
         int i = priority_index[j];
@@ -704,19 +766,25 @@ bool OooCore::runcycle() {
         }
     }
 
-    //
-    // Always clock the issue queues: they're independent of all threads
-    //
+
+    /*
+     * Always clock the issue queues: they're independent of all threads
+     */
+
     foreach_issueq(clock());
 
-    //
-    // Advance the round robin priority index
-    //
+
+    /*
+     * Advance the round robin priority index
+     */
+
     round_robin_tid = add_index_modulo(round_robin_tid, +1, threadcount);
 
 #ifdef ENABLE_CHECKS
-    // This significantly slows down simulation; only enable it if absolutely needed:
-    // check_refcounts();
+    /*
+     * This significantly slows down simulation; only enable it if absolutely needed:
+     * check_refcounts();
+     */
 #endif
 
     foreach (i, threadcount) {
@@ -732,7 +800,7 @@ bool OooCore::runcycle() {
             if(fetch_exception[i])
                 continue;
 
-            // Its a instruction page fault
+            /* Its a instruction page fault */
             rc = COMMIT_RESULT_EXCEPTION;
             thread->ctx.exception = EXCEPTION_PageFaultOnExec;
             thread->ctx.page_fault_addr = thread->ctx.exec_fault_addr;
@@ -742,23 +810,25 @@ bool OooCore::runcycle() {
             case COMMIT_RESULT_SMC:
                 {
                     if (logable(3)) ptl_logfile << "Potentially cross-modifying SMC detected: global flush required (cycle ", sim_cycle, ", ", total_insns_committed, " commits)", endl, flush;
-                    //
-                    // DO NOT GLOBALLY FLUSH! It will cut off the other thread(s) in the
-                    // middle of their currently committing x86 instruction, causing massive
-                    // internal corruption on any VCPUs that happen to be straddling the
-                    // instruction boundary.
-                    //
-                    // BAD: machine.flush_all_pipelines();
-                    //
-                    // This is a temporary fix: in the *extremely* rare case where both
-                    // threads have the same basic block in their pipelines and that
-                    // BB is being invalidated, the BB cache will forbid us from
-                    // freeing it (and will print a warning to that effect).
-                    //
-                    // I'm working on a solution to this, to put some BBs on an
-                    // "invisible" list, where they cannot be looked up anymore,
-                    // but their memory is not freed until the lock is released.
-                    //
+
+                    /*
+                     *  DO NOT GLOBALLY FLUSH! It will cut off the other thread(s) in the
+                     *  middle of their currently committing x86 instruction, causing massive
+                     *  internal corruption on any VCPUs that happen to be straddling the
+                     *  instruction boundary.
+                     *
+                     *  BAD: machine.flush_all_pipelines();
+                     *
+                     *  This is a temporary fix: in the *extremely* rare case where both
+                     *  threads have the same basic block in their pipelines and that
+                     *  BB is being invalidated, the BB cache will forbid us from
+                     *  freeing it (and will print a warning to that effect).
+                     *
+                     *  I'm working on a solution to this, to put some BBs on an
+                     *  "invisible" list, where they cannot be looked up anymore,
+                     *  but their memory is not freed until the lock is released.
+                     */
+
                     foreach (i, threadcount) {
                         ThreadContext* t = threads[i];
                         if unlikely (!t) continue;
@@ -806,8 +876,7 @@ bool OooCore::runcycle() {
                     if (logable(3)) ptl_logfile << " COMMIT_RESULT_STOP, flush_pipeline().",endl;
                     thread->flush_pipeline();
                     thread->stall_frontend = 1;
-                    // machine.stopped[thread->ctx.cpu_index] = 1;
-                    // Wait for other cores to sync up, so don't exit right away
+                    /* Wait for other cores to sync up, so don't exit right away */
                     break;
                 }
         }
@@ -816,31 +885,6 @@ bool OooCore::runcycle() {
             machine.ret_qemu_env = &thread->ctx;
     }
 
-    // return false;
-    //  if unlikely (vcpu_online_map_changed) {
-    //    vcpu_online_map_changed = 0;
-    //    foreach (i, contextcount) {
-    //      Context& vctx = contextof(i);
-    //      if likely (!vctx.dirty) continue;
-    //      //
-    //      // The VCPU is coming up for the first time after booting or being
-    //      // taken offline by the user.
-    //      //
-    //      // Force the active core model to flush any cached (uninitialized)
-    //      // internal state (like register file copies) it might have, since
-    //      // it did not know anything about this VCPU prior to now: if it
-    //      // suddenly gets marked as running without this, the core model
-    //      // will try to execute from bogus state data.
-    //      //
-    //      ptl_logfile << "VCPU ", vctx.cpu_index, " context was dirty: update core model internal state", endl;
-    //
-    //      ThreadContext* tc = threads[vctx.cpu_index];
-    //      assert(tc);
-    //      assert(&tc->ctx == &vctx);
-    //      tc->flush_pipeline();
-    //      vctx.dirty = 0;
-    //    }
-    //  }
 
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
@@ -877,9 +921,16 @@ bool OooCore::runcycle() {
     return exiting;
 }
 
-//
-// ReorderBufferEntry
-//
+
+/*
+ * ReorderBufferEntry
+ */
+
+/**
+ * @brief Initialize Reorder Buffer Entry
+ *
+ * @param idx The ROB entery to initialize
+ */
 void ReorderBufferEntry::init(int idx) {
     this->idx = idx;
     entry_valid = 0;
@@ -888,12 +939,13 @@ void ReorderBufferEntry::init(int idx) {
     reset();
 }
 
-//
-// Clean out various fields from the ROB entry that are
-// expected to be zero when allocating a new ROB entry.
-//
+
+/**
+ * @brief Clean out various fields from the ROB entry that are expected to be
+ * zero when allocating a new ROB entry.
+ */
 void ReorderBufferEntry::reset() {
-    // Deallocate ROB entry
+    /* Deallocate ROB entry */
     entry_valid = false;
     cycles_left = 0;
     uop.uuid = -1;
@@ -930,6 +982,11 @@ bool ReorderBufferEntry::ready_to_issue() const {
     }
 }
 
+/**
+ * @brief Check if the ROB entery is ready top commit
+ *
+ * @return True if the entery is ready top commit
+ */
 bool ReorderBufferEntry::ready_to_commit() const {
     return (current_state_list == &getthread().rob_ready_to_commit_queue);
 }
@@ -942,9 +999,6 @@ StateList& ReorderBufferEntry::get_ready_to_issue_list() {
         thread.rob_ready_to_issue_list[cluster];
 }
 
-//
-// Reorder Buffer
-//
 stringbuf& ReorderBufferEntry::get_operand_info(stringbuf& sb, int operand) const {
     PhysicalRegister& physreg = *operands[operand];
     ReorderBufferEntry& sourcerob = *physreg.rob;
@@ -964,7 +1018,7 @@ stringbuf& ReorderBufferEntry::get_operand_info(stringbuf& sb, int operand) cons
         case PHYSREG_PENDINGFREE:
                            sb << " (pending free for ", arch_reg_names[physreg.archreg], ")"; break;
         default:
-                           // Cannot be in free state!
+                           /* Cannot be in free state! */
                            sb << " (FREE)"; break;
     }
 
@@ -1019,16 +1073,25 @@ ostream& ReorderBufferEntry::print(ostream& os) const {
     return os;
 }
 
+/**
+ * @brief Print the reorder buffer
+ *
+ * @param os output stream
+ */
 void ThreadContext::print_rob(ostream& os) {
     os << "ROB head ", ROB.head, " to tail ", ROB.tail, " (", ROB.count, " entries):", endl;
     foreach_forward(ROB, i) {
         ReorderBufferEntry& rob = ROB[i];
         rob.print(os);
         os << endl;
-        // os << "  " << rob, endl;
     }
 }
 
+/**
+ * @brief Print the load/store queue
+ *
+ * @param os output stream
+ */
 void ThreadContext::print_lsq(ostream& os) {
     os << "LSQ head ", LSQ.head, " to tail ", LSQ.tail, " (", LSQ.count, " entries):", endl, flush;
     foreach_forward(LSQ, i) {
@@ -1058,6 +1121,11 @@ void OooCore::print_smt_state(ostream& os) {
     }
 }
 
+/**
+ * @brief print the thread state including. ROB, LSQ, ITLB and DTLB
+ *
+ * @param os output stream
+ */
 void ThreadContext::dump_smt_state(ostream& os) {
     os << "SMT per-thread state for t", threadid, ":", endl;
     os << "Fetchrip: ", hexstring(fetchrip, 64), endl;
@@ -1070,6 +1138,12 @@ void ThreadContext::dump_smt_state(ostream& os) {
     os << flush;
 }
 
+/**
+ * @brief
+ *
+ * @param os output stream print the core state, that includes all the threads
+ * state
+ */
 void OooCore::dump_state(ostream& os) {
     os << "dump_state for core[",coreid,"]: SMT common structures:", endl;
 
@@ -1081,7 +1155,6 @@ void OooCore::dump_state(ostream& os) {
     print_list_of_state_lists<ReorderBufferEntry>(os, rob_states, "ROB entry states");
     os << "Issue Queues:", endl;
     foreach_issueq(print(os));
-    // caches.print(os);
 
     os << "Unaligned predictor:", endl;
     os << "  ", unaligned_predictor.popcount(), " unaligned bits out of ", UNALIGNED_PREDICTOR_SIZE, " bits", endl;
@@ -1094,15 +1167,17 @@ void OooCore::dump_state(ostream& os) {
 
 }
 
-//
-// Validate the physical register reference counters against what
-// is really accessible from the various tables and operand fields.
-//
-// This is for debugging only.
-//
+/**
+ * @brief  Validate the physical register reference counters against what
+ *  is really accessible from the various tables and operand fields.
+ *
+ *  This is for debugging only.
+ */
 void OooCore::check_refcounts() {
-    // this should be for each thread instead of whole core:
-    // for now, we just work on thread[0];
+     /*
+      * this should be for each thread instead of whole core:
+      * for now, we just work on thread[0];
+      */
     ThreadContext& thread = *threads[0];
     Queue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
     RegisterRenameTable& specrrt = thread.specrrt;
@@ -1112,7 +1187,7 @@ void OooCore::check_refcounts() {
     memset(refcounts, 0, sizeof(refcounts));
 
     foreach (rfid, PHYS_REG_FILE_COUNT) {
-        // Null physreg in each register file is special and can never be freed:
+        /* Null physreg in each register file is special and can never be freed: */
         refcounts[rfid][PHYS_REG_NULL]++;
     }
 
@@ -1156,9 +1231,14 @@ void OooCore::check_refcounts() {
     if (errors) assert(false);
 }
 
+/**
+ * @brief  Check the ROB, for debuging only
+ */
 void OooCore::check_rob() {
-    // this should be for each thread instead of whole core:
-    // for now, we just work on thread[0];
+     /*
+      * this should be for each thread instead of whole core:
+      * for now, we just work on thread[0];
+      */
     ThreadContext& thread = *threads[0];
     Queue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
 
@@ -1186,6 +1266,13 @@ void OooCore::check_rob() {
     }
 }
 
+/**
+ * @brief Print load/store Queue entery
+ *
+ * @param os Output stream
+ *
+ * @return Output stream
+ */
 ostream& LoadStoreQueueEntry::print(ostream& os) const {
     os << (store ? "st" : "ld"), intstring(index(), -3), " ";
     os << "uuid ", intstring(rob->uop.uuid, 10), " ";
@@ -1207,14 +1294,23 @@ ostream& LoadStoreQueueEntry::print(ostream& os) const {
     return os;
 }
 
-//
-// Barriers must flush the fetchq and stall the frontend until
-// after the barrier is consumed. Execution resumes at the address
-// in internal register nextrip (rip after the instruction) after
-// handling the barrier in microcode.
-//
+
+ /*
+  * Barriers must flush the fetchq and stall the frontend until
+  * after the barrier is consumed. Execution resumes at the address
+  * in internal register nextrip (rip after the instruction) after
+  * handling the barrier in microcode.
+  */
+
+/**
+ * @brief  Barriers must flush the fetchq and stall the frontend until
+ * after the barrier is consumed. Execution resumes at the address
+ * in internal register nextrip (rip after the instruction) after
+ * handling the barrier in microcode.
+ * @return True, if the barrier handled successfully
+ */
 bool ThreadContext::handle_barrier() {
-    // Release resources of everything in the pipeline:
+    /* Release resources of everything in the pipeline: */
 
     core_to_external_state();
     if(current_basic_block) {
@@ -1225,7 +1321,7 @@ bool ThreadContext::handle_barrier() {
     int assistid = ctx.eip;
     assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
 
-    // Special case for write_cr3 to flush before calling assist
+    /* Special case for write_cr3 to flush before calling assist */
     if(assistid == ASSIST_WRITE_CR3) {
         flush_pipeline();
     }
@@ -1252,7 +1348,7 @@ bool ThreadContext::handle_barrier() {
         ptl_logfile << ctx;
     }
 
-    // Flush again, but restart at possibly modified rip
+    /* Flush again, but restart at possibly modified rip */
     if(flush_required) {
         if (logable(6)) ptl_logfile << " handle_barrier, flush_pipeline again.",endl;
         flush_pipeline();
@@ -1266,8 +1362,14 @@ bool ThreadContext::handle_barrier() {
     return true;
 }
 
+/**
+ * @brief Handle exception raies while commiting instructions.  Flush pipeline
+ * and release all the resources
+ *
+ * @return True, if the exception handled successfully
+ */
 bool ThreadContext::handle_exception() {
-    // Release resources of everything in the pipeline:
+    /* Release resources of everything in the pipeline: */
     core_to_external_state();
     if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline.",endl;
     flush_pipeline();
@@ -1277,24 +1379,25 @@ bool ThreadContext::handle_exception() {
                     " at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl, flush;
     }
 
-    //
-    // CheckFailed and SkipBlock exceptions are raised by the chk uop.
-    // This uop is used at the start of microcoded instructions to assert
-    // that certain conditions are true so complex corrective actions can
-    // be taken if the check fails.
-    //
-    // SkipBlock is a special case used for checks at the top of REP loops.
-    // Specifically, if the %rcx register is zero on entry to the REP, no
-    // action at all is to be taken; the rip should simply advance to
-    // whatever is in chk_recovery_rip and execution should resume.
-    //
-    // CheckFailed exceptions usually indicate the processor needs to take
-    // evasive action to avoid a user visible exception. For instance,
-    // CheckFailed is raised when an inlined floating point operand is
-    // denormal or otherwise cannot be handled by inlined fastpath uops,
-    // or when some unexpected segmentation or page table conditions
-    // arise.
-    //
+    /*
+     *
+     * CheckFailed and SkipBlock exceptions are raised by the chk uop.
+     * This uop is used at the start of microcoded instructions to assert
+     * that certain conditions are true so complex corrective actions can
+     * be taken if the check fails.
+     *
+     * SkipBlock is a special case used for checks at the top of REP loops.
+     * Specifically, if the %rcx register is zero on entry to the REP, no
+     * action at all is to be taken; the rip should simply advance to
+     * whatever is in chk_recovery_rip and execution should resume.
+     *
+     * CheckFailed exceptions usually indicate the processor needs to take
+     * evasive action to avoid a user visible exception. For instance,
+     * CheckFailed is raised when an inlined floating point operand is
+     * denormal or otherwise cannot be handled by inlined fastpath uops,
+     * or when some unexpected segmentation or page table conditions
+     * arise.
+     */
     if (ctx.exception == EXCEPTION_SkipBlock) {
         ctx.eip = chk_recovery_rip;
         if (logable(6)) ptl_logfile << "SkipBlock pseudo-exception: skipping to ", (void*)(Waddr)ctx.eip, endl, flush;
@@ -1303,14 +1406,16 @@ bool ThreadContext::handle_exception() {
         return true;
     }
 
-    //
-    // Map PTL internal hardware exceptions to their x86 equivalents,
-    // depending on the context. The error_code field should already
-    // be filled out.
-    //
-    // Exceptions not listed here are propagated by microcode
-    // rather than the processor itself.
-    //
+
+    /*
+     * Map PTL internal hardware exceptions to their x86 equivalents,
+     * depending on the context. The error_code field should already
+     * be filled out.
+     *
+     * Exceptions not listed here are propagated by microcode
+     * rather than the processor itself.
+     */
+
     int write_exception = 0;
     Waddr exception_address = ctx.page_fault_addr;
     switch (ctx.exception) {
@@ -1333,9 +1438,11 @@ handle_page_fault:
                 int old_exception = ctx.exception_index;
                 ctx.handle_interrupt = 1;
                 ctx.handle_page_fault(exception_address, write_exception);
-                // If we return here means the QEMU has fix the page fault
-                // witout causing any CPU faults so we can clear the pipeline
-                // and continue from current eip
+                 /*
+                  * If we return here means the QEMU has fix the page fault
+                  * witout causing any CPU faults so we can clear the pipeline
+                  * and continue from current eip
+                  */
                 flush_pipeline();
                 ctx.exception = 0;
                 ctx.exception_index = old_exception;
@@ -1356,19 +1463,27 @@ handle_page_fault:
         ptl_logfile << ctx;
     }
 
-    // We are not coming back from this call so flush the pipeline
-    // and all other things.
+     /*
+      * We are not coming back from this call so flush the pipeline
+      * and all other things.
+      */
     ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code, ctx.page_fault_addr);
 
-    // Flush again, but restart at modified rip
+    /* Flush again, but restart at modified rip */
     if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline again.",endl;
     flush_pipeline();
 
     return true;
 }
 
+/**
+ * @brief Handle interrupts.  Flush pipeline
+ * and release all the resources
+ *
+ * @return True, if the interrupt handled successfully
+ */
 bool ThreadContext::handle_interrupt() {
-    // Release resources of everything in the pipeline:
+    /* Release resources of everything in the pipeline: */
     core_to_external_state();
     if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline.",endl;
 
@@ -1387,10 +1502,10 @@ bool ThreadContext::handle_interrupt() {
         ptl_logfile.flush();
     }
 
-    // Flush again, but restart at modified rip
+    /* Flush again, but restart at modified rip */
     if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline again.",endl;
 
-    // update the stats
+    /* update the stats */
     if(ctx.exit_request) {
         thread_stats.cpu_exit_requests++;
     } else {
@@ -1433,7 +1548,7 @@ void OooCore::flush_tlb(Context& ctx) {
 }
 
 void OooCore::flush_tlb_virt(Context& ctx, Waddr virtaddr) {
-    // FIXME AVADH DEFCORE
+    /* FIXME AVADH DEFCORE */
 }
 
 void OooCore::check_ctx_changes()
@@ -1449,7 +1564,7 @@ void OooCore::check_ctx_changes()
                 ptl_logfile << "Old_eip: ", (void*)(ctx.old_eip), " New_eip: " ,
                             (void*)(ctx.eip), endl;
 
-            // IP address is changed, so flush the pipeline
+            /* IP address is changed, so flush the pipeline */
             threads[i]->flush_pipeline();
 			threads[i]->thread_stats.ctx_switches++;
         }
