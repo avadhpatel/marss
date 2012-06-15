@@ -875,31 +875,6 @@ bool OooCore::runcycle(void* none) {
             machine.ret_qemu_env = &thread->ctx;
     }
 
-    // return false;
-    //  if unlikely (vcpu_online_map_changed) {
-    //    vcpu_online_map_changed = 0;
-    //    foreach (i, contextcount) {
-    //      Context& vctx = contextof(i);
-    //      if likely (!vctx.dirty) continue;
-    //      //
-    //      // The VCPU is coming up for the first time after booting or being
-    //      // taken offline by the user.
-    //      //
-    //      // Force the active core model to flush any cached (uninitialized)
-    //      // internal state (like register file copies) it might have, since
-    //      // it did not know anything about this VCPU prior to now: if it
-    //      // suddenly gets marked as running without this, the core model
-    //      // will try to execute from bogus state data.
-    //      //
-    //      ptl_logfile << "VCPU ", vctx.cpu_index, " context was dirty: update core model internal state", endl;
-    //
-    //      ThreadContext* tc = threads[vctx.cpu_index];
-    //      assert(tc);
-    //      assert(&tc->ctx == &vctx);
-    //      tc->flush_pipeline();
-    //      vctx.dirty = 0;
-    //    }
-    //  }
 
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
@@ -1100,7 +1075,6 @@ void ThreadContext::print_rob(ostream& os) {
         ReorderBufferEntry& rob = ROB[i];
         rob.print(os);
         os << endl;
-        // os << "  " << rob, endl;
     }
 }
 
@@ -1172,7 +1146,6 @@ void OooCore::dump_state(ostream& os) {
     print_list_of_state_lists<ReorderBufferEntry>(os, rob_states, "ROB entry states");
     os << "Issue Queues:", endl;
     foreach_issueq(print(os));
-    // caches.print(os);
 
     os << "Unaligned predictor:", endl;
     os << "  ", unaligned_predictor.popcount(), " unaligned bits out of ", UNALIGNED_PREDICTOR_SIZE, " bits", endl;

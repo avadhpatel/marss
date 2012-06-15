@@ -143,7 +143,6 @@ namespace OOO_CORE_MODEL {
 
     /* Largest size of any physical register file or the store queue: */
     const int MAX_PHYS_REG_FILE_SIZE = OOO_MAX_PHYS_REG_FILE_SIZE;
-    //  const int PHYS_REG_FILE_SIZE = 256;
     const int PHYS_REG_FILE_SIZE = OOO_PHYS_REG_FILE_SIZE;
     const int PHYS_REG_NULL = 0;
 
@@ -218,9 +217,9 @@ namespace OOO_CORE_MODEL {
 
     const int COMMIT_WIDTH = OOO_COMMIT_WIDTH;
 
-	// #define MULTI_IQ
+    /* #define MULTI_IQ */
 
-	// #ifdef ENABLE_SMT
+    /* #ifdef ENABLE_SMT */
 
       /*
        * Multiple issue queues are currently only supported in
@@ -228,8 +227,8 @@ namespace OOO_CORE_MODEL {
        * ICOUNT SMT heuristic when multiple queues are active.
        */
 
-	// #undef MULTI_IQ
-	// #endif
+    /* #undef MULTI_IQ */
+    /* #endif */
 
 #ifdef MULTI_IQ
     const int MAX_CLUSTERS = 4;

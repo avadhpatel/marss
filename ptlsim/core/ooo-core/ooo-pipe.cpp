@@ -218,6 +218,10 @@ void OooCore::flush_pipeline() {
     /* Clear out everything global: */
     setzero(robs_on_fu);
 }
+/**
+ * @brief Flush entire pipeline immediately, reset all processor structures to
+ * their initial state, and resume from the state saved in ctx.commitarf.
+ */
 
 /**
  * @brief Flush entire pipeline immediately, reset all processor structures to
@@ -318,7 +322,6 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
     current_basic_block_transop_index = 0;
     unaligned_ldst_buf.reset();
 }
-
 /**
  * @brief Process any pending self-modifying code invalidate requests. This must
  * be called on all cores *after* flushing all pipelines, to ensure no stale BBs
@@ -443,37 +446,6 @@ void ThreadContext::redispatch_deadlock_recovery() {
     flush_pipeline();
     last_commit_at_cycle = previous_last_commit_at_cycle; /* so we can exit after no commit after deadlock recovery a few times in a roll */
     ptl_logfile << "[vcpu ", ctx.cpu_index, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
-    /*
-    //
-    // This is a more selective scheme than the full pipeline flush.
-    // Presently it does not work correctly with some combinations
-    // of user-modifiable parameters, so it's disabled to ensure
-    // deadlock-free operation in every configuration.
-    //
-
-    ReorderBufferEntry* prevrob = NULL;
-    bitvec<MAX_OPERANDS> noops = 0;
-
-    foreach_forward(ROB, robidx) {
-    ReorderBufferEntry& rob = ROB[robidx];
-
-    //
-    // Only re-dispatch those uops that have not yet generated a value
-    // or are guaranteed to produce a value soon without tying up resources.
-    // This must occur in program order to avoid deadlock!
-    //
-    // bool recovery_required = (rob.current_state_list->flags & ROB_STATE_IN_ISSUE_QUEUE) || (rob.current_state_list == &rob_ready_to_dispatch_list);
-    bool recovery_required = 1; // for now, just to be safe
-
-    if (recovery_required) {
-    rob.redispatch(noops, prevrob);
-    prevrob = &rob;
-    per_context_ooocore_stats_update(threadid, dispatch.redispatch.deadlock_uops_flushed++);
-    }
-    }
-
-    if (logable(6)) dump_smt_state();
-    */
 }
 
 
@@ -540,7 +512,6 @@ bool ThreadContext::fetch() {
         } else {
             /* still have reserved entries left, continue fetching */
         }
-        ///    }
 #endif
 
         if unlikely ((fetchrip.rip == config.start_log_at_rip) && (fetchrip.rip != 0xffffffffffffffffULL)) {
@@ -892,7 +863,7 @@ void ThreadContext::rename() {
         rob.operands[RS] = &core.physregfiles[0][PHYS_REG_NULL]; /* used for loads and stores only */
 
 
-        // See notes above on Physical Register Recycling Complications
+        /* See notes above on Physical Register Recycling Complications */
         foreach (i, MAX_OPERANDS) {
             rob.operands[i]->addref(rob, threadid);
             assert(rob.operands[i]->state != PHYSREG_FREE);
@@ -1650,20 +1621,6 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
     queued_mem_lock_release_count = start;
 }
 
-//
-// For debugging purposes only
-//
-#if 0
-bool rip_is_in_spinlock(W64 rip) {
-    bool inside_spinlock_now =
-        inrange(rip, 0xffffffff803d3fbcULL, 0xffffffff803d404fULL) | // .text.lock.spinlock
-        inrange(rip, 0xffffffff803d2c82ULL, 0xffffffff803d2ccfULL) | // .text.lock.mutex
-        inrange(rip, 0xffffffff80135f50ULL, 0xffffffff80135f8fULL) | // current_fs_time
-        inrange(rip, 0xffffffff801499b6ULL, 0xffffffff80149a22ULL);  // hrtimer_run_queues
-
-    return inside_spinlock_now;
-}
-#endif
 
 /* Checker - saved stores to compare after executing emulated instruction */
 namespace OOO_CORE_MODEL {
@@ -2017,30 +1974,10 @@ int ReorderBufferEntry::commit() {
         }
     }
 #endif
-     /*
-      * For debugging purposes, check the list of address ranges specified
-      * with the -deadlock-debug-range 0xAA-0xBB,0xCC-0xDD,... option. If
-      * the commit rip has been within one of these ranges on this vcpu for
-      * more than (value of -deadlock-debug-limit) commits, dump all state,
-      * dump the event log and abort the simulation.
-      */
-
+     
     if (st) assert(lsq->addrvalid && lsq->datavalid);
 
     if (ld) physreg->data = lsq->data;
-
-    // FIXME : Check if we really need to merge the load with existing register
-#if 0
-    W64 old_data = ctx.get(uop.rd);
-    W64 merged_data;
-    if(ld | st) {
-        merged_data = mux64(
-                expand_8bit_to_64bit_lut[lsq->bytemask],
-                old_data, physreg->data);
-    } else {
-        merged_data = physreg->data;
-    }
-#endif
 
     if (logable(10)) {
         ptl_logfile << "ROB Commit RIP check...\n", flush;
@@ -2277,8 +2214,6 @@ int ReorderBufferEntry::commit() {
                           "simcycle: ", sim_cycle, "\tkernel: ",
                           uop.rip.kernel, endl;
 #endif
-        // if(uop.rip.rip > 0x7f0000000000)
-        // per_core_event_update(core.coreid, insns_in_mode.userlib++);
     }
 
     if (logable(10)) {

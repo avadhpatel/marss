@@ -405,7 +405,7 @@ static void decode_tag(issueq_tag_t tag, int& threadid, int& idx) {
  *
  * @return Successfull or not
  *
- * Return:
+ * Returns:
  *  +1 if issue was successful
  *   0 if no functional unit was available
  *  -1 if there was an exception and we should stop issuing this cycle
@@ -476,9 +476,6 @@ int ReorderBufferEntry::issue() {
     PhysicalRegister& rb = *operands[RB];
     PhysicalRegister& rc = *operands[RC];
 
-    // FIXME : Failsafe operation. Sometimes an entry is issed even though its
-    // operands are not yet ready, so in this case simply replay the issue
-    //
     if(!ra.ready() || !rb.ready() || (load_store_second_phase && !rc.ready())) {
         if(logable(0)) ptl_logfile << "Invalid Issue..\n";
         replay();
@@ -630,7 +627,6 @@ int ReorderBufferEntry::issue() {
     }
 
     bool mispredicted = (physreg->data != uop.riptaken);
-    //  bool mispredicted = (physreg->valid()) ? (physreg->data != uop.riptaken) : false;
 
      /*
       * Release the issue queue entry, since we are beyond the point of no return:
@@ -733,7 +729,9 @@ int ReorderBufferEntry::issue() {
 
 /**
  * @deprecated Not used
+ * Re check if the load or store will cause page fault or not
  */
+
 bool ReorderBufferEntry::recheck_page_fault() {
 
     if(uop.internal || (lsq->sfence | lsq->lfence))
@@ -778,6 +776,7 @@ bool ReorderBufferEntry::recheck_page_fault() {
  * @param annul If this entry is annulled or not
  *
  * @return Physical address
+ * Address generation common to both loads and stores
  */
 Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, Waddr& virtpage, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate, Waddr& addr, int& exception, PageFaultErrorCode& pfec, bool& annul) {
     Context& ctx = getthread().ctx;
@@ -1099,7 +1098,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
                   * without any problem.
                   */
                 sfra = NULL;
-                // sfra = &stbuf;
                 break;
             }
         } else {
@@ -1853,6 +1851,7 @@ int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
 
     SFR dummysfr;
     setzero(dummysfr);
+    /* FIXME AVADH DEFCORE */
     lfrqslot = 0;
     assert(lfrqslot >= 0);
 
@@ -2087,7 +2086,6 @@ void ThreadContext::tlbwalk() {
     ReorderBufferEntry* rob;
     foreach_list_mutable(rob_tlb_miss_list, rob, entry, nextentry) {
         rob->tlbwalk();
-        // logfuncwith(rob->tlbwalk(), 6);
     }
 }
 
@@ -2144,7 +2142,6 @@ LoadStoreQueueEntry* ReorderBufferEntry::find_nearest_memory_fence() {
  * This implementation closely models the Intel Pentium 4 technique described
  * in U.S. Patent 6651151, "MFENCE and LFENCE Microarchitectural Implementation
  * Method and System" (S. Palanca et al), filed 12 Jul 2002.
- *
  */
 int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
     ThreadContext& thread = getthread();
@@ -2180,6 +2177,9 @@ int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
  * @param rb
  * @param rc
  * @param cachelevel
+ *
+ * Issues a prefetch on the given memory address into the specified cache level.
+ *
  */
 void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc, int cachelevel) {
     state.reg.rddata = 0;
@@ -2512,13 +2512,6 @@ void ReorderBufferEntry::release() {
         if(logable(99)) ptl_logfile << " free_shared_entry() from release()",endl;
         issueq_operation_on_cluster(core, cluster, free_shared_entry());
     }
-    /* svn 225
-       if unlikely (core.threadcount > 1) {
-       if (thread.issueq_count > core.reserved_iq_entries) {
-       issueq_operation_on_cluster(core, cluster, free_shared_entry());
-       }
-       }
-       */
     thread.issueq_count[cluster]--;
     assert(thread.issueq_count[cluster] >=0);
 #else
@@ -2527,13 +2520,6 @@ void ReorderBufferEntry::release() {
         if(logable(99)) ptl_logfile << " free_shared_entry() from release()",endl;
         issueq_operation_on_cluster(core, cluster, free_shared_entry());
     }
-    /* svn 225
-       if unlikely (core.threadcount > 1) {
-       if (thread.issueq_count > core.reserved_iq_entries) {
-       issueq_operation_on_cluster(core, cluster, free_shared_entry());
-       }
-       }
-       */
     thread.issueq_count--;
     assert(thread.issueq_count >=0);
 #endif
@@ -2558,7 +2544,9 @@ int OooCore::issue(int cluster) {
         int iqslot;
         issueq_operation_on_cluster_with_result(getcore(), cluster, iqslot, issue(last_issue_id));
 
-		/* Is anything ready? */
+        /*
+         * Is anything ready?
+         */
         if unlikely (iqslot < 0) break;
 
         int robid;
@@ -2593,9 +2581,6 @@ int OooCore::issue(int cluster) {
     return issuecount;
 }
 
-/*
- *
- */
 /**
  * @brief Forward results of ROB (uops) to waiting entries in Issue-queue
  *
@@ -2607,6 +2592,7 @@ int OooCore::issue(int cluster) {
  * N cycles after the uop issued, where N is forward_cycle. This
  * technique is used to model arbitrarily complex multi-cycle
  * forwarding networks.
+ *
  */
 int ReorderBufferEntry::forward() {
     assert(inrange((int)forward_cycle, 0, (MAX_FORWARDING_LATENCY+1)-1));
@@ -2704,7 +2690,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
     idx = endidx;
     for (;;) {
         ReorderBufferEntry& annulrob = ROB[idx];
-        //    issueq_operation_on_cluster(core, annulrob.cluster, annuluop(annulrob.get_tag()));
         bool rc;
         issueq_operation_on_cluster_with_result(core, annulrob.cluster, rc, annuluop(annulrob.get_tag()));
         if (rc) {
@@ -2763,7 +2748,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 
     foreach (i, TRANSREG_COUNT) { specrrt[i]->addspecref(i, thread.threadid); }
 
-    // if (logable(6)) ptl_logfile << "Restored SpecRRT from CommitRRT; walking forward from:", endl, core.specrrt, endl;
     idx = ROB.head;
     for (idx = ROB.head; idx != startidx; idx = add_index_modulo(idx, +1, ROB_SIZE)) {
         ReorderBufferEntry& rob = ROB[idx];

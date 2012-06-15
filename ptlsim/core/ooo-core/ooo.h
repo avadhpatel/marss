@@ -26,9 +26,9 @@
 /* With these disabled, simulation is faster */
 #define ENABLE_CHECKS
 #define ENABLE_LOGGING
-// #define ENABLE_CHECKS_IQ
+/* #define ENABLE_CHECKS_IQ */
 
-// #define DISABLE_TLB
+/* #define DISABLE_TLB */
 
 /*
  *
@@ -620,12 +620,9 @@ namespace OOO_CORE_MODEL {
         int index() const { return idx; }
 
         void reset() {
-            // int oldidx = idx;
-            // setzero(*this);
             rob = 0;
             store = 0; lfence = 0; sfence = 0; entry_valid = 0;
             time_stamp = 0;
-            // idx = oldidx;
             mbtag = -1;
             sfr_data = -1;
             sfr_bytemask = 0;
@@ -790,7 +787,6 @@ namespace OOO_CORE_MODEL {
         bool cleanup();
 
         void init(const char* name, W8 coreid, int rfid, int size, OooCore* core);
-        // bool remaining() const { return (!states[PHYSREG_FREE].empty()); }
         bool remaining() {
             if unlikely (states[PHYSREG_FREE].empty()) {
                 return cleanup();
@@ -1093,19 +1089,15 @@ namespace OOO_CORE_MODEL {
         OooCoreThreadStats thread_stats;
     };
 
-    //  class MemoryHierarchy;
-    //
 
 
-    // checkpointed core
-    //
     struct OooCore: public BaseCore {
         OooCore& getcore() { return *this; }
 
         /* This is only used for stats collection. By default if core is
          * collecting stats that is common across threads then its collected
          * into Stats that Thread-0 is using.
-		 */
+         */
         ThreadContext& getthread() { return *threads[0]; }
 
         PTLsimStats *stats_;
