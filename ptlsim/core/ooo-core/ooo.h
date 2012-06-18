@@ -1,12 +1,14 @@
-// -*- c++ -*-
-//
-// PTLsim: Cycle Accurate x86-64 Simulator
-// Out-of-Order Core Simulator
-//
-// Copyright 2003-2008 Matt T. Yourst <yourst@yourst.com>
-// Copyright 2006-2008 Hui Zeng <hzeng@cs.binghamton.edu>
-// Copyright 2009-2010 Avadh Patel <apatel@cs.binghamton.edu>
-//
+/*
+ *  -*- c++ -*-
+ *
+ *  PTLsim: Cycle Accurate x86-64 Simulator
+ *  Out-of-Order Core Simulator
+ *
+ *  Copyright 2003-2008 Matt T. Yourst <yourst@yourst.com>
+ *  Copyright 2006-2008 Hui Zeng <hzeng@cs.binghamton.edu>
+ *  Copyright 2009-2010 Avadh Patel <apatel@cs.binghamton.edu>
+ */
+
 
 #ifndef _OOOCORE_H_
 #define _OOOCORE_H_
@@ -21,22 +23,24 @@
 #include <ooo-const.h>
 #include <ooo-stats.h>
 
-// With these disabled, simulation is faster
+/* With these disabled, simulation is faster */
 #define ENABLE_CHECKS
 #define ENABLE_LOGGING
-//#define ENABLE_CHECKS_IQ
+/* #define ENABLE_CHECKS_IQ */
 
-// #define DISABLE_TLB
+/* #define DISABLE_TLB */
 
-//
-// Enable SMT operation:
-//
-// Note that this limits some configurations of resources and
-// issue queues that would normally be possible in single
-// threaded mode.
-//
+/*
+ *
+ *  Enable SMT operation:
+ *
+ *  Note that this limits some configurations of resources and
+ *  issue queues that would normally be possible in single
+ *  threaded mode.
+ *
+ */
 
-//#define ENABLE_SIM_TIMING
+/* #define ENABLE_SIM_TIMING */
 #ifdef ENABLE_SIM_TIMING
 #define time_this_scope(ct) CycleTimerScope ctscope(ct)
 #define start_timer(ct) ct.start()
@@ -84,9 +88,11 @@ namespace OOO_CORE_MODEL {
 
     extern const char* fu_names[FU_COUNT];
 
-//
-// Opcodes and properties
-//
+
+ /*
+  * Opcodes and properties
+  */
+
 #define ALU0 (FU_ALU0 * ((ALU_FU_COUNT - 1) >= 0))
 #define ALU1 (FU_ALU1 * ((ALU_FU_COUNT - 2) >= 0))
 #define ALU2 (FU_ALU2 * ((ALU_FU_COUNT - 3) >= 0))
@@ -117,21 +123,26 @@ namespace OOO_CORE_MODEL {
 #define ANYINT ANYALU|ANYSTU|ANYLDU
 #define ALLFU  ANYINT|ANYFPU
 
+    /**
+     * @brief Hold the functional unites related information
+     */
     struct FunctionalUnitInfo {
-        byte opcode;   // Must match definition in ptlhwdef.h and ptlhwdef.cpp!
-        byte latency;  // Latency in cycles, assuming ideal bypass
-        W16  fu;       // Map of functional units on which this uop can issue
+        byte opcode;   /* Must match definition in ptlhwdef.h and ptlhwdef.cpp! */
+        byte latency;  /* Latency in cycles, assuming ideal bypass */
+        W16  fu;       /* Map of functional units on which this uop can issue */
     };
 
-    //
-    // WARNING: This table MUST be kept in sync with the table
-    // in ptlhwdef.cpp and the uop enum in ptlhwdef.h!
-    //
+
+     /*
+      * WARNING: This table MUST be kept in sync with the table
+      * in ptlhwdef.cpp and the uop enum in ptlhwdef.h!
+      */
+
     const FunctionalUnitInfo fuinfo[OP_MAX_OPCODE] = {
-        // name, latency, fumask
+        /* name, latency, fumask */
         {OP_nop,            A, ALLFU},
         {OP_mov,            A, ALLFU},
-        // Logical
+        /* Logical */
         {OP_and,            A, ALLFU},
         {OP_andnot,         A, ALLFU},
         {OP_xor,            A, ALLFU},
@@ -140,41 +151,41 @@ namespace OOO_CORE_MODEL {
         {OP_ornot,          A, ALLFU},
         {OP_eqv,            A, ALLFU},
         {OP_nor,            A, ALLFU},
-        // Mask, insert or extract bytes
+        /* Mask, insert or extract bytes */
         {OP_maskb,          A, ANYINT},
-        // Add and subtract
+        /* Add and subtract */
         {OP_add,            A, ANYINT},
         {OP_sub,            A, ANYINT},
         {OP_adda,           A, ANYINT},
         {OP_suba,           A, ANYINT},
         {OP_addm,           A, ANYINT},
         {OP_subm,           A, ANYINT},
-        // Condition code logical ops
+        /* Condition code logical ops */
         {OP_andcc,          A, ANYINT},
         {OP_orcc,           A, ANYINT},
         {OP_xorcc,          A, ANYINT},
         {OP_ornotcc,        A, ANYINT},
-        // Condition code movement and merging
+        /* Condition code movement and merging */
         {OP_movccr,         A, ANYINT},
         {OP_movrcc,         A, ANYINT},
         {OP_collcc,         A, ANYINT},
-        // Simple shifting (restricted to small immediate 1..8)
+        /* Simple shifting (restricted to small immediate 1..8) */
         {OP_shls,           A, ANYINT},
         {OP_shrs,           A, ANYINT},
         {OP_bswap,          A, ANYINT},
         {OP_sars,           A, ANYINT},
-        // Bit testing
+        /* Bit testing */
         {OP_bt,             A, ANYALU},
         {OP_bts,            A, ANYALU},
         {OP_btr,            A, ANYALU},
         {OP_btc,            A, ANYALU},
-        // Set and select
+        /* Set and select */
         {OP_set,            A, ANYINT},
         {OP_set_sub,        A, ANYINT},
         {OP_set_and,        A, ANYINT},
         {OP_sel,            A, ANYINT},
         {OP_sel_cmp,        A, ANYINT},
-        // Branches
+        /* Branches */
         {OP_br,             A, ANYINT},
         {OP_br_sub,         A, ANYINT},
         {OP_br_and,         A, ANYINT},
@@ -182,17 +193,17 @@ namespace OOO_CORE_MODEL {
         {OP_bru,            A, ANYINT},
         {OP_jmpp,           A, ANYALU|ANYLDU},
         {OP_brp,            A, ANYALU|ANYLDU},
-        // Checks
+        /* Checks */
         {OP_chk,            A, ANYINT},
         {OP_chk_sub,        A, ANYINT},
         {OP_chk_and,        A, ANYINT},
-        // Loads and stores
+        /* Loads and stores */
         {OP_ld,             L, ANYLDU},
         {OP_ldx,            L, ANYLDU},
         {OP_ld_pre,         1, ANYLDU},
         {OP_st,             1, ANYSTU},
         {OP_mf,             1, STU0  },
-        // Shifts, rotates and complex masking
+        /* Shifts, rotates and complex masking */
         {OP_shl,            A, ANYALU},
         {OP_shr,            A, ANYALU},
         {OP_mask,           A, ANYALU},
@@ -201,31 +212,33 @@ namespace OOO_CORE_MODEL {
         {OP_rotr,           A, ANYALU},
         {OP_rotcl,          A, ANYALU},
         {OP_rotcr,          A, ANYALU},
-        // Multiplication
+        /* Multiplication */
         {OP_mull,           4, ANYFPU},
         {OP_mulh,           4, ANYFPU},
         {OP_mulhu,          4, ANYFPU},
         {OP_mulhl,          4, ANYFPU},
-        // Bit scans
+        /* Bit scans */
         {OP_ctz,            3, ANYFPU},
         {OP_clz,            3, ANYFPU},
         {OP_ctpop,          3, ANYFPU},
         {OP_permb,          4, ANYFPU},
-        // Integer divide and remainder step
+        /* Integer divide and remainder step */
         {OP_div,           32, ALU0},
         {OP_rem,           32, ALU0},
         {OP_divs,          32, ALU0},
         {OP_rems,          32, ALU0},
-        // Minimum and maximum
+        /* Minimum and maximum */
         {OP_min,            A, ANYALU},
         {OP_max,            A, ANYALU},
         {OP_min_s,          A, ANYALU},
         {OP_max_s,          A, ANYALU},
-        // Floating point
-        // uop.size bits have following meaning:
-        // 00 = single precision, scalar (preserve high 32 bits of ra)
-        // 01 = single precision, packed (two 32-bit floats)
-        // 1x = double precision, scalar or packed (use two uops to process 128-bit xmm)
+         /*
+          * Floating point
+          * uop.size bits have following meaning:
+          * 00 = single precision, scalar (preserve high 32 bits of ra)
+          * 01 = single precision, packed (two 32-bit floats)
+          * 1x = double precision, scalar or packed (use two uops to process 128-bit xmm)
+          */
         {OP_fadd,           6, ANYFPU},
         {OP_fsub,           6, ANYFPU},
         {OP_fmul,           6, ANYFPU},
@@ -239,16 +252,20 @@ namespace OOO_CORE_MODEL {
         {OP_fmin,           6, ANYFPU},
         {OP_fmax,           6, ANYFPU},
         {OP_fcmp,           6, ANYFPU},
-        // For fcmpcc, uop.size bits have following meaning:
-        // 00 = single precision ordered compare
-        // 01 = single precision unordered compare
-        // 10 = double precision ordered compare
-        // 11 = double precision unordered compare
+         /*
+          * For fcmpcc, uop.size bits have following meaning:
+          * 00 = single precision ordered compare
+          * 01 = single precision unordered compare
+          * 10 = double precision ordered compare
+          * 11 = double precision unordered compare
+          */
         {OP_fcmpcc,         4, ANYFPU},
-        // and/andn/or/xor are done using integer uops
-        // For these conversions, uop.size bits select truncation mode:
-        // x0 = normal IEEE-style rounding
-        // x1 = truncate to zero
+         /*
+          * and/andn/or/xor are done using integer uops
+          * For these conversions, uop.size bits select truncation mode:
+          * x0 = normal IEEE-style rounding
+          * x1 = truncate to zero
+          */
         {OP_fcvt_i2s_ins,   6, ANYFPU},
         {OP_fcvt_i2s_p,     6, ANYFPU},
         {OP_fcvt_i2d_lo,    6, ANYFPU},
@@ -265,8 +282,10 @@ namespace OOO_CORE_MODEL {
         {OP_fcvt_d2s_p,     6, ANYFPU},
         {OP_fcvt_s2d_lo,    6, ANYFPU},
         {OP_fcvt_s2d_hi,    6, ANYFPU},
-        // Vector integer uops
-        // uop.size defines element size: 00 = byte, 01 = W16, 10 = W32, 11 = W64 (i.e. same as normal ALU uops)
+         /*
+          * Vector integer uops
+          * uop.size defines element size: 00 = byte, 01 = W16, 10 = W32, 11 = W64 (i.e. same as normal ALU uops)
+          */
         {OP_vadd,           1, ANYFPU},
         {OP_vsub,           1, ANYFPU},
         {OP_vadd_us,        1, ANYFPU},
@@ -290,7 +309,7 @@ namespace OOO_CORE_MODEL {
         {OP_vsad,           4, ANYFPU},
         {OP_vpack_us,       2, ANYFPU},
         {OP_vpack_ss,       2, ANYFPU},
-        // Special Opcodes
+        /* Special Opcodes */
         {OP_ast,			4, ANYINT},
     };
 
@@ -303,15 +322,23 @@ namespace OOO_CORE_MODEL {
 
     struct ReorderBufferEntry;
 
-    //
-    // Issue queue based scheduler with broadcast
-    //
+
+     /*
+      * Issue queue based scheduler with broadcast
+      */
+
 #ifdef BIG_ROB
     typedef W16 issueq_tag_t;
 #else
     typedef byte issueq_tag_t;
 #endif
 
+    /**
+     * @brief represet the Issue Queue in real hardware
+     *
+     * @tparam size : issque queue size
+     * @tparam operandcount maximum number of opernad an opcode can have
+     */
     template <int size, int operandcount = MAX_OPERANDS>
         struct IssueQueue {
 #ifdef BIG_ROB
@@ -329,12 +356,14 @@ namespace OOO_CORE_MODEL {
             assoc_t uopids;
             assoc_t tags[operandcount];
 
-            // States:
-            //             V I
-            // free        0 0
-            // dispatched  1 0
-            // issued      1 1
-            // complete    0 1
+             /*
+              * States:
+              *             V I
+              * free        0 0
+              * dispatched  1 0
+              * issued      1 1
+              * complete    0 1
+              */
 
             bitvec<size> valid;
             bitvec<size> issued;
@@ -395,19 +424,23 @@ namespace OOO_CORE_MODEL {
             ostream& print(ostream& os) const;
             void tally_broadcast_matches(tag_t sourceid, const bitvec<size>& mask, int operand);
 
-            //
-            // Replay a uop that has already issued once.
-            // The caller may add or reset dependencies here as needed.
-            //
+
+             /*
+              * Replay a uop that has already issued once.
+              * The caller may add or reset dependencies here as needed.
+              */
+
             bool replay(int slot) {
                 issued[slot] = 0;
                 return true;
             }
 
-            //
-            // Remove an entry from the issue queue after it has completed,
-            // or in the process of annulment.
-            //
+
+             /*
+              * Remove an entry from the issue queue after it has completed,
+              * or in the process of annulment.
+              */
+
             bool release(int slot) {
                 remove(slot);
                 return true;
@@ -436,9 +469,11 @@ namespace OOO_CORE_MODEL {
     template <typename T>
         static void print_list_of_state_lists(ostream& os, const ListOfStateLists& lol, const char* title);
 
-    //
-    // Fetch Buffers
-    //
+
+     /*
+      * Fetch Buffers
+      */
+
     struct BranchPredictorUpdateInfo: public PredictorUpdate {
         int stack_recover_idx;
         int bptype;
@@ -464,18 +499,19 @@ namespace OOO_CORE_MODEL {
         }
     };
 
-    //
-    // ReorderBufferEntry
+    /* ReorderBufferEntry */
     struct ThreadContext;
     struct OooCore;
     struct PhysicalRegister;
     struct LoadStoreQueueEntry;
 
-    //
-    // Reorder Buffer (ROB) structure, used for tracking all uops in flight.
-    // This same structure is used to represent both dispatched but not yet issued
-    // uops as well as issued uops.
-    //
+
+     /**
+      * @brief Reorder Buffer (ROB) structure, used for tracking all uops in flight.
+      * This same structure is used to represent both dispatched but not yet issued
+      * uops as well as issued uops.
+      */
+
     struct ReorderBufferEntry: public selfqueuelink {
         FetchBufferEntry uop;
         struct StateList* current_state_list;
@@ -483,8 +519,8 @@ namespace OOO_CORE_MODEL {
         PhysicalRegister* operands[MAX_OPERANDS];
         LoadStoreQueueEntry* lsq;
         W16s idx;
-        W16s cycles_left; // execution latency counter, decremented every cycle when executing
-        W16s forward_cycle; // forwarding cycle after completion
+        W16s cycles_left; /* execution latency counter, decremented every cycle when executing */
+        W16s forward_cycle; /* forwarding cycle after completion */
         W16s lfrqslot;
         W16s iqslot;
         W16  executable_on_cluster_mask;
@@ -497,8 +533,8 @@ namespace OOO_CORE_MODEL {
         byte fu;
         byte consumer_count;
         PTEUpdate pteupdate;
-        Waddr origvirt; // original virtual address, with low bits
-        Waddr virtpage; // virtual page number actually accessed by the load or store
+        Waddr origvirt; /* original virtual address, with low bits */
+        Waddr virtpage; /* virtual page number actually accessed by the load or store */
         W64 original_addr, generated_addr, cache_data;
         byte entry_valid:1, load_store_second_phase:1, all_consumers_off_bypass:1, dest_renamed_before_writeback:1, no_branches_between_renamings:1, transient:1, lock_acquired:1, issued:1;
         byte annul_flag;
@@ -563,14 +599,16 @@ namespace OOO_CORE_MODEL {
         return rob.print(os);
     }
 
-    //
-    // Load/Store Queue
-    //
+
 #define LSQ_SIZE (LDQ_SIZE + STQ_SIZE)
 
-    // Define this to allow speculative issue of loads before unresolved stores
-    //#define SMT_ENABLE_LOAD_HOISTING
+    /* Define this to allow speculative issue of loads before unresolved stores */
+    /* #define SMT_ENABLE_LOAD_HOISTING */
 
+    /**
+     * @brief  LSQ structure used to track memory operations to insure update
+     * memory in order
+     */
     struct LoadStoreQueueEntry: public SFR {
         ReorderBufferEntry* rob;
         W16 idx;
@@ -578,7 +616,7 @@ namespace OOO_CORE_MODEL {
         OooCore* core;
         W8s mbtag;
         W8 store:1, lfence:1, sfence:1, entry_valid:1, mmio:1;
-        //   W32 padding;
+          /* W32 padding; */
         W32 time_stamp;
         W64 sfr_data;
         W8 sfr_bytemask;
@@ -587,12 +625,9 @@ namespace OOO_CORE_MODEL {
         int index() const { return idx; }
 
         void reset() {
-            // int oldidx = idx;
-            // setzero(*this);
             rob = 0;
             store = 0; lfence = 0; sfence = 0; entry_valid = 0;
             time_stamp = 0;
-            // idx = oldidx;
             mbtag = -1;
             sfr_data = -1;
             sfr_bytemask = 0;
@@ -632,9 +667,6 @@ namespace OOO_CORE_MODEL {
 
     ostream& operator <<(ostream& os, const PhysicalRegisterOperandInfo& opinfo);
 
-    //
-    // Physical Register File
-    //
 
     struct PhysicalRegister: public selfqueuelink {
         ReorderBufferEntry* rob;
@@ -728,6 +760,11 @@ namespace OOO_CORE_MODEL {
 
     ostream& operator <<(ostream& os, const PhysicalRegister& physreg);
 
+    /**
+     * @brief Physical Register File contains both architecture and physical
+     * registers
+     */
+
     struct PhysicalRegisterFile: public array<PhysicalRegister, MAX_PHYS_REG_FILE_SIZE> {
         byte coreid;
         OooCore *core;
@@ -752,7 +789,6 @@ namespace OOO_CORE_MODEL {
         bool cleanup();
 
         void init(const char* name, W8 coreid, int rfid, int size, OooCore* core);
-        // bool remaining() const { return (!states[PHYSREG_FREE].empty()); }
         bool remaining() {
             if unlikely (states[PHYSREG_FREE].empty()) {
                 return cleanup();
@@ -775,9 +811,10 @@ namespace OOO_CORE_MODEL {
         return physregs.print(os);
     }
 
-    //
-    // Register Rename Table
-    //
+
+    /**
+     * @brief Register Rename Table
+     */
     struct RegisterRenameTable: public array<PhysicalRegister*, TRANSREG_COUNT> {
 #ifdef ENABLE_TRANSIENT_VALUE_TRACKING
         bitvec<TRANSREG_COUNT> renamed_in_this_basic_block;
@@ -845,11 +882,13 @@ namespace OOO_CORE_MODEL {
     name[0](description "-all", rob_states, flags);
 #endif
 
-    //
-    // TLB class with one-hot semantics. 36 bit tags are required since
-    // virtual addresses are 48 bits, so 48 - 12 (2^12 bytes per page)
-    // is 36 bits.
-    //
+
+     /*
+      * TLB class with one-hot semantics. 36 bit tags are required since
+      * virtual addresses are 48 bits, so 48 - 12 (2^12 bytes per page)
+      * is 36 bits.
+      */
+
     template <int tlbid, int size>
       struct TranslationLookasideBuffer: public FullyAssociativeTagsNbitOneHot<size, 40> {
         typedef FullyAssociativeTagsNbitOneHot<size, 40> base_t;
@@ -859,7 +898,7 @@ namespace OOO_CORE_MODEL {
           base_t::reset();
         }
 
-        // Get the 40-bit TLB tag (36 bit virtual page ID plus 4 bit threadid)
+        /* Get the 40-bit TLB tag (36 bit virtual page ID plus 4 bit threadid) */
         static W64 tagof(W64 addr, W64 threadid) {
           return bits(addr, 12, 36) | (threadid << 36);
         }
@@ -909,6 +948,9 @@ namespace OOO_CORE_MODEL {
     typedef TranslationLookasideBuffer<0, DTLB_SIZE> DTLB;
     typedef TranslationLookasideBuffer<1, ITLB_SIZE> ITLB;
 
+    /**
+     * @brief represent a OOO  thread in SMT core.
+     */
     struct ThreadContext {
         OooCore& core;
         OooCore& getcore() { return core; }
@@ -925,11 +967,13 @@ namespace OOO_CORE_MODEL {
 
         ListOfStateLists rob_states;
         ListOfStateLists lsq_states;
-        //
-        // Each ROB's state can be linked into at most one of the
-        // following rob_xxx_list lists at any given time; the ROB's
-        // current_state_list points back to the list it belongs to.
-        //
+
+         /*
+          * Each ROB's state can be linked into at most one of the
+          * following rob_xxx_list lists at any given time; the ROB's
+          * current_state_list points back to the list it belongs to.
+          */
+
         StateList rob_free_list;                             // Free ROB entyry
         StateList rob_frontend_list;                         // Frontend in progress (artificial delay)
         StateList rob_ready_to_dispatch_list;                // Ready to dispatch
@@ -1049,19 +1093,16 @@ namespace OOO_CORE_MODEL {
         OooCoreThreadStats thread_stats;
     };
 
-    //  class MemoryHierarchy;
-    //
 
 
-    // checkpointed core
-    //
     struct OooCore: public BaseCore {
         W8 coreid;
         OooCore& getcore() { return *this; }
 
         /* This is only used for stats collection. By default if core is
          * collecting stats that is common across threads then its collected
-         * into Stats that Thread-0 is using. */
+         * into Stats that Thread-0 is using.
+         * */
         ThreadContext& getthread() { return *threads[0]; }
 
         PTLsimStats *stats_;
@@ -1081,9 +1122,11 @@ namespace OOO_CORE_MODEL {
         byte round_robin_tid;
 
 
-        //
-        // Issue Queues (one per cluster)
-        //
+
+         /*
+          * Issue Queues (one per cluster)
+          */
+
 
 #define declare_issueq_templates template struct IssueQueue<ISSUE_QUEUE_SIZE>
 #ifdef MULTI_IQ
@@ -1092,8 +1135,8 @@ namespace OOO_CORE_MODEL {
         IssueQueue<ISSUE_QUEUE_SIZE> issueq_ld;
         IssueQueue<ISSUE_QUEUE_SIZE> issueq_fp;
 
-        int reserved_iq_entries[4];  /// this is the total number of iq entries reserved per thread.
-        // Instantiate any issueq sizes used above:
+        int reserved_iq_entries[4];  /* this is the total number of iq entries reserved per thread. */
+         /* Instantiate any issueq sizes used above: */
 
 
 #define foreach_issueq(expr) { OooCore& core = getcore(); core.issueq_int0.expr; core.issueq_int1.expr; core.issueq_ld.expr; core.issueq_fp.expr; }
@@ -1253,7 +1296,10 @@ namespace OOO_CORE_MODEL {
 		void dump_configuration(YAML::Emitter &out) const;
     };
 
-    /* Checker - saved stores to compare after executing emulated instruction */
+    /**
+     * @brief Checker - saved stores to compare after executing emulated
+     * instruction
+     */
     struct CheckStores {
       W64 virtaddr;
       W64 data;
@@ -1297,30 +1343,30 @@ namespace OOO_CORE_MODEL {
     };
 
     const byte intercluster_latency_map[MAX_CLUSTERS][MAX_CLUSTERS] = {
-        // I0 I1 LD FP <-to
-        {0, 1, 0, 2}, // from I0
-        {1, 0, 0, 2}, // from I1
-        {0, 0, 0, 2}, // from LD
-        {2, 2, 2, 0}, // from FP
+        /* I0 I1 LD FP <-to */
+        {0, 1, 0, 2}, /* from I0 */
+        {1, 0, 0, 2}, /* from I1 */
+        {0, 0, 0, 2}, /* from LD */
+        {2, 2, 2, 0}, /* from FP */
     };
 
     const byte intercluster_bandwidth_map[MAX_CLUSTERS][MAX_CLUSTERS] = {
-        // I0 I1 LD FP <-to
-        {2, 2, 1, 1}, // from I0
-        {2, 2, 1, 1}, // from I1
-        {1, 1, 2, 2}, // from LD
-        {1, 1, 1, 2}, // from FP
+       /* I0 I1 LD FP <-to */
+        {2, 2, 1, 1}, /* from I0 */
+        {2, 2, 1, 1}, /* from I1 */
+        {1, 1, 2, 2}, /* from LD */
+        {1, 1, 1, 2}, /* from FP */
     };
 
-#else // single issueq
+#else /* single issueq */
     const Cluster clusters[MAX_CLUSTERS] = {
         {"all",  4, (ALLFU)},
     };
     const byte intercluster_latency_map[MAX_CLUSTERS][MAX_CLUSTERS] = {{0}};
     const byte intercluster_bandwidth_map[MAX_CLUSTERS][MAX_CLUSTERS] = {{64}};
-#endif // multi_issueq
+#endif /* multi_issueq */
 
-#endif // DECLARE_STRUCTURES
+#endif /* DECLARE_STRUCTURES */
 
     struct OooCoreBuilder : public CoreBuilder {
         OooCoreBuilder(const char* name);
@@ -1355,4 +1401,4 @@ namespace OOO_CORE_MODEL {
 #undef ANYINT
 #undef ALLFU
 
-#endif // _OOOCORE_H_
+#endif /* _OOOCORE_H_ */
