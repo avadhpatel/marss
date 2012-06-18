@@ -26,9 +26,9 @@
 /* With these disabled, simulation is faster */
 #define ENABLE_CHECKS
 #define ENABLE_LOGGING
-/* #define ENABLE_CHECKS_IQ */
+// #define ENABLE_CHECKS_IQ
 
-/* #define DISABLE_TLB */
+// #define DISABLE_TLB
 
 /*
  *
@@ -1235,10 +1235,6 @@ namespace OOO_CORE_MODEL {
         int round_robin_reg_file_offset;
         W32 fu_avail;
         ReorderBufferEntry* robs_on_fu[FU_COUNT];
-        // CacheSubsystem::CacheHierarchy caches;
-        // CPUControllerNamespace::CPUController cpu_controller;
-        //    MemorySystem::CPUController test_controller;
-        // OutOfOrderCoreCacheCallbacks cache_callbacks;
 
 		/* Unaligned load/store predictor */
         bitvec<UNALIGNED_PREDICTOR_SIZE> unaligned_predictor;

@@ -405,7 +405,7 @@ static void decode_tag(issueq_tag_t tag, int& threadid, int& idx) {
  *
  * @return Successfull or not
  *
- * Returns:
+ * Return:
  *  +1 if issue was successful
  *   0 if no functional unit was available
  *  -1 if there was an exception and we should stop issuing this cycle
@@ -1851,7 +1851,6 @@ int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
 
     SFR dummysfr;
     setzero(dummysfr);
-    /* FIXME AVADH DEFCORE */
     lfrqslot = 0;
     assert(lfrqslot >= 0);
 
@@ -2171,15 +2170,13 @@ int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
 
 /**
  * @brief Issue Prefetch to given memory address
+ * Issues a prefetch on the given memory address into the specified cache level.
  *
  * @param state IssueState containing information about instruction
  * @param ra
  * @param rb
  * @param rc
  * @param cachelevel
- *
- * Issues a prefetch on the given memory address into the specified cache level.
- *
  */
 void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc, int cachelevel) {
     state.reg.rddata = 0;
@@ -2544,9 +2541,7 @@ int OooCore::issue(int cluster) {
         int iqslot;
         issueq_operation_on_cluster_with_result(getcore(), cluster, iqslot, issue(last_issue_id));
 
-        /*
-         * Is anything ready?
-         */
+		/* Is anything ready? */
         if unlikely (iqslot < 0) break;
 
         int robid;
@@ -2592,7 +2587,6 @@ int OooCore::issue(int cluster) {
  * N cycles after the uop issued, where N is forward_cycle. This
  * technique is used to model arbitrarily complex multi-cycle
  * forwarding networks.
- *
  */
 int ReorderBufferEntry::forward() {
     assert(inrange((int)forward_cycle, 0, (MAX_FORWARDING_LATENCY+1)-1));
