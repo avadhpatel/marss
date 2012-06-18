@@ -35,15 +35,15 @@ using namespace OOO_CORE_MODEL;
 using namespace Memory;
 
 
- /*
-  * Issue Queue
-  */
+/*
+ * Issue Queue
+ */
 
 template <int size, int operandcount>
 int IssueQueue<size, operandcount>::issueq_id_seq = 0;
 
 /**
- * @brief
+ * @brief Reset Issue-Queue
  *
  * @tparam size
  * @tparam operandcount
@@ -81,6 +81,15 @@ void IssueQueue<size, operandcount>::reset(W8 coreid, OooCore* core_) {
     reset_shared_entries();
 }
 
+/**
+ * @brief Reset Issue-Queue
+ *
+ * @tparam size
+ * @tparam operandcount
+ * @param coreid
+ * @param threadid
+ * @param core_
+ */
 template <int size, int operandcount>
 void IssueQueue<size, operandcount>::reset(W8 coreid, W8 threadid,
         OooCore* core_)
@@ -138,6 +147,15 @@ void IssueQueue<size, operandcount>::reset(W8 coreid, W8 threadid,
 #endif
 }
 
+/**
+ * @brief 'Tick' the issue queue to update its flags
+ *
+ * @tparam size
+ * @tparam operandcount
+ *
+ * This function update's the 'allready' flag of each entry if all of its
+ * operands are available.
+ */
 template <int size, int operandcount>
 void IssueQueue<size, operandcount>::clock() {
     allready = (valid & (~issued));
@@ -146,6 +164,17 @@ void IssueQueue<size, operandcount>::clock() {
     }
 }
 
+/**
+ * @brief Insert an entry into Issue-Queue
+ *
+ * @tparam size
+ * @tparam operandcount
+ * @param uopid ID of uop
+ * @param operands Operands required to issue this entry
+ * @param preready Operands/Tags that are ready for issue
+ *
+ * @return True if entry is successfully added else false.
+ */
 template <int size, int operandcount>
 bool IssueQueue<size, operandcount>::insert(tag_t uopid, const tag_t* operands, const tag_t* preready) {
     if unlikely (count == size)
@@ -171,6 +200,17 @@ bool IssueQueue<size, operandcount>::insert(tag_t uopid, const tag_t* operands, 
     return true;
 }
 
+/**
+ * @brief Broadcast tag into issue-queue
+ *
+ * @tparam size
+ * @tparam operandcount
+ * @param uopid Tag ID of uop that completed execution
+ *
+ * @return True.
+ *
+ * This is used to wakeup dependent entries in issue-queue.
+ */
 template <int size, int operandcount>
 bool IssueQueue<size, operandcount>::broadcast(tag_t uopid) {
     vec_t tagvec = assoc_t::prep(uopid);
@@ -180,14 +220,20 @@ bool IssueQueue<size, operandcount>::broadcast(tag_t uopid) {
     return true;
 }
 
-
- /*
-  * Select one ready slot and move it to the issued state.
-  * This function returns the slot id. The returned slot
-  * id becomes invalid after the next call to remove()
-  * before the next uop can be processed in any way.
-  */
-
+/**
+ * @brief Issue an Issue-queue entry
+ *
+ * @tparam size
+ * @tparam operandcount
+ * @param previd Start searching from this id
+ *
+ * @return ID of issue-queue entry that can be issued.
+ *
+ * Select one ready slot and move it to the issued state.
+ * This function returns the slot id. The returned slot
+ * id becomes invalid after the next call to remove()
+ * before the next uop can be processed in any way.
+ */
 template <int size, int operandcount>
 int IssueQueue<size, operandcount>::issue(int previd) {
     if (!allready) return -1;
@@ -197,12 +243,20 @@ int IssueQueue<size, operandcount>::issue(int previd) {
     return slot;
 }
 
-
-/*
+/**
+ * @brief Replay an issue queue entry
+ *
+ * @tparam size
+ * @tparam operandcount
+ * @param slot Index of entry
+ * @param operands
+ * @param preready
+ *
+ * @return True on success.
+ *
  * Replay a uop that has already issued once.
  * The caller may add or reset dependencies here as needed.
  */
-
 template <int size, int operandcount>
 bool IssueQueue<size, operandcount>::replay(int slot, const tag_t* operands, const tag_t* preready) {
     assert(valid[slot]);
@@ -220,7 +274,17 @@ bool IssueQueue<size, operandcount>::replay(int slot, const tag_t* operands, con
 }
 
 
-/*
+/**
+ * @brief Move given slot to end of Issue queue
+ *
+ * @tparam size
+ * @tparam operandcount
+ * @param slot Entry index in issue-queue
+ * @param operands Operands pointer of this entry
+ * @param preready
+ *
+ * @return True if entry is moved.
+ *
  * Move a given slot to the end of the issue queue, so it will issue last.
  * This is used in SMT to resolve deadlocks where the release part of an
  * interlocked load or store cannot dispatch because some other interlocked
@@ -238,7 +302,17 @@ bool IssueQueue<size, operandcount>::switch_to_end(int slot, const tag_t* operan
     return true;
 }
 
-/* NOTE: This is a fairly expensive operation: */
+/**
+ * @brief Remove an entry from Issue-queue
+ *
+ * @tparam size
+ * @tparam operandcount
+ * @param slot Entry index in issue-queue
+ *
+ * @return True if entry is removed.
+ *
+ * NOTE: This is a fairly expensive operation
+ */
 template <int size, int operandcount>
 bool IssueQueue<size, operandcount>::remove(int slot) {
     uopids.collapse(slot);
@@ -256,6 +330,15 @@ bool IssueQueue<size, operandcount>::remove(int slot) {
     return true;
 }
 
+/**
+ * @brief Print the issue-queue
+ *
+ * @tparam size
+ * @tparam operandcount
+ * @param os
+ *
+ * @return
+ */
 template <int size, int operandcount>
 ostream& IssueQueue<size, operandcount>::print(ostream& os) const {
     os << "IssueQueue: count = ", count, ":", endl;
@@ -278,6 +361,15 @@ ostream& IssueQueue<size, operandcount>::print(ostream& os) const {
 /* Instantiate all methods in the specific IssueQueue sizes we're using: */
 declare_issueq_templates;
 
+/**
+ * @brief Merge two 64 bit values based on size
+ *
+ * @param rd Destination value
+ * @param ra Source value
+ * @param sizeshift Number of bytes to merge
+ *
+ * @return Merged value
+ */
 static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
     union {
         W8 w8;
@@ -296,17 +388,25 @@ static inline W64 x86_merge(W64 rd, W64 ra, int sizeshift) {
     return rd;
 }
 
+/**
+ * @brief Decode Issue queue tag to find thread id
+ *
+ * @param tag Issue queue tag
+ * @param threadid Thread ID
+ * @param idx ROB ID
+ */
 static void decode_tag(issueq_tag_t tag, int& threadid, int& idx) {
     threadid = tag >> MAX_ROB_IDX_BIT;
     int mask = ((1 << (MAX_ROB_IDX_BIT + MAX_THREADS_BIT)) - 1) >> MAX_THREADS_BIT;
     idx = tag & mask;
 }
 
-/*
+/**
+ * @brief Issue a single ROB.
  *
- * Issue a single ROB.
+ * @return Successfull or not
  *
- * Returns:
+ * Return:
  *  +1 if issue was successful
  *   0 if no functional unit was available
  *  -1 if there was an exception and we should stop issuing this cycle
@@ -637,11 +737,9 @@ int ReorderBufferEntry::issue() {
     return 1;
 }
 
-
- /*
-  * Re check if the load or store will cause page fault or not
-  */
-
+/**
+ * @deprecated Not used
+ */
 bool ReorderBufferEntry::recheck_page_fault() {
 
     if(uop.internal || (lsq->sfence | lsq->lfence))
@@ -670,11 +768,23 @@ bool ReorderBufferEntry::recheck_page_fault() {
     return false;
 }
 
-
- /*
-  * Address generation common to both loads and stores
-  */
-
+/**
+ * @brief Generate Physical address for load/store
+ *
+ * @param state Information about instruction
+ * @param origaddr Virtual address
+ * @param virtpage Page of virtual address
+ * @param ra Operand
+ * @param rb Operand
+ * @param rc Operand
+ * @param pteupdate Page table information
+ * @param addr Physical Address if translation found
+ * @param exception Execption flags in case of exception
+ * @param pfec Page fault information
+ * @param annul If this entry is annulled or not
+ *
+ * @return Physical address
+ */
 Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, Waddr& virtpage, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate, Waddr& addr, int& exception, PageFaultErrorCode& pfec, bool& annul) {
     Context& ctx = getthread().ctx;
 
@@ -788,6 +898,17 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
     return physaddr;
 }
 
+/**
+ * @brief Handle Load/Store exception and set exception flags
+ *
+ * @param state Information about instruction with exception
+ * @param origaddr Virtual address of byte level
+ * @param addr Virtual address aligned to 64 bits
+ * @param exception Type of exception
+ * @param pfec Page-Fault Error information
+ *
+ * @return True if exception is not required (handled by simulation)
+ */
 bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry& state, Waddr& origaddr, Waddr& addr, int& exception, PageFaultErrorCode& pfec) {
     OooCore& core = getcore();
     ThreadContext& thread = getthread();
@@ -848,14 +969,16 @@ bool ReorderBufferEntry::handle_common_load_store_exceptions(LoadStoreQueueEntry
     return true;
 }
 
-
-/*
- *  Release the lock on the cache block touched by this ld.acq uop.
+/**
+ * @brief Release memory lock held by this core
  *
- *  The lock is not actually released until flush_mem_lock_release_list()
- *  is called, for instance after the entire macro-op has committed.
+ * @param forced Not used.
+ *
+ * @return True if lock is released.
+ *
+ * The lock is not actually released until flush_mem_lock_release_list()
+ * is called, for instance after the entire macro-op has committed.
  */
-
 bool ReorderBufferEntry::release_mem_lock(bool forced) {
     if likely (!lock_acquired) return false;
 
@@ -879,9 +1002,19 @@ bool ReorderBufferEntry::release_mem_lock(bool forced) {
     return true;
 }
 
-
-
-/*
+/**
+ * @brief Issue a store uop
+ *
+ * @param state Instruction information
+ * @param origaddr Virtual address for store
+ * @param ra Operand
+ * @param rb Operand
+ * @param rc Data to store
+ * @param rcready Flag indicate if data in 'rc' is valid or not
+ * @param pteupdate Page information
+ *
+ * @return Success or failure of issuing this instruction
+ *
  * Stores have special dependency rules: they may issue as soon as operands ra and rb are ready,
  * even if rc (the value to store) or rs (the store buffer to inherit from) is not yet ready or
  * even known.
@@ -896,8 +1029,6 @@ bool ReorderBufferEntry::release_mem_lock(bool forced) {
  * The store is then marked as a second phase store, since the address has been generated.
  * When the store is replayed and rescheduled, it must now have all operands ready this time.
  */
-
-
 int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, bool rcready, PTEUpdate& pteupdate) {
     ThreadContext& thread = getthread();
     Queue<LoadStoreQueueEntry, LSQ_SIZE>& LSQ = thread.LSQ;
@@ -1241,6 +1372,9 @@ static inline W64 extract_bytes(void* target, int SIZESHIFT, bool SIGNEXT) {
     return data;
 }
 
+/**
+ * @deprecated No longer used.
+ */
 W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
 
     ThreadContext& thread = getthread();
@@ -1305,6 +1439,21 @@ W64 ReorderBufferEntry::get_load_data(LoadStoreQueueEntry& state, W64 data){
     return data;
 }
 
+/**
+ * @brief Issue a load uop - generate cache access
+ *
+ * @param state Instruction information
+ * @param origaddr Virtual address for load
+ * @param ra Operand
+ * @param rb Operand
+ * @param rc Operand
+ * @param pteupdate Page information
+ *
+ * @return Success or failure of issuing this instruction
+ *
+ * NOTE: A cache access is not performed for internal loads (accessing CPU
+ * registers and MSR registers).
+ */
 int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate) {
 
     OooCore& core = getcore();
@@ -1650,7 +1799,20 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     return ISSUE_COMPLETED;
 }
 
-/* Execute a lightweight Assist Function */
+/**
+ * @brief Issue a 'light-weight' assist function that is exected in pipeline
+ *
+ * @param state Instruction information
+ * @param assistid ID of light assist function
+ * @param ra Operand
+ * @param rb Operand
+ * @param rc Operand
+ * @param raflags Flags
+ * @param rbflags Flags
+ * @param rcflags Flags
+ *
+ * These light-assist functions do not require pipeline flush.
+ */
 void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
         W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags) {
 
@@ -1677,11 +1839,16 @@ void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
     return;
 }
 
-
- /*
-  * Probe the cache and initiate a miss if required
-  */
-
+/**
+ * @deprecated This function is no-longer used
+ *
+ * @brief Probe the cache and initiate miss if needed
+ *
+ * @param addr
+ * @param sfra
+ *
+ * @return Issue success flag.
+ */
 int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
     ThreadContext& thread = getthread();
 
@@ -1709,16 +1876,23 @@ int ReorderBufferEntry::probecache(Waddr addr, LoadStoreQueueEntry* sfra) {
 
     SFR dummysfr;
     setzero(dummysfr);
-    /* FIXME AVADH DEFCORE */
     lfrqslot = 0;
     assert(lfrqslot >= 0);
 
     return ISSUE_COMPLETED;
 }
 
-/*
- * Probe TLB function is called before every Cache access to check if we have
- * a valid TLB entry for the load/store.
+/**
+ * @brief Proble TLB to find valid virtual to physical address translation
+ *
+ * @param state Information about instruction
+ * @param origaddr Virtual address
+ * @param ra Operand
+ * @param rb Operand
+ * @param rc Operand
+ * @param pteupdate Page information
+ *
+ * @return True on hit, false on miss
  */
 bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate) {
 
@@ -1815,13 +1989,12 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
     return true;
 }
 
-
-
- /*
-  * Hardware page table walk state machine:
-  * One execution per page table tree level (4 levels)
-  */
-
+/**
+ * @brief Walk to next level of page-table
+ *
+ * Hardware page table walk state machine:
+ * One execution per page table tree level (4 levels)
+ */
 void ReorderBufferEntry::tlbwalk() {
 
     OooCore& core = getcore();
@@ -1929,6 +2102,9 @@ rob_cont:
     }
 }
 
+/**
+ * @brief 'Tick' each ROB entries in 'TLB-miss' page walk list
+ */
 void ThreadContext::tlbwalk() {
 
     ReorderBufferEntry* rob;
@@ -1937,11 +2113,13 @@ void ThreadContext::tlbwalk() {
     }
 }
 
-/*
+/**
+ * @brief Find nearest memory fence instruction
+ *
+ * @return Pointer to fence instruciton if any else NULL
  *
  * Find the newest memory fence in program order before the specified ROB,
  * so a dependency can be created to avoid immediate replay.
- *
  */
 LoadStoreQueueEntry* ReorderBufferEntry::find_nearest_memory_fence() {
     ThreadContext& thread = getthread();
@@ -1969,20 +2147,25 @@ LoadStoreQueueEntry* ReorderBufferEntry::find_nearest_memory_fence() {
 
     return NULL;
 }
-/*
+
+/**
+ * @brief Issue a memory fence instruction
  *
+ * @param state Contains information about instruction
  *
- *  Issue a memory fence (mf.lfence, mf.sfence, mf.mfence uops)
+ * @return Success of issuing this instruction
  *
- *  The mf uop issues immediately but does not complete until it's at the head
+ * Issue a memory fence (mf.lfence, mf.sfence, mf.mfence uops)
+ *
+ * The mf uop issues immediately but does not complete until it's at the head
  * of the ROB and LSQ; only at that point can future loads or stores issue.
  *
- *  All memory fence are considered stores, since in this way both loads and
- *  stores can depend on them using the rs dependency.
+ * All memory fence are considered stores, since in this way both loads and
+ * stores can depend on them using the rs dependency.
  *
- *  This implementation closely models the Intel Pentium 4 technique described
- *  in U.S. Patent 6651151, "MFENCE and LFENCE Microarchitectural Implementation
- *  Method and System" (S. Palanca et al), filed 12 Jul 2002.
+ * This implementation closely models the Intel Pentium 4 technique described
+ * in U.S. Patent 6651151, "MFENCE and LFENCE Microarchitectural Implementation
+ * Method and System" (S. Palanca et al), filed 12 Jul 2002.
  *
  */
 int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
@@ -2012,10 +2195,14 @@ int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
     return ISSUE_COMPLETED;
 }
 
-/*
+/**
+ * @brief Issue Prefetch to given memory address
  *
- * Issues a prefetch on the given memory address into the specified cache level.
- *
+ * @param state IssueState containing information about instruction
+ * @param ra
+ * @param rb
+ * @param rc
+ * @param cachelevel
  */
 void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc, int cachelevel) {
     state.reg.rddata = 0;
@@ -2040,11 +2227,13 @@ void ReorderBufferEntry::issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc
     if unlikely (annul) return;
 }
 
-
- /*
-  * Data cache has delivered a load: wake up corresponding ROB/LSQ/physreg entries
-  */
-
+/**
+ * @brief D-Cache responded with requested data
+ *
+ * @param arg MemoryRequest Object passed to this call-back
+ *
+ * @return True indicating success of receiving data
+ */
 bool OooCore::dcache_wakeup(void *arg) {
 
     Memory::MemoryRequest* request = (Memory::MemoryRequest*)arg;
@@ -2174,6 +2363,14 @@ bool OooCore::dcache_wakeup(void *arg) {
     return true;
 }
 
+/**
+ * @brief Wakeup ROB entry that was waiting for Load to complelte
+ *
+ * When a cache line is received from memory-hierarchy this function will
+ * wakeup ROB entry and place it to 'completed' list.
+ *
+ * If this entry is in 'tlb-miss' then it will perform page-walk.
+ */
 void ReorderBufferEntry::loadwakeup() {
     if (tlb_walk_level) {
         /* Wake up from TLB walk wait and move to next level */
@@ -2197,6 +2394,9 @@ void ReorderBufferEntry::loadwakeup() {
     }
 }
 
+/**
+ * @brief Wakeup Memory-fence Entry
+ */
 void ReorderBufferEntry::fencewakeup() {
     ThreadContext& thread = getthread();
 
@@ -2218,7 +2418,6 @@ void ReorderBufferEntry::fencewakeup() {
     fu = 0;
 
     /*
-     *
      *  Set flag to ensure that the second time it reaches
      *  commit, it just sits there, rather than looping
      *  back to completion and wakeup.
@@ -2228,8 +2427,9 @@ void ReorderBufferEntry::fencewakeup() {
     changestate(thread.rob_completed_list[cluster]);
 }
 
-
-/*
+/**
+ * @brief Reply this ROB entry
+ *
  * Replay the uop by recirculating it back to the dispatched
  * state so it can wait for additional dependencies not known
  * when it was originally dispatched, e.g. waiting on store
@@ -2278,7 +2478,9 @@ void ReorderBufferEntry::replay() {
     issueq_operation_on_cluster(core, cluster, replay(iqslot, uopids, preready));
 }
 
-
+/**
+ * @brief Reply ROB entry that has Memory lock acquired
+ */
 void ReorderBufferEntry::replay_locked() {
     OooCore& core = getcore();
     ThreadContext& thread = getthread();
@@ -2315,12 +2517,13 @@ void ReorderBufferEntry::replay_locked() {
 }
 
 
-/*
+/**
+ * @brief Release ROB entry from Issue-queue
+ *
  * Release the ROB from the issue queue after there is
  * no possibility it will need to be pulled back for
  * replay or annulment.
  */
-
 void ReorderBufferEntry::release() {
     issueq_operation_on_cluster(getcore(), cluster, release(iqslot));
 
@@ -2348,10 +2551,13 @@ void ReorderBufferEntry::release() {
 }
 
 
-/*
- * Process the ready to issue queue and issue as many ROBs as possible
+/**
+ * @brief 'Issue' ready uops to 'Execution' stage and based on issue width
+ *
+ * @param cluster If clustered Issue-Queue then specifies cluster ID
+ *
+ * @return Outcome of uop issue (success, fail, reply, skipped etc.)
  */
-
 int OooCore::issue(int cluster) {
 
     int issuecount = 0;
@@ -2362,9 +2568,7 @@ int OooCore::issue(int cluster) {
         int iqslot;
         issueq_operation_on_cluster_with_result(getcore(), cluster, iqslot, issue(last_issue_id));
 
-        /*
-         * Is anything ready?
-         */
+		/* Is anything ready? */
         if unlikely (iqslot < 0) break;
 
         int robid;
@@ -2401,13 +2605,19 @@ int OooCore::issue(int cluster) {
 
 
 /*
+ *
+ */
+/**
+ * @brief Forward results of ROB (uops) to waiting entries in Issue-queue
+ *
+ * @return
+ *
  * Forward the result of ROB 'result' to any other waiting ROBs
  * dispatched to the issue queues. This is done by broadcasting
  * the ROB tag to all issue queues in clusters reachable within
  * N cycles after the uop issued, where N is forward_cycle. This
  * technique is used to model arbitrarily complex multi-cycle
  * forwarding networks.
- *
  */
 int ReorderBufferEntry::forward() {
     assert(inrange((int)forward_cycle, 0, (MAX_FORWARDING_LATENCY+1)-1));
@@ -2422,7 +2632,13 @@ int ReorderBufferEntry::forward() {
     return 0;
 }
 
-/*
+/**
+ * @brief Remove ROB entries entered the pipeline after this
+ *
+ * @param keep_misspec_uop Flag to indicate to keep mis-speculated ROB
+ * @param return_first_annulled_rip Specify return type
+ *
+ * @return RIP address of either new branch or annulled ROB entry
  *
  * Exception recovery and redispatch
  *
@@ -2452,8 +2668,6 @@ int ReorderBufferEntry::forward() {
  * macro-op is a branch and that branch uop itself is
  * being retained as occurs with mispredicted branches.
  */
-
-
 W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_rip) {
     OooCore& core = getcore();
 
@@ -2469,13 +2683,11 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 
     int idx;
 
-
     /*
      * Pass 0: determine macro-op boundaries around uop
      */
 
     int somidx = index();
-
 
     while (!ROB[somidx].uop.som) somidx = add_index_modulo(somidx, -1, ROB_SIZE);
     int eomidx = index();
@@ -2488,7 +2700,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
          * The uop causing the mis-speculation was the only uop in the ROB:
          * no action is necessary (but in practice this is generally not possible)
          */
-
         return uop.rip;
     }
 
@@ -2534,7 +2745,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 
     int annulcount = 0;
 
-
     /*
      * Pass 2: reconstruct the SpecRRT as it existed just before (or after)
      * the mis-speculated operation. This is done using the fast flush with
@@ -2569,17 +2779,13 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
         rob.pseudocommit();
     }
 
-
-
     /*
      * Pass 3: For each speculative ROB, reinitialize and free speculative ROBs
      */
 
-
     idx = endidx;
     for (;;) {
         ReorderBufferEntry& annulrob = ROB[idx];
-
 
         /*
          * Free the speculatively allocated physical register
@@ -2658,7 +2864,11 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
     return (keep_misspec_uop) ? ROB[startidx].uop.riptaken : (Waddr)ROB[startidx].uop.rip;
 }
 
-/*
+/**
+ * @brief Re-dispatch specified ROB entries
+ *
+ * @param dependent_operands List of operands that are found 'dependent'
+ * @param prevrob Pointer to previous ROB entry
  *
  * Return the specified uop back to the ready_to_dispatch state.
  * All structures allocated to the uop are reset to the same state
@@ -2679,9 +2889,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
  * The <prevrob> argument should be the previous ROB, in program
  * order, before this one. If this is the first ROB being
  * re-dispatched, <prevrob> should be NULL.
- *
  */
-
 void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operands, ReorderBufferEntry* prevrob) {
     OooCore& core = getcore();
     ThreadContext& thread = getthread();
@@ -2753,12 +2961,14 @@ void ReorderBufferEntry::redispatch(const bitvec<MAX_OPERANDS>& dependent_operan
     changestate(thread.rob_ready_to_dispatch_list, true, prevrob);
 }
 
-
-/*
+/**
+ * @brief Re-dispatch ROB entries that are dependednt
+ *
+ * @param inclusive Re-dispatch this entry if flag is true
+ *
  * Find all uops dependent on the specified uop, and
  * redispatch each of them.
  */
-
 void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
     ThreadContext& thread = getthread();
     Queue<ReorderBufferEntry, ROB_SIZE>& ROB = thread.ROB;
@@ -2766,7 +2976,6 @@ void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
     bitvec<ROB_SIZE> depmap;
     depmap = 0;
     depmap[index()] = 1;
-
 
     /*
      * Go through the ROB and identify the slice of all uops
@@ -2793,7 +3002,6 @@ void ReorderBufferEntry::redispatch_dependents(bool inclusive) {
             const PhysicalRegister* operand = reissuerob.operands[i];
             dependent_operands[i] = (operand->rob && depmap[operand->rob->index()]);
         }
-
 
         /*
          * We must also redispatch all stores, since in pathological cases, there may

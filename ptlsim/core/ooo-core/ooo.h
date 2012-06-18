@@ -26,9 +26,9 @@
 /* With these disabled, simulation is faster */
 #define ENABLE_CHECKS
 #define ENABLE_LOGGING
-/* #define ENABLE_CHECKS_IQ */
+// #define ENABLE_CHECKS_IQ
 
-/* #define DISABLE_TLB */
+// #define DISABLE_TLB
 
 /*
  *
@@ -1217,18 +1217,18 @@ namespace OOO_CORE_MODEL {
         //
         void init() {
             init_generic();
-            //
-            // Physical register files
-            //
+			/*
+			 * Physical register files
+			 */
             physregfiles[0]("int", coreid, 0, PHYS_REG_FILE_SIZE, this);
             physregfiles[1]("fp", coreid, 1, PHYS_REG_FILE_SIZE, this);
             physregfiles[2]("st", coreid, 2, STQ_SIZE * threadcount, this);
             physregfiles[3]("br", coreid, 3, MAX_BRANCHES_IN_FLIGHT * threadcount, this);
         }
 
-        //
-        // Physical Registers
-        //
+		/*
+		 * Physical Registers
+		 */
 
         enum { PHYS_REG_FILE_INT, PHYS_REG_FILE_FP, PHYS_REG_FILE_ST, PHYS_REG_FILE_BR };
 
@@ -1239,23 +1239,19 @@ namespace OOO_CORE_MODEL {
             PHYS_REG_FILE_MASK_BR  = (1 << 3)
         };
 
-        // Major core structures
+		/* Major core structures */
         PhysicalRegisterFile physregfiles[PHYS_REG_FILE_COUNT];
         int round_robin_reg_file_offset;
         W32 fu_avail;
         ReorderBufferEntry* robs_on_fu[FU_COUNT];
-        // CacheSubsystem::CacheHierarchy caches;
-        // CPUControllerNamespace::CPUController cpu_controller;
-        //    MemorySystem::CPUController test_controller;
-        // OutOfOrderCoreCacheCallbacks cache_callbacks;
 
-        // Unaligned load/store predictor
+		/* Unaligned load/store predictor */
         bitvec<UNALIGNED_PREDICTOR_SIZE> unaligned_predictor;
         static int hash_unaligned_predictor_slot(const RIPVirtPhysBase& rvp);
         bool get_unaligned_hint(const RIPVirtPhysBase& rvp) const;
         void set_unaligned_hint(const RIPVirtPhysBase& rvp, bool value);
 
-        // Pipeline Stages
+		/* Pipeline Stages */
         bool runcycle();
         void flush_pipeline();
         bool fetch();
@@ -1271,20 +1267,20 @@ namespace OOO_CORE_MODEL {
         void flush_tlb(Context& ctx);
         void flush_tlb_virt(Context& ctx, Waddr virtaddr);
 
-        // Cache Signals and Callbacks
+		/* Cache Signals and Callbacks */
         Signal dcache_signal;
         Signal icache_signal;
 
         bool dcache_wakeup(void *arg);
         bool icache_wakeup(void *arg);
 
-        // Debugging
+		/* Debugging */
         void dump_state(ostream& os);
         void print_smt_state(ostream& os);
         void check_refcounts();
         void check_rob();
 
-        // Stats
+		/* Stats */
         OooCoreStats core_stats;
 
         void update_stats();
@@ -1329,11 +1325,11 @@ namespace OOO_CORE_MODEL {
     extern CycleTimer ctcommit;
 
 #ifdef DECLARE_STRUCTURES
-    //
-    // The following configuration has two integer/store clusters with a single cycle
-    // latency between them, but both clusters can access the load pseudo-cluster with
-    // no extra cycle. The floating point cluster is two cycles from everything else.
-    //
+	/*
+	 * The following configuration has two integer/store clusters with a single cycle
+	 * latency between them, but both clusters can access the load pseudo-cluster with
+	 * no extra cycle. The floating point cluster is two cycles from everything else.
+	 */
 #ifdef MULTI_IQ
     const Cluster clusters[MAX_CLUSTERS] = {
         {"int0",  2, (FU_ALU0|FU_STU0)},
