@@ -448,6 +448,16 @@ void MESILogic::handle_response(CacheQueueEntry *entry, Message &msg)
 {
 }
 
+/**
+ * @brief Dump MESI Coherence Logic Configuration
+ *
+ * @param out YAML Object
+ */
+void MESILogic::dump_configuration(YAML::Emitter &out) const
+{
+	YAML_KEY_VAL(out, "coherence", "MESI");
+}
+
 /* MESI Controller Builder */
 struct MESICacheControllerBuilder : public ControllerBuilder
 {

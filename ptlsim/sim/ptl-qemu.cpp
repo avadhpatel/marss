@@ -233,6 +233,23 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                         arg5);
                 break;
             }
+        case PTLCALL_LOG:
+            {
+                char* log_ptr = (char*)arg1;
+                W64 size = arg2;
+                stringbuf vm_log(size+1);
+                char tmp;
+
+                foreach (i, (int)size) {
+                    tmp = (char)ldub_kernel((target_ulong)(log_ptr));
+                    vm_log.buf[i] = tmp;
+                    log_ptr++;
+                }
+                vm_log.buf[size] = '\0';
+
+                ptl_logfile << "[VM @" << sim_cycle << "] " << vm_log;
+                break;
+            }
         default :
             cout << "PTLCALL type unknown : ", calltype, endl;
             cpu->regs[REG_rax] = -EINVAL;
@@ -328,7 +345,10 @@ void ptl_config_from_file(const char *filename) {
     for (;;) {
 
         line.reset();
-        cmd_file.getline(line.buf, line.length);
+
+		std::string temp;
+		std::getline(cmd_file, temp);
+		line << temp.c_str();
 
         if (!cmd_file)
             break;
@@ -1485,7 +1505,8 @@ static void adjust_fwd_insts(Context& ctx)
 
         Context& t_ctx = contextof(i);
 
-        if (t_ctx.halted && !t_ctx.stopped && t_ctx.simpoint_decr > 0) {
+		if (t_ctx.halted && !qemu_cpu_has_work(&t_ctx) &&
+				!t_ctx.stopped && t_ctx.simpoint_decr > 0) {
             min_remaining = min((W64)t_ctx.simpoint_decr, min_remaining);
             if (min_remaining == t_ctx.simpoint_decr)
                 min_ctx = &contextof(i);
@@ -1534,7 +1555,8 @@ static void cpu_fast_fwded(Context& ctx)
         if (i != ctx.cpu_index)
             others_halted |= (t_ctx.halted);
 
-        all_halted_or_stopped &= (t_ctx.stopped || t_ctx.halted);
+		all_halted_or_stopped &= (t_ctx.stopped || t_ctx.halted ||
+				!qemu_cpu_has_work(&t_ctx));
     }
 
     if (others_halted && insns_remaining > 100) {
@@ -1563,6 +1585,9 @@ static void cpu_fast_fwded(Context& ctx)
          * to logfile indicating that we are switching to simulation
          * earlier than expected. */
         if (insns_remaining > 1000) {
+			/* Restore this counter for debugging only */
+			ctx.simpoint_decr = insns_remaining;
+
             ptl_logfile << "WARNING: Early switching to simulation mode. ";
             ptl_logfile << "Instrucitons remaining in each CPU context to fast-forward are:\n";
 

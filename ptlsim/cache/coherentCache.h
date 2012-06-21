@@ -233,7 +233,6 @@ namespace Memory {
                 CacheController(W8 coreid, const char *name,
                         MemoryHierarchy *memoryHierarchy, CacheType type);
                 ~CacheController();
-                bool handle_request_cb(void *arg);
                 bool handle_interconnect_cb(void *arg);
                 int access_fast_path(Interconnect *interconnect,
                         MemoryRequest *request);
@@ -260,7 +259,8 @@ namespace Memory {
                         // We keep some free entries for interconnect
                         // so if the queue is 100% full then only
                         // return false else return true
-                        return pendingRequests_.isFull();
+						return (pendingRequests_.count() >= (
+									pendingRequests_.size() - 6));
                     }
                     // Otherwise we keep 10 entries free for interconnect
                     // or some internal requests (for example, memory update
@@ -273,6 +273,7 @@ namespace Memory {
                 }
 
                 void annul_request(MemoryRequest *request);
+				void dump_configuration(YAML::Emitter &out) const;
 
                 // Callback functions for signals of cache
                 virtual bool cache_hit_cb(void *arg);

@@ -1133,6 +1133,7 @@ bool TraceDecoder::decode_sse() {
     break;
   }
 
+  case 0x370: // pshufw (MMX)
   case 0x470: // pshuflw (0xf2)
   case 0x270: { // pshufhw (0xf3)
     DECODE(gform, rd, x_mode);
@@ -1403,6 +1404,7 @@ bool TraceDecoder::decode_sse() {
   }
 
   case 0x37f:   // movq mm/mm64,mm mmx
+  case 0x4d6:   // movdq2q xmmlo, mmx
   case 0x5d6: { // movq xmmlo|mem64,xmm with zero extension
     DECODE(eform, rd, x_mode);
     DECODE(gform, ra, x_mode);

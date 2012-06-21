@@ -105,6 +105,7 @@ machine_loop_end_j = '''
 
 machine_core_create = '''
         CoreBuilder::add_new_core(machine, "%s", "%s");
+        if (machine.context_used.allset()) break;
 '''
 
 machine_controller_create = '''

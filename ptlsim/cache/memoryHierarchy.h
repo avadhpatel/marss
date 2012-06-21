@@ -214,8 +214,8 @@ namespace Memory {
 	// Add event into event queue
 	void add_event(Signal *signal, int delay, void *arg);
 
-	MemoryRequest* get_free_request() {
-		return requestPool_.get_free_request();
+	MemoryRequest* get_free_request(int id) {
+		return requestPool_[id]->get_free_request();
 	}
 
 	void set_controller_full(Controller* controller, bool flag);
@@ -274,7 +274,7 @@ namespace Memory {
     int coreNo_;
 
 	// Request pool
-	RequestPool requestPool_;
+	dynarray<RequestPool*> requestPool_;
 
 	// Message pool
 	FixStateList<Message, 128> messageQueue_;

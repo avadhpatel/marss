@@ -9,6 +9,7 @@
 #include <ptlsim.h>
 #include <decode.h>
 
+#include <setjmp.h>
 
 BasicBlockCache bbcache[NUM_SIM_CORES];
 W8 BasicBlockCache::cpuid_counter = 0;
@@ -33,6 +34,10 @@ BasicBlockPageCache bbpages;
 CycleTimer translate_timer("translate");
 
 ofstream bbcache_dump_file;
+
+static jmp_buf decode_jmp_buf;
+
+#define DECODE_EXCEPTION() longjmp(decode_jmp_buf, 1)
 
 //
 // Calling convention:
@@ -321,12 +326,7 @@ const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT] = {
     l_assist_ioport_out,
     l_assist_pause,
     l_assist_popcnt,
-#ifdef INTEL_TSX
-    l_assist_xbegin,
-    l_assist_xend,
-    l_assist_xabort,
-    l_assist_xtest,
-#endif
+	l_assist_x87_fist,
 };
 
 const char* light_assist_names[L_ASSIST_COUNT] = {
@@ -338,12 +338,7 @@ const char* light_assist_names[L_ASSIST_COUNT] = {
 	"l_io_out",
 	"l_pause",
     "l_popcnt",
-#ifdef INTEL_TSX
-    "l_xbegin",
-    "l_xend",
-    "l_xabort",
-    "l_xtest",
-#endif
+	"l_x87_fist",
 };
 
 int light_assist_index(light_assist_func_t assist) {
@@ -564,8 +559,8 @@ static const byte onebyte_has_modrm[256] = {
     /* d0 */ 1,1,1,1,_,_,_,_,1,1,1,1,1,1,1,1, /* d0 */
     /* e0 */ _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_, /* e0 */
     /* f0 */ _,_,_,_,_,_,1,1,_,_,_,_,_,_,1,1  /* f0 */
-        /*   -------------------------------        */
-        /*   0 1 2 3 4 5 6 7 8 9 a b c d e f        */
+        /*       -------------------------------        */
+        /*       0 1 2 3 4 5 6 7 8 9 a b c d e f        */
 };
 
 static const byte twobyte_has_modrm[256] = {
@@ -587,8 +582,8 @@ static const byte twobyte_has_modrm[256] = {
     /* d0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* df */
     /* e0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ef */
     /* f0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,_  /* ff */
-        /*   -------------------------------        */
-        /*   0 1 2 3 4 5 6 7 8 9 a b c d e f        */
+        /*       -------------------------------        */
+        /*       0 1 2 3 4 5 6 7 8 9 a b c d e f        */
 };
 
 static const byte twobyte_uses_SSE_prefix[256] = {
@@ -610,8 +605,8 @@ static const byte twobyte_uses_SSE_prefix[256] = {
     /* d0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* df */
     /* e0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ef */
     /* f0 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,_  /* ff */
-        /*   -------------------------------        */
-        /*   0 1 2 3 4 5 6 7 8 9 a b c d e f        */
+        /*       -------------------------------        */
+        /*       0 1 2 3 4 5 6 7 8 9 a b c d e f        */
 };
 
 //
@@ -1228,6 +1223,8 @@ void TraceDecoder::address_generate_and_load_or_store(int destreg, int srcreg, c
     force_seg_bias |= memop;
 
     int imm_bits = (memop) ? 32 : 64;
+
+	if (memref.type != OPTYPE_MEM) DECODE_EXCEPTION();
 
     int basereg = arch_pseudo_reg_to_arch_reg[memref.mem.basereg];
     int indexreg = arch_pseudo_reg_to_arch_reg[memref.mem.indexreg];
@@ -2189,6 +2186,9 @@ bool TraceDecoder::translate() {
                     use_mmx = true;
                 op |= 0x300; // no prefix byte, typically OPps
             }
+
+			if (op == 0x4d6)
+				use_mmx = true;
         } else {
             op |= 0x100;
         }
@@ -2227,38 +2227,52 @@ bool TraceDecoder::translate() {
         return false;
     }
 
-    switch (op >> 8) {
-        case 0:
-        case 1: {
-                    rc = decode_fast();
+	if (setjmp(decode_jmp_buf) == 0) {
+		switch (op >> 8) {
+			case 0:
+			case 1: {
+						rc = decode_fast();
 
-                    // Try again with the complex decoder if needed
-                    bool iscomplex = ((rc == 0) & (!invalid));
-                    some_insns_complex |= iscomplex;
-                    if (iscomplex) rc = decode_complex();
+						// Try again with the complex decoder if needed
+						bool iscomplex = ((rc == 0) & (!invalid));
+						some_insns_complex |= iscomplex;
+						if (iscomplex) rc = decode_complex();
 
-                    if unlikely (used_microcode_assist) {
-                        DECODERSTAT->x86_decode_type[DECODE_TYPE_ASSIST]++;
-                    } else {
-                        DECODERSTAT->x86_decode_type[DECODE_TYPE_FAST] += (!iscomplex);
-                        DECODERSTAT->x86_decode_type[DECODE_TYPE_COMPLEX] += iscomplex;
-                    }
+						if unlikely (used_microcode_assist) {
+							DECODERSTAT->x86_decode_type[DECODE_TYPE_ASSIST]++;
+						} else {
+							DECODERSTAT->x86_decode_type[DECODE_TYPE_FAST] += (!iscomplex);
+							DECODERSTAT->x86_decode_type[DECODE_TYPE_COMPLEX] += iscomplex;
+						}
 
-                    break;
-                }
-        case 2:
-        case 3:
-        case 4:
-        case 5:
-                DECODERSTAT->x86_decode_type[DECODE_TYPE_SSE]++;
-                rc = decode_sse(); break;
-        case 6:
-                DECODERSTAT->x86_decode_type[DECODE_TYPE_X87]++;
-                rc = decode_x87(); break;
-        default: {
-                     assert(false);
-                 }
-    } // switch
+						break;
+					}
+			case 2:
+			case 3:
+			case 4:
+			case 5:
+					DECODERSTAT->x86_decode_type[DECODE_TYPE_SSE]++;
+					rc = decode_sse(); break;
+			case 6:
+					DECODERSTAT->x86_decode_type[DECODE_TYPE_X87]++;
+					rc = decode_x87(); break;
+			default: {
+						 assert(false);
+					 }
+		} // switch
+	} else {
+		/* Decoder Exception occured!! Something must have gone wrong while
+		 * decoding an instruciton. Mark this instruction as invalid and
+		 * return, if this decoding is on wrong path then simulator will not
+		 * come back on this same instruction address. */
+		ptl_logfile << "[EXCEPTION] Decoder Exception while decoding " <<
+			"instruction at address: " << hexstring(rip, 48) << endl;
+		invalidate();
+		user_insn_count++;
+		end_of_block = 1;
+		flush();
+		return false;
+	}
 
     if (!rc) return rc;
 

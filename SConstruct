@@ -82,7 +82,7 @@ link_shared_library_message = '%sLinking Shared Library %s==> %s$TARGET%s' % \
 
 pretty_printing=ARGUMENTS.get('pretty',1)
 
-config_file = ARGUMENTS.get('config', "config/default.conf")
+config_file = ARGUMENTS.get('config', "config")
 config_debug = ARGUMENTS.get('config-debug', False)
 
 # Base Environment used to compile Marss code (QEMU and PTLSIM both)
@@ -144,10 +144,15 @@ if ptlsim_lib == None:
 
 #print("--PTLsim Compiliation Done--")
 
+# Get plugin modules
+plugin_compile_script = "plugins/SConscript"
+plugins = SConscript(plugin_compile_script)
+
 # 3. Compile QEMU
 qemu_compile_script = "%s/SConstruct" % qemu_dir
 qemu_target = {}
 Export('ptlsim_lib')
+Export('plugins')
 ptlsim_inc_dir = "%s/sim" % ptl_dir
 Export('ptlsim_inc_dir')
 

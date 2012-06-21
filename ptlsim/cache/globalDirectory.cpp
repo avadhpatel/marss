@@ -28,6 +28,7 @@ void DirectoryEntry::reset()
     tag   = -1;
     owner = -1;
     dirty = 0;
+	locked = 0;
 }
 
 void DirectoryEntry::init(W64 tag_)
@@ -35,6 +36,7 @@ void DirectoryEntry::init(W64 tag_)
     tag   = tag_;
     dirty = 0;
     owner = -1;
+	locked = 0;
     present.reset();
 }
 
@@ -123,12 +125,6 @@ DirectoryController::DirectoryController(W8 idx, const char *name,
             &DirectoryController::send_msg_cb);
 }
 
-bool DirectoryController::handle_request_cb(void *arg)
-{
-    assert(0);
-    return false;
-}
-
 bool DirectoryController::handle_interconnect_cb(void *arg)
 {
     Message *message = (Message*)arg;
@@ -142,14 +138,6 @@ bool DirectoryController::handle_interconnect_cb(void *arg)
             *message << endl);
 
     return (this->*req_handlers[request->get_type()])(message);
-}
-
-/* This function should never be called for Directory */
-int DirectoryController::access_fast_path(Interconnect *interconn,
-        MemoryRequest *request)
-{
-    assert(0);
-    return 0;
 }
 
 void DirectoryController::register_interconnect(Interconnect *interconn,
@@ -312,7 +300,7 @@ bool DirectoryController::read_miss_cb(void *arg)
 
     if (!dir_entry) {
         // Retry after 1 cycle
-        memoryHierarchy_->add_event(&read_miss, 1, queueEntry);
+        marss_add_event(&read_miss, 1, queueEntry);
         return true;
     }
 
@@ -330,11 +318,11 @@ bool DirectoryController::read_miss_cb(void *arg)
 
         if (sig_dir == this && dir_entry->owner != queueEntry->cont->idx) {
             queueEntry->responder = controllers[dir_entry->owner];
-            memoryHierarchy_->add_event(&send_response, DIR_ACCESS_DELAY,
+            marss_add_event(&send_response, DIR_ACCESS_DELAY,
                     queueEntry);
         } else {
             queueEntry->responder = lower_cont;
-            memoryHierarchy_->add_event(&sig_dir->send_update,
+            marss_add_event(&sig_dir->send_update,
                     DIR_ACCESS_DELAY, queueEntry);
         }
 
@@ -354,7 +342,7 @@ bool DirectoryController::read_miss_cb(void *arg)
         queueEntry->responder = lower_cont;
 
     // Send response back
-    memoryHierarchy_->add_event(&send_response, DIR_ACCESS_DELAY,
+    marss_add_event(&send_response, DIR_ACCESS_DELAY,
             queueEntry);
 
     return true;
@@ -368,9 +356,9 @@ bool DirectoryController::write_miss_cb(void *arg)
     DirectoryEntry *dir_entry = get_directory_entry(queueEntry->request);
     DirectoryController *sig_dir = this;
 
-    if (!dir_entry) {
+    if (!dir_entry || dir_entry->locked) {
         // Retry after 1 cycle
-        memoryHierarchy_->add_event(&write_miss, 1, queueEntry);
+        marss_add_event(&write_miss, 1, queueEntry);
         return true;
     }
 
@@ -389,7 +377,7 @@ bool DirectoryController::write_miss_cb(void *arg)
         // Its not present in requested cache
         queueEntry->responder = lower_cont;
         sig_dir               = dir_controllers[dir_entry->owner];
-        memoryHierarchy_->add_event(&sig_dir->send_evict,
+        marss_add_event(&sig_dir->send_evict,
                 DIR_ACCESS_DELAY, queueEntry);
         return true;
     } else {
@@ -400,7 +388,7 @@ bool DirectoryController::write_miss_cb(void *arg)
             // Send evict msg to other caches
             queueEntry->responder = lower_cont;
             sig_dir               = dir_controllers[dir_entry->owner];
-            memoryHierarchy_->add_event(&sig_dir->send_evict,
+            marss_add_event(&sig_dir->send_evict,
                     DIR_ACCESS_DELAY, queueEntry);
             return true;
         }
@@ -414,7 +402,7 @@ bool DirectoryController::write_miss_cb(void *arg)
         queueEntry->hasData = 1;
     }
 
-    memoryHierarchy_->add_event(&send_response,
+    marss_add_event(&send_response,
             DIR_ACCESS_DELAY, queueEntry);
 
     return true;
@@ -433,7 +421,7 @@ bool DirectoryController::update_cb(void *arg)
 
     if (!dir_entry) {
         // Retry after 1 cycle
-        memoryHierarchy_->add_event(&update, 1, queueEntry);
+        marss_add_event(&update, 1, queueEntry);
         return true;
     }
 
@@ -449,7 +437,7 @@ bool DirectoryController::update_cb(void *arg)
         if (origEntry) {
             DirectoryController *sig_dir = dir_controllers[
                 origEntry->cont->idx];
-            memoryHierarchy_->add_event(&sig_dir->send_response, 1,
+            marss_add_event(&sig_dir->send_response, 1,
                     origEntry);
         }
     }
@@ -487,7 +475,7 @@ bool DirectoryController::evict_cb(void *arg)
 
     if (!dir_entry) {
         // Retry after 1 cycle
-        memoryHierarchy_->add_event(&evict, 1, queueEntry);
+        marss_add_event(&evict, 1, queueEntry);
         return true;
     }
 
@@ -511,7 +499,7 @@ bool DirectoryController::evict_cb(void *arg)
         if (origEntry) {
             DirectoryController *sig_dir = dir_controllers[
                 origEntry->cont->idx];
-            memoryHierarchy_->add_event(&sig_dir->send_response, 1,
+            marss_add_event(&sig_dir->send_response, 1,
                     origEntry);
         }
     }
@@ -542,12 +530,13 @@ bool DirectoryController::send_update_cb(void *arg)
     DirContBufferEntry *newEntry = pendingRequests_->alloc();
 
     if (!newEntry) {
-        memoryHierarchy_->add_event(&send_update, 1,
+        marss_add_event(&send_update, 1,
                 queueEntry);
         return true;
     }
 
-    newEntry->request = memoryHierarchy_->get_free_request();
+    newEntry->request = memoryHierarchy_->get_free_request(
+            queueEntry->request->get_coreid());
     newEntry->request->init(queueEntry->request);
     newEntry->request->incRefCounter();
     newEntry->request->set_op_type(MEMORY_OP_UPDATE);
@@ -579,7 +568,7 @@ bool DirectoryController::send_evict_cb(void *arg)
     /* Check if we have enough free entries in queue */
     if (pendingRequests_->remaining() <
             (int)queueEntry->entry->present.popcount()) {
-        memoryHierarchy_->add_event(&send_evict, 1, queueEntry);
+        marss_add_event(&send_evict, 1, queueEntry);
         return true;
     }
 
@@ -588,9 +577,11 @@ bool DirectoryController::send_evict_cb(void *arg)
 	if (queueEntry->entry->present.iszero()) {
 		DirectoryController *sig_dir = dir_controllers[
 			queueEntry->cont->idx];
-		memoryHierarchy_->add_event(&sig_dir->send_response, 1, queueEntry);
+		marss_add_event(&sig_dir->send_response, 1, queueEntry);
 		return true;
 	}
+
+	queueEntry->entry->locked = 1;
 
     /* Now for each cached entry, send evict message to that
      * controller */
@@ -602,7 +593,8 @@ bool DirectoryController::send_evict_cb(void *arg)
 
         assert(newEntry);
 
-        newEntry->request = memoryHierarchy_->get_free_request();
+        newEntry->request = memoryHierarchy_->get_free_request(
+                queueEntry->request->get_coreid());
         newEntry->request->init(queueEntry->request);
         newEntry->request->incRefCounter();
         newEntry->request->set_op_type(MEMORY_OP_EVICT);
@@ -637,6 +629,8 @@ bool DirectoryController::send_response_cb(void *arg)
     queueEntry->entry->present.reset(queueEntry->cont->idx);
     queueEntry->shared = queueEntry->entry->present.nonzero();
     queueEntry->entry->present.set(queueEntry->cont->idx);
+
+	queueEntry->entry->locked = 0;
 
     if (queueEntry->request->get_type() == MEMORY_OP_WRITE) {
         queueEntry->entry->owner = queueEntry->cont->idx;
@@ -698,7 +692,7 @@ bool DirectoryController::send_msg_cb(void *arg)
         if (delay == 0) delay = AVG_WAIT_DELAY;
         if (queueEntry->request->get_type() == MEMORY_OP_EVICT)
             delay = 1;
-        memoryHierarchy_->add_event(&send_msg, delay, queueEntry);
+        marss_add_event(&send_msg, delay, queueEntry);
         return true;
     }
 
@@ -814,7 +808,8 @@ DirectoryEntry* DirectoryController::get_directory_entry(
 
             assert(newEntry);
 
-            newEntry->request = memoryHierarchy_->get_free_request();
+            newEntry->request = memoryHierarchy_->get_free_request(
+                    req->get_coreid());
             newEntry->request->init(req);
             newEntry->request->incRefCounter();
             newEntry->request->set_physical_address(old_tag);
@@ -895,7 +890,7 @@ void DirectoryController::wakeup_dependent(DirContBufferEntry *queueEntry)
             }
         }
 
-        memoryHierarchy_->add_event(sig, 1, depEntry);
+        marss_add_event(sig, 1, depEntry);
     }
 }
 
@@ -958,6 +953,24 @@ void DirectoryController::annul_request(MemoryRequest *request)
             pendingRequests_->free(entry);
         }
     }
+}
+
+/**
+ * @brief Dump Directory Configuration in YAML Format
+ *
+ * @param out YAML Object
+ */
+void DirectoryController::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "directory");
+	YAML_KEY_VAL(out, "size", DIR_SET * DIR_WAY);
+	YAML_KEY_VAL(out, "line_size", DIR_LINE_SIZE);
+	YAML_KEY_VAL(out, "sets", DIR_SET);
+	YAML_KEY_VAL(out, "ways", DIR_WAY);
+
+	out << YAML::EndMap;
 }
 
 /**

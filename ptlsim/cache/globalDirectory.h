@@ -35,6 +35,7 @@ struct DirectoryEntry {
     bool dirty;
     W64  tag;
     W8   owner;
+	bool locked;
 
     DirectoryEntry() { reset(); }
     void reset();
@@ -182,16 +183,14 @@ class DirectoryController : public Controller {
 
         static FixStateList<DirContBufferEntry, REQ_Q_SIZE> *pendingRequests_;
 
-        bool handle_request_cb(void *arg);
         bool handle_interconnect_cb(void *arg);
-        int  access_fast_path(Interconnect *interconnect,
-                MemoryRequest *request);
         void register_interconnect(Interconnect *interconnect,
                 int type);
         void print_map(ostream &os);
         void print(ostream &os) const;
         bool is_full(bool flag=false) const;
         void annul_request(MemoryRequest *request);
+		void dump_configuration(YAML::Emitter &out) const;
 
         bool handle_read_miss(Message *message);
         bool handle_write_miss(Message *message);

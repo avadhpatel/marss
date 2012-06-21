@@ -526,21 +526,48 @@ namespace OOO_CORE_MODEL {
         StatArray<W64, ASSIST_COUNT> assists;
         StatArray<W64, L_ASSIST_COUNT> lassists;
 
-        OooCoreThreadStats(const char *name, Statable *parent)
-            : Statable(name, parent)
-              , fetch(this)
-              , frontend(this)
-              , dispatch(this)
-              , issue(this)
-              , writeback(this)
-              , commit(this)
-              , branchpred(this)
-              , dcache(this)
-              , interrupt_requests("interrupt_requests", this)
-              , cpu_exit_requests("cpu_exit_requests", this)
-              , cycles_in_pause("cycles_in_pause", this)
-              , assists("assists", this, assist_names)
-              , lassists("lassists", this, light_assist_names)
+		StatArray<W64, PHYS_REG_FILE_COUNT> physreg_reads;
+		StatArray<W64, PHYS_REG_FILE_COUNT> physreg_writes;
+
+		StatObj<W64> rob_reads;
+		StatObj<W64> rob_writes;
+
+		StatObj<W64> rename_table_reads;
+		StatObj<W64> rename_table_writes;
+
+		StatObj<W64> reg_reads;
+		StatObj<W64> reg_writes;
+		StatObj<W64> fp_reg_reads;
+		StatObj<W64> fp_reg_writes;
+
+		StatObj<W64> ctx_switches;
+
+		OooCoreThreadStats(const char *name, Statable *parent)
+			: Statable(name, parent)
+			  , fetch(this)
+			  , frontend(this)
+			  , dispatch(this)
+			  , issue(this)
+			  , writeback(this)
+			  , commit(this)
+			  , branchpred(this)
+			  , dcache(this)
+			  , interrupt_requests("interrupt_requests", this)
+			  , cpu_exit_requests("cpu_exit_requests", this)
+			  , cycles_in_pause("cycles_in_pause", this)
+			  , assists("assists", this, assist_names)
+			  , lassists("lassists", this, light_assist_names)
+			  , physreg_reads("physreg_reads", this, phys_reg_file_names)
+			  , physreg_writes("physreg_writes", this, phys_reg_file_names)
+			  , rob_reads("rob_reads", this)
+			  , rob_writes("rob_writes", this)
+			  , rename_table_reads("rename_table_reads", this)
+			  , rename_table_writes("rename_table_writes", this)
+			  , reg_reads("reg_reads", this)
+			  , reg_writes("reg_writes", this)
+			  , fp_reg_reads("fp_reg_reads", this)
+			  , fp_reg_writes("fp_reg_writes", this)
+			  , ctx_switches("ctx_switches", this)
         {}
     };
 
@@ -565,11 +592,13 @@ namespace OOO_CORE_MODEL {
             } source;
 
             StatArray<W64, DISPATCH_WIDTH+1> width;
+			StatArray<W64, OPCLASS_COUNT> opclass;
 
             dispatch(Statable *parent)
                 : Statable("dispatch", parent)
                   , source(this)
                   , width("width", this)
+				  , opclass("opclass", this, opclass_names)
             {}
         } dispatch;
 
@@ -669,13 +698,22 @@ namespace OOO_CORE_MODEL {
 
         StatObj<W64> cycles;
 
-        OooCoreStats(const char *name, Statable *parent)
-            : dispatch(parent)
-              , issue(parent)
-              , writeback(parent)
-              , commit(parent)
-              , cycles("cycles", parent)
-        { }
+		StatObj<W64> iq_reads;
+		StatObj<W64> iq_writes;
+		StatObj<W64> iq_fp_reads;
+		StatObj<W64> iq_fp_writes;
+
+		OooCoreStats(const char *name, Statable *parent)
+			: dispatch(parent)
+			  , issue(parent)
+			  , writeback(parent)
+			  , commit(parent)
+			  , cycles("cycles", parent)
+			  , iq_reads("iq_reads", parent)
+			  , iq_writes("iq_writes", parent)
+			  , iq_fp_reads("iq_fp_reads", parent)
+			  , iq_fp_writes("iq_fp_writes", parent)
+		{ }
     };
 
 };

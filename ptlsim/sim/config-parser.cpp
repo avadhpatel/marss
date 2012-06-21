@@ -6,11 +6,12 @@
 //
 
 #include <config-parser.h>
+#include <ptlsim.h>
 
 /* Use to remove escape char passed into configuration string */
 static void unescape_string(stringbuf& str)
 {
-    stringbuf tmp(str.size());
+    stringbuf tmp(str.size() + 1);
     int j = 0;
 
     foreach(i, str.size()) {
@@ -34,7 +35,7 @@ ostream& ConfigurationParserBase::printusage(const void* baseptr, ostream& os) c
 
   option = options;
   while (option) {
-    void* variable = (baseptr) ? ((void*)((Waddr)baseptr + option->offset)) : NULL;
+    void* variable = (baseptr) ? ((void*)(option->offset)) : NULL;
     if (option->type == OPTION_TYPE_SECTION) {
       os << option->description, ":", endl;
       option = option->next;
@@ -42,6 +43,11 @@ ostream& ConfigurationParserBase::printusage(const void* baseptr, ostream& os) c
     }
 
     os << "  -", padstring(option->name, -maxlength), " ", option->description, " ";
+
+	if (!variable) {
+		option = option->next;
+		continue;
+	}
 
     os << "[";
     switch (option->type) {
@@ -89,7 +95,7 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
         }
         if (strequal(name, option->name)) {
           found = true;
-          void* variable = (void*)((Waddr)baseptr + option->offset);
+          void* variable = (void*)(option->offset);
           if ((option->type != OPTION_TYPE_NONE) && (option->type != OPTION_TYPE_BOOL) && (i == (argc+1))) {
             cerr << "Warning: missing value for option '", argv[i-1], "'", endl;
             break;
@@ -238,7 +244,7 @@ ostream& ConfigurationParserBase::print(const void* baseptr, ostream& os) const 
 
   ConfigurationOption* option = options;
   while (option) {
-    void* variable = (baseptr) ? ((void*)((Waddr)baseptr + option->offset)) : NULL;
+    void* variable = (baseptr) ? ((void*)(option->offset)) : NULL;
 
     if (option->type == OPTION_TYPE_SECTION) {
       option = option->next;
@@ -351,3 +357,84 @@ void free_command_list(dynarray<char*>& list) {
   }
   list.resize(0);
 }
+
+struct PTLsimConfig;
+ConfigurationParser<PTLsimConfig> config;
+void setup_defualt_config() __attribute__((constructor(65535)));
+
+/**
+ * @brief Initialize Configuration structure
+ *
+ * DO NOT CALL THIS FUNCTION. This function is called before 'main'.
+ */
+void setup_defualt_config()
+{
+	config.setup();
+	config.reset();
+}
+
+extern "C" {
+
+/**
+ * @brief Add new configuration Section
+ *
+ * @param name Name of configuration Section
+ *
+ * Allows modules to add configuration Section before adding any configuration
+ * options.  By adding sections it makes easier for users to find specific
+ * configuration options quickly.
+ */
+void marss_add_config_section(const char* name)
+{
+	config.section(name);
+}
+
+/**
+ * @brief Add Configuration option of type 'W64'
+ *
+ * @param field Variable used to hold option value
+ * @param name Name of configuration option
+ * @param description Description of option used in -help
+ */
+void marss_add_config_W64(W64& field, const char* name, const char* description)
+{
+	config.add(field, name, description);
+}
+
+/**
+ * @brief Add Configuration option of type 'double'
+ *
+ * @param field Variable used to hold option value
+ * @param name Name of configuration option
+ * @param description Description of option used in -help
+ */
+void marss_add_config_double(double& field, const char* name, const char* description)
+{
+	config.add(field, name, description);
+}
+
+/**
+ * @brief Add Configuration option of type 'bool'
+ *
+ * @param field Variable used to hold option value
+ * @param name Name of configuration option
+ * @param description Description of option used in -help
+ */
+void marss_add_config_bool(bool& field, const char* name, const char* description)
+{
+	config.add(field, name, description);
+}
+
+/**
+ * @brief Add Configuration option of type 'stringbuf'
+ *
+ * @param field Variable used to hold option value
+ * @param name Name of configuration option
+ * @param description Description of option used in -help
+ */
+void marss_add_config_str(stringbuf& field, const char* name, const char* description)
+{
+	config.add(field, name, description);
+}
+
+} // extern "C"

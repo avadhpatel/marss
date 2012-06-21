@@ -436,6 +436,7 @@ enum {
 	L_ASSIST_IOPORT_OUT,
 	L_ASSIST_PAUSE,
     L_ASSIST_POPCNT,
+	L_ASSIST_X87_FIST,
 #ifdef INTEL_TSX
     L_ASSIST_XBEGIN,
     L_ASSIST_XEND,
@@ -583,6 +584,7 @@ L_ASSIST_FN(l_assist_ioport_in);
 L_ASSIST_FN(l_assist_ioport_out);
 L_ASSIST_FN(l_assist_pause);
 L_ASSIST_FN(l_assist_popcnt);
+L_ASSIST_FN(l_assist_x87_fist);
 #ifdef INTEL_TSX
 L_ASSIST_FN(l_assist_xbegin);
 L_ASSIST_FN(l_assist_xend);

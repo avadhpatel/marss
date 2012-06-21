@@ -1934,7 +1934,7 @@ bool AtomThread::fetch_from_icache()
         assert(!waiting_for_icache_miss);
 
         Memory::MemoryRequest *request = core.memoryHierarchy->
-            get_free_request();
+            get_free_request(core.coreid);
         assert(request != NULL);
 
         request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
@@ -2064,7 +2064,7 @@ itlb_walk_finish:
     }
 
     Memory::MemoryRequest *request = core.memoryHierarchy->
-        get_free_request();
+        get_free_request(core.coreid);
     assert(request != NULL);
 
     request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
@@ -2121,7 +2121,7 @@ dtlb_walk_finish:
     }
 
     Memory::MemoryRequest *request = core.memoryHierarchy->
-        get_free_request();
+        get_free_request(core.coreid);
     assert(request != NULL);
 
     request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
@@ -2350,7 +2350,7 @@ void AtomThread::redirect_fetch(W64 rip)
 bool AtomThread::access_dcache(Waddr addr, W64 rip, W8 type, W64 uuid)
 {
     assert(rip);
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
     assert(request);
 
     request->init(core.coreid, threadid, addr, 0,
@@ -2971,6 +2971,12 @@ AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
 
     threads = (AtomThread**)qemu_mallocz(threadcount*sizeof(AtomThread*));
 
+	stringbuf sg_name;
+	sg_name << name << "-run-cycle";
+	run_cycle.set_name(sg_name.buf);
+	run_cycle.connect(signal_mem_ptr(*this, &AtomCore::runcycle));
+	marss_register_per_cycle_event(&run_cycle);
+
     foreach(i, threadcount) {
         Context& ctx = machine.get_next_context();
 
@@ -3098,7 +3104,7 @@ void AtomCore::clear_forward(W8 reg)
  *
  * @return true if exit to qemu is requested
  */
-bool AtomCore::runcycle()
+bool AtomCore::runcycle(void* none)
 {
     bool exit_requested = false;
 
@@ -3341,6 +3347,44 @@ ostream& AtomCore::print(ostream& os) const
     }
 
     return os;
+}
+
+/**
+ * @brief Dump Atom Core configuration
+ *
+ * @param out YAML object to dump configuration parameters
+ *
+ * Dump various Atom core configuration parameters into YAML Format
+ */
+void AtomCore::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name();
+	out << YAML::Value << YAML::BeginMap;
+
+	YAML_KEY_VAL(out, "type", "core");
+	YAML_KEY_VAL(out, "threads", threadcount);
+	YAML_KEY_VAL(out, "fetch_q_size", NUM_FRONTEND_STAGES+1);
+	YAML_KEY_VAL(out, "forward_buf_size", FORWARD_BUF_SIZE);
+	YAML_KEY_VAL(out, "itlb_size", ITLB_SIZE);
+	YAML_KEY_VAL(out, "dtlb_size", DTLB_SIZE);
+	YAML_KEY_VAL(out, "total_FUs", (ATOM_ALU_FU_COUNT + ATOM_FPU_FU_COUNT +
+				ATOM_AGU_FU_COUNT));
+	YAML_KEY_VAL(out, "int_FUs", ATOM_ALU_FU_COUNT);
+	YAML_KEY_VAL(out, "fp_FUs", ATOM_FPU_FU_COUNT);
+	YAML_KEY_VAL(out, "agu_FUs", ATOM_AGU_FU_COUNT);
+	YAML_KEY_VAL(out, "frontend_stages", ATOM_FRONTEND_STAGES);
+	YAML_KEY_VAL(out, "forward_buf_size", ATOM_FORWARD_BUF_SIZE);
+	YAML_KEY_VAL(out, "commit_buf_size", ATOM_COMMIT_BUF_SIZE);
+	YAML_KEY_VAL(out, "fetch_width", ATOM_FETCH_WIDTH);
+	YAML_KEY_VAL(out, "issue_width", ATOM_ISSUE_PER_CYCLE);
+	YAML_KEY_VAL(out, "max_branch_in_flight", ATOM_MAX_BRANCH_IN_FLIGHT);
+
+	out << YAML::Key << "per_thread" << YAML::Value << YAML::BeginMap;
+	YAML_KEY_VAL(out, "dispatch_q_size", ATOM_DISPATCH_Q_SIZE);
+	YAML_KEY_VAL(out, "store_buf_size", ATOM_STORE_BUF_SIZE);
+	out << YAML::EndMap;
+
+	out << YAML::EndMap;
 }
 
 AtomCoreBuilder::AtomCoreBuilder(const char* name)

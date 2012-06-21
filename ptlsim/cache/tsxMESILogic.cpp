@@ -591,6 +591,16 @@ void TsxMESILogic::handle_response(CacheQueueEntry *entry, Message &msg)
 {
 }
 
+/**
+ * @brief Dump MESI Coherence Logic Configuration
+ *
+ * @param out YAML Object
+ */
+void TsxMESILogic::dump_configuration(YAML::Emitter &out) const
+{
+	YAML_KEY_VAL(out, "coherence", "MESI");
+}
+
 TsxCache::TsxCache(W8 coreid, const char *name,
 		MemoryHierarchy *hierarchy, CacheType type)
 : CacheController(coreid, name, hierarchy, type)

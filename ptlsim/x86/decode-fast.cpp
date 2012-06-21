@@ -519,11 +519,16 @@ bool TraceDecoder::decode_fast() {
     this << TransOp(OP_ld, REG_temp7, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
 	this << TransOp(OP_add, REG_temp7, REG_temp7, REG_imm, REG_zero,
 			sizeshift, cs_base);
-    this << TransOp(OP_add, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, addend);
+
+	this << TransOp(OP_add, REG_rsp, REG_rsp, REG_imm, REG_zero, 3, addend);
+
     if (!last_flags_update_was_atomic)
       this << TransOp(OP_collcc, REG_temp5, REG_zf, REG_cf, REG_of, 3, 0, 0, FLAGS_DEFAULT_ALU);
+
     TransOp jmp(OP_jmp, REG_rip, REG_temp7, REG_zero, REG_zero, 3);
     jmp.extshift = BRANCH_HINT_POP_RAS;
+	jmp.riptaken = rip;
+	jmp.ripseq = rip;
     this << jmp;
     break;
   }
@@ -736,6 +741,8 @@ bool TraceDecoder::decode_fast() {
         // We do not know the taken or not-taken directions yet so just leave them as zero:
         TransOp transop(OP_jmp, REG_rip, rareg, REG_zero, REG_zero, rashift);
         transop.extshift = (iscall) ? BRANCH_HINT_PUSH_RAS : 0;
+		transop.riptaken = rip;
+		transop.ripseq = rip;
         this << transop;
       } else if (ra.type == OPTYPE_MEM) {
         // there is no way to encode a 32-bit jump address in x86-64 mode:
@@ -752,6 +759,8 @@ bool TraceDecoder::decode_fast() {
         // We do not know the taken or not-taken directions yet so just leave them as zero:
         TransOp transop(OP_jmp, REG_rip, REG_temp0, REG_zero, REG_zero, ra.mem.size);
         transop.extshift = (iscall) ? BRANCH_HINT_PUSH_RAS : 0;
+		transop.riptaken = rip;
+		transop.ripseq = rip;
         this << transop;
       }
 

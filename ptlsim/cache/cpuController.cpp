@@ -57,13 +57,6 @@ CPUController::CPUController(W8 coreid, const char *name,
     SET_SIGNAL_CB(name, "_Queue_Access", queueAccess_, &CPUController::queue_access_cb);
 }
 
-bool CPUController::handle_request_cb(void *arg)
-{
-	memdebug("Received message in controller: ", get_name(), endl);
-	assert(0);
-	return false;
-}
-
 bool CPUController::handle_interconnect_cb(void *arg)
 {
 	Message *message = (Message*)arg;
@@ -191,7 +184,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
 	if unlikely (queueEntry == NULL) {
-		memoryHierarchy_->add_event(&queueAccess_, 1, request);
+		marss_add_event(&queueAccess_, 1, request);
 		return -1;
 	}
 
@@ -362,7 +355,7 @@ bool CPUController::cache_access_cb(void *arg)
 	memoryHierarchy_->free_message(&message);
 
 	if(!success) {
-		memoryHierarchy_->add_event(&cacheAccess_, 1, queueEntry);
+		marss_add_event(&cacheAccess_, 1, queueEntry);
 	}
 
 	return true;
@@ -375,7 +368,7 @@ bool CPUController::queue_access_cb(void *arg)
 	CPUControllerQueueEntry* queueEntry = pendingRequests_.alloc();
 
 	if(queueEntry == NULL) {
-		memoryHierarchy_->add_event(&queueAccess_, 1, request);
+		marss_add_event(&queueAccess_, 1, request);
 		return true;
 	}
 
@@ -471,6 +464,27 @@ void CPUController::register_interconnect_L1_i(Interconnect *interconnect)
 void CPUController::register_interconnect_L1_d(Interconnect *interconnect)
 {
 	int_L1_d_ = interconnect;
+}
+
+/**
+ * @brief Dump CPUController Configuration
+ *
+ * @param out YAML object
+ *
+ * Dump CPU Controller configuration in YAML format
+ */
+void CPUController::dump_configuration(YAML::Emitter &out) const
+{
+	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+
+	out << YAML::Comment("This is a software related structure which \
+has no relevence to any hardware module.\n");
+
+	YAML_KEY_VAL(out, "type", "core_controller");
+	YAML_KEY_VAL(out, "pending_queue_size", pendingRequests_.size());
+	YAML_KEY_VAL(out, "icache_buffer_size", icacheBuffer_.size());
+
+	out << YAML::EndMap;
 }
 
 /* CPU Controller Builder */

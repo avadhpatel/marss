@@ -1525,7 +1525,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         state.sfr_bytemask = 0;
     }
 
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
     assert(request != NULL);
 
     request->init(core.coreid, threadid, state.physaddr << 3, idx, sim_cycle,
@@ -1799,7 +1799,7 @@ rob_cont:
         // Cache queue is full.. so simply skip this iteration
         return;
     }
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request();
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
     assert(request != NULL);
 
     request->init(core.coreid, threadid, pteaddr, idx, sim_cycle,
@@ -2261,6 +2261,11 @@ int OooCore::issue(int cluster) {
         ThreadContext* thread = threads[threadid];
         assert(inrange(idx, 0, ROB_SIZE-1));
         ReorderBufferEntry& rob = thread->ROB[idx];
+
+		if unlikely (opclassof(rob.uop.opcode) == OPCLASS_FP)
+			core_stats.iq_fp_reads++;
+		else
+			core_stats.iq_reads++;
 
         rob.iqslot = iqslot;
         int rc = rob.issue();

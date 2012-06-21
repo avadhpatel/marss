@@ -267,17 +267,22 @@ namespace YAML
 		
 		bool WriteComment(ostream& out, const std::string& str, int postCommentIndent)
 		{
-			unsigned curIndent = out.col();
-			out << "#" << Indentation(postCommentIndent);
+			bool hash_needed = true;
 			int codePoint;
 			for(std::string::const_iterator i = str.begin();
 				GetNextCodePointAndAdvance(codePoint, i, str.end());
 				)
 			{
-				if(codePoint == '\n')
-					out << "\n" << IndentTo(curIndent) << "#" << Indentation(postCommentIndent);
-				else
+				if (hash_needed) {
+					out << "#" << Indentation(postCommentIndent);
+					hash_needed = false;
+				}
+				if(codePoint == '\n') {
+					out << "\n";
+					hash_needed = true;
+				} else {
 					WriteCodePoint(out, codePoint);
+				}
 			}
 			return true;
 		}

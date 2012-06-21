@@ -164,6 +164,7 @@ class BusInterconnect : public Interconnect
 				MemoryRequest *request);
 		void annul_request(MemoryRequest *request);
         void set_data_bus();
+		void dump_configuration(YAML::Emitter &out) const;
 
 		// Bus delay in sending message is BUS_BROADCASTS_DELAY
 		int get_delay() {

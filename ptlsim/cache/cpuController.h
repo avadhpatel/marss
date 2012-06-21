@@ -139,7 +139,6 @@ class CPUController : public Controller
 		CPUController(W8 coreid, const char *name,
 				MemoryHierarchy *memoryHierarchy);
 
-		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);
 		bool cache_access_cb(void *arg);
 		bool queue_access_cb(void *arg);
@@ -154,6 +153,7 @@ class CPUController : public Controller
 		bool is_cache_availabe(bool is_icache);
 		void annul_request(MemoryRequest *request);
 		int flush();
+		void dump_configuration(YAML::Emitter &out) const;
 
         void set_icacheLineBits(int i) {
             icacheLineBits_ = i;
