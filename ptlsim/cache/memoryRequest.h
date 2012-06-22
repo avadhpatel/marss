@@ -40,6 +40,7 @@ enum OP_TYPE {
 	MEMORY_OP_WRITE,  /* Indicates cache miss on a write/store operation */
 	MEMORY_OP_UPDATE, /* Indicates cache write-back request */
 	MEMORY_OP_EVICT,  /* Indicates cache evict request */
+	MEMORY_OP_TSX,    /* Indicate Intel TSX operation */
 	NUM_MEMORY_OP
 };
 
@@ -47,7 +48,8 @@ static const char* memory_op_names[NUM_MEMORY_OP] = {
 	"memory_op_read",
 	"memory_op_write",
 	"memory_op_update",
-	"memory_op_evict"
+	"memory_op_evict",
+	"memory_op_tsx",
 };
 
 class MemoryRequest: public selfqueuelink

@@ -216,6 +216,31 @@ void ThreadContext::init() {
 
     reset();
     coreid = core.coreid;
+
+   //TSX
+    stringbuf sig_name;
+    sig_name << threadid << "-tsx-begin";
+
+    core_tsx_begin_signal.set_name(sig_name.buf);
+    core_tsx_begin_signal.connect(signal_mem_ptr(*this,
+                &ThreadContext::core_tsx_begin));
+
+    sig_name.reset();
+    sig_name << threadid << "-tsx-commit";
+
+    core_tsx_commit_signal.set_name(sig_name.buf);
+    core_tsx_commit_signal.connect(signal_mem_ptr(*this,
+                &ThreadContext::core_tsx_commit));
+
+    sig_name.reset();
+    sig_name << threadid << "-tsx-abort";
+
+    core_tsx_commit_signal.set_name(sig_name.buf);
+    core_tsx_commit_signal.connect(signal_mem_ptr(*this,
+                &ThreadContext::core_tsx_abort));
+
+
+//
 }
 
 

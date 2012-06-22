@@ -886,6 +886,14 @@ struct AssociativeArray {
     return sets[setof(addr)].invalidate(tagof(addr));
   }
 
+  int getSetCount(){
+	  return setcount;
+  }
+
+  int getWayCount(){
+	  return waycount;
+  }
+
   ostream& print(ostream& os) const {
     os << "AssociativeArray<", setcount, " sets, ", waycount, " ways, ", linesize, "-byte lines>:", endl;
     foreach (set, setcount) {

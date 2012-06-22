@@ -909,6 +909,20 @@ namespace OOO_CORE_MODEL {
     typedef TranslationLookasideBuffer<0, DTLB_SIZE> DTLB;
     typedef TranslationLookasideBuffer<1, ITLB_SIZE> ITLB;
 
+    struct TsxMemoryContent {
+	    Waddr virtaddr;
+	    W64 data;
+	    byte bytemask;
+	    int sizeshift;
+
+	    void reset() {
+		    virtaddr = 0;
+		    data = 0;
+		    bytemask = 0;
+		    sizeshift = 0;
+	    }
+    };
+
     struct ThreadContext {
         OooCore& core;
         OooCore& getcore() { return core; }
@@ -1047,6 +1061,19 @@ namespace OOO_CORE_MODEL {
 
         // Stats
         OooCoreThreadStats thread_stats;
+
+
+	//TSX
+
+        Signal core_tsx_begin_signal;
+        Signal core_tsx_commit_signal;
+        Signal core_tsx_abort_signal;
+
+        bool core_tsx_begin(void *arg);
+        bool core_tsx_commit(void *arg);
+        bool core_tsx_abort(void *arg);
+
+	AssociativeArray<W64, TsxMemoryContent ,4096, 4, 250> tsxMemoryBuffer; //linesize , way count and set count numbers are for temporary
     };
 
     //  class MemoryHierarchy;

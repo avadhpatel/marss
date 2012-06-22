@@ -31,6 +31,62 @@
 using namespace OOO_CORE_MODEL;
 using namespace Memory;
 
+bool ThreadContext::core_tsx_begin(void *arg) {
+//will be filled later
+	    // start all all other cpus
+	    foreach (i, getthread().getcore().threadcount) getthread().getcore().threads[i]->ctx.running = 1;
+
+return true;
+}
+
+bool ThreadContext::core_tsx_commit(void *arg) {
+	int return_value;
+	int rb;
+	//will be filled later
+	//get success or failure result
+	//call lassist function
+	//l_assist_xend
+	light_assist_func_t assist_func = l_assist_xend;
+	Context& ctx = getthread().ctx;
+
+	W16 new_flags = 0;//raflags; ? do we need this flag?
+	rb = 0;
+	return_value = assist_func(ctx, 0, rb, 0, 0, 0, 0, new_flags);
+
+	//FIXME: stats need to be fixed
+	//thread_stats.lassists[assistid]++;
+
+	if(rb == 1) { //failure
+		//flush pipeline
+		getthread().flush_pipeline();
+		//flush memory buffer
+		tsxMemoryBuffer.reset();
+	} else { //on success
+		//write memory buffer to the memory
+		for( int i =0; i < tsxMemoryBuffer.getSetCount(); i++) {
+		      TsxMemoryContent *tsx_content_array = &tsxMemoryBuffer.sets[i].data[0];
+		      for( int j =0; j < tsxMemoryBuffer.getWayCount(); j++) {
+			    getthread().ctx.storemask_virt(tsx_content_array[j].virtaddr, tsx_content_array[j].data, tsx_content_array[j].bytemask, tsx_content_array[j].sizeshift);
+			}
+		}
+		getthread().tsxMemoryBuffer.reset();
+	}
+
+	//un-pause the cpus
+	// start all all other cpus
+	foreach (i, getthread().getcore().threadcount) getthread().getcore().threads[i]->ctx.running = 1;
+
+	return return_value;
+}
+
+
+bool ThreadContext::core_tsx_abort(void *arg) {
+
+
+return true;
+}
+
+
 bool OooCore::icache_wakeup(void *arg) {
     Memory::MemoryRequest *request = (Memory::MemoryRequest*)arg;
 
@@ -2105,7 +2161,15 @@ int ReorderBufferEntry::commit() {
             if(config.checker_enabled && !ctx.kernel_mode) {
                 add_checker_store(lsq, uop.size);
             } else {
-                thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
+		    if(thread.ctx.tsx_mode == 1) {
+			    TsxMemoryContent* tsx_content = thread.tsxMemoryBuffer.select(lsq->virtaddr) ;
+			    tsx_content->data = lsq->data;
+			    tsx_content->virtaddr = lsq->virtaddr ;
+			    tsx_content->bytemask = lsq->bytemask;
+			    tsx_content->sizeshift = uop.size;
+		    } else {
+			    thread.ctx.storemask_virt(lsq->virtaddr, lsq->data, lsq->bytemask, uop.size);
+		    }
             }
             lsq->datavalid = 1;
         }

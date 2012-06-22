@@ -1560,6 +1560,72 @@ void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
         getthread().thread_stats.cycles_in_pause += THREAD_PAUSE_CYCLES;
     }
 
+    if(assistid == L_ASSIST_XBEGIN) {
+	    //create MEMORY_OP_TSX
+	    OooCore& core = getcore();
+
+	    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+	    assert(request != NULL);
+
+	    // rip is used as a code variable
+	    // and the code for sbegin is 0x1
+	    request->init(core.coreid, threadid, 0, idx, sim_cycle,
+			    false, 0x1, uop.uuid, Memory::MEMORY_OP_TSX);
+	    request->set_coreSignal(&getthread().core_tsx_begin_signal);
+	    //reset TXT_MEMORY_BUFFER
+	    if(getthread().ctx.tsx_mode == 0) getthread().tsxMemoryBuffer.reset(); //for the first time , reset it
+	    // stop all all other cpus
+	    // FIX ME : erdem, check for the all ctx
+	    foreach (i, getthread().getcore().threadcount) getthread().getcore().threads[i]->ctx.running = 0;
+
+    }
+
+    if(assistid == L_ASSIST_XEND) {
+	    //create MEMORY_OP_TSX
+	    OooCore& core = getcore();
+
+	    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+	    assert(request != NULL);
+
+	    // rip is used as a code variable
+	    // and the code for commit is 0x2
+	    request->init(core.coreid, threadid, 0, idx, sim_cycle,
+			    false, 0x2, uop.uuid, Memory::MEMORY_OP_TSX);
+	    request->set_coreSignal(&getthread().core_tsx_commit_signal);
+
+	    // stop all all other cpus
+	    foreach (i, getthread().getcore().threadcount) getthread().getcore().threads[i]->ctx.running = 0;
+
+	    // Now, we should return and the assist function should be handled by the signal handler
+	    // should we increment the lassists counter?
+	    return;
+
+	    //reset TXT_MEMORY_BUFFER
+	    //write everything back to memory
+
+	    //erdem
+    }
+
+    if(assistid == L_ASSIST_XABORT) {
+	    //create MEMORY_OP_TSX
+	    OooCore& core = getcore();
+
+	    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+	    assert(request != NULL);
+
+	    // rip is used as a code variable
+	    // and the code for sbegin is 0x1
+	    request->init(core.coreid, threadid,  0, idx, sim_cycle,
+			    false, 0x3, uop.uuid, Memory::MEMORY_OP_TSX);
+	    request->set_coreSignal(&getthread().core_tsx_abort_signal);
+	    //flush pipeline
+	    getthread().flush_pipeline();
+	    //flush the memory buffer
+	    getthread().tsxMemoryBuffer.reset();
+
+    }
+
+
     // Get the ast function ID from
     light_assist_func_t assist_func = light_assistid_to_func[assistid];
     assert(assist_func != NULL);
@@ -1958,7 +2024,13 @@ bool OooCore::dcache_wakeup(void *arg) {
             int sizeshift = rob.uop.size;
             bool signext = (rob.uop.opcode == OP_ldx);
             W64 data;
-            data = thread->ctx.loadvirt(rob.lsq->virtaddr, sizeshift);
+	    TsxMemoryContent *tsx_content;
+
+	    if ((getthread().ctx.tsx_mode == 1) && ((tsx_content = getthread().tsxMemoryBuffer.probe(rob.lsq->virtaddr)) != NULL)){
+		    data = tsx_content->data;
+	    } else {
+		    data = thread->ctx.loadvirt(rob.lsq->virtaddr, sizeshift);
+	    }
 
             if unlikely (config.checker_enabled && !thread->ctx.kernel_mode) {
                 foreach(i, checker_stores_count) {
