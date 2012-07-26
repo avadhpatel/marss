@@ -4,6 +4,7 @@
 Import('qemu_env')
 Import('qemu_target')
 Import('ptlsim_lib')
+Import('plugins')
 Import('ptlsim_inc_dir')
 env = qemu_env
 target = qemu_target
@@ -64,20 +65,6 @@ if target['arch'] == "i386":
 env.Append(CPPFLAGS = "-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 \
         -D_LARGEFILE_SOURCE")
 env.Append(LIBS = "m")
-
-config_bld = "%s/scripts/create_config < $SOURCE > $TARGET" % env['source_path']
-env['BUILDERS']['CONFIG_CR'] = Builder(action = Action(config_bld,
-    cmdstr="$CREATECOMSTR"))
-
-#######################
-# config-host.h
-config_host_h = env.CONFIG_CR('config-host.h', 'config-host.mak')
-
-#######################
-# config-target.h
-config_target_name = '%s/config-target.h' % target_build_path
-config_target_mak_name = '%s/config-target.mak' % target_build_path
-config_target_h = env.CONFIG_CR(config_target_name, config_target_mak_name)
 
 #######################
 # QObject
@@ -486,6 +473,10 @@ for hw_f in Split(hw_files):
 hw_files_o = env.Object(Split(obj_files) + hw_files_list + Split(ide_files))
 trace_o = env.Object(trace_c)
 
+env.Append(LIBPATH = "%s/../plugins" % env['source_path'])
+env.Append(LINKFLAGS = "-Wl,-rpath=%s/../plugins" % env['source_path'])
+env.Append(LINKFLAGS = "-Wl,--no-as-needed")
+env.Append(LIBS = plugins)
 env['ARLIB'] = libqemu_comm + libqemu + ptlsim_lib
 qemu_bin = env.QEMU_BIN(qemu_prog_name, hw_files_o + pc_bios_objs +
         trace_o)

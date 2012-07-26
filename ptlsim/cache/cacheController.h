@@ -200,7 +200,6 @@ class CacheController : public Controller
 		CacheController(W8 coreid, const char *name,
 				MemoryHierarchy *memoryHierarchy, CacheType type);
         ~CacheController();
-		bool handle_request_cb(void *arg);
 		bool handle_interconnect_cb(void *arg);
 		int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request);

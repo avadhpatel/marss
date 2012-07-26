@@ -63,22 +63,6 @@ MemoryHierarchy::MemoryHierarchy(BaseMachine& machine) :
 
 MemoryHierarchy::~MemoryHierarchy()
 {
-    // Delete all the cpu-controllers and cache-controllers
-	foreach(i, cpuControllers_.count()) {
-        delete cpuControllers_[i];
-	}
-    cpuControllers_.clear();
-
-	foreach(i, allControllers_.count()) {
-        delete allControllers_[i];
-	}
-    allControllers_.clear();
-
-	foreach(i, allInterconnects_.count()) {
-        delete allInterconnects_[i];
-	}
-    allInterconnects_.clear();
-
     foreach(i, NUM_SIM_CORES) {
         RequestPool* pool = requestPool_.pop();
         delete pool;

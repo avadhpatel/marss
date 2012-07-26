@@ -136,7 +136,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
 
 	if(!is_busy()) {
 		// address bus
-		memoryHierarchy_->add_event(&broadcast_, 1, NULL);
+		marss_add_event(&broadcast_, 1, NULL);
 		set_bus_busy(true);
 	} else {
 		memdebug("Bus is busy\n");
@@ -179,7 +179,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
 		queueEntry = (BusQueueEntry*)arg;
 	else {
 		queueEntry = arbitrate_round_robin();
-        memoryHierarchy_->add_event(&broadcast_, arbitrate_latency_, queueEntry);
+        marss_add_event(&broadcast_, arbitrate_latency_, queueEntry);
         return true;
     }
 
@@ -201,7 +201,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
 		isFull |= controllers[i]->controller->is_full(true);
 	}
 	if(isFull) {
-		memoryHierarchy_->add_event(&broadcast_,
+		marss_add_event(&broadcast_,
 				latency_, queueEntry);
 		return true;
 	}
@@ -231,7 +231,7 @@ bool BusInterconnect::broadcast_cb(void *arg)
 		memoryHierarchy_->set_interconnect_full(this, false);
 	}
 	queueEntry->request->decRefCounter();
-	memoryHierarchy_->add_event(&broadcastCompleted_,
+	marss_add_event(&broadcastCompleted_,
 			latency_, NULL);
 
 	// Free the message

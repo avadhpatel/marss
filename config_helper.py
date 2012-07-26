@@ -36,7 +36,9 @@ _required_keys = {
 _debug_t = False
 _top_conf_file = ""
 
-def parse_config(config_file="config/default.conf", debug=False):
+_files_parsed = []
+
+def parse_config(config_file="config", debug=False):
     '''Parse provided configuration file and return a dict with all
     configuration parameters read from the file.
     '''
@@ -44,7 +46,10 @@ def parse_config(config_file="config/default.conf", debug=False):
     _debug_t = debug
     _top_conf_file = config_file
 
-    config = _parse_file(config_file)
+    if os.path.isfile(config_file):
+        config = _parse_file(config_file)
+    elif os.path.isdir(config_file):
+        config = _parse_dir(config_file)
     _check_required_key(_required_keys, 'config', config, config_file)
     _merge_params(config)
     _debug(yaml.dump(config))
@@ -106,6 +111,11 @@ def _parse_file(filename,
         config={'core': {}, 'cache': {}, 'machine': {}, 'memory': {}}):
     '''Parse given YAML file.'''
 
+    if filename in _files_parsed:
+        return config
+    else:
+        _files_parsed.append(filename)
+
     _debug("Reading config file %s" % filename)
     try:
         with open(filename, 'r') as fl:
@@ -120,6 +130,18 @@ def _parse_file(filename,
 
     return config
 
+def _parse_dir(dirname,
+        config={'core': {}, 'cache': {}, 'machine': {}, 'memory': {}}):
+    _debug("Traversing config directory %s" % dirname)
+
+    dirList=os.listdir(dirname)
+    for fname in dirList:
+        ext = os.path.splitext(fname)
+        if len(ext) > 1 and ext[1] == ".conf" and \
+                fname not in _files_parsed:
+            config = _parse_file("%s/%s" % (dirname, fname), config)
+    return config
+
 def _full_filename(basefile, filename):
     if os.path.isabs(filename):
         return filename
@@ -131,6 +153,15 @@ def _merge_docs(base, new, filename):
         _debug("Key : %s" % key)
         if new.has_key(key):
             for name,obj in new[key].items():
+
+                if base[key].has_key(name):
+                    err_st = "Found 2nd defination of module %s type %s" % (
+                            name, key)
+                    err_st += "\nFirst Defination in file: %s" % (
+                            base[key][name]['_file'])
+                    err_st += "\nSecond Definatio in file: %s" % (
+                            os.path.abspath(filename))
+                    _error(err_st)
 
                 if obj.has_key('base'):
                     _merge_obj_parms(new[key], obj)
