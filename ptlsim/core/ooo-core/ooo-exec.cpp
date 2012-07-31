@@ -1549,9 +1549,117 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     return ISSUE_COMPLETED;
 }
 
+bool ReorderBufferEntry::issueast_tsx(IssueState& state, W64 assistid, W64 ra,
+        W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags) {
+
+	ThreadContext& th = getthread();
+	OooCore& core = getcore();
+
+    light_assist_func_t assist_func = light_assistid_to_func[assistid];
+    assert(assist_func != NULL);
+
+    Context& ctx = th.ctx;
+    W16 new_flags = raflags;
+
+	switch (assistid) {
+		case L_ASSIST_XBEGIN:
+			{
+				if (ctx.tsx_mode == 0) {
+					Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+					assert(request != NULL);
+
+					// rip is used as a code variable
+					// and the code for xbegin is 0x1
+					request->init(core.coreid, threadid, 0, idx, sim_cycle,
+							false, 0x1, uop.uuid, Memory::MEMORY_OP_TSX);
+					request->set_coreSignal(&th.core_tsx_abort_signal);
+					// Send request to cache..
+					core.memoryHierarchy->access_cache(request);
+
+					//reset TXT_MEMORY_BUFFER
+					th.tsxMemoryBuffer.reset();
+				}
+
+				state.reg.rddata = assist_func(ctx, ra, rb, rc, raflags,
+						rbflags, rcflags, new_flags);
+				state.reg.rdflags = (W16)(new_flags);
+
+				th.thread_stats.lassists[assistid]++;
+
+				if (state.reg.rddata == (W64)-1) {
+					/* We must abort TSX */
+					goto abort_tsx;
+				}
+
+				return true;
+			}
+		case L_ASSIST_XEND:
+			{
+				if (ctx.tsx_mode == 0)
+					return true;
+
+				Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+				assert(request != NULL);
+
+				// rip is used as a code variable
+				// and the code for commit is 0x2
+				request->init(core.coreid, threadid, 0, idx, sim_cycle,
+						false, 0x2, uop.uuid, Memory::MEMORY_OP_TSX);
+				request->set_coreSignal(&th.core_tsx_commit_signal);
+				core.memoryHierarchy->access_cache(request);
+
+				// stop all all other cpus
+				foreach (i, NUM_SIM_CORES)
+					contextof(i).running = 0;
+
+				// Now, we should return and the assist function
+				// is called by signal callback, when cache will flush
+				// all modified lines.
+				th.thread_stats.lassists[assistid]++;
+
+				return true;
+			}
+abort_tsx:
+		case L_ASSIST_XABORT:
+			{
+				if (ctx.tsx_mode == 0)
+					return true;
+
+				Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+				assert(request != NULL);
+
+				// rip is used as a code variable
+				// and the code for abort is 0x3
+				request->init(core.coreid, threadid,  0, idx, sim_cycle,
+						false, 0x3, uop.uuid, Memory::MEMORY_OP_TSX);
+				core.memoryHierarchy->access_cache(request);
+
+				/* Set bit 0 to indicate XABORT instruction */
+				rb = rb | 0x1;
+				state.reg.rddata = assist_func(ctx, ra, rb, rc, raflags,
+						rbflags, rcflags, new_flags);
+				state.reg.rdflags = (W16)(new_flags);
+
+				th.thread_stats.lassists[assistid]++;
+
+				//flush the memory buffer
+				th.tsxMemoryBuffer.reset();
+				th.flush_pipeline();
+
+				return true;
+			}
+		default:
+			break;
+	}
+
+	return false;
+}
+
 // Execute a lightweight Assist Function
 void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
         W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags) {
+
+	bool tsx_ret;
 
     // If the Assist is Pause then pause the thread for Fix cycles
     if(assistid == L_ASSIST_PAUSE) {
@@ -1560,71 +1668,19 @@ void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
         getthread().thread_stats.cycles_in_pause += THREAD_PAUSE_CYCLES;
     }
 
-    if(assistid == L_ASSIST_XBEGIN) {
-	    //create MEMORY_OP_TSX
-	    OooCore& core = getcore();
+	switch (assistid) {
+		case L_ASSIST_XBEGIN:
+		case L_ASSIST_XEND:
+		case L_ASSIST_XABORT:
+			tsx_ret = issueast_tsx(state, assistid, ra, rb, rc, raflags, rbflags, rcflags);
+			break;
+		default:
+			tsx_ret = false;
+			break;
+	}
 
-	    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
-	    assert(request != NULL);
-
-	    // rip is used as a code variable
-	    // and the code for sbegin is 0x1
-	    request->init(core.coreid, threadid, 0, idx, sim_cycle,
-			    false, 0x1, uop.uuid, Memory::MEMORY_OP_TSX);
-	    request->set_coreSignal(&getthread().core_tsx_begin_signal);
-	    //reset TXT_MEMORY_BUFFER
-	    if(getthread().ctx.tsx_mode == 0) getthread().tsxMemoryBuffer.reset(); //for the first time , reset it
-	    // stop all all other cpus
-	    // FIX ME : erdem, check for the all ctx
-	    foreach (i, getthread().getcore().threadcount) getthread().getcore().threads[i]->ctx.running = 0;
-
-    }
-
-    if(assistid == L_ASSIST_XEND) {
-	    //create MEMORY_OP_TSX
-	    OooCore& core = getcore();
-
-	    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
-	    assert(request != NULL);
-
-	    // rip is used as a code variable
-	    // and the code for commit is 0x2
-	    request->init(core.coreid, threadid, 0, idx, sim_cycle,
-			    false, 0x2, uop.uuid, Memory::MEMORY_OP_TSX);
-	    request->set_coreSignal(&getthread().core_tsx_commit_signal);
-
-	    // stop all all other cpus
-	    foreach (i, getthread().getcore().threadcount) getthread().getcore().threads[i]->ctx.running = 0;
-
-	    // Now, we should return and the assist function should be handled by the signal handler
-	    // should we increment the lassists counter?
-	    return;
-
-	    //reset TXT_MEMORY_BUFFER
-	    //write everything back to memory
-
-	    //erdem
-    }
-
-    if(assistid == L_ASSIST_XABORT) {
-	    //create MEMORY_OP_TSX
-	    OooCore& core = getcore();
-
-	    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
-	    assert(request != NULL);
-
-	    // rip is used as a code variable
-	    // and the code for sbegin is 0x1
-	    request->init(core.coreid, threadid,  0, idx, sim_cycle,
-			    false, 0x3, uop.uuid, Memory::MEMORY_OP_TSX);
-	    request->set_coreSignal(&getthread().core_tsx_abort_signal);
-	    //flush pipeline
-	    getthread().flush_pipeline();
-	    //flush the memory buffer
-	    getthread().tsxMemoryBuffer.reset();
-
-    }
-
+	if (tsx_ret)
+		return;
 
     // Get the ast function ID from
     light_assist_func_t assist_func = light_assistid_to_func[assistid];

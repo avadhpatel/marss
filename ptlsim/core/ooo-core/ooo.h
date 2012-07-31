@@ -530,6 +530,7 @@ namespace OOO_CORE_MODEL {
         W64 get_load_data(LoadStoreQueueEntry& state, W64 data);
         void issueprefetch(IssueState& state, W64 ra, W64 rb, W64 rc, int cachelevel);
         void issueast(IssueState& state, W64 assistid, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags);
+        bool issueast_tsx(IssueState& state, W64 assistid, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbflags, W16 rcflags);
         int probecache(Waddr addr, LoadStoreQueueEntry* sfra);
         bool probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W64 ra, W64 rb, W64 rc, PTEUpdate& pteupdate);
         void tlbwalk();
@@ -1063,13 +1064,10 @@ namespace OOO_CORE_MODEL {
         OooCoreThreadStats thread_stats;
 
 
-	//TSX
-
-        Signal core_tsx_begin_signal;
+		//TSX
         Signal core_tsx_commit_signal;
         Signal core_tsx_abort_signal;
 
-        bool core_tsx_begin(void *arg);
         bool core_tsx_commit(void *arg);
         bool core_tsx_abort(void *arg);
 

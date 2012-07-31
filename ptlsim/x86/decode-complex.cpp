@@ -994,7 +994,6 @@ static inline void vm_func(TraceDecoder& dec, int assist) {
 	}
 }
 
-#ifdef INTEL_TSX
 W64 l_assist_xbegin(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
         W16 rbflags, W16 rcflags, W16& flags)
 {
@@ -1077,13 +1076,14 @@ W64 l_assist_xabort(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
     /* Restore Context from backup */
     ctx.tsx_restore();
 
-    ctx.reg_nextrip = abort_addr;
+	ctx.eip = abort_addr;
 
     /* Generate eax based on flags and abort value */
     eax = ((rc & 0xff) << 24);           /* Store Abort value */
     eax = (eax & ~(0x3f)) | (rb & 0x3f); /* Set flags from rb */
 
-    return ((ra & ~(W64)(W32)(-1)) | eax);
+	ctx.regs[REG_rax] = ((ra & ~(W64)(W32)(-1)) | eax);
+    return ctx.regs[REG_rax];
 }
 
 W64 l_assist_xtest(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
@@ -1097,7 +1097,6 @@ W64 l_assist_xtest(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 
     return ra;
 }
-#endif
 
 bool TraceDecoder::decode_complex() {
   DecodedOperand rd;
@@ -1749,7 +1748,6 @@ bool TraceDecoder::decode_complex() {
     break;
   }
 
-#ifdef INTEL_TSX
   case 0xc6: {
     // xabort imm8
     assert(byte(modrm) == 0xf8);
@@ -1783,7 +1781,6 @@ bool TraceDecoder::decode_complex() {
 
     break;
   }
-#endif
 
   case 0xca ... 0xcb: {
     // ret far, with and without pop count (not supported)
@@ -2327,7 +2324,6 @@ bool TraceDecoder::decode_complex() {
 	TransOp* st1;
 	TransOp* st2;
 
-#ifdef INTEL_TSX
     if (byte(modrm) == 0xd5) {
         // xend
         EndOfDecode();
@@ -2343,7 +2339,6 @@ bool TraceDecoder::decode_complex() {
         this << ast;
         break;
     }
-#endif
 
 	switch(modrm.reg) {
 		case 0: { // sgdt

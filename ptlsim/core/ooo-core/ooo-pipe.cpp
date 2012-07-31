@@ -31,61 +31,6 @@
 using namespace OOO_CORE_MODEL;
 using namespace Memory;
 
-bool ThreadContext::core_tsx_begin(void *arg) {
-//will be filled later
-	    // start all all other cpus
-	    foreach (i, getthread().getcore().threadcount) getthread().getcore().threads[i]->ctx.running = 1;
-
-return true;
-}
-
-bool ThreadContext::core_tsx_commit(void *arg) {
-	int return_value;
-	int rb;
-	//will be filled later
-	//get success or failure result
-	//call lassist function
-	//l_assist_xend
-	light_assist_func_t assist_func = l_assist_xend;
-	Context& ctx = getthread().ctx;
-
-	W16 new_flags = 0;//raflags; ? do we need this flag?
-	rb = 0;
-	return_value = assist_func(ctx, 0, rb, 0, 0, 0, 0, new_flags);
-
-	//FIXME: stats need to be fixed
-	//thread_stats.lassists[assistid]++;
-
-	if(rb == 1) { //failure
-		//flush pipeline
-		getthread().flush_pipeline();
-		//flush memory buffer
-		tsxMemoryBuffer.reset();
-	} else { //on success
-		//write memory buffer to the memory
-		for( int i =0; i < tsxMemoryBuffer.getSetCount(); i++) {
-		      TsxMemoryContent *tsx_content_array = &tsxMemoryBuffer.sets[i].data[0];
-		      for( int j =0; j < tsxMemoryBuffer.getWayCount(); j++) {
-			    getthread().ctx.storemask_virt(tsx_content_array[j].virtaddr, tsx_content_array[j].data, tsx_content_array[j].bytemask, tsx_content_array[j].sizeshift);
-			}
-		}
-		getthread().tsxMemoryBuffer.reset();
-	}
-
-	//un-pause the cpus
-	// start all all other cpus
-	foreach (i, getthread().getcore().threadcount) getthread().getcore().threads[i]->ctx.running = 1;
-
-	return return_value;
-}
-
-
-bool ThreadContext::core_tsx_abort(void *arg) {
-
-
-return true;
-}
-
 
 bool OooCore::icache_wakeup(void *arg) {
     Memory::MemoryRequest *request = (Memory::MemoryRequest*)arg;
@@ -256,6 +201,11 @@ void OooCore::flush_pipeline() {
 
 void ThreadContext::flush_pipeline() {
     if (logable(3)) ptl_logfile << " core[", core.coreid,"] TH[", threadid, "] flush_pipeline()",endl;
+
+	if (ctx.tsx_mode > 0) {
+		core_tsx_abort((void*)(0x2));
+		return;
+	}
 
     core.machine.memoryHierarchyPtr->flush(core.coreid);
 
@@ -2161,7 +2111,7 @@ int ReorderBufferEntry::commit() {
             if(config.checker_enabled && !ctx.kernel_mode) {
                 add_checker_store(lsq, uop.size);
             } else {
-		    if(thread.ctx.tsx_mode == 1) {
+		    if(thread.ctx.tsx_mode > 0) {
 			    TsxMemoryContent* tsx_content = thread.tsxMemoryBuffer.select(lsq->virtaddr) ;
 			    tsx_content->data = lsq->data;
 			    tsx_content->virtaddr = lsq->virtaddr ;
@@ -2289,6 +2239,68 @@ int ReorderBufferEntry::commit() {
 
     thread.thread_stats.commit.result.ok++;
     return COMMIT_RESULT_OK;
+}
+
+bool ThreadContext::core_tsx_commit(void *arg) {
+	W64 return_value;
+	W64 rb;
+	W64 ra;
+
+	light_assist_func_t assist_func = l_assist_xend;
+	Context& ctx = getthread().ctx;
+
+	W16 new_flags = ctx.reg_flags;
+	rb = 0;
+	ra = ctx.regs[REG_rax];
+
+	return_value = assist_func(ctx, ra, rb, 0, 0, 0, 0,
+			new_flags);
+
+	thread_stats.lassists[L_ASSIST_XEND]++;
+
+	if(return_value != ra) { //failure
+		flush_pipeline();
+	} else { //on success
+		//write memory buffer to the memory
+		for( int i =0; i < tsxMemoryBuffer.getSetCount(); i++) {
+			TsxMemoryContent *tsx_content_array = &tsxMemoryBuffer.sets[i].data[0];
+			for( int j =0; j < tsxMemoryBuffer.getWayCount(); j++) {
+				ctx.storemask_virt(tsx_content_array[j].virtaddr,
+						tsx_content_array[j].data,
+						tsx_content_array[j].bytemask,
+						tsx_content_array[j].sizeshift);
+			}
+		}
+		tsxMemoryBuffer.reset();
+	}
+
+	// start all all cpus
+	foreach (i, NUM_SIM_CORES)
+		contextof(i).running = 0;
+
+	return return_value;
+}
+
+
+bool ThreadContext::core_tsx_abort(void *arg) {
+	W64 rb;
+	W64 ra;
+
+	light_assist_func_t assist_func = l_assist_xabort;
+	Context& ctx = getthread().ctx;
+
+	W16 new_flags = 0;
+	rb = (W64)(arg);
+	ra = ctx.regs[REG_rax];
+
+	assist_func(ctx, ra, rb, 0, 0, 0, 0,
+			new_flags);
+	assert(ctx.tsx_mode == 0);
+
+	thread_stats.lassists[L_ASSIST_XABORT]++;
+	flush_pipeline();
+
+	return true;
 }
 
 namespace OOO_CORE_MODEL {
