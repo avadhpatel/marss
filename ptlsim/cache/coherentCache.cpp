@@ -521,6 +521,10 @@ void CacheController::register_lower_interconnect(Interconnect *interconnect)
     lowerInterconnect_ = interconnect;
 }
 
+void CacheController::reset_cache_states_bit(W8 value){
+    cacheLines_->reset_lines_states(value);
+}
+
 bool CacheController::cache_hit_cb(void *arg)
 {
     CacheQueueEntry *queueEntry = (CacheQueueEntry*)arg;

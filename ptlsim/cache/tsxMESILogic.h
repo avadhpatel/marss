@@ -162,22 +162,26 @@ namespace CoherentCache {
 			bool tsx_abort_;
 			bool in_tsx_;
 			W8 abort_reason_;
-
-		public:
+        public:
 			TsxCache(W8 coreid, const char *name,
 					MemoryHierarchy *hierarchy, CacheType type);
+
+            bool handle_upper_interconnect(Message &message);
 
 			void enable_tsx() {
 				in_tsx_ = true;
 			}
 
 			void disable_tsx() {
-				in_tsx_ = true;
+				in_tsx_ = false;
+                reset_cache_states_bit(TM_READ);
+                reset_cache_states_bit(TM_WRITE);
 			}
 
 			void abort_tsx(W8 reason) {
 				tsx_abort_ = 1;
 				abort_reason_ = reason;
+                //call the abort_cb
 			}
 
 			bool in_tsx() {

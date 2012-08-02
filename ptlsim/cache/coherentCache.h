@@ -215,7 +215,6 @@ namespace Memory {
                     return request->get_physical_address() >> cacheLineBits_;
                 }
 
-                bool handle_upper_interconnect(Message &message);
 
                 bool handle_lower_interconnect(Message &message);
 
@@ -230,6 +229,7 @@ namespace Memory {
                 void get_directory(Interconnect *interconn);
 
             public:
+                bool handle_upper_interconnect(Message &message);
                 CacheController(W8 coreid, const char *name,
                         MemoryHierarchy *memoryHierarchy, CacheType type);
                 ~CacheController();
@@ -304,6 +304,7 @@ namespace Memory {
 				Controller* get_lower_cont() { return lowerCont_; }
                 CacheQueueEntry* get_new_queue_entry();
 
+                void reset_cache_states_bit(W8 value);
         };
 
     };

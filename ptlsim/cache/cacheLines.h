@@ -48,7 +48,6 @@ namespace Memory {
             tag = -1;
             state = 0;
         }
-
         void invalidate() { reset(); }
 
         void print(ostream& os) const {
@@ -89,6 +88,7 @@ namespace Memory {
 			virtual int get_set_count() const=0;
 			virtual int get_way_count() const=0;
 			virtual int get_line_size() const=0;
+            virtual void reset_lines_states(W8 value)=0;
     };
 
     template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
@@ -119,6 +119,7 @@ namespace Memory {
             int invalidate(MemoryRequest *request);
             bool get_port(MemoryRequest *request);
             void print(ostream& os) const;
+            void reset_lines_states(W8 value);
 
 			/**
 			 * @brief Get Cache Size
@@ -275,7 +276,16 @@ namespace Memory {
                 }
             }
         }
-
+   template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
+        void CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::reset_lines_states(W8 value)
+        {
+            foreach(i, SET_COUNT) {
+                Set &set = base_t::sets[i];
+                foreach(j, WAY_COUNT) {
+                   set.data[j].state = set.data[j].state & ~value;;
+                }
+            }
+        }
 };
 
 #endif // CACHE_LINES_H

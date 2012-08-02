@@ -587,6 +587,25 @@ bool TsxMESILogic::is_line_valid(CacheLine *line)
 	return true;
 }
 
+
+bool TsxCache::handle_upper_interconnect(Message &message){
+    if (message.request->get_type() != Memory::MEMORY_OP_TSX)
+        return  CacheController::handle_upper_interconnect(message);
+    if (message.request->get_owner_rip() == 0x1) { //xbegin
+        enable_tsx();
+    }
+    else if (message.request->get_owner_rip() == 0x2){ //xend
+        disable_tsx();
+    }
+    else if (message.request->get_owner_rip() == 0x3){ //xabort
+        disable_tsx();
+    }
+    else{
+        //invalid TSX command
+        assert(0);
+    }
+    return true;
+}
 void TsxMESILogic::handle_response(CacheQueueEntry *entry, Message &msg)
 {
 }
