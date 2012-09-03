@@ -244,6 +244,7 @@ class CacheController : public Controller
 			}
 			return false;
 		}
+
 		void print_map(ostream& os)
 		{
 			os << "Cache-Controller: " << get_name() << endl;

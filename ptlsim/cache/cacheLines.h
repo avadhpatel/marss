@@ -48,6 +48,7 @@ namespace Memory {
             tag = -1;
             state = 0;
         }
+
         void invalidate() { reset(); }
 
         void print(ostream& os) const {

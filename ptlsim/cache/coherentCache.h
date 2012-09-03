@@ -229,7 +229,7 @@ namespace Memory {
                 void get_directory(Interconnect *interconn);
 
             public:
-                bool handle_upper_interconnect(Message &message);
+                virtual bool handle_upper_interconnect(Message &message);
                 CacheController(W8 coreid, const char *name,
                         MemoryHierarchy *memoryHierarchy, CacheType type);
                 ~CacheController();

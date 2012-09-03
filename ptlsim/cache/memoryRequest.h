@@ -121,7 +121,6 @@ class MemoryRequest: public selfqueuelink
 		int get_robid() { return robId_; }
 		void set_robid(int idx) { robId_ = idx; }
 
-
 		W64 get_owner_rip() { return ownerRIP_; }
 
 		W64 get_owner_uuid() { return ownerUUID_; }

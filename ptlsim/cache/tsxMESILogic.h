@@ -31,11 +31,15 @@
 #include <coherenceLogic.h>
 #include <coherentCache.h>
 
+#ifdef UPDATE_MESI_TRANS_STATS
+#undef UPDATE_MESI_TRANS_STATS
+#endif
+
 #define UPDATE_MESI_TRANS_STATS(old_state, new_state, mode) \
     if(mode) { /* kernel mode */ \
-        state_transition(kernel_stats)[(old_state << 2) | new_state]++; \
+        state_transition(kernel_stats)[((old_state & 3) << 2) | (new_state & 3)]++; \
     } else { \
-        state_transition(user_stats)[(old_state << 2) | new_state]++; \
+        state_transition(user_stats)[((old_state & 3) << 2) | (new_state & 3)]++; \
     }
 
 namespace Memory {
@@ -161,7 +165,10 @@ namespace CoherentCache {
 		private:
 			bool tsx_abort_;
 			bool in_tsx_;
-			W8 abort_reason_;
+			W64 abort_reason_;
+			Signal *abort_signal_;
+			Signal *complete_signal_;
+
         public:
 			TsxCache(W8 coreid, const char *name,
 					MemoryHierarchy *hierarchy, CacheType type);
@@ -174,14 +181,18 @@ namespace CoherentCache {
 
 			void disable_tsx() {
 				in_tsx_ = false;
-                reset_cache_states_bit(TM_READ);
-                reset_cache_states_bit(TM_WRITE);
+				reset_cache_states_bit(TM_READ|TM_WRITE);
+				abort_signal_ = NULL;
+				complete_signal_ = NULL;
 			}
 
 			void abort_tsx(W8 reason) {
 				tsx_abort_ = 1;
-				abort_reason_ = reason;
-                //call the abort_cb
+				abort_reason_ = (W64)reason;
+
+				if (abort_signal_) {
+					abort_signal_->emit((void*)abort_reason_);
+				}
 			}
 
 			bool in_tsx() {

@@ -322,6 +322,7 @@ bool TsxMESILogic::handle_interconn_hit_in_tsx(CacheQueueEntry *queueEntry)
 		if (tsxState) {
 			tsx_cont->abort_tsx(ABORT_EVICT);
 		}
+
 		UPDATE_MESI_TRANS_STATS(oldState, TSX_MESI_INVALID, kernel_req);
 		queueEntry->line->state = TSX_MESI_INVALID;
 		tsx_cont->clear_entry_cb(queueEntry);
@@ -587,25 +588,6 @@ bool TsxMESILogic::is_line_valid(CacheLine *line)
 	return true;
 }
 
-
-bool TsxCache::handle_upper_interconnect(Message &message){
-    if (message.request->get_type() != Memory::MEMORY_OP_TSX)
-        return  CacheController::handle_upper_interconnect(message);
-    if (message.request->get_owner_rip() == 0x1) { //xbegin
-        enable_tsx();
-    }
-    else if (message.request->get_owner_rip() == 0x2){ //xend
-        disable_tsx();
-    }
-    else if (message.request->get_owner_rip() == 0x3){ //xabort
-        disable_tsx();
-    }
-    else{
-        //invalid TSX command
-        assert(0);
-    }
-    return true;
-}
 void TsxMESILogic::handle_response(CacheQueueEntry *entry, Message &msg)
 {
 }
@@ -620,10 +602,37 @@ void TsxMESILogic::dump_configuration(YAML::Emitter &out) const
 	YAML_KEY_VAL(out, "coherence", "MESI");
 }
 
+
 TsxCache::TsxCache(W8 coreid, const char *name,
 		MemoryHierarchy *hierarchy, CacheType type)
-: CacheController(coreid, name, hierarchy, type)
+	: CacheController(coreid, name, hierarchy, type)
+	, abort_signal_(NULL)
+	, complete_signal_(NULL)
 {
+}
+
+bool TsxCache::handle_upper_interconnect(Message &message){
+
+	if (message.request->get_type() != Memory::MEMORY_OP_TSX)
+		return  CacheController::handle_upper_interconnect(message);
+
+	switch (message.request->get_owner_rip()) {
+		case 0x1: // xbegin
+			abort_signal_ = message.request->get_coreSignal();
+			enable_tsx();
+			break;
+		case 0x2: // xend
+			complete_signal_ = message.request->get_coreSignal();
+			disable_tsx();
+			break;
+		case 0x3: // xabort
+			disable_tsx();
+			break;
+		default:  // invalid
+			assert(0);
+	}
+
+	return true;
 }
 
 /* MESI Controller Builder */
