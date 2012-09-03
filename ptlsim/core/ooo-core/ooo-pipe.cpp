@@ -2276,7 +2276,7 @@ bool ThreadContext::core_tsx_commit(void *arg) {
 
 	// start all all cpus
 	foreach (i, NUM_SIM_CORES)
-		contextof(i).running = 0;
+		contextof(i).running = 1;
 
 	return return_value;
 }
@@ -2299,6 +2299,10 @@ bool ThreadContext::core_tsx_abort(void *arg) {
 
 	thread_stats.lassists[L_ASSIST_XABORT]++;
 	flush_pipeline();
+
+	// start all all cpus
+	foreach (i, NUM_SIM_CORES)
+		contextof(i).running = 1;
 
 	return true;
 }
