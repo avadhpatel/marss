@@ -178,7 +178,9 @@ namespace CoherentCache {
 			void enable_tsx() {
 				in_tsx_ = true;
 			}
-
+            bool check_tsx_invalidated(){
+				return check_cache_states_bit(TM_WRITE, TSX_MESI_INVALID);
+            }
 			void disable_tsx() {
 				in_tsx_ = false;
 				reset_cache_states_bit(TM_READ|TM_WRITE);

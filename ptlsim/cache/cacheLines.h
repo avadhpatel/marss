@@ -90,6 +90,7 @@ namespace Memory {
 			virtual int get_way_count() const=0;
 			virtual int get_line_size() const=0;
             virtual void reset_lines_states(W8 value)=0;
+            virtual bool check_lines_states_tsx(W8 value1, W8 value2)=0;
     };
 
     template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
@@ -121,7 +122,7 @@ namespace Memory {
             bool get_port(MemoryRequest *request);
             void print(ostream& os) const;
             void reset_lines_states(W8 value);
-
+            bool check_lines_states_tsx(W8 value1, W8 value2);
 			/**
 			 * @brief Get Cache Size
 			 *
@@ -287,6 +288,18 @@ namespace Memory {
                 }
             }
         }
+   template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
+       bool CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>::check_lines_states_tsx(W8 value1, W8 value2)
+       {
+           foreach(i, SET_COUNT) {
+               Set &set = base_t::sets[i];
+               foreach(j, WAY_COUNT) {
+                   if ((set.data[j].state & value1)  && !(set.data[j].state & value2))
+                        return false;
+               }
+           }
+           return true;
+       }
 };
 
 #endif // CACHE_LINES_H

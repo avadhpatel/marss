@@ -626,6 +626,7 @@ bool TsxCache::handle_upper_interconnect(Message &message){
 			disable_tsx();
 			break;
 		case 0x3: // xabort
+            assert(check_tsx_invalidated());
 			disable_tsx();
 			break;
 		default:  // invalid

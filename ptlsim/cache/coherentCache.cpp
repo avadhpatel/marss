@@ -521,6 +521,10 @@ void CacheController::register_lower_interconnect(Interconnect *interconnect)
     lowerInterconnect_ = interconnect;
 }
 
+bool CacheController::check_cache_states_bit(W8 value1, W8 value2){
+    cacheLines_->check_lines_states_tsx(value1 , value2);
+}
+
 void CacheController::reset_cache_states_bit(W8 value){
     cacheLines_->reset_lines_states(value);
 }

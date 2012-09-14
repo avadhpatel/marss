@@ -303,8 +303,8 @@ namespace Memory {
                 Controller* get_directory() { return directory_; }
 				Controller* get_lower_cont() { return lowerCont_; }
                 CacheQueueEntry* get_new_queue_entry();
-
                 void reset_cache_states_bit(W8 value);
+                bool check_cache_states_bit(W8 value1, W8 value2) ;
         };
 
     };
