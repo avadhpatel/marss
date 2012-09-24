@@ -17,7 +17,8 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "config.h"
-#include "exec.h"
+#include "cpu.h"
+#include "dyngen-exec.h"
 #include "disas.h"
 #include "tcg.h"
 
@@ -37,10 +38,10 @@
 
 //#define DEBUG_SIGNAL
 
-static void exception_action(CPUState *env1)
+static void exception_action(CPUArchState *env1)
 {
 #if defined(TARGET_I386)
-    raise_exception_err(env1->exception_index, env1->error_code);
+    raise_exception_err_env(env1, env1->exception_index, env1->error_code);
 #else
     cpu_loop_exit(env1);
 #endif
@@ -49,7 +50,7 @@ static void exception_action(CPUState *env1)
 /* exit the current TB from a signal handler. The host registers are
    restored in a state compatible with the CPU emulator
  */
-void cpu_resume_from_signal(CPUState *env1, void *puc)
+void cpu_resume_from_signal(CPUArchState *env1, void *puc)
 {
 #ifdef __linux__
     struct ucontext *uc = puc;
@@ -81,7 +82,7 @@ void cpu_resume_from_signal(CPUState *env1, void *puc)
    the effective address of the memory exception. 'is_write' is 1 if a
    write caused the exception and otherwise 0'. 'old_set' is the
    signal set which should be restored */
-static inline int handle_cpu_signal(unsigned long pc, unsigned long address,
+static inline int handle_cpu_signal(uintptr_t pc, unsigned long address,
                                     int is_write, sigset_t *old_set,
                                     void *puc)
 {
@@ -96,12 +97,13 @@ static inline int handle_cpu_signal(unsigned long pc, unsigned long address,
                 pc, address, is_write, *(unsigned long *)old_set);
 #endif
     /* XXX: locking issue */
-    if (is_write && page_unprotect(h2g(address), pc, puc)) {
+    if (is_write && h2g_valid(address)
+        && page_unprotect(h2g(address), pc, puc)) {
         return 1;
     }
 
     /* see if it is an MMU fault */
-    ret = cpu_handle_mmu_fault(env, address, is_write, MMU_USER_IDX, 0);
+    ret = cpu_handle_mmu_fault(env, address, is_write, MMU_USER_IDX);
     if (ret < 0) {
         return 0; /* not an MMU fault */
     }
@@ -628,47 +630,3 @@ int cpu_signal_handler(int host_signum, void *pinfo,
 #error host CPU specific signal handler needed
 
 #endif
-
-#if defined(TARGET_I386)
-
-void cpu_x86_load_seg(CPUX86State *s, int seg_reg, int selector)
-{
-    CPUX86State *saved_env;
-
-    saved_env = env;
-    env = s;
-    if (!(env->cr[0] & CR0_PE_MASK) || (env->eflags & VM_MASK)) {
-        selector &= 0xffff;
-        cpu_x86_load_seg_cache(env, seg_reg, selector,
-                               (selector << 4), 0xffff, 0);
-    } else {
-        helper_load_seg(seg_reg, selector);
-    }
-    env = saved_env;
-}
-
-void cpu_x86_fsave(CPUX86State *s, target_ulong ptr, int data32)
-{
-    CPUX86State *saved_env;
-
-    saved_env = env;
-    env = s;
-
-    helper_fsave(ptr, data32);
-
-    env = saved_env;
-}
-
-void cpu_x86_frstor(CPUX86State *s, target_ulong ptr, int data32)
-{
-    CPUX86State *saved_env;
-
-    saved_env = env;
-    env = s;
-
-    helper_frstor(ptr, data32);
-
-    env = saved_env;
-}
-
-#endif /* TARGET_I386 */

@@ -25,6 +25,7 @@
 
 extern "C" {
 #include <sys/ptrace.h>
+#include <qemu-barrier.h>
 }
 
 #include <math.h>
@@ -366,9 +367,6 @@ T reversebits(T v) {
 }
 
 static inline W16 x86_sse_maskeqb(const vec16b v, byte target) { return x86_sse_pmovmskb(x86_sse_pcmpeqb(v, x86_sse_dupb(target))); }
-
-// This is a barrier for the compiler only, NOT the processor!
-#define barrier() asm volatile("": : :"memory")
 
 // Denote parallel sections for the compiler
 #define parallel

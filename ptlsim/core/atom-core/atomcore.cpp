@@ -320,7 +320,7 @@ bool AtomOp::fetch()
 
             // SMP/SMT: Fill in with target thread ID (if the predictor
             // supports this):
-            predinfo.ctxid = thread->ctx.cpu_index;
+            predinfo.ctxid = thread->ctx.env->cpu_index;
             predinfo.ripafter = fetchrip + op.bytes;
             predrip = thread->branchpred.predict(predinfo, predinfo.bptype,
                     predinfo.ripafter, op.riptaken);
@@ -1021,7 +1021,7 @@ W64 AtomOp::get_load_data(W64 addr, TransOp& uop)
 bool AtomOp::check_mem_lock(W64 addr)
 {
     return thread->core.memoryHierarchy->probe_lock(addr & ~(0x3),
-            thread->ctx.cpu_index);
+            thread->ctx.env->cpu_index);
 }
 
 /**
@@ -1034,7 +1034,7 @@ bool AtomOp::check_mem_lock(W64 addr)
 bool AtomOp::grab_mem_lock(W64 addr)
 {
     lock_acquired = thread->core.memoryHierarchy->grab_lock(
-                addr & ~(0x3), thread->ctx.cpu_index);
+                addr & ~(0x3), thread->ctx.env->cpu_index);
     lock_addr = addr;
     return lock_acquired;
 }
@@ -1052,7 +1052,7 @@ void AtomOp::release_mem_lock(bool immediately)
 {
     if (immediately) {
         thread->core.memoryHierarchy->invalidate_lock(lock_addr & ~(0x3),
-                thread->ctx.cpu_index);
+                thread->ctx.env->cpu_index);
         lock_acquired = false;
     } else {
         thread->queued_mem_lock_list[
@@ -1384,7 +1384,7 @@ int AtomOp::writeback()
     ATOMOPLOG1("writeback/commit ", num_uops_used, " uops");
 
     if(config.checker_enabled && !thread->ctx.kernel_mode && som) {
-        setup_checker(thread->ctx.cpu_index);
+        setup_checker(thread->ctx.env->cpu_index);
         reset_checker_stores();
     }
 
@@ -1436,8 +1436,8 @@ void AtomOp::check_commit_exception()
     foreach (i, num_uops_used) {
         TransOp& uop = uops[i];
         if unlikely ((uop.is_sse|uop.is_x87) &&
-                ((thread->ctx.cr[0] & CR0_TS_MASK) |
-                 (uop.is_x87 & (thread->ctx.cr[0] & CR0_EM_MASK)))) {
+                ((thread->ctx.env->cr[0] & CR0_TS_MASK) |
+                 (uop.is_x87 & (thread->ctx.env->cr[0] & CR0_EM_MASK)))) {
             had_exception = true;
             exception = EXCEPTION_FloatingPointNotAvailable;
             error_code = 0;
@@ -1523,12 +1523,13 @@ void AtomOp::update_reg_mem()
  */
 void AtomOp::writeback_eom()
 {
+    Waddr &eip = (Waddr&)thread->ctx.env->eip;
     int last_idx = num_uops_used - 1;
     TransOp& last_uop = uops[last_idx];
     assert(last_uop.eom);
 
     ATOMOPLOG3("Commit EOM uop: ", last_uop);
-    ATOMOPLOG3("ctx eip: ", hexstring(thread->ctx.eip,48));
+    ATOMOPLOG3("ctx eip: ", hexstring(eip,48));
 
     if(last_uop.rd == REG_rip) {
         ATOMOPLOG3("Setting rip: ", arch_reg_names[last_uop.rd]);
@@ -1537,21 +1538,21 @@ void AtomOp::writeback_eom()
             assert(dest_register_values[last_idx]);
         }
 
-        thread->ctx.eip = dest_register_values[last_idx];
+        eip = dest_register_values[last_idx];
     } else {
         ATOMOPLOG3("Adding bytes: ", last_uop.bytes);
-        thread->ctx.eip += last_uop.bytes;
+        eip += last_uop.bytes;
     }
 
     if (isclass(last_uop.opcode, OPCLASS_BRANCH)) {
         W64 seq_eip = rip + last_uop.bytes;
 
         thread->branchpred.update(predinfo, seq_eip,
-                thread->ctx.eip);
+                eip);
         thread->st_branch_predictions.updates++;
     }
 
-    ATOMOPLOG2("Commited.. new eip:0x", hexstring(thread->ctx.eip, 48));
+    ATOMOPLOG2("Commited.. new eip:0x", hexstring(eip, 48));
 
 #ifdef TRACE_RIP
     ptl_rip_trace << "commit_rip: ",
@@ -1569,13 +1570,13 @@ void AtomOp::update_checker()
 {
     if(config.checker_enabled && eom && !thread->ctx.kernel_mode) {
         // TODO Add a mmio checker
-        if(!is_barrier && thread->ctx.eip != rip) {
+        if(!is_barrier && thread->ctx.env->eip != rip) {
             execute_checker();
             TransOp& last_uop = uops[num_uops_used - 1];
-            compare_checker(thread->ctx.cpu_index,
+            compare_checker(thread->ctx.env->cpu_index,
                     setflags_to_x86_flags[last_uop.setflags]);
 
-            if(checker_context->eip) {
+            if(checker_context->env->eip) {
                 foreach(i, checker_stores_count) {
                     thread->ctx.check_store_virt(checker_stores[i].virtaddr,
                             checker_stores[i].data, checker_stores[i].bytemask,
@@ -1714,7 +1715,7 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
     update_name(th_name.buf);
 
     // Set decoder stats
-    set_decoder_stats(this, ctx.cpu_index);
+    set_decoder_stats(this, ctx.env->cpu_index);
 
     // Setup the signals
     stringbuf sig_name;
@@ -1767,7 +1768,7 @@ void AtomThread::reset()
     }
     current_bb = NULL;
 
-    fetchrip = ctx.eip;
+    fetchrip = ctx.env->eip;
     forwarded_flags = ctx.reg_flags & (setflags_to_x86_flags[7] | FLAG_IF);
     internal_flags = forwarded_flags;
 
@@ -1978,15 +1979,15 @@ bool AtomThread::fetch_check_current_bb()
         current_bb = NULL;
     }
 
-    BasicBlock *bb = bbcache[ctx.cpu_index](fetchrip);
+    BasicBlock *bb = bbcache[ctx.env->cpu_index](fetchrip);
 
     if likely (bb) {
         current_bb = bb;
     } else {
-        current_bb = bbcache[ctx.cpu_index].translate(ctx, fetchrip);
+        current_bb = bbcache[ctx.env->cpu_index].translate(ctx, fetchrip);
 
         if unlikely (!current_bb) {
-            if(fetchrip.rip == ctx.eip) {
+            if(fetchrip.rip == ctx.env->eip) {
                 // Its a page fault in I-Cache
                 itlb_exception = true;
                 itlb_exception_addr = ctx.exec_fault_addr;
@@ -2335,7 +2336,7 @@ void AtomThread::redirect_fetch(W64 rip)
     }
 
     ATOMTHLOG3("Redirect to fetchrip:0x", hexstring(fetchrip.rip,48),
-            " .. ctx.eip:0x", hexstring(ctx.eip,48));
+            " .. ctx.eip:0x", hexstring(ctx.env->eip,48));
 }
 
 /**
@@ -2552,7 +2553,7 @@ bool AtomThread::writeback()
 
         if(itlb_exception) {
             ctx.exception = EXCEPTION_PageFaultOnExec;
-            ctx.error_code = 0;
+            ctx.env->error_code = 0;
             ctx.page_fault_addr = itlb_exception_addr;
             ret_value = handle_exception();
         } else if(handle_interrupt_at_next_eom) {
@@ -2626,7 +2627,7 @@ bool AtomThread::commit_queue()
     // First check if we had any exception or not
     if(exception_op) {
         ctx.exception = exception_op->exception;
-        ctx.error_code = exception_op->error_code;
+        ctx.env->error_code = exception_op->error_code;
         ctx.page_fault_addr = exception_op->page_fault_addr;
 
         return handle_exception();
@@ -2698,13 +2699,13 @@ bool AtomThread::handle_exception()
     flush_pipeline();
 
     if(ctx.exception == EXCEPTION_SkipBlock) {
-        ctx.eip = chk_recovery_rip;
+        ctx.env->eip = chk_recovery_rip;
         flush_pipeline();
         return false;
     }
 
     int write_exception = 0;
-    
+
     switch(ctx.exception) {
         case EXCEPTION_PageFaultOnRead:
             write_exception = 0;
@@ -2722,26 +2723,26 @@ handle_page_fault:
 
                 int old_exception = 0;
                 assert(ctx.page_fault_addr != 0);
-                ctx.handle_interrupt = 1;
+                ctx.env->handle_interrupt = 1;
                 ctx.handle_page_fault(ctx.page_fault_addr, write_exception);
 
                 flush_pipeline();
                 ctx.exception = 0;
-                ctx.exception_index = old_exception;
-                ctx.exception_is_int = 0;
+                ctx.env->exception_index = old_exception;
+                ctx.env->exception_is_int = 0;
                 return true;
             }
         case EXCEPTION_FloatingPoint:
-            ctx.exception_index = EXCEPTION_x86_fpu;
+            ctx.env->exception_index = EXCEPTION_x86_fpu;
             break;
         case EXCEPTION_FloatingPointNotAvailable:
-            ctx.exception_index = EXCEPTION_x86_fpu_not_avail;
+            ctx.env->exception_index = EXCEPTION_x86_fpu_not_avail;
             break;
         default:
             assert(0);
     }
 
-    ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code,
+    ctx.propagate_x86_exception(ctx.env->exception_index, ctx.env->error_code,
             ctx.page_fault_addr);
 
     flush_pipeline();
@@ -2759,9 +2760,9 @@ bool AtomThread::handle_interrupt()
     ctx.event_upcall();
     handle_interrupt_at_next_eom = 0;
 
-    ATOMTHLOG1("Handling interrupt ", ctx.interrupt_request, " exit ",
-            ctx.exit_request, " elfags ", hexstring(ctx.eflags,32),
-            " handle-interrupt ", ctx.handle_interrupt);
+    ATOMTHLOG1("Handling interrupt ", ctx.env->interrupt_request, " exit ",
+            ctx.env->exit_request, " elfags ", hexstring(ctx.env->eflags,32),
+            " handle-interrupt ", ctx.env->handle_interrupt);
     return true;
 }
 
@@ -2772,7 +2773,7 @@ bool AtomThread::handle_interrupt()
  */
 bool AtomThread::handle_barrier()
 {
-    int assistid = ctx.eip;
+    int assistid = ctx.env->eip;
     assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
     
     if(assistid == ASSIST_WRITE_CR3) {
@@ -2791,7 +2792,7 @@ bool AtomThread::handle_barrier()
             clear_checker();
         }
     } else {
-        fetchrip.rip = ctx.eip;
+        fetchrip.rip = ctx.env->eip;
         stall_frontend = false;
     }
 
@@ -2905,7 +2906,7 @@ void AtomThread::flush_mem_locks()
     foreach (i, queued_mem_lock_count) {
         W64 lock_addr = queued_mem_lock_list[i];
         core.memoryHierarchy->invalidate_lock(lock_addr & ~(0x3),
-                ctx.cpu_index);
+                ctx.env->cpu_index);
     }
 
     queued_mem_lock_count = 0;
@@ -2969,7 +2970,7 @@ AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
 
     coreid = machine.get_next_coreid();
 
-    threads = (AtomThread**)qemu_mallocz(threadcount*sizeof(AtomThread*));
+    threads = (AtomThread**)g_malloc0(threadcount*sizeof(AtomThread*));
 
 	stringbuf sg_name;
 	sg_name << name << "-run-cycle";
@@ -3235,7 +3236,7 @@ void AtomCore::reset()
 void AtomCore::flush_tlb(Context& ctx)
 {
     foreach(i, threadcount) {
-        if(threads[i]->ctx.cpu_index == ctx.cpu_index) {
+        if(threads[i]->ctx.env->cpu_index == ctx.env->cpu_index) {
             dtlb.flush_thread(i);
             itlb.flush_thread(i);
             break;
@@ -3252,7 +3253,7 @@ void AtomCore::flush_tlb(Context& ctx)
 void AtomCore::flush_tlb_virt(Context& ctx, Waddr virtaddr)
 {
     foreach(i, threadcount) {
-        if(threads[i]->ctx.cpu_index == ctx.cpu_index) {
+        if(threads[i]->ctx.env->cpu_index == ctx.env->cpu_index) {
             dtlb.flush_virt(virtaddr, i);
             itlb.flush_virt(virtaddr, i);
             break;
@@ -3316,13 +3317,13 @@ void AtomCore::flush_shared_structs(W8 threadid)
 void AtomCore::check_ctx_changes()
 {
     foreach(i, threadcount) {
-        threads[i]->ctx.handle_interrupt = 0;
+        threads[i]->ctx.env->handle_interrupt = 0;
 
-        if(threads[i]->ctx.eip != threads[i]->ctx.old_eip) {
+        if(threads[i]->ctx.env->eip != threads[i]->ctx.old_eip) {
             // IP Address has changed, so flush the pipeline
             ATOMCORELOG("Thread flush old_eip: ",
                     HEXADDR(threads[i]->ctx.old_eip), " new-eip: ",
-                    HEXADDR(threads[i]->ctx.eip));
+                    HEXADDR(threads[i]->ctx.env->eip));
             threads[i]->flush_pipeline();
         }
     }

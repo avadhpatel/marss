@@ -25,12 +25,11 @@
  */
 
 #include "monitor.h"
-#include "qjson.h"
-#include "qint.h"
 #include "cpu-common.h"
 #include "kvm.h"
 #include "balloon.h"
 #include "trace.h"
+#include "qmp-commands.h"
 
 static QEMUBalloonEvent *balloon_event_fn;
 static QEMUBalloonStatus *balloon_stat_fn;
@@ -52,6 +51,16 @@ int qemu_add_balloon_handler(QEMUBalloonEvent *event_func,
     return 0;
 }
 
+void qemu_remove_balloon_handler(void *opaque)
+{
+    if (balloon_opaque != opaque) {
+        return;
+    }
+    balloon_event_fn = NULL;
+    balloon_stat_fn = NULL;
+    balloon_opaque = NULL;
+}
+
 static int qemu_balloon(ram_addr_t target)
 {
     if (!balloon_event_fn) {
@@ -62,103 +71,48 @@ static int qemu_balloon(ram_addr_t target)
     return 1;
 }
 
-static int qemu_balloon_status(MonitorCompletion cb, void *opaque)
+static int qemu_balloon_status(BalloonInfo *info)
 {
     if (!balloon_stat_fn) {
         return 0;
     }
-    balloon_stat_fn(balloon_opaque, cb, opaque);
+    balloon_stat_fn(balloon_opaque, info);
     return 1;
 }
 
-static void print_balloon_stat(const char *key, QObject *obj, void *opaque)
+BalloonInfo *qmp_query_balloon(Error **errp)
 {
-    Monitor *mon = opaque;
+    BalloonInfo *info;
 
-    if (strcmp(key, "actual")) {
-        monitor_printf(mon, ",%s=%" PRId64, key,
-                       qint_get_int(qobject_to_qint(obj)));
+    if (kvm_enabled() && !kvm_has_sync_mmu()) {
+        error_set(errp, QERR_KVM_MISSING_CAP, "synchronous MMU", "balloon");
+        return NULL;
     }
+
+    info = g_malloc0(sizeof(*info));
+
+    if (qemu_balloon_status(info) == 0) {
+        error_set(errp, QERR_DEVICE_NOT_ACTIVE, "balloon");
+        qapi_free_BalloonInfo(info);
+        return NULL;
+    }
+
+    return info;
 }
 
-void monitor_print_balloon(Monitor *mon, const QObject *data)
+void qmp_balloon(int64_t value, Error **errp)
 {
-    QDict *qdict;
-
-    qdict = qobject_to_qdict(data);
-    if (!qdict_haskey(qdict, "actual")) {
+    if (kvm_enabled() && !kvm_has_sync_mmu()) {
+        error_set(errp, QERR_KVM_MISSING_CAP, "synchronous MMU", "balloon");
         return;
     }
-    monitor_printf(mon, "balloon: actual=%" PRId64,
-                   qdict_get_int(qdict, "actual") >> 20);
-    qdict_iter(qdict, print_balloon_stat, mon);
-    monitor_printf(mon, "\n");
-}
 
-/**
- * do_info_balloon(): Balloon information
- *
- * Make an asynchronous request for balloon info.  When the request completes
- * a QDict will be returned according to the following specification:
- *
- * - "actual": current balloon value in bytes
- * The following fields may or may not be present:
- * - "mem_swapped_in": Amount of memory swapped in (bytes)
- * - "mem_swapped_out": Amount of memory swapped out (bytes)
- * - "major_page_faults": Number of major faults
- * - "minor_page_faults": Number of minor faults
- * - "free_mem": Total amount of free and unused memory (bytes)
- * - "total_mem": Total amount of available memory (bytes)
- *
- * Example:
- *
- * { "actual": 1073741824, "mem_swapped_in": 0, "mem_swapped_out": 0,
- *   "major_page_faults": 142, "minor_page_faults": 239245,
- *   "free_mem": 1014185984, "total_mem": 1044668416 }
- */
-int do_info_balloon(Monitor *mon, MonitorCompletion cb, void *opaque)
-{
-    int ret;
-
-    if (kvm_enabled() && !kvm_has_sync_mmu()) {
-        qerror_report(QERR_KVM_MISSING_CAP, "synchronous MMU", "balloon");
-        return -1;
+    if (value <= 0) {
+        error_set(errp, QERR_INVALID_PARAMETER_VALUE, "target", "a size");
+        return;
     }
 
-    ret = qemu_balloon_status(cb, opaque);
-    if (!ret) {
-        qerror_report(QERR_DEVICE_NOT_ACTIVE, "balloon");
-        return -1;
+    if (qemu_balloon(value) == 0) {
+        error_set(errp, QERR_DEVICE_NOT_ACTIVE, "balloon");
     }
-
-    return 0;
-}
-
-/**
- * do_balloon(): Request VM to change its memory allocation
- */
-int do_balloon(Monitor *mon, const QDict *params,
-	       MonitorCompletion cb, void *opaque)
-{
-    int64_t target;
-    int ret;
-
-    if (kvm_enabled() && !kvm_has_sync_mmu()) {
-        qerror_report(QERR_KVM_MISSING_CAP, "synchronous MMU", "balloon");
-        return -1;
-    }
-
-    target = qdict_get_int(params, "value");
-    if (target <= 0) {
-        qerror_report(QERR_INVALID_PARAMETER_VALUE, "target", "a size");
-        return -1;
-    }
-    ret = qemu_balloon(target);
-    if (ret == 0) {
-        qerror_report(QERR_DEVICE_NOT_ACTIVE, "balloon");
-        return -1;
-    }
-
-    cb(opaque, NULL);
-    return 0;
 }

@@ -39,7 +39,7 @@ struct LM32PicState {
 typedef struct LM32PicState LM32PicState;
 
 static LM32PicState *pic;
-void pic_info(Monitor *mon)
+void lm32_do_pic_info(Monitor *mon)
 {
     if (pic == NULL) {
         return;
@@ -49,7 +49,7 @@ void pic_info(Monitor *mon)
             pic->im, pic->ip, pic->irq_state);
 }
 
-void irq_info(Monitor *mon)
+void lm32_irq_info(Monitor *mon)
 {
     int i;
     uint32_t count;
@@ -174,17 +174,26 @@ static const VMStateDescription vmstate_lm32_pic = {
     }
 };
 
-static SysBusDeviceInfo lm32_pic_info = {
-    .init = lm32_pic_init,
-    .qdev.name  = "lm32-pic",
-    .qdev.size  = sizeof(LM32PicState),
-    .qdev.vmsd  = &vmstate_lm32_pic,
-    .qdev.reset = pic_reset,
-};
-
-static void lm32_pic_register(void)
+static void lm32_pic_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&lm32_pic_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = lm32_pic_init;
+    dc->reset = pic_reset;
+    dc->vmsd = &vmstate_lm32_pic;
 }
 
-device_init(lm32_pic_register)
+static TypeInfo lm32_pic_info = {
+    .name          = "lm32-pic",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(LM32PicState),
+    .class_init    = lm32_pic_class_init,
+};
+
+static void lm32_pic_register_types(void)
+{
+    type_register_static(&lm32_pic_info);
+}
+
+type_init(lm32_pic_register_types)

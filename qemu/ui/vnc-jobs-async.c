@@ -28,6 +28,7 @@
 
 #include "vnc.h"
 #include "vnc-jobs.h"
+#include "qemu_socket.h"
 
 /*
  * Locking:
@@ -77,7 +78,7 @@ static void vnc_unlock_queue(VncJobQueue *queue)
 
 VncJob *vnc_job_new(VncState *vs)
 {
-    VncJob *job = qemu_mallocz(sizeof(VncJob));
+    VncJob *job = g_malloc0(sizeof(VncJob));
 
     job->vs = vs;
     vnc_lock_queue(queue);
@@ -88,7 +89,7 @@ VncJob *vnc_job_new(VncState *vs)
 
 int vnc_job_add_rect(VncJob *job, int x, int y, int w, int h)
 {
-    VncRectEntry *entry = qemu_mallocz(sizeof(VncRectEntry));
+    VncRectEntry *entry = g_malloc0(sizeof(VncRectEntry));
 
     entry->rect.x = x;
     entry->rect.y = y;
@@ -105,7 +106,7 @@ void vnc_job_push(VncJob *job)
 {
     vnc_lock_queue(queue);
     if (queue->exit || QLIST_EMPTY(&job->rectangles)) {
-        qemu_free(job);
+        g_free(job);
     } else {
         QTAILQ_INSERT_TAIL(&queue->jobs, job, next);
         qemu_cond_broadcast(&queue->cond);
@@ -155,6 +156,24 @@ void vnc_jobs_join(VncState *vs)
         qemu_cond_wait(&queue->cond, &queue->mutex);
     }
     vnc_unlock_queue(queue);
+    vnc_jobs_consume_buffer(vs);
+}
+
+void vnc_jobs_consume_buffer(VncState *vs)
+{
+    bool flush;
+
+    vnc_lock_output(vs);
+    if (vs->jobs_buffer.offset) {
+        vnc_write(vs, vs->jobs_buffer.buffer, vs->jobs_buffer.offset);
+        buffer_reset(&vs->jobs_buffer);
+    }
+    flush = vs->csock != -1 && vs->abort != true;
+    vnc_unlock_output(vs);
+
+    if (flush) {
+      vnc_flush(vs);
+    }
 }
 
 /*
@@ -197,7 +216,6 @@ static int vnc_worker_thread_loop(VncJobQueue *queue)
     VncState vs;
     int n_rectangles;
     int saved_offset;
-    bool flush;
 
     vnc_lock_queue(queue);
     while (QTAILQ_EMPTY(&queue->jobs) && !queue->exit) {
@@ -213,6 +231,7 @@ static int vnc_worker_thread_loop(VncJobQueue *queue)
 
     vnc_lock_output(job->vs);
     if (job->vs->csock == -1 || job->vs->abort == true) {
+        vnc_unlock_output(job->vs);
         goto disconnected;
     }
     vnc_unlock_output(job->vs);
@@ -246,7 +265,7 @@ static int vnc_worker_thread_loop(VncJobQueue *queue)
         if (n >= 0) {
             n_rectangles += n;
         }
-        qemu_free(entry);
+        g_free(entry);
     }
     vnc_unlock_display(job->vs->vd);
 
@@ -254,35 +273,30 @@ static int vnc_worker_thread_loop(VncJobQueue *queue)
     vs.output.buffer[saved_offset] = (n_rectangles >> 8) & 0xFF;
     vs.output.buffer[saved_offset + 1] = n_rectangles & 0xFF;
 
-    /* Switch back buffers */
     vnc_lock_output(job->vs);
-    if (job->vs->csock == -1) {
-        goto disconnected;
+    if (job->vs->csock != -1) {
+        buffer_reserve(&job->vs->jobs_buffer, vs.output.offset);
+        buffer_append(&job->vs->jobs_buffer, vs.output.buffer,
+                      vs.output.offset);
+        /* Copy persistent encoding data */
+        vnc_async_encoding_end(job->vs, &vs);
+
+	qemu_bh_schedule(job->vs->bh);
     }
-
-    vnc_write(job->vs, vs.output.buffer, vs.output.offset);
-
-disconnected:
-    /* Copy persistent encoding data */
-    vnc_async_encoding_end(job->vs, &vs);
-    flush = (job->vs->csock != -1 && job->vs->abort != true);
     vnc_unlock_output(job->vs);
 
-    if (flush) {
-        vnc_flush(job->vs);
-    }
-
+disconnected:
     vnc_lock_queue(queue);
     QTAILQ_REMOVE(&queue->jobs, job, next);
     vnc_unlock_queue(queue);
     qemu_cond_broadcast(&queue->cond);
-    qemu_free(job);
+    g_free(job);
     return 0;
 }
 
 static VncJobQueue *vnc_queue_init(void)
 {
-    VncJobQueue *queue = qemu_mallocz(sizeof(VncJobQueue));
+    VncJobQueue *queue = g_malloc0(sizeof(VncJobQueue));
 
     qemu_cond_init(&queue->cond);
     qemu_mutex_init(&queue->mutex);
@@ -295,7 +309,7 @@ static void vnc_queue_clear(VncJobQueue *q)
     qemu_cond_destroy(&queue->cond);
     qemu_mutex_destroy(&queue->mutex);
     buffer_free(&queue->buffer);
-    qemu_free(q);
+    g_free(q);
     queue = NULL; /* Unset global queue */
 }
 
@@ -318,7 +332,7 @@ void vnc_start_worker_thread(void)
         return ;
 
     q = vnc_queue_init();
-    qemu_thread_create(&q->thread, vnc_worker_thread, q);
+    qemu_thread_create(&q->thread, vnc_worker_thread, q, QEMU_THREAD_DETACHED);
     queue = q; /* Set global queue */
 }
 

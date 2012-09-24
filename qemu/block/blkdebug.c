@@ -214,7 +214,7 @@ static int add_rule(QemuOpts *opts, void *opaque)
     }
 
     /* Set attributes common for all actions */
-    rule = qemu_mallocz(sizeof(*rule));
+    rule = g_malloc0(sizeof(*rule));
     *rule = (struct BlkdebugRule) {
         .event  = event,
         .action = d->action,
@@ -292,10 +292,10 @@ static int blkdebug_open(BlockDriverState *bs, const char *filename, int flags)
         return -EINVAL;
     }
 
-    config = strdup(filename);
+    config = g_strdup(filename);
     config[c - filename] = '\0';
     ret = read_config(s, config);
-    free(config);
+    g_free(config);
     if (ret < 0) {
         return ret;
     }
@@ -392,20 +392,9 @@ static void blkdebug_close(BlockDriverState *bs)
     for (i = 0; i < BLKDBG_EVENT_MAX; i++) {
         QLIST_FOREACH_SAFE(rule, &s->rules[i], next, next) {
             QLIST_REMOVE(rule, next);
-            qemu_free(rule);
+            g_free(rule);
         }
     }
-}
-
-static int blkdebug_flush(BlockDriverState *bs)
-{
-    return bdrv_flush(bs->file);
-}
-
-static BlockDriverAIOCB *blkdebug_aio_flush(BlockDriverState *bs,
-    BlockDriverCompletionFunc *cb, void *opaque)
-{
-    return bdrv_aio_flush(bs->file, cb, opaque);
 }
 
 static void process_rule(BlockDriverState *bs, struct BlkdebugRule *rule,
@@ -454,11 +443,9 @@ static BlockDriver bdrv_blkdebug = {
 
     .bdrv_file_open     = blkdebug_open,
     .bdrv_close         = blkdebug_close,
-    .bdrv_flush         = blkdebug_flush,
 
     .bdrv_aio_readv     = blkdebug_aio_readv,
     .bdrv_aio_writev    = blkdebug_aio_writev,
-    .bdrv_aio_flush     = blkdebug_aio_flush,
 
     .bdrv_debug_event   = blkdebug_debug_event,
 };

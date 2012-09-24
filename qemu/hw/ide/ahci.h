@@ -24,7 +24,7 @@
 #ifndef HW_IDE_AHCI_H
 #define HW_IDE_AHCI_H
 
-#define AHCI_PCI_BAR              5
+#define AHCI_MEM_BAR_SIZE         0x1000
 #define AHCI_MAX_PORTS            32
 #define AHCI_MAX_SG               168 /* hardware max is 64K */
 #define AHCI_DMA_BOUNDARY         0xffffffff
@@ -212,6 +212,10 @@
 #define RES_FIS_SDBFIS                     0x58
 #define RES_FIS_UFIS                       0x60
 
+#define SATA_CAP_SIZE           0x8
+#define SATA_CAP_REV            0x2
+#define SATA_CAP_BAR            0x4
+
 typedef struct AHCIControlRegs {
     uint32_t    cap;
     uint32_t    ghc;
@@ -244,13 +248,13 @@ typedef struct AHCICmdHdr {
     uint32_t    status;
     uint64_t    tbl_addr;
     uint32_t    reserved[4];
-} __attribute__ ((packed)) AHCICmdHdr;
+} QEMU_PACKED AHCICmdHdr;
 
 typedef struct AHCI_SG {
     uint64_t    addr;
     uint32_t    reserved;
     uint32_t    flags_size;
-} __attribute__ ((packed)) AHCI_SG;
+} QEMU_PACKED AHCI_SG;
 
 typedef struct AHCIDevice AHCIDevice;
 
@@ -258,7 +262,7 @@ typedef struct NCQTransferState {
     AHCIDevice *drive;
     BlockDriverAIOCB *aiocb;
     QEMUSGList sglist;
-    int is_read;
+    BlockAcctCookie acct;
     uint16_t sector_count;
     uint64_t lba;
     uint8_t tag;
@@ -289,7 +293,10 @@ struct AHCIDevice {
 typedef struct AHCIState {
     AHCIDevice *dev;
     AHCIControlRegs control_regs;
-    int mem;
+    MemoryRegion mem;
+    MemoryRegion idp;       /* Index-Data Pair I/O port space */
+    unsigned idp_offset;    /* Offset of index in I/O port space */
+    uint32_t idp_index;     /* Current IDP index */
     int ports;
     qemu_irq irq;
 } AHCIState;
@@ -320,7 +327,7 @@ typedef struct NCQFrame {
     uint8_t reserved8;
     uint8_t reserved9;
     uint8_t reserved10;
-} __attribute__ ((packed)) NCQFrame;
+} QEMU_PACKED NCQFrame;
 
 void ahci_init(AHCIState *s, DeviceState *qdev, int ports);
 void ahci_uninit(AHCIState *s);

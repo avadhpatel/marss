@@ -27,6 +27,7 @@
 
 #include "ioport.h"
 #include "trace.h"
+#include "memory.h"
 
 /***********************************************************/
 /* IO Port */
@@ -51,6 +52,7 @@
 static void *ioport_opaque[MAX_IOPORTS];
 static IOPortReadFunc *ioport_read_table[3][MAX_IOPORTS];
 static IOPortWriteFunc *ioport_write_table[3][MAX_IOPORTS];
+static IOPortDestructor *ioport_destructor_table[MAX_IOPORTS];
 
 static IOPortReadFunc default_ioport_readb, default_ioport_readw, default_ioport_readl;
 static IOPortWriteFunc default_ioport_writeb, default_ioport_writew, default_ioport_writel;
@@ -146,7 +148,7 @@ int register_ioport_read(pio_addr_t start, int length, int size,
         hw_error("register_ioport_read: invalid size");
         return -1;
     }
-    for(i = start; i < start + length; i += size) {
+    for(i = start; i < start + length; ++i) {
         ioport_read_table[bsize][i] = func;
         if (ioport_opaque[i] != NULL && ioport_opaque[i] != opaque)
             hw_error("register_ioport_read: invalid opaque for address 0x%x",
@@ -166,7 +168,7 @@ int register_ioport_write(pio_addr_t start, int length, int size,
         hw_error("register_ioport_write: invalid size");
         return -1;
     }
-    for(i = start; i < start + length; i += size) {
+    for(i = start; i < start + length; ++i) {
         ioport_write_table[bsize][i] = func;
         if (ioport_opaque[i] != NULL && ioport_opaque[i] != opaque)
             hw_error("register_ioport_write: invalid opaque for address 0x%x",
@@ -224,6 +226,15 @@ static void ioport_writel_thunk(void *opaque, uint32_t addr, uint32_t data)
     ioport->ops->write(ioport, addr - ioport->base, 4, data);
 }
 
+static void iorange_destructor_thunk(void *opaque)
+{
+    IORange *iorange = opaque;
+
+    if (iorange->ops->destructor) {
+        iorange->ops->destructor(iorange);
+    }
+}
+
 void ioport_register(IORange *ioport)
 {
     register_ioport_read(ioport->base, ioport->len, 1,
@@ -238,12 +249,17 @@ void ioport_register(IORange *ioport)
                           ioport_writew_thunk, ioport);
     register_ioport_write(ioport->base, ioport->len, 4,
                           ioport_writel_thunk, ioport);
+    ioport_destructor_table[ioport->base] = iorange_destructor_thunk;
 }
 
 void isa_unassign_ioport(pio_addr_t start, int length)
 {
     int i;
 
+    if (ioport_destructor_table[start]) {
+        ioport_destructor_table[start](ioport_opaque[start]);
+        ioport_destructor_table[start] = NULL;
+    }
     for(i = start; i < start + length; i++) {
         ioport_read_table[0][i] = NULL;
         ioport_read_table[1][i] = NULL;
@@ -312,4 +328,125 @@ uint32_t cpu_inl(pio_addr_t addr)
     trace_cpu_in(addr, val);
     LOG_IOPORT("inl : %04"FMT_pioaddr" %08"PRIx32"\n", addr, val);
     return val;
+}
+
+void portio_list_init(PortioList *piolist,
+                      const MemoryRegionPortio *callbacks,
+                      void *opaque, const char *name)
+{
+    unsigned n = 0;
+
+    while (callbacks[n].size) {
+        ++n;
+    }
+
+    piolist->ports = callbacks;
+    piolist->nr = 0;
+    piolist->regions = g_new0(MemoryRegion *, n);
+    piolist->aliases = g_new0(MemoryRegion *, n);
+    piolist->address_space = NULL;
+    piolist->opaque = opaque;
+    piolist->name = name;
+}
+
+void portio_list_destroy(PortioList *piolist)
+{
+    g_free(piolist->regions);
+    g_free(piolist->aliases);
+}
+
+static void portio_list_add_1(PortioList *piolist,
+                              const MemoryRegionPortio *pio_init,
+                              unsigned count, unsigned start,
+                              unsigned off_low, unsigned off_high)
+{
+    MemoryRegionPortio *pio;
+    MemoryRegionOps *ops;
+    MemoryRegion *region, *alias;
+    unsigned i;
+
+    /* Copy the sub-list and null-terminate it.  */
+    pio = g_new(MemoryRegionPortio, count + 1);
+    memcpy(pio, pio_init, sizeof(MemoryRegionPortio) * count);
+    memset(pio + count, 0, sizeof(MemoryRegionPortio));
+
+    /* Adjust the offsets to all be zero-based for the region.  */
+    for (i = 0; i < count; ++i) {
+        pio[i].offset -= off_low;
+    }
+
+    ops = g_new0(MemoryRegionOps, 1);
+    ops->old_portio = pio;
+
+    region = g_new(MemoryRegion, 1);
+    alias = g_new(MemoryRegion, 1);
+    /*
+     * Use an alias so that the callback is called with an absolute address,
+     * rather than an offset relative to to start + off_low.
+     */
+    memory_region_init_io(region, ops, piolist->opaque, piolist->name,
+                          INT64_MAX);
+    memory_region_init_alias(alias, piolist->name,
+                             region, start + off_low, off_high - off_low);
+    memory_region_add_subregion(piolist->address_space,
+                                start + off_low, alias);
+    piolist->regions[piolist->nr] = region;
+    piolist->aliases[piolist->nr] = alias;
+    ++piolist->nr;
+}
+
+void portio_list_add(PortioList *piolist,
+                     MemoryRegion *address_space,
+                     uint32_t start)
+{
+    const MemoryRegionPortio *pio, *pio_start = piolist->ports;
+    unsigned int off_low, off_high, off_last, count;
+
+    piolist->address_space = address_space;
+
+    /* Handle the first entry specially.  */
+    off_last = off_low = pio_start->offset;
+    off_high = off_low + pio_start->len;
+    count = 1;
+
+    for (pio = pio_start + 1; pio->size != 0; pio++, count++) {
+        /* All entries must be sorted by offset.  */
+        assert(pio->offset >= off_last);
+        off_last = pio->offset;
+
+        /* If we see a hole, break the region.  */
+        if (off_last > off_high) {
+            portio_list_add_1(piolist, pio_start, count, start, off_low,
+                              off_high);
+            /* ... and start collecting anew.  */
+            pio_start = pio;
+            off_low = off_last;
+            off_high = off_low + pio->len;
+            count = 0;
+        } else if (off_last + pio->len > off_high) {
+            off_high = off_last + pio->len;
+        }
+    }
+
+    /* There will always be an open sub-list.  */
+    portio_list_add_1(piolist, pio_start, count, start, off_low, off_high);
+}
+
+void portio_list_del(PortioList *piolist)
+{
+    MemoryRegion *mr, *alias;
+    unsigned i;
+
+    for (i = 0; i < piolist->nr; ++i) {
+        mr = piolist->regions[i];
+        alias = piolist->aliases[i];
+        memory_region_del_subregion(piolist->address_space, alias);
+        memory_region_destroy(alias);
+        memory_region_destroy(mr);
+        g_free((MemoryRegionOps *)mr->ops);
+        g_free(mr);
+        g_free(alias);
+        piolist->regions[i] = NULL;
+        piolist->aliases[i] = NULL;
+    }
 }

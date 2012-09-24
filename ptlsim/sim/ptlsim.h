@@ -17,7 +17,14 @@
 
 #include <statsBuilder.h>
 
+extern "C" {
+#define class _safe_class
+#define typename _safe_typename
 #include <sysemu.h>
+#undef class
+#undef typename
+};
+
 
 #define INVALID_MFN 0xffffffffffffffffULL
 #define INVALID_PHYSADDR 0xffffffffffffffffULL

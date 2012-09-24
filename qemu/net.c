@@ -34,8 +34,14 @@
 #include "monitor.h"
 #include "qemu-common.h"
 #include "qemu_socket.h"
+#include "qmp-commands.h"
 #include "hw/qdev.h"
 #include "iov.h"
+
+/* Net bridge is currently not supported for W32. */
+#if !defined(_WIN32)
+# define CONFIG_NET_BRIDGE
+#endif
 
 static QTAILQ_HEAD(, VLANState) vlans;
 static QTAILQ_HEAD(, VLANClientState) non_vlan_clients;
@@ -150,12 +156,11 @@ void qemu_macaddr_default_if_unset(MACAddr *macaddr)
 static char *assign_name(VLANClientState *vc1, const char *model)
 {
     VLANState *vlan;
+    VLANClientState *vc;
     char buf[256];
     int id = 0;
 
     QTAILQ_FOREACH(vlan, &vlans, next) {
-        VLANClientState *vc;
-
         QTAILQ_FOREACH(vc, &vlan->clients, next) {
             if (vc != vc1 && strcmp(vc->model, model) == 0) {
                 id++;
@@ -163,9 +168,15 @@ static char *assign_name(VLANClientState *vc1, const char *model)
         }
     }
 
+    QTAILQ_FOREACH(vc, &non_vlan_clients, next) {
+        if (vc != vc1 && strcmp(vc->model, model) == 0) {
+            id++;
+        }
+    }
+
     snprintf(buf, sizeof(buf), "%s.%d", model, id);
 
-    return qemu_strdup(buf);
+    return g_strdup(buf);
 }
 
 static ssize_t qemu_deliver_packet(VLANClientState *sender,
@@ -189,12 +200,12 @@ VLANClientState *qemu_new_net_client(NetClientInfo *info,
 
     assert(info->size >= sizeof(VLANClientState));
 
-    vc = qemu_mallocz(info->size);
+    vc = g_malloc0(info->size);
 
     vc->info = info;
-    vc->model = qemu_strdup(model);
+    vc->model = g_strdup(model);
     if (name) {
-        vc->name = qemu_strdup(name);
+        vc->name = g_strdup(name);
     } else {
         vc->name = assign_name(vc, model);
     }
@@ -263,9 +274,9 @@ static void qemu_free_vlan_client(VLANClientState *vc)
             vc->peer->peer = NULL;
         }
     }
-    qemu_free(vc->name);
-    qemu_free(vc->model);
-    qemu_free(vc);
+    g_free(vc->name);
+    g_free(vc->model);
+    g_free(vc);
 }
 
 void qemu_del_vlan_client(VLANClientState *vc)
@@ -635,7 +646,7 @@ VLANState *qemu_find_vlan(int id, int allocate)
         return NULL;
     }
 
-    vlan = qemu_mallocz(sizeof(VLANState));
+    vlan = g_malloc0(sizeof(VLANState));
     vlan->id = id;
     QTAILQ_INIT(&vlan->clients);
 
@@ -653,6 +664,8 @@ VLANClientState *qemu_find_netdev(const char *id)
     VLANClientState *vc;
 
     QTAILQ_FOREACH(vc, &non_vlan_clients, next) {
+        if (vc->info->type == NET_CLIENT_TYPE_NIC)
+            continue;
         if (!strcmp(vc->name, id)) {
             return vc;
         }
@@ -703,7 +716,7 @@ int qemu_find_nic_model(NICInfo *nd, const char * const *models,
     int i;
 
     if (!nd->model)
-        nd->model = qemu_strdup(default_model);
+        nd->model = g_strdup(default_model);
 
     for (i = 0 ; models[i]; i++) {
         if (strcmp(nd->model, models[i]) == 0)
@@ -726,12 +739,7 @@ int net_handle_fd_param(Monitor *mon, const char *param)
             return -1;
         }
     } else {
-        char *endptr = NULL;
-
-        fd = strtol(param, &endptr, 10);
-        if (*endptr || (fd == 0 && param == endptr)) {
-            return -1;
-        }
+        fd = qemu_parse_fd(param);
     }
 
     return fd;
@@ -767,13 +775,13 @@ static int net_init_nic(QemuOpts *opts,
         nd->vlan = vlan;
     }
     if (name) {
-        nd->name = qemu_strdup(name);
+        nd->name = g_strdup(name);
     }
     if (qemu_opt_get(opts, "model")) {
-        nd->model = qemu_strdup(qemu_opt_get(opts, "model"));
+        nd->model = g_strdup(qemu_opt_get(opts, "model"));
     }
     if (qemu_opt_get(opts, "addr")) {
-        nd->devaddr = qemu_strdup(qemu_opt_get(opts, "addr"));
+        nd->devaddr = g_strdup(qemu_opt_get(opts, "addr"));
     }
 
     if (qemu_opt_get(opts, "macaddr") &&
@@ -949,6 +957,12 @@ static const struct {
                 .type = QEMU_OPT_STRING,
                 .help = "script to shut down the interface",
             }, {
+#ifdef CONFIG_NET_BRIDGE
+                .name = "helper",
+                .type = QEMU_OPT_STRING,
+                .help = "command to execute to configure bridge",
+            }, {
+#endif
                 .name = "sndbuf",
                 .type = QEMU_OPT_SIZE,
                 .help = "send buffer limit"
@@ -997,7 +1011,11 @@ static const struct {
             }, {
                 .name = "localaddr",
                 .type = QEMU_OPT_STRING,
-                .help = "source address for multicast packets",
+                .help = "source address and port for multicast and udp packets",
+            }, {
+                .name = "udp",
+                .type = QEMU_OPT_STRING,
+                .help = "UDP unicast address and port number",
             },
             { /* end of list */ }
         },
@@ -1046,6 +1064,25 @@ static const struct {
             { /* end of list */ }
         },
     },
+#ifdef CONFIG_NET_BRIDGE
+    [NET_CLIENT_TYPE_BRIDGE] = {
+        .type = "bridge",
+        .init = net_init_bridge,
+        .desc = {
+            NET_COMMON_PARAMS_DESC,
+            {
+                .name = "br",
+                .type = QEMU_OPT_STRING,
+                .help = "bridge name",
+            }, {
+                .name = "helper",
+                .type = QEMU_OPT_STRING,
+                .help = "command to execute to configure bridge",
+            },
+            { /* end of list */ }
+        },
+    },
+#endif /* CONFIG_NET_BRIDGE */
 };
 
 int net_client_init(Monitor *mon, QemuOpts *opts, int is_netdev)
@@ -1062,6 +1099,9 @@ int net_client_init(Monitor *mon, QemuOpts *opts, int is_netdev)
 
     if (is_netdev) {
         if (strcmp(type, "tap") != 0 &&
+#ifdef CONFIG_NET_BRIDGE
+            strcmp(type, "bridge") != 0 &&
+#endif
 #ifdef CONFIG_SLIRP
             strcmp(type, "user") != 0 &&
 #endif
@@ -1132,6 +1172,9 @@ static int net_host_check_device(const char *device)
 {
     int i;
     const char *valid_param_list[] = { "tap", "socket", "dump"
+#ifdef CONFIG_NET_BRIDGE
+                                       , "bridge"
+#endif
 #ifdef CONFIG_SLIRP
                                        ,"user"
 #endif
@@ -1212,7 +1255,7 @@ int do_netdev_del(Monitor *mon, const QDict *qdict, QObject **ret_data)
     VLANClientState *vc;
 
     vc = qemu_find_netdev(id);
-    if (!vc || vc->info->type == NET_CLIENT_TYPE_NIC) {
+    if (!vc) {
         qerror_report(QERR_DEVICE_NOT_FOUND, id);
         return -1;
     }
@@ -1256,12 +1299,10 @@ void do_info_network(Monitor *mon)
     }
 }
 
-int do_set_link(Monitor *mon, const QDict *qdict, QObject **ret_data)
+void qmp_set_link(const char *name, bool up, Error **errp)
 {
     VLANState *vlan;
     VLANClientState *vc = NULL;
-    const char *name = qdict_get_str(qdict, "name");
-    int up = qdict_get_bool(qdict, "up");
 
     QTAILQ_FOREACH(vlan, &vlans, next) {
         QTAILQ_FOREACH(vc, &vlan->clients, next) {
@@ -1270,12 +1311,16 @@ int do_set_link(Monitor *mon, const QDict *qdict, QObject **ret_data)
             }
         }
     }
-    vc = qemu_find_netdev(name);
+    QTAILQ_FOREACH(vc, &non_vlan_clients, next) {
+        if (!strcmp(vc->name, name)) {
+            goto done;
+        }
+    }
 done:
 
     if (!vc) {
-        qerror_report(QERR_DEVICE_NOT_FOUND, name);
-        return -1;
+        error_set(errp, QERR_DEVICE_NOT_FOUND, name);
+        return;
     }
 
     vc->link_down = !up;
@@ -1294,7 +1339,6 @@ done:
     if (vc->peer && vc->peer->info->link_status_changed) {
         vc->peer->info->link_status_changed(vc->peer);
     }
-    return 0;
 }
 
 void net_cleanup(void)
@@ -1430,4 +1474,27 @@ int net_client_parse(QemuOptsList *opts_list, const char *optarg)
 
     default_net = 0;
     return 0;
+}
+
+/* From FreeBSD */
+/* XXX: optimize */
+unsigned compute_mcast_idx(const uint8_t *ep)
+{
+    uint32_t crc;
+    int carry, i, j;
+    uint8_t b;
+
+    crc = 0xffffffff;
+    for (i = 0; i < 6; i++) {
+        b = *ep++;
+        for (j = 0; j < 8; j++) {
+            carry = ((crc & 0x80000000L) ? 1 : 0) ^ (b & 0x01);
+            crc <<= 1;
+            b >>= 1;
+            if (carry) {
+                crc = ((crc ^ POLYNOMIAL) | carry);
+            }
+        }
+    }
+    return crc >> 26;
 }

@@ -42,7 +42,7 @@ bool OooCore::icache_wakeup(void *arg) {
                 && thread->waiting_for_icache_fill
                 && thread->waiting_for_icache_fill_physaddr ==
                 floor(physaddr, ICACHE_FETCH_GRANULARITY)) {
-            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
+            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.env->cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
             thread->waiting_for_icache_fill = 0;
             thread->waiting_for_icache_fill_physaddr = 0;
             if unlikely (thread->itlb_walk_level > 0) {
@@ -50,7 +50,7 @@ bool OooCore::icache_wakeup(void *arg) {
                 thread->itlbwalk();
             }
         }else{
-            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr,
+            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.env->cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr,
                 " delivered ", (void*) physaddr,endl;
         }
     }
@@ -239,7 +239,7 @@ void ThreadContext::flush_pipeline() {
         }
     }
 
-    reset_fetch_unit(ctx.eip);
+    reset_fetch_unit(ctx.env->eip);
     rob_states.reset();
 
     ROB.reset();
@@ -279,7 +279,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
     }
 
     if(logable(10))
-        ptl_logfile << "realrip:", hexstring(realrip, 48), " csbase:", ctx.segs[R_CS].base,
+        ptl_logfile << "realrip:", hexstring(realrip, 48), " csbase:", ctx.env->segs[R_CS].base,
                     endl;
     fetchrip = realrip;
     fetchrip.update(ctx);
@@ -300,8 +300,8 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
 void ThreadContext::invalidate_smc() {
     if unlikely (smc_invalidate_pending) {
         if (logable(5)) ptl_logfile << "SMC invalidate pending on ", smc_invalidate_rvp, endl;
-        bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnlo, INVALIDATE_REASON_SMC);
-        if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
+        bbcache[ctx.env->cpu_index].invalidate_page(smc_invalidate_rvp.mfnlo, INVALIDATE_REASON_SMC);
+        if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache[ctx.env->cpu_index].invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
         smc_invalidate_pending = 0;
     }
 }
@@ -410,7 +410,7 @@ void ThreadContext::redispatch_deadlock_recovery() {
     if (logable(3)) ptl_logfile << " redispatch_deadlock_recovery, flush_pipeline.",endl;
     flush_pipeline();
     last_commit_at_cycle = previous_last_commit_at_cycle; /// so we can exit after no commit after deadlock recovery a few times in a roll
-    ptl_logfile << "[vcpu ", ctx.cpu_index, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
+    ptl_logfile << "[vcpu ", ctx.env->cpu_index, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
     /*
     //
     // This is a more selective scheme than the full pipeline flush.
@@ -517,7 +517,7 @@ bool ThreadContext::fetch() {
 
             fetchrip.update(ctx);
             if(fetch_or_translate_basic_block(fetchrip) == NULL) {
-                if(fetchrip.rip == ctx.eip) {
+                if(fetchrip.rip == ctx.env->eip) {
                     if(logable(10)) ptl_logfile << "Exception in Code page\n";
                     return false;
                 }
@@ -722,12 +722,12 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
         current_basic_block = NULL;
     }
 
-    BasicBlock* bb = bbcache[ctx.cpu_index](rvp);
+    BasicBlock* bb = bbcache[ctx.env->cpu_index](rvp);
 
     if likely (bb) {
         current_basic_block = bb;
     } else {
-        current_basic_block = bbcache[ctx.cpu_index].translate(ctx, rvp);
+        current_basic_block = bbcache[ctx.env->cpu_index].translate(ctx, rvp);
         if (current_basic_block == NULL) return NULL;
         assert(current_basic_block);
     }
@@ -1578,19 +1578,19 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
         W64 lockaddr = queued_mem_lock_release_list[i];
 
         bool lock = core.memoryHierarchy->probe_lock(lockaddr,
-                ctx.cpu_index);
+                ctx.env->cpu_index);
 
         if (!lock) {
-            ptl_logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock was ", lock, endl;
+            ptl_logfile << "ERROR: thread ", ctx.env->cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock was ", lock, endl;
             assert(false);
         }
 
         if(logable(8)) {
             ptl_logfile << "Releasing mem lock of addr: ", lockaddr,
-                        " from cpu: ", ctx.cpu_index, endl;
+                        " from cpu: ", ctx.env->cpu_index, endl;
         }
 
-        core.memoryHierarchy->invalidate_lock(lockaddr, ctx.cpu_index);
+        core.memoryHierarchy->invalidate_lock(lockaddr, ctx.env->cpu_index);
     }
 
     queued_mem_lock_release_count = start;
@@ -1710,7 +1710,7 @@ int ReorderBufferEntry::commit() {
             cant_commit_subrob = &subrob;
         }
 
-        if unlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.cr[0] & CR0_EM_MASK)))) {
+        if unlikely ((subrob.uop.is_sse|subrob.uop.is_x87) && ((ctx.env->cr[0] & CR0_TS_MASK) | (subrob.uop.is_x87 & (ctx.env->cr[0] & CR0_EM_MASK)))) {
             subrob.physreg->data = EXCEPTION_FloatingPointNotAvailable;
             subrob.physreg->flags = FLAG_INV;
             if unlikely (subrob.lsq) subrob.lsq->invalid = 1;
@@ -1728,7 +1728,7 @@ int ReorderBufferEntry::commit() {
             // the first exception in uop order.
             //
             ctx.exception = LO32(subrob.physreg->data);
-            ctx.error_code = HI32(subrob.physreg->data);
+            ctx.env->error_code = HI32(subrob.physreg->data);
 
             // Capture the faulting virtual address for page faults
             if ((ctx.exception == EXCEPTION_PageFaultOnRead) |
@@ -1822,7 +1822,7 @@ int ReorderBufferEntry::commit() {
 
         // See notes in handle_exception():
         if likely (isclass(uop.opcode, OPCLASS_CHECK) & (ctx.exception == EXCEPTION_SkipBlock)) {
-            thread.chk_recovery_rip = ctx.eip + uop.bytes;
+            thread.chk_recovery_rip = ctx.env->eip + uop.bytes;
             thread.thread_stats.commit.result.skipblock++;
         } else {
             thread.thread_stats.commit.result.exception++;
@@ -1882,7 +1882,7 @@ int ReorderBufferEntry::commit() {
     if unlikely (uop.opcode == OP_st) {
         W64 lockaddr = lsq->physaddr << 3;
         bool lock = core.memoryHierarchy->probe_lock(lockaddr,
-                thread.ctx.cpu_index);
+                thread.ctx.env->cpu_index);
 
         if unlikely (!lock) {
             thread.thread_stats.commit.result.memlocked++;
@@ -1976,7 +1976,7 @@ int ReorderBufferEntry::commit() {
     if likely (uop.som) assert(ctx.get_cs_eip() == uop.rip);
 
     if unlikely (!ctx.kernel_mode && config.checker_enabled && uop.som) {
-        setup_checker(ctx.cpu_index);
+        setup_checker(ctx.env->cpu_index);
         reset_checker_stores();
     }
 
@@ -2027,10 +2027,10 @@ int ReorderBufferEntry::commit() {
                 thread.thread_stats.issue.result.branch_mispredict++;
             }
             assert(physreg->data);
-            ctx.eip = physreg->data;
+            ctx.env->eip = physreg->data;
         } else {
             assert(!isbranch(uop.opcode));
-            ctx.eip += uop.bytes;
+            ctx.env->eip += uop.bytes;
         }
     }
 
@@ -2065,9 +2065,9 @@ int ReorderBufferEntry::commit() {
     if unlikely (uop.eom && !ctx.kernel_mode && config.checker_enabled) {
         bool mmio = (lsq != NULL) ? lsq->mmio : false;
         if likely (!isclass(uop.opcode, OPCLASS_BARRIER) &&
-                uop.rip.rip != ctx.eip && !mmio) {
+                uop.rip.rip != ctx.env->eip && !mmio) {
             execute_checker();
-            compare_checker(ctx.cpu_index, setflags_to_x86_flags[uop.setflags]);
+            compare_checker(ctx.env->cpu_index, setflags_to_x86_flags[uop.setflags]);
         } else {
             clear_checker();
         }
@@ -2214,7 +2214,7 @@ int ReorderBufferEntry::commit() {
     }
 
     if unlikely (uop_is_eom & thread.stop_at_next_eom) {
-        ptl_logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_insns_committed, " commits)", endl;
+        ptl_logfile << "[vcpu ", thread.ctx.env->cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_insns_committed, " commits)", endl;
         return COMMIT_RESULT_STOP;
     }
 

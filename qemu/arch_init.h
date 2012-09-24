@@ -17,6 +17,7 @@ enum {
     QEMU_ARCH_S390X = 512,
     QEMU_ARCH_SH4 = 1024,
     QEMU_ARCH_SPARC = 2048,
+    QEMU_ARCH_XTENSA = 4096,
 };
 
 extern const uint32_t arch_type;
@@ -26,7 +27,7 @@ void do_acpitable_option(const char *optarg);
 void do_smbios_option(const char *optarg);
 void cpudef_init(void);
 int audio_available(void);
-void audio_init(qemu_irq *isa_pic, PCIBus *pci_bus);
+void audio_init(ISABus *isa_bus, PCIBus *pci_bus);
 int tcg_available(void);
 int kvm_available(void);
 int xen_available(void);

@@ -20,8 +20,8 @@ except:
 # Setup the environment
 # env = Environment()
 
-env['CPPPATH'] = []
 env['CPPPATH'].append(qemu_dir)
+env['CPPPATH'].append("%s/%s" % (qemu_dir, "include"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "target-i386"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "fpu"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "x86_64-softmmu"))

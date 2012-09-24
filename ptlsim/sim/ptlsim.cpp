@@ -810,7 +810,7 @@ void ptl_reconfigure(const char* config_str) {
 		return;
 	}
 
-    argv = (char*)(qemu_malloc((strlen(config_str)+1) * sizeof(char)));
+    argv = (char*)(g_malloc((strlen(config_str)+1) * sizeof(char)));
     strcpy(argv, config_str);
     argv[strlen(config_str)] = '\0';
 
@@ -833,14 +833,14 @@ void ptl_reconfigure(const char* config_str) {
      */
 	curr_ptl_machine = NULL;
 
-    qemu_free(argv);
+    g_free(argv);
 }
 
 extern "C" void ptl_machine_configure(const char* config_str_) {
 
     static bool ptl_machine_configured=false;
 
-    char *config_str = (char*)qemu_mallocz(strlen(config_str_) + 1);
+    char *config_str = (char*)g_malloc0(strlen(config_str_) + 1);
     pstrcpy(config_str, strlen(config_str_)+1, config_str_);
 
     // Setup the configuration
@@ -888,7 +888,7 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
         }
     }
 
-    qemu_free(config_str);
+    g_free(config_str);
 
     ptl_machine.disable_dump();
 
@@ -915,6 +915,19 @@ CPUX86State* ptl_create_new_context() {
 	return (CPUX86State*)(ctx);
 }
 
+extern "C"
+void ptl_set_new_context(CPUX86State* env) {
+    static int ctx_counter = 0;
+	Context* ctx = new Context();
+	ctx->init(env);
+	ptl_contexts[ctx_counter] = ctx;
+	ctx_counter++;
+
+	if (config.simpoint_file.set()) {
+		init_simpoints();
+	}
+}
+
 /* Checker */
 Context* checker_context = NULL;
 
@@ -935,9 +948,9 @@ void setup_checker(W8 contextid) {
 
     checker_context->setup_ptlsim_switch();
 
-    if(checker_context->kernel_mode || checker_context->eip == 0) {
+    if(checker_context->kernel_mode || checker_context->env->eip == 0) {
       in_simulation = 0;
-      tb_flush(ptl_contexts[0]);
+      tb_flush(ptl_contexts[0]->env);
       in_simulation = 1;
       memset(checker_context, 0, sizeof(Context));
 
@@ -960,7 +973,7 @@ void clear_checker() {
 }
 
 bool is_checker_valid() {
-    return (checker_context->eip == 0 ? false : true);
+    return (checker_context->env->eip == 0 ? false : true);
 }
 
 void execute_checker() {
@@ -975,25 +988,25 @@ void execute_checker() {
     /* We need to load eflag's condition flags manually */
     // load_eflags(checker_context->reg_flags, FLAG_ZAPS|FLAG_CF|FLAG_OF);
 
-    checker_context->singlestep_enabled = SSTEP_ENABLE;
+    checker_context->env->singlestep_enabled = SSTEP_ENABLE;
 
     in_simulation = 0;
 
-    checker_context->interrupt_request = 0;
-    checker_context->handle_interrupt = 0;
-    checker_context->exception_index = 0;
-    W64 old_eip = checker_context->eip;
-    int old_exception_index = checker_context->exception_index;
+    checker_context->env->interrupt_request = 0;
+    checker_context->env->handle_interrupt = 0;
+    checker_context->env->exception_index = 0;
+    W64 old_eip = checker_context->env->eip;
+    int old_exception_index = checker_context->env->exception_index;
     int ret = 0;
-    while(checker_context->eip == old_eip)
-        ret = cpu_exec((CPUX86State*)checker_context);
+    while(checker_context->env->eip == old_eip)
+        ret = cpu_exec(checker_context->env);
 
-    checker_context->exception_index = old_exception_index;
+    checker_context->env->exception_index = old_exception_index;
 
     checker_context->setup_ptlsim_switch();
 
-    if(checker_context->interrupt_request != 0)
-        ptl_contexts[0]->interrupt_request = checker_context->interrupt_request;
+    if(checker_context->env->interrupt_request != 0)
+        ptl_contexts[0]->env->interrupt_request = checker_context->env->interrupt_request;
 
     if(checker_context->kernel_mode) {
       // TODO : currently we skip the context switch from checker
@@ -1006,32 +1019,32 @@ void execute_checker() {
 
     if(logable(4)) {
         ptl_logfile << "Checker execution ret value: " << ret << endl;
-        ptl_logfile << "Checker flags: " << (void*)checker_context->eflags << endl;
+        ptl_logfile << "Checker flags: " << (void*)checker_context->env->eflags << endl;
     }
 }
 
 void compare_checker(W8 context_id, W64 flagmask) {
     int ret, ret1, ret_x87;
-    int check_size = (char*)(&(checker_context->eip)) - (char*)(checker_context);
+    int check_size = (char*)(&(checker_context->env->eip)) - (char*)(checker_context->env);
     //ptl_logfile << "check_size: ", check_size, endl;
 
-    if(checker_context->eip == 0) {
+    if(checker_context->env->eip == 0) {
       return;
     }
 
-    ret = memcmp(checker_context, ptl_contexts[context_id], check_size);
+    ret = memcmp(checker_context->env, ptl_contexts[context_id]->env, check_size);
 
     check_size = (sizeof(XMMReg) * 16);
     //ptl_logfile << "check_size: ", check_size, endl;
 
-    ret1 = memcmp(&checker_context->xmm_regs, &ptl_contexts[context_id]->xmm_regs, check_size);
+    ret1 = memcmp(&checker_context->env->xmm_regs, &ptl_contexts[context_id]->env->xmm_regs, check_size);
 
     check_size = (sizeof(FPReg) * 8);
-    ret_x87 = memcmp(&checker_context->fpregs, &ptl_contexts[context_id]->fpregs, check_size);
+    ret_x87 = memcmp(&checker_context->env->fpregs, &ptl_contexts[context_id]->env->fpregs, check_size);
     ret_x87 = 0;
 
     bool fail = false;
-    fail = (checker_context->eip != ptl_contexts[context_id]->eip);
+    fail = (checker_context->env->eip != ptl_contexts[context_id]->env->eip);
 
     //W64 flag1 = checker_context->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
     //W64 flag2 = ptl_contexts[context_id]->reg_flags & flagmask & ~(FLAG_INV | FLAG_AF | FLAG_PF);
@@ -1109,8 +1122,8 @@ void write_mongo_stats() {
     foreach(i, 3) {
         Stats *stats_;
 
-        bb = (bson_buffer*)qemu_mallocz(sizeof(bson_buffer));
-        bout = (bson*)qemu_mallocz(sizeof(bson));
+        bb = (bson_buffer*)g_malloc0(sizeof(bson_buffer));
+        bout = (bson*)g_malloc0(sizeof(bson));
 
         bson_buffer_init(bb);
         bson_append_new_oid(bb, "_id");
@@ -1127,8 +1140,8 @@ void write_mongo_stats() {
         mongo_insert(conn, ns, bout);
         bson_destroy(bout);
 
-        qemu_free(bb);
-        qemu_free(bout);
+        g_free(bb);
+        g_free(bout);
     }
 
     /* Close the connection with MongoDB */
@@ -1348,7 +1361,7 @@ extern "C" uint8_t ptl_simulate() {
     if(logable(1)) {
 		ptl_logfile << "Starting simulation at rip: ";
 		foreach(i, contextcount) {
-			ptl_logfile  << "[cpu ", i, "]", (void*)(contextof(i).eip), " ";
+			ptl_logfile  << "[cpu ", i, "]", (void*)(contextof(i).env->eip), " ";
 		}
         ptl_logfile << " sim_cycle: ", sim_cycle;
 		ptl_logfile << endl;
@@ -1368,7 +1381,7 @@ extern "C" uint8_t ptl_simulate() {
 
 	if (!machine->stopped) {
         if(logable(1)) {
-			ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).exception_index,
+			ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).env->exception_index,
 						" ex: ", contextof(0).exception, " running: ",
 						contextof(0).running;
             ptl_logfile << " sim_cycle: ", sim_cycle;

@@ -236,7 +236,7 @@ static void readline_hist_add(ReadLineState *rs, const char *cmdline)
 	    new_entry = hist_entry;
 	    /* Put this entry at the end of history */
 	    memmove(&rs->history[idx], &rs->history[idx + 1],
-		    (READLINE_MAX_CMDS - idx + 1) * sizeof(char *));
+		    (READLINE_MAX_CMDS - (idx + 1)) * sizeof(char *));
 	    rs->history[READLINE_MAX_CMDS - 1] = NULL;
 	    for (; idx < READLINE_MAX_CMDS; idx++) {
 		if (rs->history[idx] == NULL)
@@ -264,7 +264,7 @@ static void readline_hist_add(ReadLineState *rs, const char *cmdline)
 void readline_add_completion(ReadLineState *rs, const char *str)
 {
     if (rs->nb_completions < READLINE_MAX_COMPLETIONS) {
-        rs->completions[rs->nb_completions++] = qemu_strdup(str);
+        rs->completions[rs->nb_completions++] = g_strdup(str);
     }
 }
 
@@ -281,11 +281,11 @@ static void readline_completion(ReadLineState *rs)
 
     rs->nb_completions = 0;
 
-    cmdline = qemu_malloc(rs->cmd_buf_index + 1);
+    cmdline = g_malloc(rs->cmd_buf_index + 1);
     memcpy(cmdline, rs->cmd_buf, rs->cmd_buf_index);
     cmdline[rs->cmd_buf_index] = '\0';
     rs->completion_finder(cmdline);
-    qemu_free(cmdline);
+    g_free(cmdline);
 
     /* no completion found */
     if (rs->nb_completions <= 0)
@@ -336,6 +336,9 @@ static void readline_completion(ReadLineState *rs)
             }
         }
         readline_show_prompt(rs);
+    }
+    for (i = 0; i < rs->nb_completions; i++) {
+        g_free(rs->completions[i]);
     }
 }
 
@@ -466,7 +469,7 @@ const char *readline_get_history(ReadLineState *rs, unsigned int index)
 ReadLineState *readline_init(Monitor *mon,
                              ReadLineCompletionFunc *completion_finder)
 {
-    ReadLineState *rs = qemu_mallocz(sizeof(*rs));
+    ReadLineState *rs = g_malloc0(sizeof(*rs));
 
     rs->hist_entry = -1;
     rs->mon = mon;

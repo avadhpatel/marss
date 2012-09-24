@@ -15,18 +15,25 @@
 #ifndef QEMU_VIRTIO_PCI_H
 #define QEMU_VIRTIO_PCI_H
 
+#include "virtio-blk.h"
 #include "virtio-net.h"
 #include "virtio-serial.h"
+#include "virtio-scsi.h"
+
+/* Performance improves when virtqueue kick processing is decoupled from the
+ * vcpu thread using ioeventfd for some devices. */
+#define VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT 1
+#define VIRTIO_PCI_FLAG_USE_IOEVENTFD   (1 << VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT)
 
 typedef struct {
     PCIDevice pci_dev;
     VirtIODevice *vdev;
+    MemoryRegion bar;
+    MemoryRegion msix_bar;
     uint32_t flags;
-    uint32_t addr;
     uint32_t class_code;
     uint32_t nvectors;
-    BlockConf block;
-    char *block_serial;
+    VirtIOBlkConf blk;
     NICConf nic;
     uint32_t host_features;
 #ifdef CONFIG_LINUX
@@ -34,11 +41,13 @@ typedef struct {
 #endif
     virtio_serial_conf serial;
     virtio_net_conf net;
+    VirtIOSCSIConf scsi;
     bool ioeventfd_disabled;
     bool ioeventfd_started;
 } VirtIOPCIProxy;
 
 void virtio_init_pci(VirtIOPCIProxy *proxy, VirtIODevice *vdev);
+void virtio_pci_reset(DeviceState *d);
 
 /* Virtio ABI version, if we increment this, we break the guest driver. */
 #define VIRTIO_PCI_ABI_VERSION          0

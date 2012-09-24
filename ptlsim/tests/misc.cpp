@@ -64,17 +64,17 @@ namespace {
         ASSERT_EQ(320, get_simpoint(2));
         ASSERT_EQ(3220, get_simpoint(3));
 
-        set_next_simpoint(&ctx);
-        ASSERT_EQ(10 * config.simpoint_interval, ctx.simpoint_decr);
+        set_next_simpoint(ctx.env);
+        ASSERT_EQ(10 * config.simpoint_interval, ctx.env->simpoint_decr);
 
-        set_next_simpoint(&ctx);
-        ASSERT_EQ(10 * config.simpoint_interval, ctx.simpoint_decr);
+        set_next_simpoint(ctx.env);
+        ASSERT_EQ(10 * config.simpoint_interval, ctx.env->simpoint_decr);
 
-        set_next_simpoint(&ctx);
-        ASSERT_EQ(300 * config.simpoint_interval, ctx.simpoint_decr);
+        set_next_simpoint(ctx.env);
+        ASSERT_EQ(300 * config.simpoint_interval, ctx.env->simpoint_decr);
 
-        set_next_simpoint(&ctx);
-        ASSERT_EQ(2900 * config.simpoint_interval, ctx.simpoint_decr);
+        set_next_simpoint(ctx.env);
+        ASSERT_EQ(2900 * config.simpoint_interval, ctx.env->simpoint_decr);
     }
 
     TEST(Simpoint, ChkName)
@@ -86,12 +86,12 @@ namespace {
         add_simpoint(10, 0);
         add_simpoint(20, 1);
 
-        set_next_simpoint(&ctx);
+        set_next_simpoint(ctx.env);
         name = get_simpoint_chk_name();
         EXPECT_STREQ("simpoint_sp_0", name->buf);
         delete name;
 
-        set_next_simpoint(&ctx);
+        set_next_simpoint(ctx.env);
         name = get_simpoint_chk_name();
         EXPECT_STREQ("simpoint_sp_1", name->buf);
         delete name;
@@ -101,12 +101,12 @@ namespace {
         add_simpoint(20, 0);
         config.simpoint_chk_name = "test";
 
-        set_next_simpoint(&ctx);
+        set_next_simpoint(ctx.env);
         name = get_simpoint_chk_name();
         EXPECT_STREQ("test_sp_1", name->buf);
         delete name;
 
-        set_next_simpoint(&ctx);
+        set_next_simpoint(ctx.env);
         name = get_simpoint_chk_name();
         EXPECT_STREQ("test_sp_0", name->buf);
         delete name;

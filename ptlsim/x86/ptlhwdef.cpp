@@ -294,16 +294,16 @@ const char* sizeshift_names[4] = {
 };
 
 bool Context::check_events() const {
-	if(exit_request)
+	if(env->exit_request || env->stop || env->stopped)
 		return true;
-	if(eflags & IF_MASK)
-		return (interrupt_request > 0);
+	if(env->eflags & IF_MASK)
+		return (env->interrupt_request > 0);
 	return false;
 }
 
 bool Context::is_int_pending() const {
-    if(eflags & IF_MASK)
-        return (interrupt_request > 0);
+    if(env->eflags & IF_MASK)
+        return (env->interrupt_request > 0);
     return false;
 }
 
@@ -314,7 +314,7 @@ bool Context::event_upcall() {
 	// to QEMU to handle the interrupts/exceptions.
 	// So there is no need to send any trigger to QEMU for this via
 	// this function.
-    handle_interrupt = 1;
+    env->handle_interrupt = 1;
 	return true;
 }
 
@@ -698,7 +698,7 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   os << "  Architectural Registers:", endl;
   int i = 0;
   for(i=0; i < CPU_NB_REGS; i++) {
-	  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.regs[i], 64);
+	  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.env->regs[i], 64);
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
   for(; i < 48; i++) {
@@ -706,14 +706,14 @@ ostream& operator <<(ostream& os, const Context& ctx) {
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
   os << "  ", padstring(arch_reg_names[48], -6), " 0x", hexstring(ctx.reg_fptos, 64);
-  os << "  ", padstring(arch_reg_names[49], -6), " 0x", hexstring(ctx.fpus, 64);
+  os << "  ", padstring(arch_reg_names[49], -6), " 0x", hexstring(ctx.env->fpus, 64);
   os << "  ", padstring(arch_reg_names[50], -6), " 0x", hexstring(ctx.reg_fptag, 64);
   os << "  ", padstring(arch_reg_names[51], -6), " 0x", hexstring(ctx.reg_fpstack, 64), endl;
   os << "  ", padstring(arch_reg_names[52], -6), " 0x", hexstring(ctx.invalid_reg, 64);
   os << "  ", padstring(arch_reg_names[53], -6), " 0x", hexstring(ctx.invalid_reg, 64);
   os << "  ", padstring(arch_reg_names[54], -6), " 0x", hexstring(ctx.reg_trace, 64);
   os << "  ", padstring(arch_reg_names[55], -6), " 0x", hexstring(ctx.reg_ctx, 64), endl;
-  os << "  ", padstring(arch_reg_names[56], -6), " 0x", hexstring(ctx.eip, 64);
+  os << "  ", padstring(arch_reg_names[56], -6), " 0x", hexstring(ctx.env->eip, 64);
   os << "  ", padstring(arch_reg_names[57], -6), " 0x", hexstring(ctx.reg_flags, 64);
   os << "  ", padstring(arch_reg_names[58], -6), " 0x", hexstring(ctx.invalid_reg, 64);
   os << "  ", padstring(arch_reg_names[59], -6), " 0x", hexstring(ctx.reg_selfrip, 64), endl;
@@ -728,42 +728,42 @@ ostream& operator <<(ostream& os, const Context& ctx) {
   os << "    Mode:      ", ((ctx.kernel_mode) ? "kernel" : "user"), endl;
   os << "    32/64:     ", ((ctx.use64) ? "64-bit x86-64" : "32-bit x86"), endl;
   os << "    IntEFLAGS: ", hexstring(ctx.internal_eflags, 32), " (df ", ((ctx.internal_eflags & FLAG_DF) != 0), ")", endl;
-  os << "    hflags: ", hexstring(ctx.hflags, 32), " (QEMU internal flags)", endl;
+  os << "    hflags: ", hexstring(ctx.env->hflags, 32), " (QEMU internal flags)", endl;
   os << "  Segment Registers:", endl;
-  os << "    cs ", ctx.segs[SEGID_CS], endl;
-  os << "    ss ", ctx.segs[SEGID_SS], endl;
-  os << "    ds ", ctx.segs[SEGID_DS], endl;
-  os << "    es ", ctx.segs[SEGID_ES], endl;
-  os << "    fs ", ctx.segs[SEGID_FS], endl;
-  os << "    gs ", ctx.segs[SEGID_GS], endl;
+  os << "    cs ", ctx.env->segs[SEGID_CS], endl;
+  os << "    ss ", ctx.env->segs[SEGID_SS], endl;
+  os << "    ds ", ctx.env->segs[SEGID_DS], endl;
+  os << "    es ", ctx.env->segs[SEGID_ES], endl;
+  os << "    fs ", ctx.env->segs[SEGID_FS], endl;
+  os << "    gs ", ctx.env->segs[SEGID_GS], endl;
   os << "  Segment Control Registers:", endl;
 //  os << "    ldt ", hexstring(ctx.ldtvirt, 64), "  ld# ", hexstring(ctx.ldtsize, 64), "  gd# ", hexstring(ctx.gdtsize, 64), endl;
 //  os << "    gdt mfns"; foreach (i, 16) { os << " ", ctx.gdtpages[i]; } os << endl;
 //  os << "    fsB ", hexstring(ctx.fs_base, 64), "  gsB ", hexstring(ctx.gs_base_user, 64), "  gkB ", hexstring(ctx.gs_base_kernel, 64), endl;
   os << "  Control Registers:", endl;
-  os << "    cr0 ", ctx.cr[0], endl;
-  os << "    cr2 ", hexstring(ctx.cr[2], 64), "  fault virtual address", endl;
-  os << "    cr3 ", hexstring(ctx.cr[3], 64), "  page table base (mfn ", (ctx.cr[3] >> 12), ")", endl;
-  os << "    cr4 ", ctx.cr[4], endl;
+  os << "    cr0 ", ctx.env->cr[0], endl;
+  os << "    cr2 ", hexstring(ctx.env->cr[2], 64), "  fault virtual address", endl;
+  os << "    cr3 ", hexstring(ctx.env->cr[3], 64), "  page table base (mfn ", (ctx.env->cr[3] >> 12), ")", endl;
+  os << "    cr4 ", ctx.env->cr[4], endl;
 //  os << "    kss ", hexstring(ctx.kernel_ss, 64), "  ksp ", hexstring(ctx.kernel_sp, 64), "  vma ", hexstring(ctx.vm_assist, 64),endl;
 //  os << "    kPT ", intstring(ctx.kernel_ptbase_mfn, 16), endl;
 //  os << "    uPT ", intstring(ctx.user_ptbase_mfn, 16), endl;
   os << "  Debug Registers:", endl;
-  os << "    dr0 ", hexstring(ctx.dr[0], 64), "  dr1 ", hexstring(ctx.dr[1], 64), "  dr2 ", hexstring(ctx.dr[2], 64),  "  dr3 ", hexstring(ctx.dr[3], 64), endl;
-  os << "    dr4 ", hexstring(ctx.dr[4], 64), "  dr5 ", hexstring(ctx.dr[5], 64), "  dr6 ", hexstring(ctx.dr[6], 64),  "  dr7 ", hexstring(ctx.dr[7], 64), endl;
+  os << "    dr0 ", hexstring(ctx.env->dr[0], 64), "  dr1 ", hexstring(ctx.env->dr[1], 64), "  dr2 ", hexstring(ctx.env->dr[2], 64),  "  dr3 ", hexstring(ctx.env->dr[3], 64), endl;
+  os << "    dr4 ", hexstring(ctx.env->dr[4], 64), "  dr5 ", hexstring(ctx.env->dr[5], 64), "  dr6 ", hexstring(ctx.env->dr[6], 64),  "  dr7 ", hexstring(ctx.env->dr[7], 64), endl;
   os << "  Callbacks:", endl;
   os << "  Exception and Event Control:", endl;
-  os << "    exception ", intstring(ctx.exception_index, 2), "  errorcode ", hexstring(ctx.error_code, 32),
+  os << "    exception ", intstring(ctx.env->exception_index, 2), "  errorcode ", hexstring(ctx.env->error_code, 32),
     endl;
 
   os << "  FPU:", endl;
-  os << "    FP Control Word: 0x", hexstring(ctx.fpuc, 32), endl;
-  os << "    MXCSR:           0x", hexstring(ctx.mxcsr, 32), endl;
+  os << "    FP Control Word: 0x", hexstring(ctx.env->fpuc, 32), endl;
+  os << "    MXCSR:           0x", hexstring(ctx.env->mxcsr, 32), endl;
 
   for (int i = 7; i >= 0; i--) {
-    int stackid = (i - (ctx.fpstt >> 3)) & 0x7;
-    os << "    fp", i, "  st(", stackid, ")  ", (ctx.fptags[i] ? "Valid" : "Empty"),
-      "  0x", hexstring(ctx.fpregs[i].mmx.q, 64), " => ", *((double*)&(ctx.fpregs[i].d)), endl;
+    int stackid = (i - (ctx.env->fpstt >> 3)) & 0x7;
+    os << "    fp", i, "  st(", stackid, ")  ", (ctx.env->fptags[i] ? "Valid" : "Empty"),
+      "  0x", hexstring(ctx.env->fpregs[i].mmx.q, 64), " => ", *((double*)&(ctx.env->fpregs[i].d)), endl;
   }
 
   os << "  Internal State:", endl;

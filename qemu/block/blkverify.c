@@ -87,10 +87,10 @@ static int blkverify_open(BlockDriverState *bs, const char *filename, int flags)
         return -EINVAL;
     }
 
-    raw = strdup(filename);
+    raw = g_strdup(filename);
     raw[c - filename] = '\0';
     ret = bdrv_file_open(&bs->file, raw, flags);
-    free(raw);
+    g_free(raw);
     if (ret < 0) {
         return ret;
     }
@@ -114,14 +114,6 @@ static void blkverify_close(BlockDriverState *bs)
 
     bdrv_delete(s->test_file);
     s->test_file = NULL;
-}
-
-static int blkverify_flush(BlockDriverState *bs)
-{
-    BDRVBlkverifyState *s = bs->opaque;
-
-    /* Only flush test file, the raw file is not important */
-    return bdrv_flush(s->test_file);
 }
 
 static int64_t blkverify_getlength(BlockDriverState *bs)
@@ -318,14 +310,10 @@ static BlockDriverAIOCB *blkverify_aio_readv(BlockDriverState *bs,
     qemu_iovec_init(&acb->raw_qiov, acb->qiov->niov);
     blkverify_iovec_clone(&acb->raw_qiov, qiov, acb->buf);
 
-    if (!bdrv_aio_readv(s->test_file, sector_num, qiov, nb_sectors,
-                        blkverify_aio_cb, acb)) {
-        blkverify_aio_cb(acb, -EIO);
-    }
-    if (!bdrv_aio_readv(bs->file, sector_num, &acb->raw_qiov, nb_sectors,
-                        blkverify_aio_cb, acb)) {
-        blkverify_aio_cb(acb, -EIO);
-    }
+    bdrv_aio_readv(s->test_file, sector_num, qiov, nb_sectors,
+                   blkverify_aio_cb, acb);
+    bdrv_aio_readv(bs->file, sector_num, &acb->raw_qiov, nb_sectors,
+                   blkverify_aio_cb, acb);
     return &acb->common;
 }
 
@@ -337,14 +325,10 @@ static BlockDriverAIOCB *blkverify_aio_writev(BlockDriverState *bs,
     BlkverifyAIOCB *acb = blkverify_aio_get(bs, true, sector_num, qiov,
                                             nb_sectors, cb, opaque);
 
-    if (!bdrv_aio_writev(s->test_file, sector_num, qiov, nb_sectors,
-                         blkverify_aio_cb, acb)) {
-        blkverify_aio_cb(acb, -EIO);
-    }
-    if (!bdrv_aio_writev(bs->file, sector_num, qiov, nb_sectors,
-                         blkverify_aio_cb, acb)) {
-        blkverify_aio_cb(acb, -EIO);
-    }
+    bdrv_aio_writev(s->test_file, sector_num, qiov, nb_sectors,
+                    blkverify_aio_cb, acb);
+    bdrv_aio_writev(bs->file, sector_num, qiov, nb_sectors,
+                    blkverify_aio_cb, acb);
     return &acb->common;
 }
 
@@ -368,7 +352,6 @@ static BlockDriver bdrv_blkverify = {
 
     .bdrv_file_open     = blkverify_open,
     .bdrv_close         = blkverify_close,
-    .bdrv_flush         = blkverify_flush,
 
     .bdrv_aio_readv     = blkverify_aio_readv,
     .bdrv_aio_writev    = blkverify_aio_writev,

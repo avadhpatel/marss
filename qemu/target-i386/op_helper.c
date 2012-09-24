@@ -18,15 +18,23 @@
  */
 
 #include <math.h>
-#include "exec.h"
+#include "cpu.h"
+#include "dyngen-exec.h"
 #include "host-utils.h"
 #include "ioport.h"
+#include "qemu-log.h"
+#include "cpu-defs.h"
+#include "helper.h"
+
+#if !defined(CONFIG_USER_ONLY)
+#include "softmmu_exec.h"
+#endif /* !defined(CONFIG_USER_ONLY) */
+
 #ifdef MARSS_QEMU
 #include <ptl-qemu.h>
 #endif
 
 //#define DEBUG_PCALL
-
 
 #ifdef DEBUG_PCALL
 #  define LOG_PCALL(...) qemu_log_mask(CPU_LOG_PCALL, ## __VA_ARGS__)
@@ -37,6 +45,101 @@
 #  define LOG_PCALL_STATE(env) do { } while (0)
 #endif
 
+/* n must be a constant to be efficient */
+static inline target_long lshift(target_long x, int n)
+{
+    if (n >= 0) {
+        return x << n;
+    } else {
+        return x >> (-n);
+    }
+}
+
+#define FPU_RC_MASK         0xc00
+#define FPU_RC_NEAR         0x000
+#define FPU_RC_DOWN         0x400
+#define FPU_RC_UP           0x800
+#define FPU_RC_CHOP         0xc00
+
+#define MAXTAN 9223372036854775808.0
+
+/* the following deal with x86 long double-precision numbers */
+#define MAXEXPD 0x7fff
+#define EXPBIAS 16383
+#define EXPD(fp)        (fp.l.upper & 0x7fff)
+#define SIGND(fp)       ((fp.l.upper) & 0x8000)
+#define MANTD(fp)       (fp.l.lower)
+#define BIASEXPONENT(fp) fp.l.upper = (fp.l.upper & ~(0x7fff)) | EXPBIAS
+
+static inline void fpush(void)
+{
+    env->fpstt = (env->fpstt - 1) & 7;
+    env->fptags[env->fpstt] = 0; /* validate stack entry */
+}
+
+static inline void fpop(void)
+{
+    env->fptags[env->fpstt] = 1; /* invvalidate stack entry */
+    env->fpstt = (env->fpstt + 1) & 7;
+}
+
+static inline floatx80 helper_fldt(target_ulong ptr)
+{
+    CPU_LDoubleU temp;
+
+    temp.l.lower = ldq(ptr);
+    temp.l.upper = lduw(ptr + 8);
+    return temp.d;
+}
+
+static inline void helper_fstt(floatx80 f, target_ulong ptr)
+{
+    CPU_LDoubleU temp;
+
+    temp.d = f;
+    stq(ptr, temp.l.lower);
+    stw(ptr + 8, temp.l.upper);
+}
+
+#define FPUS_IE (1 << 0)
+#define FPUS_DE (1 << 1)
+#define FPUS_ZE (1 << 2)
+#define FPUS_OE (1 << 3)
+#define FPUS_UE (1 << 4)
+#define FPUS_PE (1 << 5)
+#define FPUS_SF (1 << 6)
+#define FPUS_SE (1 << 7)
+#define FPUS_B  (1 << 15)
+
+#define FPUC_EM 0x3f
+
+static inline uint32_t compute_eflags(void)
+{
+    return env->eflags | helper_cc_compute_all(CC_OP) | (DF & DF_MASK);
+}
+
+/* NOTE: CC_OP must be modified manually to CC_OP_EFLAGS */
+static inline void load_eflags(int eflags, int update_mask)
+{
+    CC_SRC = eflags & (CC_O | CC_S | CC_Z | CC_A | CC_P | CC_C);
+    DF = 1 - (2 * ((eflags >> 10) & 1));
+    env->eflags = (env->eflags & ~update_mask) |
+        (eflags & update_mask) | 0x2;
+}
+
+/* load efer and update the corresponding hflags. XXX: do consistency
+   checks with cpuid bits ? */
+static inline void cpu_load_efer(CPUX86State *env, uint64_t val)
+{
+    env->efer = val;
+    env->hflags &= ~(HF_LMA_MASK | HF_SVME_MASK);
+    if (env->efer & MSR_EFER_LMA) {
+        env->hflags |= HF_LMA_MASK;
+    }
+    if (env->efer & MSR_EFER_SVME) {
+        env->hflags |= HF_SVME_MASK;
+    }
+}
 
 #if 0
 #define raise_exception_err(a, b)\
@@ -45,6 +148,9 @@ do {\
     (raise_exception_err)(a, b);\
 } while (0)
 #endif
+
+static void QEMU_NORETURN raise_exception_err(int exception_index,
+                                              int error_code);
 
 static const uint8_t parity_table[256] = {
     CC_P, 0, 0, CC_P, 0, CC_P, CC_P, 0,
@@ -586,28 +692,6 @@ target_ulong helper_inl(uint32_t port)
 {
     return cpu_inl(port);
 }
-
-#ifdef MARSS_QEMU
-/* Forward declaration to avoid compiler warnings */
-void vm_stop(int reason);
-
-void helper_switch_to_sim(void)
-{
-    ptl_machine_configure("-run");
-
-    // Flush the tb-caches so it dont call this again
-    tb_flush(env);
-
-    raise_exception(EXCP_INTERRUPT);
-}
-
-void helper_simpoint(void)
-{
-    /* We reached to a 'simpoint' so call helper function in ptlsim
-     * to handle this 'simpoint'. */
-    ptl_simpoint_reached(env->cpu_index);
-}
-#endif
 
 static inline unsigned int get_sp_mask(unsigned int e2)
 {
@@ -1296,9 +1380,9 @@ static void do_interrupt_all(int intno, int is_int, int error_code,
 #endif
 }
 
-void do_interrupt(CPUState *env1)
+void do_interrupt(CPUX86State *env1)
 {
-    CPUState *saved_env;
+    CPUX86State *saved_env;
 
     saved_env = env;
     env = env1;
@@ -1326,9 +1410,9 @@ void do_interrupt(CPUState *env1)
     env = saved_env;
 }
 
-void do_interrupt_x86_hardirq(CPUState *env1, int intno, int is_hw)
+void do_interrupt_x86_hardirq(CPUX86State *env1, int intno, int is_hw)
 {
-    CPUState *saved_env;
+    CPUX86State *saved_env;
 
     saved_env = env;
     env = env1;
@@ -1406,17 +1490,25 @@ static void QEMU_NORETURN raise_interrupt(int intno, int is_int, int error_code,
 
 /* shortcuts to generate exceptions */
 
-void raise_exception_err(int exception_index, int error_code)
+static void QEMU_NORETURN raise_exception_err(int exception_index,
+                                              int error_code)
 {
     raise_interrupt(exception_index, 0, error_code, 0);
 }
 
-void raise_exception(int exception_index)
+void raise_exception_err_env(CPUX86State *nenv, int exception_index,
+                             int error_code)
+{
+    env = nenv;
+    raise_interrupt(exception_index, 0, error_code, 0);
+}
+
+static void QEMU_NORETURN raise_exception(int exception_index)
 {
     raise_interrupt(exception_index, 0, 0, 0);
 }
 
-void raise_exception_env(int exception_index, CPUState *nenv)
+void raise_exception_env(int exception_index, CPUX86State *nenv)
 {
     env = nenv;
     raise_exception(exception_index);
@@ -1425,7 +1517,7 @@ void raise_exception_env(int exception_index, CPUState *nenv)
 
 #if defined(CONFIG_USER_ONLY)
 
-void do_smm_enter(CPUState *env1)
+void do_smm_enter(CPUX86State *env1)
 {
 }
 
@@ -1441,12 +1533,12 @@ void helper_rsm(void)
 #define SMM_REVISION_ID 0x00020000
 #endif
 
-void do_smm_enter(CPUState *env1)
+void do_smm_enter(CPUX86State *env1)
 {
     target_ulong sm_state;
     SegmentCache *dt;
     int i, offset;
-    CPUState *saved_env;
+    CPUX86State *saved_env;
 
     saved_env = env;
     env = env1;
@@ -1881,20 +1973,20 @@ void helper_aas(void)
 
 void helper_daa(void)
 {
-    int al, af, cf;
+    int old_al, al, af, cf;
     int eflags;
 
     eflags = helper_cc_compute_all(CC_OP);
     cf = eflags & CC_C;
     af = eflags & CC_A;
-    al = EAX & 0xff;
+    old_al = al = EAX & 0xff;
 
     eflags = 0;
     if (((al & 0x0f) > 9 ) || af) {
         al = (al + 6) & 0xff;
         eflags |= CC_A;
     }
-    if ((al > 0x9f) || cf) {
+    if ((old_al > 0x99) || cf) {
         al = (al + 0x60) & 0xff;
         eflags |= CC_C;
     }
@@ -3191,6 +3283,9 @@ void helper_wrmsr(void)
     case MSR_TSC_AUX:
         env->tsc_aux = val;
         break;
+    case MSR_IA32_MISC_ENABLE:
+        env->msr_ia32_misc_enable = val;
+        break;
     default:
         if ((uint32_t)ECX >= MSR_MC0_CTL
             && (uint32_t)ECX < MSR_MC0_CTL + (4 * env->mcg_cap & 0xff)) {
@@ -3323,6 +3418,9 @@ void helper_rdmsr(void)
         break;
     case MSR_MCG_STATUS:
         val = env->mcg_status;
+        break;
+    case MSR_IA32_MISC_ENABLE:
+        val = env->msr_ia32_misc_enable;
         break;
     default:
         if ((uint32_t)ECX >= MSR_MC0_CTL
@@ -3929,18 +4027,18 @@ static void update_fp_status(void)
     int rnd_type;
 
     /* set rounding mode */
-    switch(env->fpuc & RC_MASK) {
+    switch(env->fpuc & FPU_RC_MASK) {
     default:
-    case RC_NEAR:
+    case FPU_RC_NEAR:
         rnd_type = float_round_nearest_even;
         break;
-    case RC_DOWN:
+    case FPU_RC_DOWN:
         rnd_type = float_round_down;
         break;
-    case RC_UP:
+    case FPU_RC_UP:
         rnd_type = float_round_up;
         break;
-    case RC_CHOP:
+    case FPU_RC_CHOP:
         rnd_type = float_round_to_zero;
         break;
     }
@@ -4451,6 +4549,49 @@ void helper_frstor(target_ulong ptr, int data32)
     }
 }
 
+
+#if defined(CONFIG_USER_ONLY)
+void cpu_x86_load_seg(CPUX86State *s, int seg_reg, int selector)
+{
+    CPUX86State *saved_env;
+
+    saved_env = env;
+    env = s;
+    if (!(env->cr[0] & CR0_PE_MASK) || (env->eflags & VM_MASK)) {
+        selector &= 0xffff;
+        cpu_x86_load_seg_cache(env, seg_reg, selector,
+                               (selector << 4), 0xffff, 0);
+    } else {
+        helper_load_seg(seg_reg, selector);
+    }
+    env = saved_env;
+}
+
+void cpu_x86_fsave(CPUX86State *s, target_ulong ptr, int data32)
+{
+    CPUX86State *saved_env;
+
+    saved_env = env;
+    env = s;
+
+    helper_fsave(ptr, data32);
+
+    env = saved_env;
+}
+
+void cpu_x86_frstor(CPUX86State *s, target_ulong ptr, int data32)
+{
+    CPUX86State *saved_env;
+
+    saved_env = env;
+    env = s;
+
+    helper_frstor(ptr, data32);
+
+    env = saved_env;
+}
+#endif
+
 void helper_fxsave(target_ulong ptr, int data64)
 {
     int fpus, fptag, i, nb_xmm_regs;
@@ -4865,28 +5006,25 @@ void helper_boundl(target_ulong a0, int v)
    NULL, it means that the function was called in C code (i.e. not
    from generated code or from helper.c) */
 /* XXX: fix it to restore all registers */
-void tlb_fill(target_ulong addr, int is_write, int mmu_idx, void *retaddr)
+void tlb_fill(CPUX86State *env1, target_ulong addr, int is_write, int mmu_idx,
+              uintptr_t retaddr)
 {
     TranslationBlock *tb;
     int ret;
-    unsigned long pc;
     CPUX86State *saved_env;
 
-    /* XXX: hack to restore env in all cases, even if not called from
-       generated code */
     saved_env = env;
-    env = cpu_single_env;
+    env = env1;
 
-    ret = cpu_x86_handle_mmu_fault(env, addr, is_write, mmu_idx, 1);
+    ret = cpu_x86_handle_mmu_fault(env, addr, is_write, mmu_idx);
     if (ret) {
         if (retaddr) {
             /* now we have a real cpu fault */
-            pc = (unsigned long)retaddr;
-            tb = tb_find_pc(pc);
+            tb = tb_find_pc(retaddr);
             if (tb) {
                 /* the PC is inside the translated code. It means that we have
                    a virtual CPU fault */
-                cpu_restore_state(tb, env, pc);
+                cpu_restore_state(tb, env, retaddr);
             }
         }
         raise_exception_err(env->exception_index, env->error_code);
@@ -4930,7 +5068,7 @@ void helper_svm_check_intercept_param(uint32_t type, uint64_t param)
 {
 }
 
-void svm_check_intercept(CPUState *env1, uint32_t type)
+void svm_check_intercept(CPUX86State *env1, uint32_t type)
 {
 }
 
@@ -4965,7 +5103,7 @@ static inline void svm_load_seg(target_phys_addr_t addr, SegmentCache *sc)
 }
 
 static inline void svm_load_seg_cache(target_phys_addr_t addr, 
-                                      CPUState *env, int seg_reg)
+                                      CPUX86State *env, int seg_reg)
 {
     SegmentCache sc1, *sc = &sc1;
     svm_load_seg(addr, sc);
@@ -5324,9 +5462,9 @@ void helper_svm_check_intercept_param(uint32_t type, uint64_t param)
     }
 }
 
-void svm_check_intercept(CPUState *env1, uint32_t type)
+void svm_check_intercept(CPUX86State *env1, uint32_t type)
 {
-    CPUState *saved_env;
+    CPUX86State *saved_env;
 
     saved_env = env;
     env = env1;
@@ -5492,6 +5630,50 @@ void helper_vmexit(uint32_t exit_code, uint64_t exit_info_1)
 
 /* MMX/SSE */
 /* XXX: optimize by storing fptt and fptags in the static cpu state */
+
+#define SSE_DAZ             0x0040
+#define SSE_RC_MASK         0x6000
+#define SSE_RC_NEAR         0x0000
+#define SSE_RC_DOWN         0x2000
+#define SSE_RC_UP           0x4000
+#define SSE_RC_CHOP         0x6000
+#define SSE_FZ              0x8000
+
+static void update_sse_status(void)
+{
+    int rnd_type;
+
+    /* set rounding mode */
+    switch(env->mxcsr & SSE_RC_MASK) {
+    default:
+    case SSE_RC_NEAR:
+        rnd_type = float_round_nearest_even;
+        break;
+    case SSE_RC_DOWN:
+        rnd_type = float_round_down;
+        break;
+    case SSE_RC_UP:
+        rnd_type = float_round_up;
+        break;
+    case SSE_RC_CHOP:
+        rnd_type = float_round_to_zero;
+        break;
+    }
+    set_float_rounding_mode(rnd_type, &env->sse_status);
+
+    /* set denormals are zero */
+    set_flush_inputs_to_zero((env->mxcsr & SSE_DAZ) ? 1 : 0, &env->sse_status);
+
+    /* set flush to zero */
+    set_flush_to_zero((env->mxcsr & SSE_FZ) ? 1 : 0, &env->fp_status);
+}
+
+void helper_ldmxcsr(uint32_t val)
+{
+    env->mxcsr = val;
+    update_sse_status();
+}
+
 void helper_enter_mmx(void)
 {
     env->fpstt = 0;
@@ -5511,6 +5693,33 @@ void helper_movq(void *d, void *s)
 {
     *(uint64_t *)d = *(uint64_t *)s;
 }
+
+#ifdef MARSS_QEMU
+/* Forward declaration to avoid compiler warnings */
+void vm_stop(int reason);
+
+void helper_switch_to_sim(void)
+{
+    ptl_machine_configure("-run");
+
+    // Flush the tb-caches so it dont call this again
+    tb_flush(env);
+
+    raise_exception(EXCP_INTERRUPT);
+}
+
+void helper_simpoint(void)
+{
+    /* We reached to a 'simpoint' so call helper function in ptlsim
+     * to handle this 'simpoint'. */
+    ptl_simpoint_reached(env->cpu_index);
+}
+
+void set_global_env(CPUX86State *env1)
+{
+    env = env1;
+}
+#endif
 
 #define SHIFT 0
 #include "ops_sse.h"
@@ -5660,9 +5869,9 @@ uint32_t helper_cc_compute_all(int op)
     }
 }
 
-uint32_t cpu_cc_compute_all(CPUState *env1, int op)
+uint32_t cpu_cc_compute_all(CPUX86State *env1, int op)
 {
-    CPUState *saved_env;
+    CPUX86State *saved_env;
     uint32_t ret;
 
     saved_env = env;

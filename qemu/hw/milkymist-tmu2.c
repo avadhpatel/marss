@@ -73,10 +73,11 @@ enum {
 struct vertex {
     int x;
     int y;
-} __attribute__((packed));
+} QEMU_PACKED;
 
 struct MilkymistTMU2State {
     SysBusDevice busdev;
+    MemoryRegion regs_region;
     CharDriverState *chr;
     qemu_irq irq;
 
@@ -309,7 +310,8 @@ static void tmu2_start(MilkymistTMU2State *s)
     qemu_irq_pulse(s->irq);
 }
 
-static uint32_t tmu2_read(void *opaque, target_phys_addr_t addr)
+static uint64_t tmu2_read(void *opaque, target_phys_addr_t addr,
+                          unsigned size)
 {
     MilkymistTMU2State *s = opaque;
     uint32_t r = 0;
@@ -370,7 +372,8 @@ static void tmu2_check_registers(MilkymistTMU2State *s)
     }
 }
 
-static void tmu2_write(void *opaque, target_phys_addr_t addr, uint32_t value)
+static void tmu2_write(void *opaque, target_phys_addr_t addr, uint64_t value,
+                       unsigned size)
 {
     MilkymistTMU2State *s = opaque;
 
@@ -414,16 +417,14 @@ static void tmu2_write(void *opaque, target_phys_addr_t addr, uint32_t value)
     tmu2_check_registers(s);
 }
 
-static CPUReadMemoryFunc * const tmu2_read_fn[] = {
-    NULL,
-    NULL,
-    &tmu2_read,
-};
-
-static CPUWriteMemoryFunc * const tmu2_write_fn[] = {
-    NULL,
-    NULL,
-    &tmu2_write,
+static const MemoryRegionOps tmu2_mmio_ops = {
+    .read = tmu2_read,
+    .write = tmu2_write,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 static void milkymist_tmu2_reset(DeviceState *d)
@@ -439,7 +440,6 @@ static void milkymist_tmu2_reset(DeviceState *d)
 static int milkymist_tmu2_init(SysBusDevice *dev)
 {
     MilkymistTMU2State *s = FROM_SYSBUS(typeof(*s), dev);
-    int tmu2_regs;
 
     if (tmu2_glx_init(s)) {
         return 1;
@@ -447,9 +447,9 @@ static int milkymist_tmu2_init(SysBusDevice *dev)
 
     sysbus_init_irq(dev, &s->irq);
 
-    tmu2_regs = cpu_register_io_memory(tmu2_read_fn, tmu2_write_fn, s,
-            DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, R_MAX * 4, tmu2_regs);
+    memory_region_init_io(&s->regs_region, &tmu2_mmio_ops, s,
+            "milkymist-tmu2", R_MAX * 4);
+    sysbus_init_mmio(dev, &s->regs_region);
 
     return 0;
 }
@@ -465,17 +465,26 @@ static const VMStateDescription vmstate_milkymist_tmu2 = {
     }
 };
 
-static SysBusDeviceInfo milkymist_tmu2_info = {
-    .init = milkymist_tmu2_init,
-    .qdev.name  = "milkymist-tmu2",
-    .qdev.size  = sizeof(MilkymistTMU2State),
-    .qdev.vmsd  = &vmstate_milkymist_tmu2,
-    .qdev.reset = milkymist_tmu2_reset,
-};
-
-static void milkymist_tmu2_register(void)
+static void milkymist_tmu2_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&milkymist_tmu2_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = milkymist_tmu2_init;
+    dc->reset = milkymist_tmu2_reset;
+    dc->vmsd = &vmstate_milkymist_tmu2;
 }
 
-device_init(milkymist_tmu2_register)
+static TypeInfo milkymist_tmu2_info = {
+    .name          = "milkymist-tmu2",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(MilkymistTMU2State),
+    .class_init    = milkymist_tmu2_class_init,
+};
+
+static void milkymist_tmu2_register_types(void)
+{
+    type_register_static(&milkymist_tmu2_info);
+}
+
+type_init(milkymist_tmu2_register_types)

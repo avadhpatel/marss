@@ -28,9 +28,10 @@
 #include "elf.h"
 #include "lm32_hwsetup.h"
 #include "lm32.h"
+#include "exec-memory.h"
 
 typedef struct {
-    CPUState *env;
+    CPULM32State *env;
     target_phys_addr_t bootstrap_pc;
     target_phys_addr_t flash_base;
     target_phys_addr_t hwsetup_base;
@@ -41,7 +42,7 @@ typedef struct {
 
 static void cpu_irq_handler(void *opaque, int irq, int level)
 {
-    CPUState *env = opaque;
+    CPULM32State *env = opaque;
 
     if (level) {
         cpu_interrupt(env, CPU_INTERRUPT_HARD);
@@ -53,9 +54,9 @@ static void cpu_irq_handler(void *opaque, int irq, int level)
 static void main_cpu_reset(void *opaque)
 {
     ResetInfo *reset_info = opaque;
-    CPUState *env = reset_info->env;
+    CPULM32State *env = reset_info->env;
 
-    cpu_reset(env);
+    cpu_state_reset(env);
 
     /* init defaults */
     env->pc = (uint32_t)reset_info->bootstrap_pc;
@@ -74,10 +75,10 @@ static void lm32_evr_init(ram_addr_t ram_size_not_used,
                           const char *kernel_cmdline,
                           const char *initrd_filename, const char *cpu_model)
 {
-    CPUState *env;
+    CPULM32State *env;
     DriveInfo *dinfo;
-    ram_addr_t phys_ram;
-    ram_addr_t phys_flash;
+    MemoryRegion *address_space_mem =  get_system_memory();
+    MemoryRegion *phys_ram = g_new(MemoryRegion, 1);
     qemu_irq *cpu_irq, irq[32];
     ResetInfo *reset_info;
     int i;
@@ -95,7 +96,7 @@ static void lm32_evr_init(ram_addr_t ram_size_not_used,
     int timer0_irq                 = 1;
     int timer1_irq                 = 3;
 
-    reset_info = qemu_mallocz(sizeof(ResetInfo));
+    reset_info = g_malloc0(sizeof(ResetInfo));
 
     if (cpu_model == NULL) {
         cpu_model = "lm32-full";
@@ -105,13 +106,13 @@ static void lm32_evr_init(ram_addr_t ram_size_not_used,
 
     reset_info->flash_base = flash_base;
 
-    phys_ram = qemu_ram_alloc(NULL, "lm32_evr.sdram", ram_size);
-    cpu_register_physical_memory(ram_base, ram_size, phys_ram | IO_MEM_RAM);
+    memory_region_init_ram(phys_ram, "lm32_evr.sdram", ram_size);
+    vmstate_register_ram_global(phys_ram);
+    memory_region_add_subregion(address_space_mem, ram_base, phys_ram);
 
-    phys_flash = qemu_ram_alloc(NULL, "lm32_evr.flash", flash_size);
     dinfo = drive_get(IF_PFLASH, 0, 0);
     /* Spansion S29NS128P */
-    pflash_cfi02_register(flash_base, phys_flash,
+    pflash_cfi02_register(flash_base, NULL, "lm32_evr.flash", flash_size,
                           dinfo ? dinfo->bdrv : NULL, flash_sector_size,
                           flash_size / flash_sector_size, 1, 2,
                           0x01, 0x7e, 0x43, 0x00, 0x555, 0x2aa, 1);
@@ -162,10 +163,10 @@ static void lm32_uclinux_init(ram_addr_t ram_size_not_used,
                           const char *kernel_cmdline,
                           const char *initrd_filename, const char *cpu_model)
 {
-    CPUState *env;
+    CPULM32State *env;
     DriveInfo *dinfo;
-    ram_addr_t phys_ram;
-    ram_addr_t phys_flash;
+    MemoryRegion *address_space_mem =  get_system_memory();
+    MemoryRegion *phys_ram = g_new(MemoryRegion, 1);
     qemu_irq *cpu_irq, irq[32];
     HWSetup *hw;
     ResetInfo *reset_info;
@@ -190,7 +191,7 @@ static void lm32_uclinux_init(ram_addr_t ram_size_not_used,
     target_phys_addr_t initrd_base  = 0x08400000;
     size_t initrd_max               = 0x01000000;
 
-    reset_info = qemu_mallocz(sizeof(ResetInfo));
+    reset_info = g_malloc0(sizeof(ResetInfo));
 
     if (cpu_model == NULL) {
         cpu_model = "lm32-full";
@@ -200,13 +201,13 @@ static void lm32_uclinux_init(ram_addr_t ram_size_not_used,
 
     reset_info->flash_base = flash_base;
 
-    phys_ram = qemu_ram_alloc(NULL, "lm32_uclinux.sdram", ram_size);
-    cpu_register_physical_memory(ram_base, ram_size, phys_ram | IO_MEM_RAM);
+    memory_region_init_ram(phys_ram, "lm32_uclinux.sdram", ram_size);
+    vmstate_register_ram_global(phys_ram);
+    memory_region_add_subregion(address_space_mem, ram_base, phys_ram);
 
-    phys_flash = qemu_ram_alloc(NULL, "lm32_uclinux.flash", flash_size);
     dinfo = drive_get(IF_PFLASH, 0, 0);
     /* Spansion S29NS128P */
-    pflash_cfi02_register(flash_base, phys_flash,
+    pflash_cfi02_register(flash_base, NULL, "lm32_uclinux.flash", flash_size,
                           dinfo ? dinfo->bdrv : NULL, flash_sector_size,
                           flash_size / flash_sector_size, 1, 2,
                           0x01, 0x7e, 0x43, 0x00, 0x555, 0x2aa, 1);

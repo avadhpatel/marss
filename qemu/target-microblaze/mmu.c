@@ -2,6 +2,7 @@
  *  Microblaze MMU emulation for qemu.
  *
  *  Copyright (c) 2009 Edgar E. Iglesias
+ *  Copyright (c) 2009-2012 PetaLogix Qld Pty Ltd.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,11 +17,7 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
 
-#include "config.h"
 #include "cpu.h"
 
 #define D(x)
@@ -35,7 +32,7 @@ static unsigned int tlb_decode_size(unsigned int f)
     return sizes[f];
 }
 
-static void mmu_flush_idx(CPUState *env, unsigned int idx)
+static void mmu_flush_idx(CPUMBState *env, unsigned int idx)
 {
     struct microblaze_mmu *mmu = &env->mmu;
     unsigned int tlb_size;
@@ -55,7 +52,7 @@ static void mmu_flush_idx(CPUState *env, unsigned int idx)
     }
 }
 
-static void mmu_change_pid(CPUState *env, unsigned int newpid) 
+static void mmu_change_pid(CPUMBState *env, unsigned int newpid)
 {
     struct microblaze_mmu *mmu = &env->mmu;
     unsigned int i;
@@ -179,7 +176,7 @@ done:
 }
 
 /* Writes/reads to the MMU's special regs end up here.  */
-uint32_t mmu_read(CPUState *env, uint32_t rn)
+uint32_t mmu_read(CPUMBState *env, uint32_t rn)
 {
     unsigned int i;
     uint32_t r;
@@ -219,7 +216,7 @@ uint32_t mmu_read(CPUState *env, uint32_t rn)
     return r;
 }
 
-void mmu_write(CPUState *env, uint32_t rn, uint32_t v)
+void mmu_write(CPUMBState *env, uint32_t rn, uint32_t v)
 {
     unsigned int i;
     D(qemu_log("%s rn=%d=%x old=%x\n", __func__, rn, v, env->mmu.regs[rn]));

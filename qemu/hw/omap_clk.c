@@ -836,7 +836,7 @@ static struct clk i2c2_iclk = {
     .parent	= &core_l4_iclk,
 };
 
-static struct clk gpio_dbclk[4] = {
+static struct clk gpio_dbclk[5] = {
     {
         .name	= "gpio1_dbclk",
         .flags	= CLOCK_IN_OMAP242X | CLOCK_IN_OMAP243X,
@@ -853,6 +853,10 @@ static struct clk gpio_dbclk[4] = {
         .name	= "gpio4_dbclk",
         .flags	= CLOCK_IN_OMAP242X | CLOCK_IN_OMAP243X,
         .parent	= &wu_32k_clk,
+    }, {
+        .name   = "gpio5_dbclk",
+        .flags  = CLOCK_IN_OMAP243X,
+        .parent = &wu_32k_clk,
     },
 };
 
@@ -1235,7 +1239,7 @@ void omap_clk_init(struct omap_mpu_state_s *mpu)
     for (i = onchip_clks, count = 0; *i; i ++)
         if ((*i)->flags & flag)
             count ++;
-    mpu->clks = (struct clk *) qemu_mallocz(sizeof(struct clk) * (count + 1));
+    mpu->clks = (struct clk *) g_malloc0(sizeof(struct clk) * (count + 1));
     for (i = onchip_clks, j = mpu->clks; *i; i ++)
         if ((*i)->flags & flag) {
             memcpy(j, *i, sizeof(struct clk));

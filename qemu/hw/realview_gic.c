@@ -9,71 +9,66 @@
 
 #include "sysbus.h"
 
-#define GIC_NIRQ 96
-#define NCPU 1
-
-/* Only a single "CPU" interface is present.  */
-static inline int
-gic_get_current_cpu(void)
-{
-  return 0;
-}
-
-#include "arm_gic.c"
-
 typedef struct {
-    gic_state gic;
-    int iomemtype;
+    SysBusDevice busdev;
+    DeviceState *gic;
+    MemoryRegion container;
 } RealViewGICState;
 
-static uint32_t realview_gic_cpu_read(void *opaque, target_phys_addr_t offset)
+static void realview_gic_set_irq(void *opaque, int irq, int level)
 {
-    gic_state *s = (gic_state *)opaque;
-    return gic_cpu_read(s, gic_get_current_cpu(), offset);
-}
-
-static void realview_gic_cpu_write(void *opaque, target_phys_addr_t offset,
-                          uint32_t value)
-{
-    gic_state *s = (gic_state *)opaque;
-    gic_cpu_write(s, gic_get_current_cpu(), offset, value);
-}
-
-static CPUReadMemoryFunc * const realview_gic_cpu_readfn[] = {
-   realview_gic_cpu_read,
-   realview_gic_cpu_read,
-   realview_gic_cpu_read
-};
-
-static CPUWriteMemoryFunc * const realview_gic_cpu_writefn[] = {
-   realview_gic_cpu_write,
-   realview_gic_cpu_write,
-   realview_gic_cpu_write
-};
-
-static void realview_gic_map(SysBusDevice *dev, target_phys_addr_t base)
-{
-    RealViewGICState *s = FROM_SYSBUSGIC(RealViewGICState, dev);
-    cpu_register_physical_memory(base, 0x1000, s->iomemtype);
-    cpu_register_physical_memory(base + 0x1000, 0x1000, s->gic.iomemtype);
+    RealViewGICState *s = (RealViewGICState *)opaque;
+    qemu_set_irq(qdev_get_gpio_in(s->gic, irq), level);
 }
 
 static int realview_gic_init(SysBusDevice *dev)
 {
-    RealViewGICState *s = FROM_SYSBUSGIC(RealViewGICState, dev);
+    RealViewGICState *s = FROM_SYSBUS(RealViewGICState, dev);
+    SysBusDevice *busdev;
+    /* The GICs on the RealView boards have a fixed nonconfigurable
+     * number of interrupt lines, so we don't need to expose this as
+     * a qdev property.
+     */
+    int numirq = 96;
 
-    gic_init(&s->gic);
-    s->iomemtype = cpu_register_io_memory(realview_gic_cpu_readfn,
-                                          realview_gic_cpu_writefn, s,
-                                          DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio_cb(dev, 0x2000, realview_gic_map);
+    s->gic = qdev_create(NULL, "arm_gic");
+    qdev_prop_set_uint32(s->gic, "num-cpu", 1);
+    qdev_prop_set_uint32(s->gic, "num-irq", numirq);
+    qdev_init_nofail(s->gic);
+    busdev = sysbus_from_qdev(s->gic);
+
+    /* Pass through outbound IRQ lines from the GIC */
+    sysbus_pass_irq(dev, busdev);
+
+    /* Pass through inbound GPIO lines to the GIC */
+    qdev_init_gpio_in(&s->busdev.qdev, realview_gic_set_irq, numirq - 32);
+
+    memory_region_init(&s->container, "realview-gic-container", 0x2000);
+    memory_region_add_subregion(&s->container, 0,
+                                sysbus_mmio_get_region(busdev, 1));
+    memory_region_add_subregion(&s->container, 0x1000,
+                                sysbus_mmio_get_region(busdev, 0));
+    sysbus_init_mmio(dev, &s->container);
     return 0;
 }
 
-static void realview_gic_register_devices(void)
+static void realview_gic_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_dev("realview_gic", sizeof(RealViewGICState),
-                        realview_gic_init);
+    SysBusDeviceClass *sdc = SYS_BUS_DEVICE_CLASS(klass);
+
+    sdc->init = realview_gic_init;
 }
 
-device_init(realview_gic_register_devices)
+static TypeInfo realview_gic_info = {
+    .name          = "realview_gic",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(RealViewGICState),
+    .class_init    = realview_gic_class_init,
+};
+
+static void realview_gic_register_types(void)
+{
+    type_register_static(&realview_gic_info);
+}
+
+type_init(realview_gic_register_types)

@@ -119,7 +119,6 @@ static IO_WRITE_PROTO (adlib_write)
 {
     AdlibState *s = opaque;
     int a = nport & 3;
-    int status;
 
     s->active = 1;
     AUD_set_active_out (s->voice, 1);
@@ -127,9 +126,9 @@ static IO_WRITE_PROTO (adlib_write)
     adlib_kill_timers (s);
 
 #ifdef HAS_YMF262
-    status = YMF262Write (0, a, val);
+    YMF262Write (0, a, val);
 #else
-    status = OPLWrite (s->opl, a, val);
+    OPLWrite (s->opl, a, val);
 #endif
 }
 
@@ -165,7 +164,7 @@ static void timer_handler (int c, double interval_Sec)
 
     s->ticking[n] = 1;
 #ifdef DEBUG
-    interval = get_ticks_per_sec() * interval_Sec;
+    interval = get_ticks_per_sec () * interval_Sec;
     exp = qemu_get_clock_ns (vm_clock) + interval;
     s->exp[n] = exp;
 #endif
@@ -268,7 +267,7 @@ static void Adlib_fini (AdlibState *s)
 #endif
 
     if (s->mixbuf) {
-        qemu_free (s->mixbuf);
+        g_free (s->mixbuf);
     }
 
     s->active = 0;
@@ -276,7 +275,7 @@ static void Adlib_fini (AdlibState *s)
     AUD_remove_card (&s->card);
 }
 
-int Adlib_init (qemu_irq *pic)
+int Adlib_init (ISABus *bus)
 {
     AdlibState *s = &glob_adlib;
     struct audsettings as;
@@ -323,7 +322,7 @@ int Adlib_init (qemu_irq *pic)
     }
 
     s->samples = AUD_get_buffer_size_out (s->voice) >> SHIFT;
-    s->mixbuf = qemu_mallocz (s->samples << SHIFT);
+    s->mixbuf = g_malloc0 (s->samples << SHIFT);
 
     register_ioport_read (0x388, 4, 1, adlib_read, s);
     register_ioport_write (0x388, 4, 1, adlib_write, s);

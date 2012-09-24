@@ -8,9 +8,18 @@
 
 #include <decode.h>
 
+extern "C" {
+#define class _safe_class_
+#define typename _safe_typename_
 #include <helper.h>
+#include <dyngen-exec.h>
+#include <softmmu_exec.h>
+#undef class
+#undef typename
+};
 
 #include <math.h>
+
 //
 // x87 assists
 //
@@ -38,14 +47,14 @@ W64 l_assist_x87_fist(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags, W16 rbf
 
 bool assist_x87_fprem(Context& ctx) {
     ASSIST_IN_QEMU(helper_fprem);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
     return true;
 }
 
 #define make_two_input_x87_func_with_pop(name, expr) \
 bool assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
-	ctx.eip = ctx.reg_nextrip; \
+	ctx.env->eip = ctx.reg_nextrip; \
   return true; \
 }
 
@@ -91,7 +100,7 @@ make_two_input_x87_func_with_pop(fpatan, st1u.d = x87_fpatan(st1u.d, st0u.d));
 
 bool assist_x87_fscale(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fscale);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
@@ -100,7 +109,7 @@ bool assist_x87_fscale(Context& ctx) {
 #define make_unary_x87_func(name, expr) \
 bool assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
-	ctx.eip = ctx.reg_nextrip; \
+	ctx.env->eip = ctx.reg_nextrip; \
   return true; \
 }
 
@@ -111,14 +120,14 @@ make_unary_x87_func(f2xm1, exp2(ra.d) - 1);
 
 bool assist_x87_frndint(Context& ctx) {
 	ASSIST_IN_QEMU(helper_frndint);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 #define make_two_output_x87_func_with_push(name, expr) \
 bool assist_x87_##name(Context& ctx) { \
 	ASSIST_IN_QEMU(helper_##name); \
-	ctx.eip = ctx.reg_nextrip; \
+	ctx.env->eip = ctx.reg_nextrip; \
   return true; \
 }
 
@@ -134,45 +143,45 @@ bool assist_x87_fprem1(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fprem1);
 //	ctx.setup_qemu_switch();
 //	helper_fprem1();
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 //  W64& tos = ctx.fpstt;
-//  W64& st0 = ctx.fpregs[tos >> 3];
-//  W64& st1 = ctx.fpregs[((tos >> 3) - 1) & 0x7];
+//  W64& st0 = ctx.env->fpregs[tos >> 3];
+//  W64& st1 = ctx.env->fpregs[((tos >> 3) - 1) & 0x7];
 //  SSEType st0u(st0); SSEType st1u(st1);
 //
 //  X87StatusWord fpsw;
 //  asm("fldl %[st1]; fldl %[st0]; fprem1; fstsw %%ax; fstpl %[st0]; ffree %%st(0); fincstp;" : [st0] "+m" (st0u.d), "=a" (*(W16*)&fpsw) : [st1] "m" (st1u.d));
 //  st0 = st0u.w64;
 //
-//  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
+//  X87StatusWord* sw = (X87StatusWord*)&ctx.env->fpus;
 //  sw->c0 = fpsw.c0;
 //  sw->c1 = fpsw.c1;
 //  sw->c2 = fpsw.c2;
 //  sw->c3 = fpsw.c3;
-//  ctx.eip = ctx.reg_nextrip;
+//  ctx.env->eip = ctx.reg_nextrip;
 //}
 
 bool assist_x87_fxam(Context& ctx) {
     ASSIST_IN_QEMU(helper_fxam_ST0);
 //	ctx.setup_qemu_switch();
 //	helper_fxam_ST0();
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
-//  W64& r = ctx.fpregs[ctx.fpstt >> 3];
+//  W64& r = ctx.env->fpregs[ctx.fpstt >> 3];
 //  SSEType ra(r);
 //
 //  X87StatusWord fpsw;
 //  asm("fxam; fstsw %%ax" : "=a" (*(W16*)&fpsw) : "t" (ra.d));
 //
-//  X87StatusWord* sw = (X87StatusWord*)&ctx.fpus;
+//  X87StatusWord* sw = (X87StatusWord*)&ctx.env->fpus;
 //  sw->c0 = fpsw.c0;
 //  sw->c1 = fpsw.c1;
 //  sw->c2 = fpsw.c2;
 //  sw->c3 = fpsw.c3;
-//  ctx.eip = ctx.reg_nextrip;
+//  ctx.env->eip = ctx.reg_nextrip;
 //}
 
 // We need a general purpose "copy from user virtual addresses" function
@@ -191,7 +200,7 @@ bool assist_x87_fld80(Context& ctx) {
     int bytes = ctx.copy_from_vm(data, addr, sizeof(X87Reg), pfec, faultaddr, false);
 
     if (bytes < (int)sizeof(X87Reg) || faultaddr != 0) {
-        ctx.eip = ctx.reg_selfrip;
+        ctx.env->eip = ctx.reg_selfrip;
         if(logable(0)) ptl_logfile << "Page fault in assist fld80\n";
         ctx.handle_page_fault(faultaddr, 0);
         return false;
@@ -200,10 +209,10 @@ bool assist_x87_fld80(Context& ctx) {
     // Push on stack
     W64& tos = ctx.reg_fptos;
     tos = (tos - 8) & FP_STACK_MASK;
-    ctx.fpregs[tos >> 3].mmx.q = (W64)x87_fp_80bit_to_64bit(&data);
+    ctx.env->fpregs[tos >> 3].mmx.q = (W64)x87_fp_80bit_to_64bit(&data);
     setbit(ctx.reg_fptag, tos);
 
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
     return true;
 }
 
@@ -211,13 +220,13 @@ bool assist_x87_fstp80(Context& ctx) {
     // Store and pop from stack
     W64& tos = ctx.reg_fptos;
     //  CPU86_LDoubleU data;
-    //  x87_fp_64bit_to_80bit((X87Reg*)&data, ctx.fpregs[tos >> 3]);
+    //  x87_fp_64bit_to_80bit((X87Reg*)&data, ctx.env->fpregs[tos >> 3]);
 
     // Virtual address is in sr2
     Waddr addr = ctx.reg_ar1;
 
     X87Reg data;
-    x87_fp_64bit_to_80bit(&data, ctx.fpregs[tos >> 3].mmx.q);
+    x87_fp_64bit_to_80bit(&data, ctx.env->fpregs[tos >> 3].mmx.q);
 
     setup_qemu_switch_all_ctx(ctx);
     ptl_stable_state = 1;
@@ -232,7 +241,7 @@ bool assist_x87_fstp80(Context& ctx) {
     //  int bytes = ctx.copy_to_user(addr, data, sizeof(X87Reg), pfec, faultaddr);
     //
     //  if (bytes < sizeof(X87Reg)) {
-    //    ctx.eip = ctx.reg_selfrip;
+    //    ctx.env->eip = ctx.reg_selfrip;
     //    ctx.propagate_x86_exception(EXCEPTION_x86_page_fault, pfec, faultaddr);
     //    return;
     //  }
@@ -240,13 +249,13 @@ bool assist_x87_fstp80(Context& ctx) {
     clearbit(ctx.reg_fptag, tos);
     // ctx.fptags[tos] = 0;
     tos = (tos + 8) & FP_STACK_MASK;
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
     return true;
 }
 
 bool assist_x87_fsave(Context& ctx) {
   //++MTY TODO
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
   return true;
 }
@@ -256,7 +265,7 @@ bool assist_x87_frstor(Context& ctx) {
     Waddr ptr = ctx.reg_ar1;
     int data32 = ctx.reg_ar2;
     ASSIST_IN_QEMU(helper_frstor, ptr, data32);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
 
     return true;
 }
@@ -265,10 +274,10 @@ bool assist_x87_fclex(Context& ctx) {
 	ASSIST_IN_QEMU(helper_fclex);
 //	ctx.setup_qemu_switch();
 //	helper_fclex();
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
-//  X87StatusWord fpsw = ctx.fpus;
+//  X87StatusWord fpsw = ctx.env->fpus;
 //  fpsw.pe = 0;
 //  fpsw.ue = 0;
 //  fpsw.oe = 0;
@@ -278,15 +287,15 @@ bool assist_x87_fclex(Context& ctx) {
 //  fpsw.sf = 0;
 //  fpsw.es = 0;
 //  fpsw.b = 0;
-//  ctx.fpus = fpsw;
-//  ctx.eip = ctx.reg_nextrip;
+//  ctx.env->fpus = fpsw;
+//  ctx.env->eip = ctx.reg_nextrip;
 //}
 
 bool assist_x87_finit(Context& ctx) {
-  ctx.fpuc = 0x037f;
-  ctx.fpus = 0;
+  ctx.env->fpuc = 0x037f;
+  ctx.env->fpus = 0;
   ctx.reg_fptag = 0;
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
@@ -295,7 +304,7 @@ bool assist_x87_fxch(Context& ctx) {
 
 	ASSIST_IN_QEMU(helper_fxchg_ST0_STN, reg);
 
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
@@ -304,7 +313,7 @@ bool assist_x87_fnstenv(Context& ctx) {
     Waddr ptr = ctx.reg_ar1;
     int data32 = ctx.reg_ar2;
     ASSIST_IN_QEMU(helper_fstenv, ptr, data32);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
 
     return true;
 }
@@ -314,7 +323,7 @@ bool assist_x87_fldenv(Context& ctx) {
     Waddr ptr = ctx.reg_ar1;
     int data32 = ctx.reg_ar2;
     ASSIST_IN_QEMU(helper_fldenv, ptr, data32);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
 
     return true;
 }
@@ -324,7 +333,7 @@ bool assist_x87_fbstp(Context& ctx) {
     Waddr ptr = ctx.reg_ar1;
     ASSIST_IN_QEMU(helper_fbst_ST0, ptr);
     ASSIST_IN_QEMU(helper_fpop);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
 
     return true;
 }
@@ -333,7 +342,7 @@ bool assist_x87_fbld(Context& ctx) {
 
     Waddr ptr = ctx.reg_ar1;
     ASSIST_IN_QEMU(helper_fbld_ST0, ptr);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
 
     return true;
 }
@@ -343,7 +352,7 @@ bool assist_x87_fnsave(Context& ctx) {
     Waddr ptr = ctx.reg_ar1;
     int data32 = ctx.reg_ar2;
     ASSIST_IN_QEMU(helper_fsave, ptr, data32);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
 
     return true;
 }
@@ -354,12 +363,12 @@ bool assist_x87_fldcw(Context& ctx) {
     ASSIST_IN_QEMU(helper_fldcw, val);
 
     // Update the rounding control from fpcw to mxcsr
-    int rounding = (ctx.fpuc >> 10) & 3;
-    W32 mxcsr = (W32)ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
+    int rounding = (ctx.env->fpuc >> 10) & 3;
+    W32 mxcsr = (W32)ctx.env->mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
     mxcsr = (mxcsr & ~(0x6000)) | (rounding << 13);
     x86_set_mxcsr(mxcsr);
 
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
 
     return true;
 }
@@ -845,7 +854,7 @@ bool TraceDecoder::decode_x87() {
       // fnstcw
       DECODE(eform, rd, w_mode);
       EndOfDecode();
-      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof_t(Context, fpuc)); ldp.internal = 1; this << ldp;
+      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof_t(CPUX86State, fpuc)); ldp.internal = 1; this << ldp;
       result_store(REG_temp1, REG_temp0, rd);
     }
     break;

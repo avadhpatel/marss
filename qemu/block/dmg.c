@@ -28,6 +28,7 @@
 #include <zlib.h>
 
 typedef struct BDRVDMGState {
+    CoMutex lock;
     /* each chunk contains a certain number of sectors,
      * offsets[i] is the offset in the .dmg file,
      * lengths[i] is the length of the compressed chunk,
@@ -127,11 +128,11 @@ static int dmg_open(BlockDriverState *bs, int flags)
 
 	    chunk_count = (count-204)/40;
 	    new_size = sizeof(uint64_t) * (s->n_chunks + chunk_count);
-	    s->types = qemu_realloc(s->types, new_size/2);
-	    s->offsets = qemu_realloc(s->offsets, new_size);
-	    s->lengths = qemu_realloc(s->lengths, new_size);
-	    s->sectors = qemu_realloc(s->sectors, new_size);
-	    s->sectorcounts = qemu_realloc(s->sectorcounts, new_size);
+	    s->types = g_realloc(s->types, new_size/2);
+	    s->offsets = g_realloc(s->offsets, new_size);
+	    s->lengths = g_realloc(s->lengths, new_size);
+	    s->sectors = g_realloc(s->sectors, new_size);
+	    s->sectorcounts = g_realloc(s->sectorcounts, new_size);
 
 	    for(i=s->n_chunks;i<s->n_chunks+chunk_count;i++) {
 		s->types[i] = read_uint32(bs, offset);
@@ -170,13 +171,14 @@ static int dmg_open(BlockDriverState *bs, int flags)
     }
 
     /* initialize zlib engine */
-    s->compressed_chunk = qemu_malloc(max_compressed_size+1);
-    s->uncompressed_chunk = qemu_malloc(512*max_sectors_per_chunk);
+    s->compressed_chunk = g_malloc(max_compressed_size+1);
+    s->uncompressed_chunk = g_malloc(512*max_sectors_per_chunk);
     if(inflateInit(&s->zstream) != Z_OK)
 	goto fail;
 
     s->current_chunk = s->n_chunks;
 
+    qemu_co_mutex_init(&s->lock);
     return 0;
 fail:
     return -1;
@@ -280,6 +282,17 @@ static int dmg_read(BlockDriverState *bs, int64_t sector_num,
     return 0;
 }
 
+static coroutine_fn int dmg_co_read(BlockDriverState *bs, int64_t sector_num,
+                                    uint8_t *buf, int nb_sectors)
+{
+    int ret;
+    BDRVDMGState *s = bs->opaque;
+    qemu_co_mutex_lock(&s->lock);
+    ret = dmg_read(bs, sector_num, buf, nb_sectors);
+    qemu_co_mutex_unlock(&s->lock);
+    return ret;
+}
+
 static void dmg_close(BlockDriverState *bs)
 {
     BDRVDMGState *s = bs->opaque;
@@ -300,7 +313,7 @@ static BlockDriver bdrv_dmg = {
     .instance_size	= sizeof(BDRVDMGState),
     .bdrv_probe		= dmg_probe,
     .bdrv_open		= dmg_open,
-    .bdrv_read		= dmg_read,
+    .bdrv_read          = dmg_co_read,
     .bdrv_close		= dmg_close,
 };
 

@@ -27,7 +27,6 @@
 #include <hw/pci.h>
 #include <hw/isa.h>
 #include "block.h"
-#include "block_int.h"
 #include "dma.h"
 
 #include <hw/ide/pci.h>
@@ -63,7 +62,8 @@ static int bmdma_prepare_buf(IDEDMA *dma, int is_write)
     } prd;
     int l, len;
 
-    qemu_sglist_init(&s->sg, s->nsector / (BMDMA_PAGE_SIZE / 512) + 1);
+    pci_dma_sglist_init(&s->sg, &bm->pci_dev->dev,
+                        s->nsector / (BMDMA_PAGE_SIZE / 512) + 1);
     s->io_buffer_size = 0;
     for(;;) {
         if (bm->cur_prd_len == 0) {
@@ -71,7 +71,7 @@ static int bmdma_prepare_buf(IDEDMA *dma, int is_write)
             if (bm->cur_prd_last ||
                 (bm->cur_addr - bm->addr) >= BMDMA_PAGE_SIZE)
                 return s->io_buffer_size != 0;
-            cpu_physical_memory_read(bm->cur_addr, (uint8_t *)&prd, 8);
+            pci_dma_read(&bm->pci_dev->dev, bm->cur_addr, &prd, 8);
             bm->cur_addr += 8;
             prd.addr = le32_to_cpu(prd.addr);
             prd.size = le32_to_cpu(prd.size);
@@ -113,7 +113,7 @@ static int bmdma_rw_buf(IDEDMA *dma, int is_write)
             if (bm->cur_prd_last ||
                 (bm->cur_addr - bm->addr) >= BMDMA_PAGE_SIZE)
                 return 0;
-            cpu_physical_memory_read(bm->cur_addr, (uint8_t *)&prd, 8);
+            pci_dma_read(&bm->pci_dev->dev, bm->cur_addr, &prd, 8);
             bm->cur_addr += 8;
             prd.addr = le32_to_cpu(prd.addr);
             prd.size = le32_to_cpu(prd.size);
@@ -128,11 +128,11 @@ static int bmdma_rw_buf(IDEDMA *dma, int is_write)
             l = bm->cur_prd_len;
         if (l > 0) {
             if (is_write) {
-                cpu_physical_memory_write(bm->cur_prd_addr,
-                                          s->io_buffer + s->io_buffer_index, l);
+                pci_dma_write(&bm->pci_dev->dev, bm->cur_prd_addr,
+                              s->io_buffer + s->io_buffer_index, l);
             } else {
-                cpu_physical_memory_read(bm->cur_prd_addr,
-                                          s->io_buffer + s->io_buffer_index, l);
+                pci_dma_read(&bm->pci_dev->dev, bm->cur_prd_addr,
+                             s->io_buffer + s->io_buffer_index, l);
             }
             bm->cur_prd_addr += l;
             bm->cur_prd_len -= l;
@@ -223,7 +223,7 @@ static void bmdma_restart_bh(void *opaque)
     }
 }
 
-static void bmdma_restart_cb(void *opaque, int running, int reason)
+static void bmdma_restart_cb(void *opaque, int running, RunState state)
 {
     IDEDMA *dma = opaque;
     BMDMAState *bm = DO_UPCAST(BMDMAState, dma, dma);
@@ -287,9 +287,8 @@ static void bmdma_irq(void *opaque, int n, int level)
     qemu_set_irq(bm->irq, level);
 }
 
-void bmdma_cmd_writeb(void *opaque, uint32_t addr, uint32_t val)
+void bmdma_cmd_writeb(BMDMAState *bm, uint32_t val)
 {
-    BMDMAState *bm = opaque;
 #ifdef DEBUG_IDE
     printf("%s: 0x%08x\n", __func__, val);
 #endif
@@ -310,7 +309,7 @@ void bmdma_cmd_writeb(void *opaque, uint32_t addr, uint32_t val)
              * aio operation with preadv/pwritev.
              */
             if (bm->bus->dma->aiocb) {
-                qemu_aio_flush();
+                bdrv_drain_all();
                 assert(bm->bus->dma->aiocb == NULL);
                 assert((bm->status & BM_STATUS_DMAING) == 0);
             }
@@ -328,22 +327,24 @@ void bmdma_cmd_writeb(void *opaque, uint32_t addr, uint32_t val)
     bm->cmd = val & 0x09;
 }
 
-static void bmdma_addr_read(IORange *ioport, uint64_t addr,
-                            unsigned width, uint64_t *data)
+static uint64_t bmdma_addr_read(void *opaque, target_phys_addr_t addr,
+                                unsigned width)
 {
-    BMDMAState *bm = container_of(ioport, BMDMAState, addr_ioport);
+    BMDMAState *bm = opaque;
     uint32_t mask = (1ULL << (width * 8)) - 1;
+    uint64_t data;
 
-    *data = (bm->addr >> (addr * 8)) & mask;
+    data = (bm->addr >> (addr * 8)) & mask;
 #ifdef DEBUG_IDE
-    printf("%s: 0x%08x\n", __func__, (unsigned)*data);
+    printf("%s: 0x%08x\n", __func__, (unsigned)data);
 #endif
+    return data;
 }
 
-static void bmdma_addr_write(IORange *ioport, uint64_t addr,
-                             unsigned width, uint64_t data)
+static void bmdma_addr_write(void *opaque, target_phys_addr_t addr,
+                             uint64_t data, unsigned width)
 {
-    BMDMAState *bm = container_of(ioport, BMDMAState, addr_ioport);
+    BMDMAState *bm = opaque;
     int shift = addr * 8;
     uint32_t mask = (1ULL << (width * 8)) - 1;
 
@@ -354,9 +355,10 @@ static void bmdma_addr_write(IORange *ioport, uint64_t addr,
     bm->addr |= ((data & mask) << shift) & ~3;
 }
 
-const IORangeOps bmdma_addr_ioport_ops = {
+MemoryRegionOps bmdma_addr_ioport_ops = {
     .read = bmdma_addr_read,
     .write = bmdma_addr_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
 };
 
 static bool ide_bmdma_current_needed(void *opaque)
@@ -514,7 +516,7 @@ static const struct IDEDMAOps bmdma_ops = {
     .reset = bmdma_reset,
 };
 
-void bmdma_init(IDEBus *bus, BMDMAState *bm)
+void bmdma_init(IDEBus *bus, BMDMAState *bm, PCIIDEState *d)
 {
     qemu_irq *irq;
 
@@ -527,4 +529,5 @@ void bmdma_init(IDEBus *bus, BMDMAState *bm)
     bm->irq = bus->irq;
     irq = qemu_allocate_irqs(bmdma_irq, bm, 1);
     bus->irq = *irq;
+    bm->pci_dev = d;
 }

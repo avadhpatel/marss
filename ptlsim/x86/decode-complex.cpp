@@ -16,18 +16,18 @@ extern "C" {
 }
 
 template <typename T> bool assist_div(Context& ctx) {
-  Waddr rax = ctx.regs[R_EAX]; Waddr rdx = ctx.regs[R_EDX];
+  Waddr rax = ctx.env->regs[R_EAX]; Waddr rdx = ctx.env->regs[R_EDX];
   asm("div %[divisor];" : "+a" (rax), "+d" (rdx) : [divisor] "q" ((T)ctx.reg_ar1));
-  ctx.regs[R_EAX] = rax; ctx.regs[R_EDX] = rdx;
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->regs[R_EAX] = rax; ctx.env->regs[R_EDX] = rdx;
+  ctx.env->eip = ctx.reg_nextrip;
   return false;
 }
 
 template <typename T> bool assist_idiv(Context& ctx) {
-  Waddr rax = ctx.regs[R_EAX]; Waddr rdx = ctx.regs[R_EDX];
+  Waddr rax = ctx.env->regs[R_EAX]; Waddr rdx = ctx.env->regs[R_EDX];
   asm("idiv %[divisor];" : "+a" (rax), "+d" (rdx) : [divisor] "q" ((T)ctx.reg_ar1));
-  ctx.regs[R_EAX] = rax; ctx.regs[R_EDX] = rdx;
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->regs[R_EAX] = rax; ctx.env->regs[R_EDX] = rdx;
+  ctx.env->eip = ctx.reg_nextrip;
   return false;
 }
 
@@ -50,7 +50,7 @@ template bool assist_idiv<W64>(Context& ctx);
 bool assist_int(Context& ctx) {
   byte intid = ctx.reg_ar1;
   // The returned rip is nextrip for explicit intN instructions:
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   ctx.propagate_x86_exception(intid, 0);
 
   return true;
@@ -58,7 +58,7 @@ bool assist_int(Context& ctx) {
 
 bool assist_syscall(Context& ctx) {
 
-	ctx.eip = ctx.reg_selfrip;
+	ctx.env->eip = ctx.reg_selfrip;
 	ASSIST_IN_QEMU(helper_syscall, ctx.reg_nextrip - ctx.reg_selfrip);
 
   // REG_rip is filled out for us
@@ -66,7 +66,7 @@ bool assist_syscall(Context& ctx) {
 }
 
 bool assist_sysret(Context& ctx) {
-	ctx.eip = ctx.reg_selfrip;
+	ctx.env->eip = ctx.reg_selfrip;
     int dflag = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_sysret, dflag);
 
@@ -218,13 +218,13 @@ union ProcessorMiscInfo {
 
 bool assist_cpuid(Context& ctx) {
 	ASSIST_IN_QEMU(helper_cpuid);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 bool assist_sti(Context& ctx) {
 	ASSIST_IN_QEMU(helper_sti);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return false;
 }
 
@@ -240,14 +240,14 @@ W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
     helper_sti();
     ctx.setup_ptlsim_switch();
 
-	if(logable(4)) ptl_logfile << "[cpu ", ctx.cpu_index, "]sti called rip ", (void*)ctx.eip, endl;
+	if(logable(4)) ptl_logfile << "[cpu ", ctx.env->cpu_index, "]sti called rip ", (void*)ctx.env->eip, endl;
 
 	return 0;
 }
 
 bool assist_cli(Context& ctx) {
 	ASSIST_IN_QEMU(helper_cli);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return false;
 }
 
@@ -263,7 +263,7 @@ W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
     helper_cli();
     ctx.setup_ptlsim_switch();
 
-	if(logable(4)) ptl_logfile << "[cpu ", ctx.cpu_index, "]cli called at rip ", (void*)ctx.eip, endl;
+	if(logable(4)) ptl_logfile << "[cpu ", ctx.env->cpu_index, "]cli called at rip ", (void*)ctx.env->eip, endl;
 
 	return 0;
 }
@@ -277,8 +277,8 @@ bool assist_enter(Context& ctx) {
     level = ctx.reg_ar2 & 0x1f;
     opsize = 1 << (ctx.reg_ar2 >> 8);
 
-    tmp1 = ctx.regs[REG_rsp] - opsize;
-    ctx.storemask_virt(tmp1, ctx.regs[REG_rbp], 0xff, 3);
+    tmp1 = ctx.env->regs[REG_rsp] - opsize;
+    ctx.storemask_virt(tmp1, ctx.env->regs[REG_rbp], 0xff, 3);
 
     if(level) {
         // FIXME : We assume that we are always operating in 64 bit mode
@@ -286,10 +286,10 @@ bool assist_enter(Context& ctx) {
         ASSIST_IN_QEMU(helper_enter64_level, level, 1, tmp1);
     }
 
-    ctx.regs[REG_rbp] = tmp1;
-    ctx.regs[REG_rsp] = tmp1 + (-esp_addend + (-opsize * level));
+    ctx.env->regs[REG_rbp] = tmp1;
+    ctx.env->regs[REG_rsp] = tmp1 + (-esp_addend + (-opsize * level));
 
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
 
     return true;
 }
@@ -324,18 +324,18 @@ bool assist_ljmp(Context& ctx) {
 	ptl_logfile << "assit_ljmp: csbase: ", ctx.reg_ar1,
 				" eip: ", ctx.reg_ar2, endl;
 	W32 selector = new_cs & 0xffff;
-	ctx.segs[R_CS].selector = selector;
+	ctx.env->segs[R_CS].selector = selector;
 	W64 base = selector << 4;
-	ctx.segs[R_CS].base = base;
+	ctx.env->segs[R_CS].base = base;
 	ctx.cs_segment_updated();
-	ctx.eip = base + new_eip;
+	ctx.env->eip = base + new_eip;
 	return true;
 }
 
 // BCD Assist
 bool assist_bcd_aas(Context& ctx) {
 	ASSIST_IN_QEMU(helper_aas);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -344,7 +344,7 @@ bool assist_svm_check(Context& ctx) {
 	W64 type = ctx.reg_ar1;
 	W64 param = ctx.reg_ar2;
 	ASSIST_IN_QEMU(helper_svm_check_intercept_param, type, param);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -352,7 +352,7 @@ bool assist_svm_check(Context& ctx) {
 bool assist_mwait(Context& ctx) {
 	W64 next_eip = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_mwait, next_eip);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -360,7 +360,7 @@ bool assist_mwait(Context& ctx) {
 bool assist_monitor(Context& ctx) {
 	W64 ptr = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_monitor, ptr);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -369,14 +369,14 @@ bool assist_vmrun(Context& ctx) {
 	W64 aflag = ctx.reg_ar1;
 	W64 next_eip = ctx.reg_ar2;
 	ASSIST_IN_QEMU(helper_vmrun, aflag, next_eip);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
 // VMCall
 bool assist_vmcall(Context& ctx) {
 	ASSIST_IN_QEMU(helper_vmmcall);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -384,7 +384,7 @@ bool assist_vmcall(Context& ctx) {
 bool assist_vmload(Context& ctx) {
 	W64 aflag = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_vmload, aflag);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -392,28 +392,28 @@ bool assist_vmload(Context& ctx) {
 bool assist_vmsave(Context& ctx) {
 	W64 aflag = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_vmsave, aflag);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
 // STGI
 bool assist_stgi(Context& ctx) {
 	ASSIST_IN_QEMU(helper_stgi);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
 // CLGI
 bool assist_clgi(Context& ctx) {
 	ASSIST_IN_QEMU(helper_clgi);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
 // SKINIT
 bool assist_skinit(Context& ctx) {
 	ASSIST_IN_QEMU(helper_skinit);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -421,7 +421,7 @@ bool assist_skinit(Context& ctx) {
 bool assist_invlpga(Context& ctx) {
 	W64 aflag = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_invlpga, aflag);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -429,7 +429,7 @@ bool assist_invlpga(Context& ctx) {
 bool assist_invlpg(Context& ctx) {
 	W64 addr = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_invlpg, addr);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -437,7 +437,7 @@ bool assist_invlpg(Context& ctx) {
 bool assist_lmsw(Context& ctx) {
 	W64 t0 = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_lmsw, t0);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -445,7 +445,7 @@ bool assist_lmsw(Context& ctx) {
 bool assist_lldt(Context& ctx) {
 	W32 ldt = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_lldt, ldt);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -453,7 +453,7 @@ bool assist_lldt(Context& ctx) {
 bool assist_ltr(Context& ctx) {
 	W32 ltr = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_ltr, ltr);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -461,7 +461,7 @@ bool assist_ltr(Context& ctx) {
 bool assist_verr(Context& ctx) {
 	W32 v = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_verr, v);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -469,7 +469,7 @@ bool assist_verr(Context& ctx) {
 bool assist_verw(Context& ctx) {
 	W32 v = ctx.reg_ar1;
 	ASSIST_IN_QEMU(helper_verw, v);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -477,7 +477,7 @@ bool assist_verw(Context& ctx) {
 bool assist_clts(Context& ctx) {
 	ASSIST_IN_QEMU(helper_clts);
 	// abort block because static cpu state changed
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -488,7 +488,7 @@ bool assist_swapgs(Context& ctx) {
 	// execution of after this opcode untill its completed
 	// So it acts as a barriar instruction
 	// Actual swap of GS is already done in uops
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -497,27 +497,27 @@ bool assist_barrier(Context& ctx) {
 	// Simple barrier assist to make sure we don't do any
 	// out of order execution beyound the instruction that calls
 	// this assist function
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
 // Halt
 bool assist_halt(Context& ctx) {
-	W64 next_eip = ctx.reg_nextrip - ctx.segs[R_CS].base;
+	W64 next_eip = ctx.reg_nextrip - ctx.env->segs[R_CS].base;
 	ASSIST_IN_QEMU(helper_hlt, next_eip);
 	return true;
 }
 
 // Pause
 bool assist_pause(Context& ctx) {
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
 // TODO : Convert RDTSC to Light Assist
 bool assist_rdtsc(Context& ctx) {
     ASSIST_IN_QEMU(helper_rdtsc);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
     return true;
 }
 
@@ -527,9 +527,9 @@ bool assist_pushf(Context& ctx) {
 	W64 flags = helper_read_eflags();
 	ctx.setup_ptlsim_switch();
 	// now push the flags on the stack
-	ctx.regs[R_ESP] -= 8;
-	ctx.storemask_virt(ctx.regs[R_ESP], flags, 0xff, 8);
-	ctx.eip = ctx.reg_nextrip;
+	ctx.env->regs[R_ESP] -= 8;
+	ctx.storemask_virt(ctx.env->regs[R_ESP], flags, 0xff, 8);
+	ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -547,9 +547,9 @@ W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	flags = (W16)ra;
 
 	if(logable(4))
-		ptl_logfile << "[cpu ", ctx.cpu_index, "]push stable_flags: ", hexstring(stable_flags, 64),
+		ptl_logfile << "[cpu ", ctx.env->cpu_index, "]push stable_flags: ", hexstring(stable_flags, 64),
 					" flags: ", hexstring(flags, 16), " at rip: ",
-				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
+				   (void*)ctx.env->eip, " cycle: ", sim_cycle, endl;
 
 	return stable_flags;
 }
@@ -567,7 +567,7 @@ bool assist_popf(Context& ctx) {
 	  mask = (W32)(TF_MASK | AC_MASK | ID_MASK | NT_MASK | IF_MASK);
   }
   ASSIST_IN_QEMU(helper_write_eflags, flags , mask);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
 
   // Update internal flags too (only update non-standard flags in internal_flags_bits):
   // Equivalent to these uops:
@@ -604,15 +604,15 @@ W64 l_assist_popf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 // QEMU based D flag : 1 if D = 0, -1 if D = 1
 bool assist_cld(Context& ctx) {
   ctx.internal_eflags &= ~FLAG_DF;
-  ctx.df = 1;
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->df = 1;
+  ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
 bool assist_std(Context& ctx) {
   ctx.internal_eflags |= FLAG_DF;
-  ctx.df = -1;
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->df = -1;
+  ctx.env->eip = ctx.reg_nextrip;
 	return true;
 }
 
@@ -626,7 +626,7 @@ bool assist_write_segreg(Context& ctx) {
   byte segid = ctx.reg_ar2;
 
   ASSIST_IN_QEMU(helper_load_seg, segid , selector);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
@@ -638,7 +638,7 @@ bool assist_ldmxcsr(Context& ctx) {
   W32 mxcsr = (W32)ctx.reg_ar1;
 
   // Top bit of mxcsr archreg doubles as direction flag and other misc flags: preserve it
-  ctx.mxcsr = (ctx.mxcsr & 0xffffffff00000000ULL) | mxcsr;
+  ctx.env->mxcsr = (ctx.env->mxcsr & 0xffffffff00000000ULL) | mxcsr;
 
   // We can't have exceptions going on inside PTLsim: virtualize this feature in uopimpl code
   // Everything else will be used by real SSE insns inside uopimpls.
@@ -652,7 +652,7 @@ bool assist_ldmxcsr(Context& ctx) {
   // no code checks for exception conditions in this manner. Otherwise each FP
   // uopimpl would need to update a speculative version of the mxcsr.
   //
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
 
   return true;
 }
@@ -660,65 +660,65 @@ bool assist_ldmxcsr(Context& ctx) {
 bool assist_fxsave(Context& ctx) {
   Waddr target = ctx.reg_ar1;
   ASSIST_IN_QEMU(helper_fxsave, target, 1);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 bool assist_fxrstor(Context& ctx) {
   Waddr target = ctx.reg_ar1 & ctx.virt_addr_mask;
   ASSIST_IN_QEMU(helper_fxrstor, target, 1);
-  W32 mxcsr = ctx.mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
+  W32 mxcsr = ctx.env->mxcsr | MXCSR_EXCEPTION_DISABLE_MASK;
   mxcsr &= (0xffff);
   x86_set_mxcsr(mxcsr);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 bool assist_wrmsr(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_wrmsr);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 
 bool assist_rdmsr(Context& ctx) {
-    ctx.eip = ctx.reg_selfrip;
+    ctx.env->eip = ctx.reg_selfrip;
     ASSIST_IN_QEMU(helper_rdmsr);
-    ctx.eip = ctx.reg_nextrip;
+    ctx.env->eip = ctx.reg_nextrip;
     return true;
 }
 
 bool assist_write_cr0(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 0, ctx.reg_ar1);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 bool assist_write_cr2(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 2, ctx.reg_ar1);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 bool assist_write_cr3(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 3, ctx.reg_ar1 & 0xfffffffffffff000ULL);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 bool assist_write_cr4(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_write_crN, 4, ctx.reg_ar1);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 bool assist_write_debug_reg(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
 
   if (!ctx.kernel_mode) {
     ctx.propagate_x86_exception(EXCEPTION_x86_gp_fault);
@@ -733,30 +733,30 @@ bool assist_write_debug_reg(Context& ctx) {
 
   int i;
   if(regid < 4) {
-	  hw_breakpoint_remove(env, regid);
-	  ctx.dr[regid] = value;
-	  hw_breakpoint_insert(env, regid);
+	  hw_breakpoint_remove(ctx.env, regid);
+	  ctx.env->dr[regid] = value;
+	  hw_breakpoint_insert(ctx.env, regid);
   } else if(regid == 7) {
 	  for (i = 0; i < 4; i++)
-		  hw_breakpoint_remove(env, i);
-	  ctx.dr[7] = value;
+		  hw_breakpoint_remove(ctx.env, i);
+	  ctx.env->dr[7] = value;
 	  for (i = 0; i < 4; i++)
-		  hw_breakpoint_insert(env, i);
+		  hw_breakpoint_insert(ctx.env, i);
   } else {
-	  ctx.dr[regid] = value;
+	  ctx.env->dr[regid] = value;
   }
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
 bool assist_iret16(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 	return true;
 }
 
 bool assist_iret32(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
   ctx.propagate_x86_exception(EXCEPTION_x86_invalid_opcode);
 	return true;
 }
@@ -780,8 +780,8 @@ bool assist_iret64(Context& ctx) {
 	W32 prefixes;
 	int shift = 1;
 
-	pe = (ctx.hflags >> HF_PE_SHIFT) & 1;
-	vm86 = (ctx.eflags >> VM_SHIFT) & 1;
+	pe = (ctx.env->hflags >> HF_PE_SHIFT) & 1;
+	vm86 = (ctx.env->eflags >> VM_SHIFT) & 1;
 
 	prefixes = ctx.reg_ar1;
 	if(prefixes & PFX_REX) {
@@ -800,7 +800,7 @@ bool assist_iret64(Context& ctx) {
 			ASSIST_IN_QEMU(helper_iret_real, shift);
 		}
 	} else {
-		W64 eip = ctx.eip - ctx.segs[R_CS].base;
+		W64 eip = ctx.env->eip - ctx.env->segs[R_CS].base;
 		ASSIST_IN_QEMU(helper_iret_protected, shift, eip);
 	}
 
@@ -830,7 +830,7 @@ bool assist_ioport_in(Context& ctx) {
   // ar2 = sizeshift
   // rax = output
 
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
 
   W64 port = ctx.reg_ar1;
   W64 sizeshift = ctx.reg_ar2;
@@ -847,8 +847,8 @@ bool assist_ioport_in(Context& ctx) {
   }
   ctx.setup_ptlsim_switch();
 
-  ctx.regs[R_EAX] = x86_merge(ctx.regs[R_EAX], value, sizeshift);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->regs[R_EAX] = x86_merge(ctx.env->regs[R_EAX], value, sizeshift);
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
@@ -875,7 +875,7 @@ W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 
 	if(logable(4))
 		ptl_logfile << "ioport in value: ", hexstring(value, 64), " at rip: ",
-				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
+				   (void*)ctx.env->eip, " cycle: ", sim_cycle, endl;
 
 	return value;
 }
@@ -885,11 +885,11 @@ bool assist_ioport_out(Context& ctx) {
   // ar2 = sizeshift
   // rax = value to write
 
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
 
   W64 port = ctx.reg_ar1;
   W64 sizeshift = ctx.reg_ar2;
-  W64 value = x86_merge(0, ctx.regs[R_EAX], sizeshift);
+  W64 value = x86_merge(0, ctx.env->regs[R_EAX], sizeshift);
 
   setup_qemu_switch_except_ctx(ctx);
   ctx.setup_qemu_switch();
@@ -901,7 +901,7 @@ bool assist_ioport_out(Context& ctx) {
 	  helper_outl(port, value);
   }
   ctx.setup_ptlsim_switch();
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
@@ -926,7 +926,7 @@ W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 
 	if(logable(4))
 		ptl_logfile << "ioport out value: ", hexstring(value, 64), " at rip: ",
-				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
+				   (void*)ctx.env->eip, " cycle: ", sim_cycle, endl;
 
 	return 0;
 }
@@ -951,9 +951,9 @@ W64 l_assist_popcnt(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 }
 
 bool assist_mmx_emms(Context& ctx) {
-  ctx.eip = ctx.reg_selfrip;
+  ctx.env->eip = ctx.reg_selfrip;
   ASSIST_IN_QEMU(helper_emms);
-  ctx.eip = ctx.reg_nextrip;
+  ctx.env->eip = ctx.reg_nextrip;
   return true;
 }
 
@@ -1052,7 +1052,7 @@ bool TraceDecoder::decode_complex() {
      * We shift dflag based on sizeshift to get 'inc' value
      * Add 'inc' value to RDI */
     TransOp ldp(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 2,
-            offsetof_t(Context, df));
+            offsetof_t(CPUX86State, df));
     ldp.internal = 1;
     this << ldp;
     this << TransOp(OP_shl, REG_temp0, REG_temp0, REG_imm, REG_zero, addrsizeshift, sizeshift);
@@ -1099,7 +1099,7 @@ bool TraceDecoder::decode_complex() {
      * We shift dflag based on sizeshift to get 'inc' value
      * Add 'inc' value to RDI */
     TransOp ldp(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 2,
-            offsetof_t(Context, df));
+            offsetof_t(CPUX86State, df));
     ldp.internal = 1;
     this << ldp;
     this << TransOp(OP_shl, REG_temp0, REG_temp0, REG_imm, REG_zero, addrsizeshift, sizeshift);
@@ -1241,7 +1241,7 @@ bool TraceDecoder::decode_complex() {
     if (modrm.reg >= 6) MakeInvalid();
 
     int rdreg = (rd.type == OPTYPE_MEM) ? REG_temp0 : arch_pseudo_reg_to_arch_reg[rd.reg.reg];
-    TransOp ldp(OP_ld, rdreg, REG_ctx, REG_imm, REG_zero, 1, offsetof_t(Context, segs[modrm.reg].selector)); ldp.internal = 1; this << ldp;
+    TransOp ldp(OP_ld, rdreg, REG_ctx, REG_imm, REG_zero, 1, offsetof_t(CPUX86State, segs[modrm.reg].selector)); ldp.internal = 1; this << ldp;
 
     prefixes &= ~PFX_LOCK;
     if (rd.type == OPTYPE_MEM) result_store(rdreg, REG_temp5, rd);
@@ -1366,8 +1366,6 @@ bool TraceDecoder::decode_complex() {
 	TransOp ast(OP_ast, REG_temp1, REG_temp0, REG_zero, REG_zero, 3, 0, 0, FLAGS_DEFAULT_ALU);
 	ast.riptaken = L_ASSIST_POPF;
 	this << ast;
-
-	TransOp stp(OP_st, REG_temp1, REG_ctx, REG_imm, REG_zero, 2, offsetof_t(Context, internal_eflags)); stp.internal = 1; this << stp;
 
     break;
   }
@@ -2097,7 +2095,7 @@ bool TraceDecoder::decode_complex() {
 			svm_check_intercept(*this, SVM_EXIT_LDTR_READ);
 
 			TransOp ldp(OP_ld, REG_temp0, REG_ctx, REG_imm, REG_zero, 2,
-					offsetof_t(Context, ldt.selector));
+					offsetof_t(CPUX86State, ldt.selector));
 			ldp.internal = 1;
 			this << ldp;
 
@@ -2200,7 +2198,7 @@ bool TraceDecoder::decode_complex() {
 					ra, OP_add);
 
 			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
-					REG_zero, 3, offsetof_t(Context, gdt.limit));
+					REG_zero, 3, offsetof_t(CPUX86State, gdt.limit));
 			ldp->internal = 1;
 			this << *ldp;
 			delete ldp;
@@ -2209,7 +2207,7 @@ bool TraceDecoder::decode_complex() {
 					REG_temp0, 3);
 
 			ldp2 = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
-					REG_zero, 3, offsetof_t(Context, gdt.base));
+					REG_zero, 3, offsetof_t(CPUX86State, gdt.base));
 			ldp2->internal = 1;
 			this << *ldp2;
 			delete ldp2;
@@ -2251,7 +2249,7 @@ bool TraceDecoder::decode_complex() {
 						// Add DS segment base to reg_ar1
 						ldp = new TransOp(OP_ld, REG_temp0, REG_ctx,
 								REG_imm, REG_zero, sizeshift,
-								offsetof_t(Context,
+								offsetof_t(CPUX86State,
 									segs[R_DS].base));
 						ldp->internal = 1;
 						this << *ldp;
@@ -2290,7 +2288,7 @@ bool TraceDecoder::decode_complex() {
 						ra, OP_add);
 
 				ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
-						REG_zero, 2, offsetof_t(Context, idt.limit));
+						REG_zero, 2, offsetof_t(CPUX86State, idt.limit));
 				ldp->internal = 1;
 				this << *ldp;
 				delete ldp;
@@ -2298,7 +2296,7 @@ bool TraceDecoder::decode_complex() {
 						REG_temp0, 3);
 
 				ldp2 = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
-						REG_zero, 3, offsetof_t(Context, idt.base));
+						REG_zero, 3, offsetof_t(CPUX86State, idt.base));
 				ldp2->internal = 1;
 				this << *ldp2;
 				delete ldp2;
@@ -2400,11 +2398,11 @@ bool TraceDecoder::decode_complex() {
 					int offset_val1 = 0;
 					int offset_val2 = 0;
 					if(modrm.reg == 2) {
-						offset_val1 = offsetof_t(Context, gdt.base);
-						offset_val2 = offsetof_t(Context, gdt.limit);
+						offset_val1 = offsetof_t(CPUX86State, gdt.base);
+						offset_val2 = offsetof_t(CPUX86State, gdt.limit);
 					} else {
-						offset_val1 = offsetof_t(Context, idt.base);
-						offset_val2 = offsetof_t(Context, idt.limit);
+						offset_val1 = offsetof_t(CPUX86State, idt.base);
+						offset_val2 = offsetof_t(CPUX86State, idt.limit);
 					}
 					st1 = new TransOp(OP_st, REG_mem, REG_temp7,
 							REG_zero, REG_imm, 2, offset_val1);
@@ -2432,10 +2430,10 @@ bool TraceDecoder::decode_complex() {
 
 #ifdef __x86_64__
 			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
-					REG_zero, 3, offsetof_t(Context, cr[0]) + 4);
+					REG_zero, 3, offsetof_t(CPUX86State, cr[0]) + 4);
 #else
 			ldp = new TransOp(OP_ld, REG_temp0, REG_ctx, REG_imm,
-					REG_zero, 3, offsetof_t(Context, cr[0]));
+					REG_zero, 3, offsetof_t(CPUX86State, cr[0]));
 #endif
 			ldp->internal = 1;
 			this << *ldp;
@@ -2469,10 +2467,10 @@ bool TraceDecoder::decode_complex() {
 						EndOfDecode();
 						TransOp ld1(OP_ld, REG_temp0, REG_ctx, REG_imm,
 								REG_zero, 3,
-								offsetof_t(Context, segs[R_GS].base));
+								offsetof_t(CPUX86State, segs[R_GS].base));
 						TransOp ld2(OP_ld, REG_temp1, REG_ctx, REG_imm,
 								REG_zero, 3,
-								offsetof_t(Context, kernelgsbase));
+								offsetof_t(CPUX86State, kernelgsbase));
 						ld1.internal = 1;
 						ld2.internal = 1;
 						this << ld1;
@@ -2480,10 +2478,10 @@ bool TraceDecoder::decode_complex() {
 
 						st1 = new TransOp(OP_st, REG_mem, REG_ctx,
 								REG_imm, REG_temp1, 3,
-								offsetof_t(Context, segs[R_GS].base));
+								offsetof_t(CPUX86State, segs[R_GS].base));
 						st2 = new TransOp(OP_st, REG_mem, REG_ctx,
 								REG_imm, REG_temp0, 3,
-								offsetof_t(Context, kernelgsbase));
+								offsetof_t(CPUX86State, kernelgsbase));
 						st1->internal = 1;
 						st2->internal = 1;
 						this << *st1;
@@ -2557,14 +2555,14 @@ bool TraceDecoder::decode_complex() {
     int offset = -1;
 
     switch (modrm.reg) {
-    case 0: offset = offsetof_t(Context, cr[0]); break;
-    case 1: offset = offsetof_t(Context, cr[1]); break;
-    case 2: offset = offsetof_t(Context, cr[2]); break;
-    case 3: offset = offsetof_t(Context, cr[3]); break;
-    case 4: offset = offsetof_t(Context, cr[4]); break;
-    case 5: offset = offsetof_t(Context, cr[5]); break;
-    case 6: offset = offsetof_t(Context, cr[6]); break;
-    case 7: offset = offsetof_t(Context, cr[7]); break;
+    case 0: offset = offsetof_t(CPUX86State, cr[0]); break;
+    case 1: offset = offsetof_t(CPUX86State, cr[1]); break;
+    case 2: offset = offsetof_t(CPUX86State, cr[2]); break;
+    case 3: offset = offsetof_t(CPUX86State, cr[3]); break;
+    case 4: offset = offsetof_t(CPUX86State, cr[4]); break;
+    case 5: offset = offsetof_t(CPUX86State, cr[5]); break;
+    case 6: offset = offsetof_t(CPUX86State, cr[6]); break;
+    case 7: offset = offsetof_t(CPUX86State, cr[7]); break;
     default: MakeInvalid();
     }
 
@@ -2620,14 +2618,14 @@ bool TraceDecoder::decode_complex() {
     int offset = -1;
 
     switch (modrm.reg) {
-    case 0: offset = offsetof_t(Context, dr[0]); break;
-    case 1: offset = offsetof_t(Context, dr[1]); break;
-    case 2: offset = offsetof_t(Context, dr[2]); break;
-    case 3: offset = offsetof_t(Context, cr[3]); break;
-    case 4: offset = offsetof_t(Context, dr[4]); break;
-    case 5: offset = offsetof_t(Context, dr[5]); break;
-    case 6: offset = offsetof_t(Context, dr[6]); break;
-    case 7: offset = offsetof_t(Context, dr[7]); break;
+    case 0: offset = offsetof_t(CPUX86State, dr[0]); break;
+    case 1: offset = offsetof_t(CPUX86State, dr[1]); break;
+    case 2: offset = offsetof_t(CPUX86State, dr[2]); break;
+    case 3: offset = offsetof_t(CPUX86State, cr[3]); break;
+    case 4: offset = offsetof_t(CPUX86State, dr[4]); break;
+    case 5: offset = offsetof_t(CPUX86State, dr[5]); break;
+    case 6: offset = offsetof_t(CPUX86State, dr[6]); break;
+    case 7: offset = offsetof_t(CPUX86State, dr[7]); break;
     default: MakeInvalid();
     }
 
@@ -3106,7 +3104,7 @@ bool TraceDecoder::decode_complex() {
       EndOfDecode();
       is_sse = 1;
 
-      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof_t(Context, mxcsr)); ldp.internal = 1; this << ldp;
+      TransOp ldp(OP_ld, REG_temp1, REG_ctx, REG_imm, REG_zero, 1, offsetof_t(CPUX86State, mxcsr)); ldp.internal = 1; this << ldp;
       result_store(REG_temp1, REG_temp0, rd);
       break;
     }

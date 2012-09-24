@@ -26,7 +26,6 @@
 #include <hw/pc.h>
 #include <hw/isa.h>
 #include "block.h"
-#include "block_int.h"
 #include "dma.h"
 
 #include <hw/ide/internal.h>
@@ -67,22 +66,20 @@ static int isa_ide_initfn(ISADevice *dev)
     ISAIDEState *s = DO_UPCAST(ISAIDEState, dev, dev);
 
     ide_bus_new(&s->bus, &s->dev.qdev, 0);
-    ide_init_ioport(&s->bus, s->iobase, s->iobase2);
+    ide_init_ioport(&s->bus, dev, s->iobase, s->iobase2);
     isa_init_irq(dev, &s->irq, s->isairq);
-    isa_init_ioport_range(dev, s->iobase, 8);
-    isa_init_ioport(dev, s->iobase2);
     ide_init2(&s->bus, s->irq);
     vmstate_register(&dev->qdev, 0, &vmstate_ide_isa, s);
     return 0;
 };
 
-ISADevice *isa_ide_init(int iobase, int iobase2, int isairq,
+ISADevice *isa_ide_init(ISABus *bus, int iobase, int iobase2, int isairq,
                         DriveInfo *hd0, DriveInfo *hd1)
 {
     ISADevice *dev;
     ISAIDEState *s;
 
-    dev = isa_create("isa-ide");
+    dev = isa_create(bus, "isa-ide");
     qdev_prop_set_uint32(&dev->qdev, "iobase",  iobase);
     qdev_prop_set_uint32(&dev->qdev, "iobase2", iobase2);
     qdev_prop_set_uint32(&dev->qdev, "irq",     isairq);
@@ -97,23 +94,33 @@ ISADevice *isa_ide_init(int iobase, int iobase2, int isairq,
     return dev;
 }
 
-static ISADeviceInfo isa_ide_info = {
-    .qdev.name  = "isa-ide",
-    .qdev.fw_name  = "ide",
-    .qdev.size  = sizeof(ISAIDEState),
-    .init       = isa_ide_initfn,
-    .qdev.reset = isa_ide_reset,
-    .qdev.props = (Property[]) {
-        DEFINE_PROP_HEX32("iobase",  ISAIDEState, iobase,  0x1f0),
-        DEFINE_PROP_HEX32("iobase2", ISAIDEState, iobase2, 0x3f6),
-        DEFINE_PROP_UINT32("irq",    ISAIDEState, isairq,  14),
-        DEFINE_PROP_END_OF_LIST(),
-    },
+static Property isa_ide_properties[] = {
+    DEFINE_PROP_HEX32("iobase",  ISAIDEState, iobase,  0x1f0),
+    DEFINE_PROP_HEX32("iobase2", ISAIDEState, iobase2, 0x3f6),
+    DEFINE_PROP_UINT32("irq",    ISAIDEState, isairq,  14),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void isa_ide_register_devices(void)
+static void isa_ide_class_initfn(ObjectClass *klass, void *data)
 {
-    isa_qdev_register(&isa_ide_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    ISADeviceClass *ic = ISA_DEVICE_CLASS(klass);
+    ic->init = isa_ide_initfn;
+    dc->fw_name = "ide";
+    dc->reset = isa_ide_reset;
+    dc->props = isa_ide_properties;
 }
 
-device_init(isa_ide_register_devices)
+static TypeInfo isa_ide_info = {
+    .name          = "isa-ide",
+    .parent        = TYPE_ISA_DEVICE,
+    .instance_size = sizeof(ISAIDEState),
+    .class_init    = isa_ide_class_initfn,
+};
+
+static void isa_ide_register_types(void)
+{
+    type_register_static(&isa_ide_info);
+}
+
+type_init(isa_ide_register_types)

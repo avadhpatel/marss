@@ -859,7 +859,7 @@ sub annotate_values {
 				$av_preprocessor = 0;
 			}
 
-		} elsif ($cur =~ /^(\(\s*$Type\s*)\)/) {
+		} elsif ($cur =~ /^(\(\s*$Type\s*)\)/ && $av_pending eq '_') {
 			print "CAST($1)\n" if ($dbg_values > 1);
 			push(@av_paren_type, $type);
 			$type = 'C';
@@ -1901,13 +1901,13 @@ sub process {
 # printk should use KERN_* levels.  Note that follow on printk's on the
 # same line do not need a level, so we use the current block context
 # to try and find and validate the current printk.  In summary the current
-# printk includes all preceeding printk's which have no newline on the end.
+# printk includes all preceding printk's which have no newline on the end.
 # we assume the first bad printk is the one to report.
 		if ($line =~ /\bprintk\((?!KERN_)\s*"/) {
 			my $ok = 0;
 			for (my $ln = $linenr - 1; $ln >= $first_line; $ln--) {
 				#print "CHECK<$lines[$ln - 1]\n";
-				# we have a preceeding printk if it ends
+				# we have a preceding printk if it ends
 				# with "\n" ignore it, else it is to blame
 				if ($lines[$ln - 1] =~ m{\bprintk\(}) {
 					if ($rawlines[$ln - 1] !~ m{\\n"}) {
@@ -1999,7 +1999,7 @@ sub process {
 			for (my $n = 0; $n < $#elements; $n += 2) {
 				$off += length($elements[$n]);
 
-				# Pick up the preceeding and succeeding characters.
+				# Pick up the preceding and succeeding characters.
 				my $ca = substr($opline, 0, $off);
 				my $cc = '';
 				if (length($opline) >= ($off + length($elements[$n + 1]))) {
@@ -2204,12 +2204,6 @@ sub process {
 		    $line !~ /for\s*\(.*;\s+\)/ &&
 		    $line !~ /:\s+\)/) {
 			ERROR("space prohibited before that close parenthesis ')'\n" . $herecurr);
-		}
-
-#goto labels aren't indented, allow a single space however
-		if ($line=~/^.\s+[A-Za-z\d_]+:(?![0-9]+)/ and
-		   !($line=~/^. [A-Za-z\d_]+:/) and !($line=~/^.\s+default:/)) {
-			WARN("labels should not be indented\n" . $herecurr);
 		}
 
 # Return is not a function.
@@ -2532,7 +2526,7 @@ sub process {
 						$allowed = 1;
 					}
 				}
-				if (!$seen) {
+				if ($seen != ($#chunks + 1)) {
 					WARN("braces {} are necessary for all arms of this statement\n" . $herectx);
 				}
 			}

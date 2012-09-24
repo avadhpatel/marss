@@ -139,6 +139,7 @@ struct SerialState {
     int it_shift;
     int baudbase;
     int tsr_retry;
+    uint32_t wakeup;
 
     uint64_t last_xmit_ts;              /* Time when the last byte was successfully sent out of the tsr */
     SerialFIFO recv_fifo;
@@ -153,6 +154,7 @@ struct SerialState {
     int poll_msl;
 
     struct QEMUTimer *modem_status_poll;
+    MemoryRegion io;
 };
 
 typedef struct ISASerialState {
@@ -274,7 +276,7 @@ static void serial_update_parameters(SerialState *s)
     ssp.data_bits = data_bits;
     ssp.stop_bits = stop_bits;
     s->char_transmit_time =  (get_ticks_per_sec() / speed) * frame_size;
-    qemu_chr_ioctl(s->chr, CHR_IOCTL_SERIAL_SET_PARAMS, &ssp);
+    qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_SERIAL_SET_PARAMS, &ssp);
 
     DPRINTF("speed=%d parity=%c data=%d stop=%d\n",
            speed, parity, data_bits, stop_bits);
@@ -287,7 +289,7 @@ static void serial_update_msl(SerialState *s)
 
     qemu_del_timer(s->modem_status_poll);
 
-    if (qemu_chr_ioctl(s->chr,CHR_IOCTL_SERIAL_GET_TIOCM, &flags) == -ENOTSUP) {
+    if (qemu_chr_fe_ioctl(s->chr,CHR_IOCTL_SERIAL_GET_TIOCM, &flags) == -ENOTSUP) {
         s->poll_msl = -1;
         return;
     }
@@ -325,17 +327,20 @@ static void serial_xmit(void *opaque)
             s->tsr = fifo_get(s,XMIT_FIFO);
             if (!s->xmit_fifo.count)
                 s->lsr |= UART_LSR_THRE;
+        } else if ((s->lsr & UART_LSR_THRE)) {
+            return;
         } else {
             s->tsr = s->thr;
             s->lsr |= UART_LSR_THRE;
+            s->lsr &= ~UART_LSR_TEMT;
         }
     }
 
     if (s->mcr & UART_MCR_LOOP) {
         /* in loopback mode, say that we just received a char */
         serial_receive1(s, &s->tsr, 1);
-    } else if (qemu_chr_write(s->chr, &s->tsr, 1) != 1) {
-        if ((s->tsr_retry > 0) && (s->tsr_retry <= MAX_XMIT_RETRY)) {
+    } else if (qemu_chr_fe_write(s->chr, &s->tsr, 1) != 1) {
+        if ((s->tsr_retry >= 0) && (s->tsr_retry <= MAX_XMIT_RETRY)) {
             s->tsr_retry++;
             qemu_mod_timer(s->transmit_timer,  new_xmit_ts + s->char_transmit_time);
             return;
@@ -467,7 +472,7 @@ static void serial_ioport_write(void *opaque, uint32_t addr, uint32_t val)
             break_enable = (val >> 6) & 1;
             if (break_enable != s->last_break_enable) {
                 s->last_break_enable = break_enable;
-                qemu_chr_ioctl(s->chr, CHR_IOCTL_SERIAL_SET_BREAK,
+                qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_SERIAL_SET_BREAK,
                                &break_enable);
             }
         }
@@ -482,7 +487,7 @@ static void serial_ioport_write(void *opaque, uint32_t addr, uint32_t val)
 
             if (s->poll_msl >= 0 && old_mcr != s->mcr) {
 
-                qemu_chr_ioctl(s->chr,CHR_IOCTL_SERIAL_GET_TIOCM, &flags);
+                qemu_chr_fe_ioctl(s->chr,CHR_IOCTL_SERIAL_GET_TIOCM, &flags);
 
                 flags &= ~(CHR_TIOCM_RTS | CHR_TIOCM_DTR);
 
@@ -491,7 +496,7 @@ static void serial_ioport_write(void *opaque, uint32_t addr, uint32_t val)
                 if (val & UART_MCR_DTR)
                     flags |= CHR_TIOCM_DTR;
 
-                qemu_chr_ioctl(s->chr,CHR_IOCTL_SERIAL_SET_TIOCM, &flags);
+                qemu_chr_fe_ioctl(s->chr,CHR_IOCTL_SERIAL_SET_TIOCM, &flags);
                 /* Update the modem status after a one-character-send wait-time, since there may be a response
                    from the device/computer at the other end of the serial line */
                 qemu_mod_timer(s->modem_status_poll, qemu_get_clock_ns(vm_clock) + s->char_transmit_time);
@@ -634,6 +639,10 @@ static int serial_can_receive1(void *opaque)
 static void serial_receive1(void *opaque, const uint8_t *buf, int size)
 {
     SerialState *s = opaque;
+
+    if (s->wakeup) {
+        qemu_system_wakeup_request(QEMU_WAKEUP_REASON_OTHER);
+    }
     if(s->fcr & UART_FCR_FE) {
         int i;
         for (i = 0; i < size; i++) {
@@ -755,6 +764,15 @@ void serial_set_frequency(SerialState *s, uint32_t frequency)
 static const int isa_serial_io[MAX_SERIAL_PORTS] = { 0x3f8, 0x2f8, 0x3e8, 0x2e8 };
 static const int isa_serial_irq[MAX_SERIAL_PORTS] = { 4, 3, 4, 3 };
 
+static const MemoryRegionPortio serial_portio[] = {
+    { 0, 8, 1, .read = serial_ioport_read, .write = serial_ioport_write },
+    PORTIO_END_OF_LIST()
+};
+
+static const MemoryRegionOps serial_io_ops = {
+    .old_portio = serial_portio
+};
+
 static int serial_isa_initfn(ISADevice *dev)
 {
     static int index;
@@ -776,9 +794,8 @@ static int serial_isa_initfn(ISADevice *dev)
     serial_init_core(s);
     qdev_set_legacy_instance_id(&dev->qdev, isa->iobase, 3);
 
-    register_ioport_write(isa->iobase, 8, 1, serial_ioport_write, s);
-    register_ioport_read(isa->iobase, 8, 1, serial_ioport_read, s);
-    isa_init_ioport_range(dev, isa->iobase, 8);
+    memory_region_init_io(&s->io, &serial_io_ops, s, "serial", 8);
+    isa_register_ioport(dev, &s->io, isa->iobase);
     return 0;
 }
 
@@ -797,7 +814,7 @@ SerialState *serial_init(int base, qemu_irq irq, int baudbase,
 {
     SerialState *s;
 
-    s = qemu_mallocz(sizeof(SerialState));
+    s = g_malloc0(sizeof(SerialState));
 
     s->irq = irq;
     s->baudbase = baudbase;
@@ -812,126 +829,47 @@ SerialState *serial_init(int base, qemu_irq irq, int baudbase,
 }
 
 /* Memory mapped interface */
-static uint32_t serial_mm_readb(void *opaque, target_phys_addr_t addr)
+static uint64_t serial_mm_read(void *opaque, target_phys_addr_t addr,
+                               unsigned size)
 {
     SerialState *s = opaque;
-
-    return serial_ioport_read(s, addr >> s->it_shift) & 0xFF;
+    return serial_ioport_read(s, addr >> s->it_shift);
 }
 
-static void serial_mm_writeb(void *opaque, target_phys_addr_t addr,
-                             uint32_t value)
+static void serial_mm_write(void *opaque, target_phys_addr_t addr,
+                            uint64_t value, unsigned size)
 {
     SerialState *s = opaque;
-
-    serial_ioport_write(s, addr >> s->it_shift, value & 0xFF);
-}
-
-static uint32_t serial_mm_readw_be(void *opaque, target_phys_addr_t addr)
-{
-    SerialState *s = opaque;
-    uint32_t val;
-
-    val = serial_ioport_read(s, addr >> s->it_shift) & 0xFFFF;
-    val = bswap16(val);
-    return val;
-}
-
-static uint32_t serial_mm_readw_le(void *opaque, target_phys_addr_t addr)
-{
-    SerialState *s = opaque;
-    uint32_t val;
-
-    val = serial_ioport_read(s, addr >> s->it_shift) & 0xFFFF;
-    return val;
-}
-
-static void serial_mm_writew_be(void *opaque, target_phys_addr_t addr,
-                                uint32_t value)
-{
-    SerialState *s = opaque;
-
-    value = bswap16(value);
-    serial_ioport_write(s, addr >> s->it_shift, value & 0xFFFF);
-}
-
-static void serial_mm_writew_le(void *opaque, target_phys_addr_t addr,
-                                uint32_t value)
-{
-    SerialState *s = opaque;
-
-    serial_ioport_write(s, addr >> s->it_shift, value & 0xFFFF);
-}
-
-static uint32_t serial_mm_readl_be(void *opaque, target_phys_addr_t addr)
-{
-    SerialState *s = opaque;
-    uint32_t val;
-
-    val = serial_ioport_read(s, addr >> s->it_shift);
-    val = bswap32(val);
-    return val;
-}
-
-static uint32_t serial_mm_readl_le(void *opaque, target_phys_addr_t addr)
-{
-    SerialState *s = opaque;
-    uint32_t val;
-
-    val = serial_ioport_read(s, addr >> s->it_shift);
-    return val;
-}
-
-static void serial_mm_writel_be(void *opaque, target_phys_addr_t addr,
-                                uint32_t value)
-{
-    SerialState *s = opaque;
-
-    value = bswap32(value);
+    value &= ~0u >> (32 - (size * 8));
     serial_ioport_write(s, addr >> s->it_shift, value);
 }
 
-static void serial_mm_writel_le(void *opaque, target_phys_addr_t addr,
-                                uint32_t value)
-{
-    SerialState *s = opaque;
-
-    serial_ioport_write(s, addr >> s->it_shift, value);
-}
-
-static CPUReadMemoryFunc * const serial_mm_read_be[] = {
-    &serial_mm_readb,
-    &serial_mm_readw_be,
-    &serial_mm_readl_be,
+static const MemoryRegionOps serial_mm_ops[3] = {
+    [DEVICE_NATIVE_ENDIAN] = {
+        .read = serial_mm_read,
+        .write = serial_mm_write,
+        .endianness = DEVICE_NATIVE_ENDIAN,
+    },
+    [DEVICE_LITTLE_ENDIAN] = {
+        .read = serial_mm_read,
+        .write = serial_mm_write,
+        .endianness = DEVICE_LITTLE_ENDIAN,
+    },
+    [DEVICE_BIG_ENDIAN] = {
+        .read = serial_mm_read,
+        .write = serial_mm_write,
+        .endianness = DEVICE_BIG_ENDIAN,
+    },
 };
 
-static CPUWriteMemoryFunc * const serial_mm_write_be[] = {
-    &serial_mm_writeb,
-    &serial_mm_writew_be,
-    &serial_mm_writel_be,
-};
-
-static CPUReadMemoryFunc * const serial_mm_read_le[] = {
-    &serial_mm_readb,
-    &serial_mm_readw_le,
-    &serial_mm_readl_le,
-};
-
-static CPUWriteMemoryFunc * const serial_mm_write_le[] = {
-    &serial_mm_writeb,
-    &serial_mm_writew_le,
-    &serial_mm_writel_le,
-};
-
-SerialState *serial_mm_init (target_phys_addr_t base, int it_shift,
-                             qemu_irq irq, int baudbase,
-                             CharDriverState *chr, int ioregister,
-                             int be)
+SerialState *serial_mm_init(MemoryRegion *address_space,
+                            target_phys_addr_t base, int it_shift,
+                            qemu_irq irq, int baudbase,
+                            CharDriverState *chr, enum device_endian end)
 {
     SerialState *s;
-    int s_io_memory;
 
-    s = qemu_mallocz(sizeof(SerialState));
+    s = g_malloc0(sizeof(SerialState));
 
     s->it_shift = it_shift;
     s->irq = irq;
@@ -941,39 +879,42 @@ SerialState *serial_mm_init (target_phys_addr_t base, int it_shift,
     serial_init_core(s);
     vmstate_register(NULL, base, &vmstate_serial, s);
 
-    if (ioregister) {
-        if (be) {
-            s_io_memory = cpu_register_io_memory(serial_mm_read_be,
-                                                 serial_mm_write_be, s,
-                                                 DEVICE_NATIVE_ENDIAN);
-        } else {
-            s_io_memory = cpu_register_io_memory(serial_mm_read_le,
-                                                 serial_mm_write_le, s,
-                                                 DEVICE_NATIVE_ENDIAN);
-        }
-        cpu_register_physical_memory(base, 8 << it_shift, s_io_memory);
-    }
+    memory_region_init_io(&s->io, &serial_mm_ops[end], s,
+                          "serial", 8 << it_shift);
+    memory_region_add_subregion(address_space, base, &s->io);
+
     serial_update_msl(s);
     return s;
 }
 
-static ISADeviceInfo serial_isa_info = {
-    .qdev.name  = "isa-serial",
-    .qdev.size  = sizeof(ISASerialState),
-    .qdev.vmsd  = &vmstate_isa_serial,
-    .init       = serial_isa_initfn,
-    .qdev.props = (Property[]) {
-        DEFINE_PROP_UINT32("index", ISASerialState, index,   -1),
-        DEFINE_PROP_HEX32("iobase", ISASerialState, iobase,  -1),
-        DEFINE_PROP_UINT32("irq",   ISASerialState, isairq,  -1),
-        DEFINE_PROP_CHR("chardev",  ISASerialState, state.chr),
-        DEFINE_PROP_END_OF_LIST(),
-    },
+static Property serial_isa_properties[] = {
+    DEFINE_PROP_UINT32("index", ISASerialState, index,   -1),
+    DEFINE_PROP_HEX32("iobase", ISASerialState, iobase,  -1),
+    DEFINE_PROP_UINT32("irq",   ISASerialState, isairq,  -1),
+    DEFINE_PROP_CHR("chardev",  ISASerialState, state.chr),
+    DEFINE_PROP_UINT32("wakeup", ISASerialState, state.wakeup, 0),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void serial_register_devices(void)
+static void serial_isa_class_initfn(ObjectClass *klass, void *data)
 {
-    isa_qdev_register(&serial_isa_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    ISADeviceClass *ic = ISA_DEVICE_CLASS(klass);
+    ic->init = serial_isa_initfn;
+    dc->vmsd = &vmstate_isa_serial;
+    dc->props = serial_isa_properties;
 }
 
-device_init(serial_register_devices)
+static TypeInfo serial_isa_info = {
+    .name          = "isa-serial",
+    .parent        = TYPE_ISA_DEVICE,
+    .instance_size = sizeof(ISASerialState),
+    .class_init    = serial_isa_class_initfn,
+};
+
+static void serial_register_types(void)
+{
+    type_register_static(&serial_isa_info);
+}
+
+type_init(serial_register_types)

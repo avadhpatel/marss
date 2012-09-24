@@ -43,7 +43,7 @@ typedef struct {
     uint8_t data[NUM_PACKETS][2048];
     uint8_t int_level;
     uint8_t int_mask;
-    int mmio_index;
+    MemoryRegion mmio;
 } smc91c111_state;
 
 static const VMStateDescription vmstate_smc91c111 = {
@@ -429,7 +429,7 @@ static void smc91c111_writeb(void *opaque, target_phys_addr_t offset,
             smc91c111_update(s);
             return;
         }
-        break;;
+        break;
 
     case 3:
         switch (offset) {
@@ -717,16 +717,15 @@ static ssize_t smc91c111_receive(VLANClientState *nc, const uint8_t *buf, size_t
     return size;
 }
 
-static CPUReadMemoryFunc * const smc91c111_readfn[] = {
-    smc91c111_readb,
-    smc91c111_readw,
-    smc91c111_readl
-};
-
-static CPUWriteMemoryFunc * const smc91c111_writefn[] = {
-    smc91c111_writeb,
-    smc91c111_writew,
-    smc91c111_writel
+static const MemoryRegionOps smc91c111_mem_ops = {
+    /* The special case for 32 bit writes to 0xc means we can't just
+     * set .impl.min/max_access_size to 1, unfortunately
+     */
+    .old_mmio = {
+        .read = { smc91c111_readb, smc91c111_readw, smc91c111_readl, },
+        .write = { smc91c111_writeb, smc91c111_writew, smc91c111_writel, },
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 static void smc91c111_cleanup(VLANClientState *nc)
@@ -747,35 +746,44 @@ static NetClientInfo net_smc91c111_info = {
 static int smc91c111_init1(SysBusDevice *dev)
 {
     smc91c111_state *s = FROM_SYSBUS(smc91c111_state, dev);
-
-    s->mmio_index = cpu_register_io_memory(smc91c111_readfn,
-                                           smc91c111_writefn, s,
-                                           DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, 16, s->mmio_index);
+    memory_region_init_io(&s->mmio, &smc91c111_mem_ops, s,
+                          "smc91c111-mmio", 16);
+    sysbus_init_mmio(dev, &s->mmio);
     sysbus_init_irq(dev, &s->irq);
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
     s->nic = qemu_new_nic(&net_smc91c111_info, &s->conf,
-                          dev->qdev.info->name, dev->qdev.id, s);
+                          object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
     /* ??? Save/restore.  */
     return 0;
 }
 
-static SysBusDeviceInfo smc91c111_info = {
-    .init = smc91c111_init1,
-    .qdev.name  = "smc91c111",
-    .qdev.size  = sizeof(smc91c111_state),
-    .qdev.vmsd = &vmstate_smc91c111,
-    .qdev.reset = smc91c111_reset,
-    .qdev.props = (Property[]) {
-        DEFINE_NIC_PROPERTIES(smc91c111_state, conf),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+static Property smc91c111_properties[] = {
+    DEFINE_NIC_PROPERTIES(smc91c111_state, conf),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void smc91c111_register_devices(void)
+static void smc91c111_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&smc91c111_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = smc91c111_init1;
+    dc->reset = smc91c111_reset;
+    dc->vmsd = &vmstate_smc91c111;
+    dc->props = smc91c111_properties;
+}
+
+static TypeInfo smc91c111_info = {
+    .name          = "smc91c111",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(smc91c111_state),
+    .class_init    = smc91c111_class_init,
+};
+
+static void smc91c111_register_types(void)
+{
+    type_register_static(&smc91c111_info);
 }
 
 /* Legacy helper function.  Should go away when machine config files are
@@ -794,4 +802,4 @@ void smc91c111_init(NICInfo *nd, uint32_t base, qemu_irq irq)
     sysbus_connect_irq(s, 0, irq);
 }
 
-device_init(smc91c111_register_devices)
+type_init(smc91c111_register_types)

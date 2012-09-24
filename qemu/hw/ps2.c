@@ -24,6 +24,7 @@
 #include "hw.h"
 #include "ps2.h"
 #include "console.h"
+#include "sysemu.h"
 
 /* debug PC keyboard */
 //#define DEBUG_KBD
@@ -87,11 +88,12 @@ typedef struct {
 typedef struct {
     PS2State common;
     int scan_enabled;
-    /* Qemu uses translated PC scancodes internally.  To avoid multiple
+    /* QEMU uses translated PC scancodes internally.  To avoid multiple
        conversions we do the translation (if any) in the PS/2 emulation
        not the keyboard controller.  */
     int translate;
     int scancode_set; /* 1=XT, 2=AT, 3=PS/2 */
+    int ledstate;
 } PS2KbdState;
 
 typedef struct {
@@ -153,6 +155,7 @@ static void ps2_put_keycode(void *opaque, int keycode)
 {
     PS2KbdState *s = opaque;
 
+    qemu_system_wakeup_request(QEMU_WAKEUP_REASON_OTHER);
     /* XXX: add support for scancode set 1 */
     if (!s->translate && keycode < 0xe0 && s->scancode_set > 1) {
         if (keycode & 0x80) {
@@ -195,11 +198,17 @@ uint32_t ps2_read_data(void *opaque)
     return val;
 }
 
+static void ps2_set_ledstate(PS2KbdState *s, int ledstate)
+{
+    s->ledstate = ledstate;
+    kbd_put_ledstate(ledstate);
+}
+
 static void ps2_reset_keyboard(PS2KbdState *s)
 {
     s->scan_enabled = 1;
     s->scancode_set = 2;
-    kbd_put_ledstate(0);
+    ps2_set_ledstate(s, 0);
 }
 
 void ps2_write_keyboard(void *opaque, int val)
@@ -274,7 +283,7 @@ void ps2_write_keyboard(void *opaque, int val)
         s->common.write_cmd = -1;
         break;
     case KBD_CMD_SET_LEDS:
-        kbd_put_ledstate(val);
+        ps2_set_ledstate(s, val);
         ps2_queue(&s->common, KBD_REPLY_ACK);
         s->common.write_cmd = -1;
         break;
@@ -360,6 +369,10 @@ static void ps2_mouse_event(void *opaque,
         s->mouse_buttons == buttons_state)
 	return;
     s->mouse_buttons = buttons_state;
+
+    if (buttons_state) {
+        qemu_system_wakeup_request(QEMU_WAKEUP_REASON_OTHER);
+    }
 
     if (!(s->mouse_status & MOUSE_STATUS_REMOTE) &&
         (s->common.queue.count < (PS2_QUEUE_SIZE - 16))) {
@@ -557,6 +570,33 @@ static const VMStateDescription vmstate_ps2_common = {
     }
 };
 
+static bool ps2_keyboard_ledstate_needed(void *opaque)
+{
+    PS2KbdState *s = opaque;
+
+    return s->ledstate != 0; /* 0 is default state */
+}
+
+static int ps2_kbd_ledstate_post_load(void *opaque, int version_id)
+{
+    PS2KbdState *s = opaque;
+
+    kbd_put_ledstate(s->ledstate);
+    return 0;
+}
+
+static const VMStateDescription vmstate_ps2_keyboard_ledstate = {
+    .name = "ps2kbd/ledstate",
+    .version_id = 3,
+    .minimum_version_id = 2,
+    .minimum_version_id_old = 2,
+    .post_load = ps2_kbd_ledstate_post_load,
+    .fields      = (VMStateField []) {
+        VMSTATE_INT32(ledstate, PS2KbdState),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 static int ps2_kbd_post_load(void* opaque, int version_id)
 {
     PS2KbdState *s = (PS2KbdState*)opaque;
@@ -578,6 +618,14 @@ static const VMStateDescription vmstate_ps2_keyboard = {
         VMSTATE_INT32(translate, PS2KbdState),
         VMSTATE_INT32_V(scancode_set, PS2KbdState,3),
         VMSTATE_END_OF_LIST()
+    },
+    .subsections = (VMStateSubsection []) {
+        {
+            .vmsd = &vmstate_ps2_keyboard_ledstate,
+            .needed = ps2_keyboard_ledstate_needed,
+        }, {
+            /* empty */
+        }
     }
 };
 
@@ -604,7 +652,7 @@ static const VMStateDescription vmstate_ps2_mouse = {
 
 void *ps2_kbd_init(void (*update_irq)(void *, int), void *update_arg)
 {
-    PS2KbdState *s = (PS2KbdState *)qemu_mallocz(sizeof(PS2KbdState));
+    PS2KbdState *s = (PS2KbdState *)g_malloc0(sizeof(PS2KbdState));
 
     s->common.update_irq = update_irq;
     s->common.update_arg = update_arg;
@@ -617,7 +665,7 @@ void *ps2_kbd_init(void (*update_irq)(void *, int), void *update_arg)
 
 void *ps2_mouse_init(void (*update_irq)(void *, int), void *update_arg)
 {
-    PS2MouseState *s = (PS2MouseState *)qemu_mallocz(sizeof(PS2MouseState));
+    PS2MouseState *s = (PS2MouseState *)g_malloc0(sizeof(PS2MouseState));
 
     s->common.update_irq = update_irq;
     s->common.update_arg = update_arg;

@@ -9,6 +9,8 @@
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
  *
+ * Contributions after 2012-01-13 are licensed under the terms of the
+ * GNU GPL, version 2 or (at your option) any later version.
  */
 
 #include "qemu-common.h"
@@ -30,41 +32,53 @@
     do { } while (0)
 #endif
 
-static int fd_errno(FdMigrationState *s)
+static int fd_errno(MigrationState *s)
 {
     return errno;
 }
 
-static int fd_write(FdMigrationState *s, const void * buf, size_t size)
+static int fd_write(MigrationState *s, const void * buf, size_t size)
 {
     return write(s->fd, buf, size);
 }
 
-static int fd_close(FdMigrationState *s)
+static int fd_close(MigrationState *s)
 {
+    struct stat st;
+    int ret;
+
     DPRINTF("fd_close\n");
     if (s->fd != -1) {
-        close(s->fd);
+        ret = fstat(s->fd, &st);
+        if (ret == 0 && S_ISREG(st.st_mode)) {
+            /*
+             * If the file handle is a regular file make sure the
+             * data is flushed to disk before signaling success.
+             */
+            ret = fsync(s->fd);
+            if (ret != 0) {
+                ret = -errno;
+                perror("migration-fd: fsync");
+                return ret;
+            }
+        }
+        ret = close(s->fd);
         s->fd = -1;
+        if (ret != 0) {
+            ret = -errno;
+            perror("migration-fd: close");
+            return ret;
+        }
     }
     return 0;
 }
 
-MigrationState *fd_start_outgoing_migration(Monitor *mon,
-					    const char *fdname,
-					    int64_t bandwidth_limit,
-					    int detach,
-					    int blk,
-					    int inc)
+int fd_start_outgoing_migration(MigrationState *s, const char *fdname)
 {
-    FdMigrationState *s;
-
-    s = qemu_mallocz(sizeof(*s));
-
-    s->fd = monitor_get_fd(mon, fdname);
+    s->fd = monitor_get_fd(cur_mon, fdname);
     if (s->fd == -1) {
         DPRINTF("fd_migration: invalid file descriptor identifier\n");
-        goto err_after_alloc;
+        goto err_after_get_fd;
     }
 
     if (fcntl(s->fd, F_SETFL, O_NONBLOCK) == -1) {
@@ -75,29 +89,14 @@ MigrationState *fd_start_outgoing_migration(Monitor *mon,
     s->get_error = fd_errno;
     s->write = fd_write;
     s->close = fd_close;
-    s->mig_state.cancel = migrate_fd_cancel;
-    s->mig_state.get_status = migrate_fd_get_status;
-    s->mig_state.release = migrate_fd_release;
-
-    s->mig_state.blk = blk;
-    s->mig_state.shared = inc;
-
-    s->state = MIG_STATE_ACTIVE;
-    s->mon = NULL;
-    s->bandwidth_limit = bandwidth_limit;
-
-    if (!detach) {
-        migrate_fd_monitor_suspend(s, mon);
-    }
 
     migrate_fd_connect(s);
-    return &s->mig_state;
+    return 0;
 
 err_after_open:
     close(s->fd);
-err_after_alloc:
-    qemu_free(s);
-    return NULL;
+err_after_get_fd:
+    return -1;
 }
 
 static void fd_accept_incoming_migration(void *opaque)

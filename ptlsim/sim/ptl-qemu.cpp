@@ -35,9 +35,19 @@
 #include <ptlhwdef.h>
 
 extern "C" {
+#define class _safe_class_
+#define typename _safe_typename_
 #include <sysemu.h>
 #include <qemu-objects.h>
+#include <cpu-all.h>
 #include <monitor.h>
+#include <dyngen-exec.h>
+#include <softmmu_exec.h>
+#include <qapi-types.h>
+#include <memory.h>
+#include <exec-memory.h>
+#undef class
+#undef typename
 }
 
 #include <ptl-qemu.h>
@@ -78,8 +88,8 @@ static void save_core_dump(char* dump, W64 dump_size,
     char      *dmp;
     char      *app;
 
-    dmp = (char*)qemu_malloc(sizeof(char) * dump_size);
-    app = (char*)qemu_malloc((sizeof(char) * app_name_size) + 1);
+    dmp = (char*)g_malloc(sizeof(char) * dump_size);
+    app = (char*)g_malloc((sizeof(char) * app_name_size) + 1);
 
     _addr = dump;
     foreach(i, (W64s)dump_size) {
@@ -105,8 +115,12 @@ static void save_core_dump(char* dump, W64 dump_size,
                 filename, " with signal ", signum, endl;
 }
 
-static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
-        int length) {
+static void ptlcall_mmio_write(void* opaque, target_phys_addr_t offset,
+        uint64_t value, unsigned length) {
+    CPUX86State* old_env = env;
+    if (env != cpu_single_env)
+        env = cpu_single_env;
+	CPUX86State* cpu = cpu_single_env;
     int calltype = (int)(cpu->regs[REG_rax]);
     W64 arg1 = cpu->regs[REG_rdi];
     W64 arg2 = cpu->regs[REG_rsi];
@@ -146,7 +160,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 
                     desc_ptr += 16;
 
-                    char *command_str = (char*)qemu_malloc(desc.length + 1);
+                    char *command_str = (char*)g_malloc(desc.length + 1);
                     char *command_addr = (char*)(desc.command);
                     foreach (i, (W64s)desc.length) {
                         command_str[i] = (char)ldub_kernel(
@@ -157,12 +171,12 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
 
                     command << command_str << " ";
 
-                    qemu_free(command_str);
+                    g_free(command_str);
                 }
 
 
                 ptl_logfile << "Command received: " << command << endl << flush;
-                pending_command_str = (char*)qemu_malloc(command.size() * sizeof(char));
+                pending_command_str = (char*)g_malloc(command.size() * sizeof(char));
                 strcpy(pending_command_str, command.buf);
                 pending_call_type = PTLCALL_ENQUEUE;
                 simulation_configured = 1;
@@ -178,7 +192,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
             {
                 if (!config.quiet) cout << "PTLCALL type PTLCALL_CHECKPOINT\n";
 
-                char *checkpoint_name = (char*)qemu_malloc(arg2 + 1);
+                char *checkpoint_name = (char*)g_malloc(arg2 + 1);
                 char *name_addr = (char*)(arg1);
                 foreach (i, (W64s)arg2) {
                     checkpoint_name[i] = (char)ldub_kernel(
@@ -186,7 +200,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                 }
                 checkpoint_name[arg2] = '\0';
 
-                vm_stop(0);
+                vm_stop(RUN_STATE_PAUSED);
 
                 if (cpu_single_env)
                     cpu_exit(cpu_single_env);
@@ -254,50 +268,17 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
             cout << "PTLCALL type unknown : ", calltype, endl;
             cpu->regs[REG_rax] = -EINVAL;
     }
+
+    env = old_env;
 }
 
-static uint32_t ptlcall_mmio_read(CPUX86State* cpu, W64 offset, int length) {
-    return 0;
+static uint64_t ptlcall_mmio_read(void *opaque, target_phys_addr_t offset,
+		unsigned length) {
+	return 0;
 }
 
-static uint32_t ptlcall_mmio_readb(void *opaque, target_phys_addr_t addr) {
-    return ptlcall_mmio_read(cpu_single_env, addr, 1);
-}
-
-static uint32_t ptlcall_mmio_readw(void *opaque, target_phys_addr_t addr) {
-    return ptlcall_mmio_read(cpu_single_env, addr, 2);
-}
-
-static uint32_t ptlcall_mmio_readl(void *opaque, target_phys_addr_t addr) {
-    return ptlcall_mmio_read(cpu_single_env, addr, 4);
-}
-
-static void ptlcall_mmio_writeb(void *opaque, target_phys_addr_t addr,
-        uint32_t value) {
-    ptlcall_mmio_write(cpu_single_env, addr, value, 1);
-}
-
-static void ptlcall_mmio_writew(void *opaque, target_phys_addr_t addr,
-        uint32_t value) {
-    ptlcall_mmio_write(cpu_single_env, addr, value, 2);
-}
-
-static void ptlcall_mmio_writel(void *opaque, target_phys_addr_t addr,
-        uint32_t value) {
-    ptlcall_mmio_write(cpu_single_env, addr, value, 4);
-}
-
-static CPUReadMemoryFunc* ptlcall_mmio_read_ops[] = {
-    ptlcall_mmio_readb,
-    ptlcall_mmio_readw,
-    ptlcall_mmio_readl,
-};
-
-static CPUWriteMemoryFunc* ptlcall_mmio_write_ops[] = {
-    ptlcall_mmio_writeb,
-    ptlcall_mmio_writew,
-    ptlcall_mmio_writel,
-};
+static MemoryRegion ptl_mmio;
+static MemoryRegionOps *ptl_mmio_ops;
 
 void dump_all_info();
 void dump_bbcache_to_logfile();
@@ -305,10 +286,16 @@ void dump_bbcache_to_logfile();
 void ptlsim_init() {
 
     /* Register PTLsim PTLCALL mmio page */
-    W64 ptlcall_mmio_pd = cpu_register_io_memory(ptlcall_mmio_read_ops,
-            ptlcall_mmio_write_ops, NULL, DEVICE_NATIVE_ENDIAN);
-    cpu_register_physical_memory(PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR, 4096,
-            ptlcall_mmio_pd);
+	ptl_mmio_ops = (MemoryRegionOps*)g_malloc0(sizeof(MemoryRegionOps));
+	ptl_mmio_ops->read = ptlcall_mmio_read;
+	ptl_mmio_ops->write = ptlcall_mmio_write;
+	ptl_mmio_ops->impl.max_access_size = 8;
+	memory_region_init_io(&ptl_mmio, ptl_mmio_ops, NULL, "ptl-mmio",
+			4096);
+    memory_region_set_address(&ptl_mmio, PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR);
+    memory_region_add_subregion(get_system_memory(),
+            PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR,
+            &ptl_mmio);
 
     /* Register ptlsim assert callback functions */
     register_assert_cb(&dump_all_info);
@@ -389,6 +376,7 @@ int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
         *edx = (W32)((PTLSIM_PTLCALL_MMIO_PAGE_PHYSADDR >> 32) &
                 0xffff) | 0x0;
 
+        ptl_logfile << "CPUID with ptlsim magic index is called" << endl << flush;
         return 1;
     }
 
@@ -486,15 +474,15 @@ W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
     setup_qemu_switch();
 
     // First check if PAE bit is enabled or not
-    if(cr[4] & CR4_PAE_MASK) {
+    if(env->cr[4] & CR4_PAE_MASK) {
         W64 pde, pdpe;
         W64 pdpe_addr;
 
         // Check if we are in 32 bit mode or 64 bit
-        if(hflags & HF_LMA_MASK) {
+        if(env->hflags & HF_LMA_MASK) {
 
             W64 pml4e_addr, pml4e;
-            pml4e_addr = ((cr[3] & ~0xfff) + (((rawvirt >> 39) & 0x1ff) << 3)) & a20_mask;
+            pml4e_addr = ((env->cr[3] & ~0xfff) + (((rawvirt >> 39) & 0x1ff) << 3)) & env->a20_mask;
             if(level == 4) {
                 ret_addr = pml4e_addr;
                 goto finish;
@@ -507,7 +495,7 @@ W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
 
             ptep = pml4e * PG_NX_MASK;
 
-            pdpe_addr = ((pml4e & PHYS_ADDR_MASK) + (((rawvirt >> 30) & 0x1ff) << 3)) & a20_mask;
+            pdpe_addr = ((pml4e & PHYS_ADDR_MASK) + (((rawvirt >> 30) & 0x1ff) << 3)) & env->a20_mask;
 
             if(level == 3) {
                 ret_addr = pdpe_addr;
@@ -523,7 +511,7 @@ W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
 
             assert(level < 4);
 
-            pdpe_addr = ((env->cr[3] & ~0x1f) + ((rawvirt >> 27) & 0x18)) & a20_mask;
+            pdpe_addr = ((env->cr[3] & ~0x1f) + ((rawvirt >> 27) & 0x18)) & env->a20_mask;
 
             if(level == 3) {
                 ret_addr = pdpe_addr;
@@ -537,7 +525,7 @@ W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
             ptep = PG_NX_MASK | PG_USER_MASK | PG_RW_MASK;
         }
 
-        pde_addr = ((pdpe & PHYS_ADDR_MASK) + (((rawvirt >> 21) & 0x1ff) << 3)) & a20_mask;
+        pde_addr = ((pdpe & PHYS_ADDR_MASK) + (((rawvirt >> 21) & 0x1ff) << 3)) & env->a20_mask;
 
         if(level == 2) {
             ret_addr = pde_addr;
@@ -557,7 +545,7 @@ W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
             goto finish;
         } else {
             // 4 KB page size - make sure our level
-            pte_addr = ((pde & PHYS_ADDR_MASK) + (((rawvirt >> 12) & 0x1ff) << 3)) & a20_mask;
+            pte_addr = ((pde & PHYS_ADDR_MASK) + (((rawvirt >> 12) & 0x1ff) << 3)) & env->a20_mask;
             ret_addr = pte_addr;
             goto finish;
         }
@@ -568,7 +556,7 @@ W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
 
         assert(level < 3);
 
-        pde_addr = ((cr[3] & ~0xfff) + ((rawvirt >> 20) & 0xffc)) & env->a20_mask;
+        pde_addr = ((env->cr[3] & ~0xfff) + ((rawvirt >> 20) & 0xffc)) & env->a20_mask;
 
         if(level == 2) {
             ret_addr = pde_addr;
@@ -582,14 +570,14 @@ W64 Context::virt_to_pte_phys_addr(W64 rawvirt, byte& level) {
 
         assert(level == 1);
 
-        if ((pde & PG_PSE_MASK) && (cr[4] & CR4_PSE_MASK)) {
+        if ((pde & PG_PSE_MASK) && (env->cr[4] & CR4_PSE_MASK)) {
             // 4 MB Page size - no need to look last level
             level = 0;
             ret_addr = -1;
             goto finish;
         } else {
             // 4 KB Page size
-            pte_addr = ((pde & ~0xfff) + ((rawvirt >> 10) & 0xffc)) & a20_mask;
+            pte_addr = ((pde & ~0xfff) + ((rawvirt >> 10) & 0xffc)) & env->a20_mask;
             ret_addr = pte_addr;
             goto finish;
         }
@@ -624,16 +612,15 @@ int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorC
     check_and_translate(source, 0, 0, 0, exception,
             mmio, pfec, forexec);
     if (exception) {
-        cr2 = cr[2];
-        int old_exception = exception_index;
-        int mmu_index = cpu_mmu_index((CPUState*)this);
-        int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
-                source, 2, mmu_index, 1);
-        cr[2] = cr2;
+        cr2 = env->cr[2];
+        int old_exception = env->exception_index;
+        int mmu_index = cpu_mmu_index(env);
+        int fail = cpu_x86_handle_mmu_fault(env, source, 2, mmu_index);
+        env->cr[2] = cr2;
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source),
-                        " eip:", (void*)(eip), " fail: ", fail, endl;
+                        " eip:", (void*)(env->eip), " fail: ", fail, endl;
         if (fail != 0) {
             if(logable(10))
                 ptl_logfile << "Unable to read code from ",
@@ -643,7 +630,7 @@ int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorC
              * restore the exception index as it will be
              * restore when we try to commit this entry from ROB
              */
-            exception_index = old_exception;
+            env->exception_index = old_exception;
             if likely (forexec)
                 exec_fault_addr = source;
             faultaddr = source;
@@ -679,16 +666,16 @@ int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorC
     check_and_translate(source + n, 0, 0, 0, exception,
             mmio, pfec, forexec);
     if (exception) {
-        cr2 = cr[2];
-        int old_exception = exception_index;
-        int mmu_index = cpu_mmu_index((CPUState*)this);
-        int fail = cpu_x86_handle_mmu_fault((CPUX86State*)this,
-                source + n, 2, mmu_index, 1);
-        cr[2] = cr2;
+        cr2 = env->cr[2];
+        int old_exception = env->exception_index;
+        int mmu_index = cpu_mmu_index(env);
+        int fail = cpu_x86_handle_mmu_fault(env,
+                source + n, 2, mmu_index);
+        env->cr[2] = cr2;
         if(logable(10))
             ptl_logfile << "page fault while reading code fault:", fail,
                         " source_addr:", (void*)(source + n),
-                        " eip:", (void*)(eip), endl;
+                        " eip:", (void*)(env->eip), endl;
         if (fail != 0) {
             if(logable(10))
                 ptl_logfile << "Unable to read code from ",
@@ -698,7 +685,7 @@ int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorC
              * restore the exception index as it will be
              * restore when we try to commit this entry from ROB
              */
-            exception_index = old_exception;
+            env->exception_index = old_exception;
             if likely (forexec)
                 exec_fault_addr = source + n;
             faultaddr = source + n;
@@ -765,18 +752,18 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 
     Waddr paddr;
 
-    int mmu_index = cpu_mmu_index((CPUState*)this);
+    int mmu_index = cpu_mmu_index(env);
     int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     W64 tlb_addr;
 
     if likely (!store) {
         if likely (!is_code) {
-            tlb_addr = tlb_table[mmu_index][index].addr_read;
+            tlb_addr = env->tlb_table[mmu_index][index].addr_read;
         } else {
-            tlb_addr = tlb_table[mmu_index][index].addr_code;
+            tlb_addr = env->tlb_table[mmu_index][index].addr_code;
         }
     } else {
-        tlb_addr = tlb_table[mmu_index][index].addr_write;
+        tlb_addr = env->tlb_table[mmu_index][index].addr_write;
     }
 	Waddr host_virtaddr;
     if(logable(10)) {
@@ -788,7 +775,7 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
                     " tlbpage:", hexstring(
                             (tlb_addr & TARGET_PAGE_MASK), 64),
                     " addend:", hexstring(
-                            tlb_table[mmu_index][index].addend, 64),
+                            env->tlb_table[mmu_index][index].addend, 64),
                     endl;
     }
     if likely ((virtaddr & TARGET_PAGE_MASK) ==
@@ -796,13 +783,13 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
         /* Check if its not MMIO address */
         if(tlb_addr & ~TARGET_PAGE_MASK) {
             mmio = 1;
-            return (Waddr)(virtaddr + iotlb[mmu_index][index]);
+            return (Waddr)(virtaddr + env->iotlb[mmu_index][index]);
         }
 
         /* we find valid TLB entry, return the physical address for it */
         mmio = 0;
 
-        host_virtaddr = (Waddr)(virtaddr + tlb_table[mmu_index][index].addend);
+        host_virtaddr = (Waddr)(virtaddr + env->tlb_table[mmu_index][index].addend);
         if (unlikely(get_phys_memory_address(host_virtaddr, paddr) < 0))
         {
             // Since the entry is in the TLB, it should also have a mapping, so this case should never arise
@@ -836,14 +823,14 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
 
 bool Context::is_mmio_addr(Waddr virtaddr, bool store) {
 
-    int mmu_index = cpu_mmu_index((CPUState*)this);
+    int mmu_index = cpu_mmu_index(env);
     int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     W64 tlb_addr;
 
     if likely (!store) {
-        tlb_addr = tlb_table[mmu_index][index].addr_read;
+        tlb_addr = env->tlb_table[mmu_index][index].addr_read;
     } else {
-        tlb_addr = tlb_table[mmu_index][index].addr_write;
+        tlb_addr = env->tlb_table[mmu_index][index].addr_write;
     }
 
     if(logable(10)) {
@@ -855,7 +842,7 @@ bool Context::is_mmio_addr(Waddr virtaddr, bool store) {
                     " tlbpage:", hexstring(
                             (tlb_addr & TARGET_PAGE_MASK), 64),
                     " addend:", hexstring(
-                            tlb_table[mmu_index][index].addend, 64),
+                            env->tlb_table[mmu_index][index].addend, 64),
                     endl;
     }
     if likely ((virtaddr & TARGET_PAGE_MASK) ==
@@ -871,14 +858,14 @@ bool Context::is_mmio_addr(Waddr virtaddr, bool store) {
 }
 
 bool Context::has_page_fault(Waddr virtaddr, int store) {
-    int mmu_index = cpu_mmu_index((CPUState*)this);
+    int mmu_index = cpu_mmu_index(env);
     int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
     W64 tlb_addr;
 
     if likely (!store) {
-        tlb_addr = tlb_table[mmu_index][index].addr_read;
+        tlb_addr = env->tlb_table[mmu_index][index].addr_read;
     } else {
-        tlb_addr = tlb_table[mmu_index][index].addr_write;
+        tlb_addr = env->tlb_table[mmu_index][index].addr_write;
     }
 
     if likely ((virtaddr & TARGET_PAGE_MASK) ==
@@ -932,14 +919,14 @@ int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr&
 void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virtaddr ) {
     if(logable(2))
         ptl_logfile << "Propagating exception from simulation at eip: ",
-                    this->eip, " cycle: ", sim_cycle, endl;
+                    env->eip, " cycle: ", sim_cycle, endl;
     setup_qemu_switch_all_ctx(*this);
     ptl_stable_state = 1;
-    handle_interrupt = 1;
+    env->handle_interrupt = 1;
     if(errorcode) {
-        raise_exception_err((int)exception, (int)errorcode);
+        raise_exception_err_env(env, (int)exception, (int)errorcode);
     } else {
-        raise_exception((int)exception);
+        raise_exception_env((int)exception, env);
     }
     ptl_stable_state = 0;
     setup_ptlsim_switch_all_ctx(*this);
@@ -1235,12 +1222,12 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
         ptl_logfile << "Context before page fault handling:\n", *this, endl;
     }
 
-    exception_is_int = 0;
+    env->exception_is_int = 0;
     ptl_stable_state = 1;
-    handle_interrupt = 1;
-    int mmu_index = cpu_mmu_index((CPUState*)this);
-    W64 cr2 = cr[2];
-    tlb_fill(virtaddr, is_write, mmu_index, NULL);
+    env->handle_interrupt = 1;
+    int mmu_index = cpu_mmu_index(env);
+    W64 cr2 = env->cr[2];
+    tlb_fill(env, virtaddr, is_write, mmu_index, 0);
     ptl_stable_state = 0;
 
     if(kernel_mode) {
@@ -1250,7 +1237,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
     }
 
     setup_ptlsim_switch_all_ctx(*this);
-    cr[2] = cr2;
+    env->cr[2] = cr2;
     return;
 }
 
@@ -1261,19 +1248,19 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
     if(logable(10))
         ptl_logfile << "Trying to fill tlb for addr: ", (void*)virtaddr, endl;
 
-    W64 cr2 = cr[2];
-    int mmu_index = cpu_mmu_index((CPUState*)this);
-    int fault = cpu_x86_handle_mmu_fault((CPUState*)this, virtaddr, store, mmu_index, 1);
+    W64 cr2 = env->cr[2];
+    int mmu_index = cpu_mmu_index(env);
+    int fault = cpu_x86_handle_mmu_fault(env, virtaddr, store, mmu_index);
 
-    cr[2] = cr2;
+    env->cr[2] = cr2;
 
     setup_ptlsim_switch_all_ctx(*this);
     if(fault) {
         if(logable(10))
             ptl_logfile << "Fault for addr: ", (void*)virtaddr, endl, flush;
 
-        error_code = 0;
-        exception_index = -1;
+        env->error_code = 0;
+        env->exception_index = -1;
 
         return false;
     }
@@ -1286,7 +1273,8 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
 
 extern "C" void ptl_add_phys_memory_mapping(int8_t cpu_index, uint64_t host_vaddr, uint64_t guest_paddr)
 {
-  contextof(cpu_index).hvirt_gphys_map[(Waddr)host_vaddr] = (Waddr)guest_paddr;
+    map<Waddr, Waddr> &addr_map = *(contextof(cpu_index).hvirt_gphys_map);
+  addr_map[(Waddr)host_vaddr] = (Waddr)guest_paddr;
 }
 
 void ptl_quit()
@@ -1484,8 +1472,8 @@ void set_cpu_fast_fwd()
 
     foreach (i, NUM_SIM_CORES) {
         Context& ctx = contextof(i);
-        ctx.simpoint_decr = per_cpu_fast_fwd;
-        tb_flush(&ctx);
+        ctx.env->simpoint_decr = per_cpu_fast_fwd;
+        tb_flush(ctx.env);
     }
 }
 
@@ -1500,15 +1488,15 @@ static void adjust_fwd_insts(Context& ctx)
     Context* min_ctx = NULL;
 
     foreach (i, NUM_SIM_CORES) {
-        if (i == ctx.cpu_index)
+        if (i == ctx.env->cpu_index)
             continue;
 
         Context& t_ctx = contextof(i);
 
-		if (t_ctx.halted && !qemu_cpu_has_work(&t_ctx) &&
-				!t_ctx.stopped && t_ctx.simpoint_decr > 0) {
-            min_remaining = min((W64)t_ctx.simpoint_decr, min_remaining);
-            if (min_remaining == t_ctx.simpoint_decr)
+		if (t_ctx.env->halted && !qemu_cpu_has_work(t_ctx.env) &&
+				!t_ctx.env->stopped && t_ctx.env->simpoint_decr > 0) {
+            min_remaining = min((W64)t_ctx.env->simpoint_decr, min_remaining);
+            if (min_remaining == t_ctx.env->simpoint_decr)
                 min_ctx = &contextof(i);
         }
     }
@@ -1517,18 +1505,18 @@ static void adjust_fwd_insts(Context& ctx)
     min_remaining = min(min_remaining, (W64)10000000);
 
     if (min_remaining && min_ctx) {
-        min_ctx->simpoint_decr -= min_remaining;
-        ctx.simpoint_decr = min_remaining;
+        min_ctx->env->simpoint_decr -= min_remaining;
+        ctx.env->simpoint_decr = min_remaining;
 
         if (logable(2)) {
-            ptl_logfile << "Min ctx " << int(min_ctx->cpu_index) <<
+            ptl_logfile << "Min ctx " << int(min_ctx->env->cpu_index) <<
                 " allocated " << min_remaining << " instructions to " <<
-                int(ctx.cpu_index) << " CPU\n";
+                int(ctx.env->cpu_index) << " CPU\n";
         }
     } else {
         /* We can't find any CPU Context with remaining
          * instructions so we will force switch to simulation */
-        ctx.simpoint_decr = 0;
+        ctx.env->simpoint_decr = 0;
     }
 }
 
@@ -1545,18 +1533,18 @@ static void cpu_fast_fwded(Context& ctx)
     W64 insns_remaining = 0;
 
     /* Stop this CPU and check if all CPU are stopped or not */
-    ctx.stopped = 1;
+    ctx.env->stopped = 1;
 
     /* Check if all other cpus are stopped or not */
     foreach (i, NUM_SIM_CORES) {
         Context& t_ctx = contextof(i);
-        insns_remaining += t_ctx.simpoint_decr;
+        insns_remaining += t_ctx.env->simpoint_decr;
 
-        if (i != ctx.cpu_index)
-            others_halted |= (t_ctx.halted);
+        if (i != ctx.env->cpu_index)
+            others_halted |= (t_ctx.env->halted);
 
-		all_halted_or_stopped &= (t_ctx.stopped || t_ctx.halted ||
-				!qemu_cpu_has_work(&t_ctx));
+		all_halted_or_stopped &= (t_ctx.env->stopped || t_ctx.env->halted ||
+				!qemu_cpu_has_work(t_ctx.env));
     }
 
     if (others_halted && insns_remaining > 100) {
@@ -1568,12 +1556,12 @@ static void cpu_fast_fwded(Context& ctx)
         adjust_fwd_insts(ctx);
 
         /* If we found some more instructions to emulate then return */
-        if (ctx.simpoint_decr) {
+        if (ctx.env->simpoint_decr) {
             if (logable(2)) {
-                ptl_logfile << "Cpu " << int(ctx.cpu_index) << " will emulate " <<
-                    ctx.simpoint_decr << " instructions\n";
+                ptl_logfile << "Cpu " << int(ctx.env->cpu_index) << " will emulate " <<
+                    ctx.env->simpoint_decr << " instructions\n";
             }
-            ctx.stopped = 0;
+            ctx.env->stopped = 0;
             return;
         }
     }
@@ -1586,23 +1574,23 @@ static void cpu_fast_fwded(Context& ctx)
          * earlier than expected. */
         if (insns_remaining > 1000) {
 			/* Restore this counter for debugging only */
-			ctx.simpoint_decr = insns_remaining;
+			ctx.env->simpoint_decr = insns_remaining;
 
             ptl_logfile << "WARNING: Early switching to simulation mode. ";
             ptl_logfile << "Instrucitons remaining in each CPU context to fast-forward are:\n";
 
             foreach (i, NUM_SIM_CORES) {
                 ptl_logfile << "\tCPU " << (int)i << ": " <<
-                    (int)(contextof(i).simpoint_decr) << "\n";
-                contextof(i).simpoint_decr = 0;
+                    (int)(contextof(i).env->simpoint_decr) << "\n";
+                contextof(i).env->simpoint_decr = 0;
             }
         }
 
         ptl_fast_fwd_enabled = 0;
 
         foreach (i, NUM_SIM_CORES) {
-            contextof(i).stopped = 0;
-            tb_flush(&contextof(i));
+            contextof(i).env->stopped = 0;
+            tb_flush(contextof(i).env);
         }
 
         if (config.fast_fwd_checkpoint.size() > 0) {
@@ -1632,7 +1620,7 @@ void ptl_simpoint_reached(int cpuid)
         stringbuf* chk_name = get_simpoint_chk_name();
         create_checkpoint(chk_name->buf);
 
-        set_next_simpoint(&ctx);
+        set_next_simpoint(ctx.env);
 
         delete chk_name;
     }
@@ -1656,7 +1644,7 @@ void ptl_qemu_initialized(void)
     }
 
     if (simpoint_enabled) {
-        set_next_simpoint(&contextof(0));
+        set_next_simpoint(contextof(0).env);
     }
 
     set_cpu_fast_fwd();

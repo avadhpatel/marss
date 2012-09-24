@@ -18,14 +18,12 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "cpu.h"
 #include "gdbstub.h"
-#include "qemu-common.h"
 #include "qemu-timer.h"
+#ifndef CONFIG_USER_ONLY
+#include "sysemu.h"
+#endif
 
 //#define DEBUG_S390
 //#define DEBUG_S390_PTE
@@ -53,17 +51,19 @@
 #endif
 
 #ifndef CONFIG_USER_ONLY
-static void s390x_tod_timer(void *opaque)
+void s390x_tod_timer(void *opaque)
 {
-    CPUState *env = opaque;
+    S390CPU *cpu = opaque;
+    CPUS390XState *env = &cpu->env;
 
     env->pending_int |= INTERRUPT_TOD;
     cpu_interrupt(env, CPU_INTERRUPT_HARD);
 }
 
-static void s390x_cpu_timer(void *opaque)
+void s390x_cpu_timer(void *opaque)
 {
-    CPUState *env = opaque;
+    S390CPU *cpu = opaque;
+    CPUS390XState *env = &cpu->env;
 
     env->pending_int |= INTERRUPT_CPUTIMER;
     cpu_interrupt(env, CPU_INTERRUPT_HARD);
@@ -72,48 +72,35 @@ static void s390x_cpu_timer(void *opaque)
 
 CPUS390XState *cpu_s390x_init(const char *cpu_model)
 {
+    S390CPU *cpu;
     CPUS390XState *env;
-#if !defined (CONFIG_USER_ONLY)
-    struct tm tm;
-#endif
     static int inited = 0;
-    static int cpu_num = 0;
 
-    env = qemu_mallocz(sizeof(CPUS390XState));
-    cpu_exec_init(env);
-    if (!inited) {
+    cpu = S390_CPU(object_new(TYPE_S390_CPU));
+    env = &cpu->env;
+
+    if (tcg_enabled() && !inited) {
         inited = 1;
         s390x_translate_init();
     }
 
-#if !defined(CONFIG_USER_ONLY)
-    qemu_get_timedate(&tm, 0);
-    env->tod_offset = TOD_UNIX_EPOCH +
-                      (time2tod(mktimegm(&tm)) * 1000000000ULL);
-    env->tod_basetime = 0;
-    env->tod_timer = qemu_new_timer_ns(vm_clock, s390x_tod_timer, env);
-    env->cpu_timer = qemu_new_timer_ns(vm_clock, s390x_cpu_timer, env);
-#endif
     env->cpu_model_str = cpu_model;
-    env->cpu_num = cpu_num++;
-    env->ext_index = -1;
-    cpu_reset(env);
     qemu_init_vcpu(env);
     return env;
 }
 
 #if defined(CONFIG_USER_ONLY)
 
-void do_interrupt (CPUState *env)
+void do_interrupt (CPUS390XState *env)
 {
     env->exception_index = -1;
 }
 
-int cpu_s390x_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
-                              int mmu_idx, int is_softmmu)
+int cpu_s390x_handle_mmu_fault (CPUS390XState *env, target_ulong address, int rw,
+                                int mmu_idx)
 {
-    /* fprintf(stderr,"%s: address 0x%lx rw %d mmu_idx %d is_softmmu %d\n",
-            __FUNCTION__, address, rw, mmu_idx, is_softmmu); */
+    /* fprintf(stderr,"%s: address 0x%lx rw %d mmu_idx %d\n",
+            __FUNCTION__, address, rw, mmu_idx); */
     env->exception_index = EXCP_ADDR;
     env->__excp_addr = address; /* FIXME: find out how this works on a real machine */
     return 1;
@@ -121,29 +108,22 @@ int cpu_s390x_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
 
 #endif /* CONFIG_USER_ONLY */
 
-void cpu_reset(CPUS390XState *env)
+void cpu_state_reset(CPUS390XState *env)
 {
-    if (qemu_loglevel_mask(CPU_LOG_RESET)) {
-        qemu_log("CPU Reset (CPU %d)\n", env->cpu_index);
-        log_cpu_state(env, 0);
-    }
-
-    memset(env, 0, offsetof(CPUS390XState, breakpoints));
-    /* FIXME: reset vector? */
-    tlb_flush(env, 1);
+    cpu_reset(ENV_GET_CPU(env));
 }
 
 #ifndef CONFIG_USER_ONLY
 
 /* Ensure to exit the TB after this call! */
-static void trigger_pgm_exception(CPUState *env, uint32_t code, uint32_t ilc)
+static void trigger_pgm_exception(CPUS390XState *env, uint32_t code, uint32_t ilc)
 {
     env->exception_index = EXCP_PGM;
     env->int_pgm_code = code;
     env->int_pgm_ilc = ilc;
 }
 
-static int trans_bits(CPUState *env, uint64_t mode)
+static int trans_bits(CPUS390XState *env, uint64_t mode)
 {
     int bits = 0;
 
@@ -165,7 +145,7 @@ static int trans_bits(CPUState *env, uint64_t mode)
     return bits;
 }
 
-static void trigger_prot_fault(CPUState *env, target_ulong vaddr, uint64_t mode)
+static void trigger_prot_fault(CPUS390XState *env, target_ulong vaddr, uint64_t mode)
 {
     int ilc = ILC_LATER_INC_2;
     int bits = trans_bits(env, mode) | 4;
@@ -176,7 +156,7 @@ static void trigger_prot_fault(CPUState *env, target_ulong vaddr, uint64_t mode)
     trigger_pgm_exception(env, PGM_PROTECTION, ilc);
 }
 
-static void trigger_page_fault(CPUState *env, target_ulong vaddr, uint32_t type,
+static void trigger_page_fault(CPUS390XState *env, target_ulong vaddr, uint32_t type,
                                uint64_t asc, int rw)
 {
     int ilc = ILC_LATER;
@@ -193,7 +173,7 @@ static void trigger_page_fault(CPUState *env, target_ulong vaddr, uint32_t type,
     trigger_pgm_exception(env, type, ilc);
 }
 
-static int mmu_translate_asce(CPUState *env, target_ulong vaddr, uint64_t asc,
+static int mmu_translate_asce(CPUS390XState *env, target_ulong vaddr, uint64_t asc,
                               uint64_t asce, int level, target_ulong *raddr,
                               int *flags, int rw)
 {
@@ -275,7 +255,7 @@ static int mmu_translate_asce(CPUState *env, target_ulong vaddr, uint64_t asc,
     return 0;
 }
 
-static int mmu_translate_asc(CPUState *env, target_ulong vaddr, uint64_t asc,
+static int mmu_translate_asc(CPUS390XState *env, target_ulong vaddr, uint64_t asc,
                              target_ulong *raddr, int *flags, int rw)
 {
     uint64_t asce = 0;
@@ -344,10 +324,11 @@ static int mmu_translate_asc(CPUState *env, target_ulong vaddr, uint64_t asc,
     return r;
 }
 
-int mmu_translate(CPUState *env, target_ulong vaddr, int rw, uint64_t asc,
+int mmu_translate(CPUS390XState *env, target_ulong vaddr, int rw, uint64_t asc,
                   target_ulong *raddr, int *flags)
 {
     int r = -1;
+    uint8_t *sk;
 
     *flags = PAGE_READ | PAGE_WRITE | PAGE_EXEC;
     vaddr &= TARGET_PAGE_MASK;
@@ -390,18 +371,29 @@ out:
         *raddr = *raddr + env->psa;
     }
 
+    if (*raddr <= ram_size) {
+        sk = &env->storage_keys[*raddr / TARGET_PAGE_SIZE];
+        if (*flags & PAGE_READ) {
+            *sk |= SK_R;
+        }
+
+        if (*flags & PAGE_WRITE) {
+            *sk |= SK_C;
+        }
+    }
+
     return r;
 }
 
-int cpu_s390x_handle_mmu_fault (CPUState *env, target_ulong _vaddr, int rw,
-                                int mmu_idx, int is_softmmu)
+int cpu_s390x_handle_mmu_fault (CPUS390XState *env, target_ulong _vaddr, int rw,
+                                int mmu_idx)
 {
     uint64_t asc = env->psw.mask & PSW_MASK_ASC;
     target_ulong vaddr, raddr;
     int prot;
 
-    DPRINTF("%s: address 0x%" PRIx64 " rw %d mmu_idx %d is_softmmu %d\n",
-            __FUNCTION__, _vaddr, rw, mmu_idx, is_softmmu);
+    DPRINTF("%s: address 0x%" PRIx64 " rw %d mmu_idx %d\n",
+            __FUNCTION__, _vaddr, rw, mmu_idx);
 
     _vaddr &= TARGET_PAGE_MASK;
     vaddr = _vaddr;
@@ -433,7 +425,7 @@ int cpu_s390x_handle_mmu_fault (CPUState *env, target_ulong _vaddr, int rw,
     return 0;
 }
 
-target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong vaddr)
+target_phys_addr_t cpu_get_phys_page_debug(CPUS390XState *env, target_ulong vaddr)
 {
     target_ulong raddr;
     int prot = PAGE_READ | PAGE_WRITE | PAGE_EXEC;
@@ -451,14 +443,18 @@ target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong vaddr)
     return raddr;
 }
 
-void load_psw(CPUState *env, uint64_t mask, uint64_t addr)
+void load_psw(CPUS390XState *env, uint64_t mask, uint64_t addr)
 {
     if (mask & PSW_MASK_WAIT) {
+        if (!(mask & (PSW_MASK_IO | PSW_MASK_EXT | PSW_MASK_MCHECK))) {
+            if (s390_del_running_cpu(env) == 0) {
+#ifndef CONFIG_USER_ONLY
+                qemu_system_shutdown_request();
+#endif
+            }
+        }
         env->halted = 1;
         env->exception_index = EXCP_HLT;
-        if (!(mask & (PSW_MASK_IO | PSW_MASK_EXT | PSW_MASK_MCHECK))) {
-            /* XXX disabled wait state - CPU is dead */
-        }
     }
 
     env->psw.addr = addr;
@@ -466,7 +462,7 @@ void load_psw(CPUState *env, uint64_t mask, uint64_t addr)
     env->cc_op = (mask >> 13) & 3;
 }
 
-static uint64_t get_psw_mask(CPUState *env)
+static uint64_t get_psw_mask(CPUS390XState *env)
 {
     uint64_t r = env->psw.mask;
 
@@ -479,7 +475,7 @@ static uint64_t get_psw_mask(CPUState *env)
     return r;
 }
 
-static void do_svc_interrupt(CPUState *env)
+static void do_svc_interrupt(CPUS390XState *env)
 {
     uint64_t mask, addr;
     LowCore *lowcore;
@@ -499,7 +495,7 @@ static void do_svc_interrupt(CPUState *env)
     load_psw(env, mask, addr);
 }
 
-static void do_program_interrupt(CPUState *env)
+static void do_program_interrupt(CPUS390XState *env)
 {
     uint64_t mask, addr;
     LowCore *lowcore;
@@ -542,7 +538,7 @@ static void do_program_interrupt(CPUState *env)
 
 #define VIRTIO_SUBCODE_64 0x0D00
 
-static void do_ext_interrupt(CPUState *env)
+static void do_ext_interrupt(CPUS390XState *env)
 {
     uint64_t mask, addr;
     LowCore *lowcore;
@@ -582,11 +578,12 @@ static void do_ext_interrupt(CPUState *env)
     load_psw(env, mask, addr);
 }
 
-void do_interrupt (CPUState *env)
+void do_interrupt (CPUS390XState *env)
 {
     qemu_log("%s: %d at pc=%" PRIx64 "\n", __FUNCTION__, env->exception_index,
              env->psw.addr);
 
+    s390_add_running_cpu(env);
     /* handle external interrupts */
     if ((env->psw.mask & PSW_MASK_EXT) &&
         env->exception_index == -1) {

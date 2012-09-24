@@ -9,17 +9,20 @@
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
  *
+ * Contributions after 2012-01-13 are licensed under the terms of the
+ * GNU GPL, version 2 or (at your option) any later version.
  */
 
 #include "qemu-common.h"
 #include "monitor.h"
 #include "qemu-timer.h"
 #include "qemu-log.h"
+#include "migration.h"
+#include "main-loop.h"
+#include "qemu_socket.h"
+#include "slirp/libslirp.h"
 
 #include <sys/time.h>
-
-QEMUClock *rt_clock;
-QEMUClock *vm_clock;
 
 FILE *logfile;
 
@@ -28,10 +31,6 @@ struct QEMUBH
     QEMUBHFunc *cb;
     void *opaque;
 };
-
-void qemu_service_io(void)
-{
-}
 
 Monitor *cur_mon;
 
@@ -60,39 +59,65 @@ void monitor_protocol_event(MonitorEvent event, QObject *data)
 {
 }
 
-int qemu_set_fd_handler2(int fd,
-                         IOCanReadHandler *fd_read_poll,
-                         IOHandler *fd_read,
-                         IOHandler *fd_write,
-                         void *opaque)
+int64_t cpu_get_clock(void)
 {
-    return 0;
+    return qemu_get_clock_ns(rt_clock);
 }
 
-void qemu_notify_event(void)
+int64_t cpu_get_icount(void)
 {
+    abort();
 }
 
-QEMUTimer *qemu_new_timer(QEMUClock *clock, int scale,
-                          QEMUTimerCB *cb, void *opaque)
-{
-    return qemu_malloc(1);
-}
-
-void qemu_free_timer(QEMUTimer *ts)
-{
-    qemu_free(ts);
-}
-
-void qemu_del_timer(QEMUTimer *ts)
+void qemu_mutex_lock_iothread(void)
 {
 }
 
-void qemu_mod_timer(QEMUTimer *ts, int64_t expire_time)
+void qemu_mutex_unlock_iothread(void)
 {
 }
 
-int64_t qemu_get_clock_ns(QEMUClock *clock)
+int use_icount;
+
+void qemu_clock_warp(QEMUClock *clock)
 {
-    return 0;
 }
+
+int qemu_init_main_loop(void)
+{
+    init_clocks();
+    init_timer_alarm();
+    return main_loop_init();
+}
+
+void slirp_update_timeout(uint32_t *timeout)
+{
+}
+
+void slirp_select_fill(int *pnfds, fd_set *readfds,
+                       fd_set *writefds, fd_set *xfds)
+{
+}
+
+void slirp_select_poll(fd_set *readfds, fd_set *writefds,
+                       fd_set *xfds, int select_error)
+{
+}
+
+void migrate_add_blocker(Error *reason)
+{
+}
+
+void migrate_del_blocker(Error *reason)
+{
+}
+
+#ifdef MARSS_QEMU
+uint8_t in_simulation;
+int64_t cpu_get_sim_clock(void);
+
+int64_t cpu_get_sim_clock(void)
+{
+    return cpu_get_clock();
+}
+#endif

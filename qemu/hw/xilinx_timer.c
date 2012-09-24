@@ -24,6 +24,7 @@
 
 #include "sysbus.h"
 #include "qemu-timer.h"
+#include "ptimer.h"
 
 #define D(x)
 
@@ -59,6 +60,7 @@ struct xlx_timer
 struct timerblock
 {
     SysBusDevice busdev;
+    MemoryRegion mmio;
     qemu_irq irq;
     uint32_t nr_timers;
     uint32_t freq_hz;
@@ -85,7 +87,8 @@ static void timer_update_irq(struct timerblock *t)
     qemu_set_irq(t->irq, !!irq);
 }
 
-static uint32_t timer_readl (void *opaque, target_phys_addr_t addr)
+static uint64_t
+timer_read(void *opaque, target_phys_addr_t addr, unsigned int size)
 {
     struct timerblock *t = opaque;
     struct xlx_timer *xt;
@@ -134,11 +137,13 @@ static void timer_enable(struct xlx_timer *xt)
 }
 
 static void
-timer_writel (void *opaque, target_phys_addr_t addr, uint32_t value)
+timer_write(void *opaque, target_phys_addr_t addr,
+            uint64_t val64, unsigned int size)
 {
     struct timerblock *t = opaque;
     struct xlx_timer *xt;
     unsigned int timer;
+    uint32_t value = val64;
 
     addr >>= 2;
     timer = timer_from_addr(addr);
@@ -166,14 +171,14 @@ timer_writel (void *opaque, target_phys_addr_t addr, uint32_t value)
     timer_update_irq(t);
 }
 
-static CPUReadMemoryFunc * const timer_read[] = {
-    NULL, NULL,
-    &timer_readl,
-};
-
-static CPUWriteMemoryFunc * const timer_write[] = {
-    NULL, NULL,
-    &timer_writel,
+static const MemoryRegionOps timer_ops = {
+    .read = timer_read,
+    .write = timer_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4
+    }
 };
 
 static void timer_hit(void *opaque)
@@ -192,13 +197,12 @@ static int xilinx_timer_init(SysBusDevice *dev)
 {
     struct timerblock *t = FROM_SYSBUS(typeof (*t), dev);
     unsigned int i;
-    int timer_regs;
 
     /* All timers share a single irq line.  */
     sysbus_init_irq(dev, &t->irq);
 
     /* Init all the ptimers.  */
-    t->timers = qemu_mallocz(sizeof t->timers[0] * t->nr_timers);
+    t->timers = g_malloc0(sizeof t->timers[0] * t->nr_timers);
     for (i = 0; i < t->nr_timers; i++) {
         struct xlx_timer *xt = &t->timers[i];
 
@@ -209,26 +213,37 @@ static int xilinx_timer_init(SysBusDevice *dev)
         ptimer_set_freq(xt->ptimer, t->freq_hz);
     }
 
-    timer_regs = cpu_register_io_memory(timer_read, timer_write, t,
-                                        DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, R_MAX * 4 * t->nr_timers, timer_regs);
+    memory_region_init_io(&t->mmio, &timer_ops, t, "xilinx-timer",
+                          R_MAX * 4 * t->nr_timers);
+    sysbus_init_mmio(dev, &t->mmio);
     return 0;
 }
 
-static SysBusDeviceInfo xilinx_timer_info = {
-    .init = xilinx_timer_init,
-    .qdev.name  = "xilinx,timer",
-    .qdev.size  = sizeof(struct timerblock),
-    .qdev.props = (Property[]) {
-        DEFINE_PROP_UINT32("frequency", struct timerblock, freq_hz,   0),
-        DEFINE_PROP_UINT32("nr-timers", struct timerblock, nr_timers, 0),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+static Property xilinx_timer_properties[] = {
+    DEFINE_PROP_UINT32("frequency", struct timerblock, freq_hz,   0),
+    DEFINE_PROP_UINT32("nr-timers", struct timerblock, nr_timers, 0),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void xilinx_timer_register(void)
+static void xilinx_timer_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&xilinx_timer_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = xilinx_timer_init;
+    dc->props = xilinx_timer_properties;
 }
 
-device_init(xilinx_timer_register)
+static TypeInfo xilinx_timer_info = {
+    .name          = "xilinx,timer",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(struct timerblock),
+    .class_init    = xilinx_timer_class_init,
+};
+
+static void xilinx_timer_register_types(void)
+{
+    type_register_static(&xilinx_timer_info);
+}
+
+type_init(xilinx_timer_register_types)

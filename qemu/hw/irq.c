@@ -44,8 +44,8 @@ qemu_irq *qemu_allocate_irqs(qemu_irq_handler handler, void *opaque, int n)
     struct IRQState *p;
     int i;
 
-    s = (qemu_irq *)qemu_mallocz(sizeof(qemu_irq) * n);
-    p = (struct IRQState *)qemu_mallocz(sizeof(struct IRQState) * n);
+    s = (qemu_irq *)g_malloc0(sizeof(qemu_irq) * n);
+    p = (struct IRQState *)g_malloc0(sizeof(struct IRQState) * n);
     for (i = 0; i < n; i++) {
         p->handler = handler;
         p->opaque = opaque;
@@ -58,8 +58,8 @@ qemu_irq *qemu_allocate_irqs(qemu_irq_handler handler, void *opaque, int n)
 
 void qemu_free_irqs(qemu_irq *s)
 {
-    qemu_free(s[0]);
-    qemu_free(s);
+    g_free(s[0]);
+    g_free(s);
 }
 
 static void qemu_notirq(void *opaque, int line, int level)
@@ -85,8 +85,39 @@ static void qemu_splitirq(void *opaque, int line, int level)
 
 qemu_irq qemu_irq_split(qemu_irq irq1, qemu_irq irq2)
 {
-    qemu_irq *s = qemu_mallocz(2 * sizeof(qemu_irq));
+    qemu_irq *s = g_malloc0(2 * sizeof(qemu_irq));
     s[0] = irq1;
     s[1] = irq2;
     return qemu_allocate_irqs(qemu_splitirq, s, 1)[0];
+}
+
+static void proxy_irq_handler(void *opaque, int n, int level)
+{
+    qemu_irq **target = opaque;
+
+    if (*target) {
+        qemu_set_irq((*target)[n], level);
+    }
+}
+
+qemu_irq *qemu_irq_proxy(qemu_irq **target, int n)
+{
+    return qemu_allocate_irqs(proxy_irq_handler, target, n);
+}
+
+void qemu_irq_intercept_in(qemu_irq *gpio_in, qemu_irq_handler handler, int n)
+{
+    int i;
+    qemu_irq *old_irqs = qemu_allocate_irqs(NULL, NULL, n);
+    for (i = 0; i < n; i++) {
+        *old_irqs[i] = *gpio_in[i];
+        gpio_in[i]->handler = handler;
+        gpio_in[i]->opaque = old_irqs;
+    }
+}
+
+void qemu_irq_intercept_out(qemu_irq **gpio_out, qemu_irq_handler handler, int n)
+{
+    qemu_irq *old_irqs = *gpio_out;
+    *gpio_out = qemu_allocate_irqs(handler, old_irqs, n);
 }

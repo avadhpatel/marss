@@ -113,7 +113,6 @@ fork_exec(struct socket *so, const char *ex, int do_pty)
 	struct sockaddr_in addr;
 	socklen_t addrlen = sizeof(addr);
 	int opt;
-        int master = -1;
 	const char *argv[256];
 	/* don't want to clobber the original */
 	char *bptr;
@@ -148,32 +147,23 @@ fork_exec(struct socket *so, const char *ex, int do_pty)
 	 case -1:
 		lprint("Error: fork failed: %s\n", strerror(errno));
 		close(s);
-		if (do_pty == 2)
-		   close(master);
 		return 0;
 
 	 case 0:
                 setsid();
 
 		/* Set the DISPLAY */
-		if (do_pty == 2) {
-			(void) close(master);
-#ifdef TIOCSCTTY /* XXXXX */
-			ioctl(s, TIOCSCTTY, (char *)NULL);
-#endif
-		} else {
-			getsockname(s, (struct sockaddr *)&addr, &addrlen);
-			close(s);
-			/*
-			 * Connect to the socket
-			 * XXX If any of these fail, we're in trouble!
-	 		 */
-			s = qemu_socket(AF_INET, SOCK_STREAM, 0);
-			addr.sin_addr = loopback_addr;
-                        do {
-                            ret = connect(s, (struct sockaddr *)&addr, addrlen);
-                        } while (ret < 0 && errno == EINTR);
-		}
+                getsockname(s, (struct sockaddr *)&addr, &addrlen);
+                close(s);
+                /*
+                 * Connect to the socket
+                 * XXX If any of these fail, we're in trouble!
+                 */
+                s = qemu_socket(AF_INET, SOCK_STREAM, 0);
+                addr.sin_addr = loopback_addr;
+                do {
+                    ret = connect(s, (struct sockaddr *)&addr, addrlen);
+                } while (ret < 0 && errno == EINTR);
 
 		dup2(s, 0);
 		dup2(s, 1);
@@ -182,7 +172,7 @@ fork_exec(struct socket *so, const char *ex, int do_pty)
 		   close(s);
 
 		i = 0;
-		bptr = qemu_strdup(ex); /* No need to free() this */
+		bptr = g_strdup(ex); /* No need to free() this */
 		if (do_pty == 1) {
 			/* Setup "slirp.telnetd -x" */
 			argv[i++] = "slirp.telnetd";
@@ -210,27 +200,22 @@ fork_exec(struct socket *so, const char *ex, int do_pty)
 
 	 default:
 		qemu_add_child_watch(pid);
-		if (do_pty == 2) {
-			close(s);
-			so->s = master;
-		} else {
-			/*
-			 * XXX this could block us...
-			 * XXX Should set a timer here, and if accept() doesn't
-		 	 * return after X seconds, declare it a failure
-		 	 * The only reason this will block forever is if socket()
-		 	 * of connect() fail in the child process
-		 	 */
-                        do {
-                            so->s = accept(s, (struct sockaddr *)&addr, &addrlen);
-                        } while (so->s < 0 && errno == EINTR);
-                        closesocket(s);
-			opt = 1;
-			setsockopt(so->s,SOL_SOCKET,SO_REUSEADDR,(char *)&opt,sizeof(int));
-			opt = 1;
-			setsockopt(so->s,SOL_SOCKET,SO_OOBINLINE,(char *)&opt,sizeof(int));
-		}
-		fd_nonblock(so->s);
+                /*
+                 * XXX this could block us...
+                 * XXX Should set a timer here, and if accept() doesn't
+                 * return after X seconds, declare it a failure
+                 * The only reason this will block forever is if socket()
+                 * of connect() fail in the child process
+                 */
+                do {
+                    so->s = accept(s, (struct sockaddr *)&addr, &addrlen);
+                } while (so->s < 0 && errno == EINTR);
+                closesocket(s);
+                opt = 1;
+                setsockopt(so->s, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(int));
+                opt = 1;
+                setsockopt(so->s, SOL_SOCKET, SO_OOBINLINE, (char *)&opt, sizeof(int));
+		socket_set_nonblock(so->s);
 
 		/* Append the telnet options now */
                 if (so->so_m != NULL && do_pty == 1)  {
@@ -282,50 +267,6 @@ u_sleep(int usec)
 	select(0, &fdset, &fdset, &fdset, &t);
 }
 
-/*
- * Set fd blocking and non-blocking
- */
-
-void
-fd_nonblock(int fd)
-{
-#ifdef FIONBIO
-#ifdef _WIN32
-        unsigned long opt = 1;
-#else
-        int opt = 1;
-#endif
-
-	ioctlsocket(fd, FIONBIO, &opt);
-#else
-	int opt;
-
-	opt = fcntl(fd, F_GETFL, 0);
-	opt |= O_NONBLOCK;
-	fcntl(fd, F_SETFL, opt);
-#endif
-}
-
-void
-fd_block(int fd)
-{
-#ifdef FIONBIO
-#ifdef _WIN32
-        unsigned long opt = 0;
-#else
-	int opt = 0;
-#endif
-
-	ioctlsocket(fd, FIONBIO, &opt);
-#else
-	int opt;
-
-	opt = fcntl(fd, F_GETFL, 0);
-	opt &= ~O_NONBLOCK;
-	fcntl(fd, F_SETFL, opt);
-#endif
-}
-
 void slirp_connection_info(Slirp *slirp, Monitor *mon)
 {
     const char * const tcpstates[] = {
@@ -348,7 +289,6 @@ void slirp_connection_info(Slirp *slirp, Monitor *mon)
     struct socket *so;
     const char *state;
     char buf[20];
-    int n;
 
     monitor_printf(mon, "  Protocol[State]    FD  Source Address  Port   "
                         "Dest. Address  Port RecvQ SendQ\n");
@@ -372,10 +312,8 @@ void slirp_connection_info(Slirp *slirp, Monitor *mon)
             dst_addr = so->so_faddr;
             dst_port = so->so_fport;
         }
-        n = snprintf(buf, sizeof(buf), "  TCP[%s]", state);
-        memset(&buf[n], ' ', 19 - n);
-        buf[19] = 0;
-        monitor_printf(mon, "%s %3d %15s %5d ", buf, so->s,
+        snprintf(buf, sizeof(buf), "  TCP[%s]", state);
+        monitor_printf(mon, "%-19s %3d %15s %5d ", buf, so->s,
                        src.sin_addr.s_addr ? inet_ntoa(src.sin_addr) : "*",
                        ntohs(src.sin_port));
         monitor_printf(mon, "%15s %5d %5d %5d\n",
@@ -385,22 +323,20 @@ void slirp_connection_info(Slirp *slirp, Monitor *mon)
 
     for (so = slirp->udb.so_next; so != &slirp->udb; so = so->so_next) {
         if (so->so_state & SS_HOSTFWD) {
-            n = snprintf(buf, sizeof(buf), "  UDP[HOST_FORWARD]");
+            snprintf(buf, sizeof(buf), "  UDP[HOST_FORWARD]");
             src_len = sizeof(src);
             getsockname(so->s, (struct sockaddr *)&src, &src_len);
             dst_addr = so->so_laddr;
             dst_port = so->so_lport;
         } else {
-            n = snprintf(buf, sizeof(buf), "  UDP[%d sec]",
+            snprintf(buf, sizeof(buf), "  UDP[%d sec]",
                          (so->so_expire - curtime) / 1000);
             src.sin_addr = so->so_laddr;
             src.sin_port = so->so_lport;
             dst_addr = so->so_faddr;
             dst_port = so->so_fport;
         }
-        memset(&buf[n], ' ', 19 - n);
-        buf[19] = 0;
-        monitor_printf(mon, "%s %3d %15s %5d ", buf, so->s,
+        monitor_printf(mon, "%-19s %3d %15s %5d ", buf, so->s,
                        src.sin_addr.s_addr ? inet_ntoa(src.sin_addr) : "*",
                        ntohs(src.sin_port));
         monitor_printf(mon, "%15s %5d %5d %5d\n",
@@ -409,13 +345,11 @@ void slirp_connection_info(Slirp *slirp, Monitor *mon)
     }
 
     for (so = slirp->icmp.so_next; so != &slirp->icmp; so = so->so_next) {
-        n = snprintf(buf, sizeof(buf), "  ICMP[%d sec]",
+        snprintf(buf, sizeof(buf), "  ICMP[%d sec]",
                      (so->so_expire - curtime) / 1000);
         src.sin_addr = so->so_laddr;
         dst_addr = so->so_faddr;
-        memset(&buf[n], ' ', 19 - n);
-        buf[19] = 0;
-        monitor_printf(mon, "%s %3d %15s  -    ", buf, so->s,
+        monitor_printf(mon, "%-19s %3d %15s  -    ", buf, so->s,
                        src.sin_addr.s_addr ? inet_ntoa(src.sin_addr) : "*");
         monitor_printf(mon, "%15s  -    %5d %5d\n", inet_ntoa(dst_addr),
                        so->so_rcv.sb_cc, so->so_snd.sb_cc);

@@ -8,6 +8,9 @@
  *
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
+ *
+ * Contributions after 2012-01-13 are licensed under the terms of the
+ * GNU GPL, version 2 or (at your option) any later version.
  */
 
 #include "net.h"
@@ -92,7 +95,7 @@ struct vhost_net *vhost_net_init(VLANClientState *backend, int devfd,
                                  bool force)
 {
     int r;
-    struct vhost_net *net = qemu_malloc(sizeof *net);
+    struct vhost_net *net = g_malloc(sizeof *net);
     if (!backend) {
         fprintf(stderr, "vhost-net requires backend to be setup\n");
         goto fail;
@@ -125,7 +128,7 @@ struct vhost_net *vhost_net_init(VLANClientState *backend, int devfd,
     vhost_net_ack_features(net, 0);
     return net;
 fail:
-    qemu_free(net);
+    g_free(net);
     return NULL;
 }
 
@@ -139,16 +142,22 @@ int vhost_net_start(struct vhost_net *net,
 {
     struct vhost_vring_file file = { };
     int r;
+
+    net->dev.nvqs = 2;
+    net->dev.vqs = net->vqs;
+
+    r = vhost_dev_enable_notifiers(&net->dev, dev);
+    if (r < 0) {
+        goto fail_notifiers;
+    }
     if (net->dev.acked_features & (1 << VIRTIO_NET_F_MRG_RXBUF)) {
         tap_set_vnet_hdr_len(net->vc,
                              sizeof(struct virtio_net_hdr_mrg_rxbuf));
     }
 
-    net->dev.nvqs = 2;
-    net->dev.vqs = net->vqs;
     r = vhost_dev_start(&net->dev, dev);
     if (r < 0) {
-        return r;
+        goto fail_start;
     }
 
     net->vc->info->poll(net->vc, false);
@@ -173,6 +182,9 @@ fail:
     if (net->dev.acked_features & (1 << VIRTIO_NET_F_MRG_RXBUF)) {
         tap_set_vnet_hdr_len(net->vc, sizeof(struct virtio_net_hdr));
     }
+fail_start:
+    vhost_dev_disable_notifiers(&net->dev, dev);
+fail_notifiers:
     return r;
 }
 
@@ -190,6 +202,7 @@ void vhost_net_stop(struct vhost_net *net,
     if (net->dev.acked_features & (1 << VIRTIO_NET_F_MRG_RXBUF)) {
         tap_set_vnet_hdr_len(net->vc, sizeof(struct virtio_net_hdr));
     }
+    vhost_dev_disable_notifiers(&net->dev, dev);
 }
 
 void vhost_net_cleanup(struct vhost_net *net)
@@ -198,7 +211,7 @@ void vhost_net_cleanup(struct vhost_net *net)
     if (net->dev.acked_features & (1 << VIRTIO_NET_F_MRG_RXBUF)) {
         tap_set_vnet_hdr_len(net->vc, sizeof(struct virtio_net_hdr));
     }
-    qemu_free(net);
+    g_free(net);
 }
 #else
 struct vhost_net *vhost_net_init(VLANClientState *backend, int devfd,

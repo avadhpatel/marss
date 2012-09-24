@@ -55,6 +55,13 @@ tcp_init(Slirp *slirp)
     slirp->tcp_last_so = &slirp->tcb;
 }
 
+void tcp_cleanup(Slirp *slirp)
+{
+    while (slirp->tcb.so_next != &slirp->tcb) {
+        tcp_close(sototcpcb(slirp->tcb.so_next));
+    }
+}
+
 /*
  * Create template to be used to send tcp packets on a connection.
  * Call after host entry created, fills
@@ -329,7 +336,7 @@ int tcp_fconnect(struct socket *so)
     int opt, s=so->s;
     struct sockaddr_in addr;
 
-    fd_nonblock(s);
+    socket_set_nonblock(s);
     opt = 1;
     setsockopt(s,SOL_SOCKET,SO_REUSEADDR,(char *)&opt,sizeof(opt ));
     opt = 1;
@@ -417,7 +424,7 @@ tcp_connect(struct socket *inso)
 		tcp_close(sototcpcb(so)); /* This will sofree() as well */
 		return;
 	}
-	fd_nonblock(s);
+	socket_set_nonblock(s);
 	opt = 1;
 	setsockopt(s,SOL_SOCKET,SO_REUSEADDR,(char *)&opt,sizeof(int));
 	opt = 1;
@@ -902,7 +909,7 @@ int tcp_ctl(struct socket *so)
                     return 1;
                 }
                 do_pty = ex_ptr->ex_pty;
-                DEBUG_MISC((dfd, " executing %s \n",ex_ptr->ex_exec));
+                DEBUG_MISC((dfd, " executing %s\n", ex_ptr->ex_exec));
                 return fork_exec(so, ex_ptr->ex_exec, do_pty);
             }
         }

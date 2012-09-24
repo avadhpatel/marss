@@ -41,6 +41,7 @@ typedef struct BDRVRawState {
 int qemu_ftruncate64(int fd, int64_t length)
 {
     LARGE_INTEGER li;
+    DWORD dw;
     LONG high;
     HANDLE h;
     BOOL res;
@@ -53,12 +54,15 @@ int qemu_ftruncate64(int fd, int64_t length)
     /* get current position, ftruncate do not change position */
     li.HighPart = 0;
     li.LowPart = SetFilePointer (h, 0, &li.HighPart, FILE_CURRENT);
-    if (li.LowPart == 0xffffffffUL && GetLastError() != NO_ERROR)
+    if (li.LowPart == INVALID_SET_FILE_POINTER && GetLastError() != NO_ERROR) {
 	return -1;
+    }
 
     high = length >> 32;
-    if (!SetFilePointer(h, (DWORD) length, &high, FILE_BEGIN))
+    dw = SetFilePointer(h, (DWORD) length, &high, FILE_BEGIN);
+    if (dw == INVALID_SET_FILE_POINTER && GetLastError() != NO_ERROR) {
 	return -1;
+    }
     res = SetEndOfFile(h);
 
     /* back to old position */
@@ -277,9 +281,11 @@ static BlockDriver bdrv_file = {
     .bdrv_file_open	= raw_open,
     .bdrv_close		= raw_close,
     .bdrv_create	= raw_create,
-    .bdrv_flush		= raw_flush,
-    .bdrv_read		= raw_read,
-    .bdrv_write		= raw_write,
+
+    .bdrv_read              = raw_read,
+    .bdrv_write             = raw_write,
+    .bdrv_co_flush_to_disk  = raw_flush,
+
     .bdrv_truncate	= raw_truncate,
     .bdrv_getlength	= raw_getlength,
     .bdrv_get_allocated_file_size
@@ -393,41 +399,6 @@ static int hdev_open(BlockDriverState *bs, const char *filename, int flags)
     return 0;
 }
 
-#if 0
-/***********************************************/
-/* removable device additional commands */
-
-static int raw_is_inserted(BlockDriverState *bs)
-{
-    return 1;
-}
-
-static int raw_media_changed(BlockDriverState *bs)
-{
-    return -ENOTSUP;
-}
-
-static int raw_eject(BlockDriverState *bs, int eject_flag)
-{
-    DWORD ret_count;
-
-    if (s->type == FTYPE_FILE)
-        return -ENOTSUP;
-    if (eject_flag) {
-        DeviceIoControl(s->hfile, IOCTL_STORAGE_EJECT_MEDIA,
-                        NULL, 0, NULL, 0, &lpBytesReturned, NULL);
-    } else {
-        DeviceIoControl(s->hfile, IOCTL_STORAGE_LOAD_MEDIA,
-                        NULL, 0, NULL, 0, &lpBytesReturned, NULL);
-    }
-}
-
-static int raw_set_locked(BlockDriverState *bs, int locked)
-{
-    return -ENOTSUP;
-}
-#endif
-
 static int hdev_has_zero_init(BlockDriverState *bs)
 {
     return 0;
@@ -440,11 +411,12 @@ static BlockDriver bdrv_host_device = {
     .bdrv_probe_device	= hdev_probe_device,
     .bdrv_file_open	= hdev_open,
     .bdrv_close		= raw_close,
-    .bdrv_flush		= raw_flush,
     .bdrv_has_zero_init = hdev_has_zero_init,
 
-    .bdrv_read		= raw_read,
-    .bdrv_write	        = raw_write,
+    .bdrv_read              = raw_read,
+    .bdrv_write             = raw_write,
+    .bdrv_co_flush_to_disk  = raw_flush,
+
     .bdrv_getlength	= raw_getlength,
     .bdrv_get_allocated_file_size
                         = raw_get_allocated_file_size,

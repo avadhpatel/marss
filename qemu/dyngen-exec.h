@@ -19,23 +19,19 @@
 #if !defined(__DYNGEN_EXEC_H__)
 #define __DYNGEN_EXEC_H__
 
-#include "qemu-common.h"
-
-#ifdef __OpenBSD__
-#include <sys/types.h>
-#endif
-
-/* XXX: This may be wrong for 64-bit ILP32 hosts.  */
-typedef void * host_reg_t;
-
-#if defined(__i386__)
+#if defined(CONFIG_TCG_INTERPRETER)
+/* The TCG interpreter does not need a special register AREG0,
+ * but it is possible to use one by defining AREG0.
+ * On i386, register edi seems to work. */
+/* Run without special register AREG0 or use a value defined elsewhere. */
+#elif defined(__i386__)
 #define AREG0 "ebp"
 #elif defined(__x86_64__)
 #define AREG0 "r14"
 #elif defined(_ARCH_PPC)
 #define AREG0 "r27"
 #elif defined(__arm__)
-#define AREG0 "r7"
+#define AREG0 "r6"
 #elif defined(__hppa__)
 #define AREG0 "r17"
 #elif defined(__mips__)
@@ -64,21 +60,11 @@ typedef void * host_reg_t;
 #error unsupported CPU
 #endif
 
-#define xglue(x, y) x ## y
-#define glue(x, y) xglue(x, y)
-#define stringify(s)	tostring(s)
-#define tostring(s)	#s
-
-/* The return address may point to the start of the next instruction.
-   Subtracting one gets us the call instruction itself.  */
-#if defined(__s390__) && !defined(__s390x__)
-# define GETPC() ((void*)(((unsigned long)__builtin_return_address(0) & 0x7fffffffUL) - 1))
-#elif defined(__arm__)
-/* Thumb return addresses have the low bit set, so we need to subtract two.
-   This is still safe in ARM mode because instructions are 4 bytes.  */
-# define GETPC() ((void *)((unsigned long)__builtin_return_address(0) - 2))
+#if defined(AREG0)
+register CPUArchState *env asm(AREG0);
 #else
-# define GETPC() ((void *)((unsigned long)__builtin_return_address(0) - 1))
+/* TODO: Try env = cpu_single_env. */
+extern CPUArchState *env;
 #endif
 
 #endif /* !defined(__DYNGEN_EXEC_H__) */

@@ -12,12 +12,6 @@
 #ifndef _PTLHWDEF_H
 #define _PTLHWDEF_H
 
-extern "C" {
-#include <cpu.h>
-#define CPU_NO_GLOBAL_REGS
-#include <exec.h>
-}
-
 // for virtual -> physical address mapping
 #include <map>
 using std::map;
@@ -197,6 +191,18 @@ using std::map;
 extern "C" W64 sim_cycle;
 #include <logic.h>
 #include <config.h>
+
+extern "C" {
+#define class _safe_class
+#define typename _safe_typename
+#include <cpu.h>
+#include <memory.h>
+#include <cputlb.h>
+#include <cpu-all.h>
+#include <dyngen-exec.h>
+#undef class
+#undef typename
+};
 
 //
 // Exceptions:
@@ -787,6 +793,10 @@ struct RunstateInfo {
   W64 time[4];
 };
 
+static void set_gl_env(CPUX86State *env1)
+{
+  env = env1;
+}
 //
 // This is the complete x86 user-visible context for a single VCPU.
 // It includes both the renamable registers (commitarf) as well as
@@ -799,7 +809,10 @@ enum {
 	CONTEXT_RUNNING = 1,
 };
 
-struct Context: public CPUX86State {
+struct Context {
+
+  /* Pointer to QEMU's CPU context (env) */
+  CPUX86State *env;
 
   bool use32;
   bool use64;
@@ -829,7 +842,7 @@ struct Context: public CPUX86State {
   W64 reg_fpstack;
   W64 page_fault_addr;
   W64 exec_fault_addr;
-  map<Waddr, Waddr> hvirt_gphys_map;
+  map<Waddr, Waddr> *hvirt_gphys_map;
 
 
   void change_runstate(int new_state) { running = new_state; }
@@ -837,50 +850,51 @@ struct Context: public CPUX86State {
   void propagate_x86_exception(byte exception, W32 errorcode = 0, Waddr virtaddr = 0) ;
 
   void set_eip_ptlsim() {
-	  eip = eip + segs[R_CS].base;
+	  env->eip = env->eip + env->segs[R_CS].base;
   }
 
   void set_eip_qemu() {
-	  eip = eip - segs[R_CS].base;
+	  env->eip = env->eip - env->segs[R_CS].base;
   }
 
   void setup_qemu_switch() {
-	  old_eip = eip;
+    cpu_single_env = this->env;
+    set_gl_env(this->env);
+    //set_global_env(this->env);
+	  old_eip = env->eip;
 	  set_eip_qemu();
-	  set_cpu_env((CPUX86State*)this);
 	  W64 flags = reg_flags;
 	  // Set the 2nd bit to 1 for compatibility
 	  flags = (flags | FLAG_INV);
-      cc_src = flags & (FLAG_NOT_WAIT_INV);
+      env->cc_src = flags & (FLAG_NOT_WAIT_INV);
           // load_eflags(flags, 0x00);
-          cc_op = CC_OP_EFLAGS;
-	  fpstt = reg_fptos >> 3;
+          env->cc_op = CC_OP_EFLAGS;
+	  env->fpstt = reg_fptos >> 3;
 	  foreach(i, 8) {
-          fptags[i] = !((reg_fptag >> (8*i)) & 0x1);
+          env->fptags[i] = !((reg_fptag >> (8*i)) & 0x1);
 	  }
   }
 
   void setup_ptlsim_switch() {
 
-	  set_cpu_env((CPUX86State*)this);
 	  // W64 flags = compute_eflags();
 
 	  // Clear the 2nd and 3rd bit as its used by PTLSim to indicate if
 	  // uop is executed correctly or not
 	  // flags = (flags & ~(W64)(FLAG_INV|FLAG_WAIT));
 	  // reg_flags = eflags & ~(W64)(FLAG_INV|FLAG_WAIT);
-          internal_eflags = cc_src & (FLAG_NOT_WAIT_INV);
-          internal_eflags |= (df & DF_MASK);
+          internal_eflags = env->cc_src & (FLAG_NOT_WAIT_INV);
+          internal_eflags |= (env->df & DF_MASK);
           reg_flags = internal_eflags;
-	  eip = eip + segs[R_CS].base;
+	  env->eip = env->eip + env->segs[R_CS].base;
       cs_segment_updated();
-	  update_mode((hflags & HF_CPL_MASK) == 0);
-	  reg_fptos = fpstt << 3;
-	  reg_fpstack = ((W64)&(fpregs[0].mmx.q));
+	  update_mode((env->hflags & HF_CPL_MASK) == 0);
+	  reg_fptos = env->fpstt << 3;
+	  reg_fpstack = ((W64)&(env->fpregs[0].mmx.q));
 	  reg_trace = 0;
-      reg_fptag = 0;
+    reg_fptag = 0;
 	  foreach(i, 8) {
-          reg_fptag |= ((W64(!fptags[i])) << (8*i));
+          reg_fptag |= ((W64(!env->fptags[i])) << (8*i));
 	  }
 
       // by default disable the interrupt handling flag
@@ -900,22 +914,22 @@ struct Context: public CPUX86State {
   bool try_handle_fault(Waddr virtaddr, int is_write);
 
   W64 get_cs_eip() {
-	  return eip;
+	  return env->eip;
   }
 
   int copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorCode& pfec, Waddr& faultaddr, bool forexec = true) ;
 
   CPUTLBEntry* get_tlb_entry(Waddr virtaddr) {
-	  int mmu_idx = cpu_mmu_index((CPUX86State*)this);
+	  int mmu_idx = cpu_mmu_index(env);
 	  int index = (virtaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
 
-	  return &tlb_table[mmu_idx][index];
+	  return &env->tlb_table[mmu_idx][index];
   }
 
   int get_phys_memory_address(Waddr host_vaddr, Waddr &guest_paddr)
   {
     map<Waddr, Waddr>::iterator it;
-    if ((it = hvirt_gphys_map.find(host_vaddr & TARGET_PAGE_MASK)) == hvirt_gphys_map.end())
+    if ((it = hvirt_gphys_map->find(host_vaddr & TARGET_PAGE_MASK)) == hvirt_gphys_map->end())
     {
       guest_paddr=0;
       return -1;
@@ -953,9 +967,9 @@ struct Context: public CPUX86State {
 		  // (unsigned long)(phys_ram_base);
 
 	  bool dirty = false;
-	  setup_qemu_switch();
-	  dirty = cpu_physical_memory_is_dirty(ram_addr);
-	  setup_ptlsim_switch();
+	  //setup_qemu_switch();
+	  //dirty = cpu_physical_memory_is_dirty(ram_addr);
+	  //setup_ptlsim_switch();
 
 	  return dirty;
   }
@@ -976,16 +990,24 @@ struct Context: public CPUX86State {
       ram_addr = qemu_ram_addr_from_host_nofail((void*)ram_addr);
 		  // (unsigned long)(phys_ram_base);
 
-	  setup_qemu_switch();
-	  cpu_physical_memory_set_dirty(ram_addr);
-	  setup_ptlsim_switch();
+	  //setup_qemu_switch();
+	  //cpu_physical_memory_set_dirty(ram_addr);
+	  //setup_ptlsim_switch();
   }
 
   void smc_cleardirty(Waddr virtaddr) {
 	  //TODO
   }
 
-  void init();
+  void init(CPUX86State *env_t) {
+    env = env_t;
+	  invalid_reg = -1;
+	  reg_zero = 0;
+	  reg_ctx = (Waddr)env;
+    hvirt_gphys_map = new map<Waddr, Waddr>();
+	  // hvirt_gphys_map = (map<Waddr, Waddr> *)g_malloc(
+			//   sizeof(map<Waddr, Waddr>));
+  }
 
   Context() : invalid_reg(-1), reg_zero(0), reg_ctx((Waddr)this) { }
 
@@ -997,8 +1019,8 @@ struct Context: public CPUX86State {
   bool event_upcall();
 
   int page_table_level_count() const {
-      if(cr[4] & CR4_PAE_MASK) {
-          if(hflags & HF_LMA_MASK) {
+      if(env->cr[4] & CR4_PAE_MASK) {
+          if(env->hflags & HF_LMA_MASK) {
               return 4;
           }
           return 3;
@@ -1008,21 +1030,21 @@ struct Context: public CPUX86State {
 
   W64 get(int index) const {
 	  if likely (index < 16) {
-		  return (W64)(regs[index]);
+		  return (W64)(env->regs[index]);
 	  }
 	  else if(index < 48) {
 		  int i = (index - 16) / 2;
 		  if(index % 2 == 0) {
-			  return (W64)(xmm_regs[i]._q[0]);
+			  return (W64)(env->xmm_regs[i]._q[0]);
 		  } else {
-			  return (W64)(xmm_regs[i]._q[1]);
+			  return (W64)(env->xmm_regs[i]._q[1]);
 		  }
 	  }
 	  else if(index == REG_fptos) {
 		  return reg_fptos;
 	  }
 	  else if(index == REG_fpsw) {
-		  return (W64)fpus;
+		  return (W64)env->fpus;
 	  }
 	  else if(index == REG_fptags) {
 		  return reg_fptag;
@@ -1045,7 +1067,7 @@ struct Context: public CPUX86State {
 		  return reg_ctx;
 	  }
 	  else if(index == 56) {
-		  return (W64)(eip);
+		  return (W64)(env->eip);
 	  }
 	  else if(index == REG_flags) {
 		  return reg_flags;
@@ -1070,7 +1092,7 @@ struct Context: public CPUX86State {
 		  return reg_zero;
 	  }
       else if(index <= REG_mmx7 && index >= REG_mmx0) {
-          return fpregs[(index - REG_mmx0)].mmx.q;
+          return env->fpregs[(index - REG_mmx0)].mmx.q;
       }
 	  return invalid_reg;
   }
@@ -1078,21 +1100,21 @@ struct Context: public CPUX86State {
 
   void set_reg(int index, W64 value) {
 	  if likely (index < 16) {
-		  regs[index] = value;
+		  env->regs[index] = value;
 	  }
 	  else if(index < 48) {
 		  int i = (index - 16) / 2;
 		  if(index % 2 == 0) {
-			  xmm_regs[i]._q[0] = value;
+			  env->xmm_regs[i]._q[0] = value;
 		  } else {
-			  xmm_regs[i]._q[1] = value;
+			  env->xmm_regs[i]._q[1] = value;
 		  }
 	  }
 	  else if(index == REG_fptos) {
 		  reg_fptos = value;
 	  }
 	  else if(index == REG_fpsw) {
-		  fpus = value;
+		  env->fpus = value;
 	  }
 	  else if(index == REG_fptags) {
 		  reg_fptag = value;
@@ -1116,7 +1138,7 @@ struct Context: public CPUX86State {
 		  reg_ctx = value;
 	  }
 	  else if(index == 56) {
-		  eip = value;
+		  env->eip = value;
 	  }
 	  else if(index == REG_flags) {
 		  reg_flags = value;
@@ -1141,7 +1163,7 @@ struct Context: public CPUX86State {
 		  reg_zero = 0;
 	  }
       else if(index <= REG_mmx7 && index >= REG_mmx0) {
-          fpregs[(index - REG_mmx0)].mmx.q = value;
+          env->fpregs[(index - REG_mmx0)].mmx.q = value;
       }
 
 	  return ;
@@ -1150,12 +1172,12 @@ struct Context: public CPUX86State {
   void update_mode(bool is_kernel);
 
   void cs_segment_updated() {
-      if((hflags & HF_LMA_MASK)) {
-          use64 = (hflags >> HF_CS64_SHIFT) & 1;
+      if((env->hflags & HF_LMA_MASK)) {
+          use64 = (env->hflags >> HF_CS64_SHIFT) & 1;
       } else {
           use64 = 0;
       }
-      use32 = (use64) ? false : (hflags >> HF_CS32_SHIFT) & 1;
+      use32 = (use64) ? false : (env->hflags >> HF_CS32_SHIFT) & 1;
 	  virt_addr_mask = (use64 ? 0xffffffffffffffffULL : 0x00000000ffffffffULL);
   }
 
@@ -1777,11 +1799,11 @@ void update_light_assist_stats(int idx);
 
 // Self Modifying code Support with QEMU
 static inline bool smc_isdirty(Waddr page_addr) {
-	return cpu_physical_memory_is_dirty(page_addr);
+	return false; //cpu_physical_memory_is_dirty(page_addr);
 }
 
 static inline void smc_setdirty(Waddr page_addr) {
-	cpu_physical_memory_set_dirty(page_addr);
+	//cpu_physical_memory_set_dirty(page_addr);
 }
 
 static inline void smc_cleardirty(Waddr page_addr) {

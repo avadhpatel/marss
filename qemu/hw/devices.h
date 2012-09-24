@@ -1,6 +1,9 @@
 #ifndef QEMU_DEVICES_H
 #define QEMU_DEVICES_H
 
+/* ??? Not all users of this file can include cpu-common.h.  */
+struct MemoryRegion;
+
 /* Devices that have nowhere better to go.  */
 
 /* smc91c111.c */
@@ -47,24 +50,19 @@ void *tahvo_init(qemu_irq irq, int betty);
 
 void retu_key_event(void *retu, int state);
 
-/* tusb6010.c */
-typedef struct TUSBState TUSBState;
-TUSBState *tusb6010_init(qemu_irq intr);
-int tusb6010_sync_io(TUSBState *s);
-int tusb6010_async_io(TUSBState *s);
-void tusb6010_power(TUSBState *s, int on);
-
 /* tc6393xb.c */
 typedef struct TC6393xbState TC6393xbState;
 #define TC6393XB_RAM	0x110000 /* amount of ram for Video and USB */
-TC6393xbState *tc6393xb_init(uint32_t base, qemu_irq irq);
+TC6393xbState *tc6393xb_init(struct MemoryRegion *sysmem,
+                             uint32_t base, qemu_irq irq);
 void tc6393xb_gpio_out_set(TC6393xbState *s, int line,
                     qemu_irq handler);
 qemu_irq *tc6393xb_gpio_in_get(TC6393xbState *s);
 qemu_irq tc6393xb_l3v_get(TC6393xbState *s);
 
 /* sm501.c */
-void sm501_init(uint32_t base, uint32_t local_mem_bytes, qemu_irq irq,
+void sm501_init(struct MemoryRegion *address_space_mem, uint32_t base,
+                uint32_t local_mem_bytes, qemu_irq irq,
                 CharDriverState *chr);
 
 #endif

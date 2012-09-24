@@ -53,6 +53,7 @@ enum {
 
 struct MilkymistAC97State {
     SysBusDevice busdev;
+    MemoryRegion regs_region;
 
     QEMUSoundCard card;
     SWVoiceIn *voice_in;
@@ -82,7 +83,8 @@ static void update_voices(MilkymistAC97State *s)
     }
 }
 
-static uint32_t ac97_read(void *opaque, target_phys_addr_t addr)
+static uint64_t ac97_read(void *opaque, target_phys_addr_t addr,
+                          unsigned size)
 {
     MilkymistAC97State *s = opaque;
     uint32_t r = 0;
@@ -113,7 +115,8 @@ static uint32_t ac97_read(void *opaque, target_phys_addr_t addr)
     return r;
 }
 
-static void ac97_write(void *opaque, target_phys_addr_t addr, uint32_t value)
+static void ac97_write(void *opaque, target_phys_addr_t addr, uint64_t value,
+                       unsigned size)
 {
     MilkymistAC97State *s = opaque;
 
@@ -159,16 +162,14 @@ static void ac97_write(void *opaque, target_phys_addr_t addr, uint32_t value)
 
 }
 
-static CPUReadMemoryFunc * const ac97_read_fn[] = {
-    NULL,
-    NULL,
-    &ac97_read,
-};
-
-static CPUWriteMemoryFunc * const ac97_write_fn[] = {
-    NULL,
-    NULL,
-    &ac97_write,
+static const MemoryRegionOps ac97_mmio_ops = {
+    .read = ac97_read,
+    .write = ac97_write,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 static void ac97_in_cb(void *opaque, int avail_b)
@@ -280,7 +281,6 @@ static int ac97_post_load(void *opaque, int version_id)
 static int milkymist_ac97_init(SysBusDevice *dev)
 {
     MilkymistAC97State *s = FROM_SYSBUS(typeof(*s), dev);
-    int ac97_regs;
 
     struct audsettings as;
     sysbus_init_irq(dev, &s->crrequest_irq);
@@ -300,9 +300,9 @@ static int milkymist_ac97_init(SysBusDevice *dev)
     s->voice_out = AUD_open_out(&s->card, s->voice_out,
             "mm_ac97.out", s, ac97_out_cb, &as);
 
-    ac97_regs = cpu_register_io_memory(ac97_read_fn, ac97_write_fn, s,
-            DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, R_MAX * 4, ac97_regs);
+    memory_region_init_io(&s->regs_region, &ac97_mmio_ops, s,
+            "milkymist-ac97", R_MAX * 4);
+    sysbus_init_mmio(dev, &s->regs_region);
 
     return 0;
 }
@@ -319,17 +319,26 @@ static const VMStateDescription vmstate_milkymist_ac97 = {
     }
 };
 
-static SysBusDeviceInfo milkymist_ac97_info = {
-    .init = milkymist_ac97_init,
-    .qdev.name  = "milkymist-ac97",
-    .qdev.size  = sizeof(MilkymistAC97State),
-    .qdev.vmsd  = &vmstate_milkymist_ac97,
-    .qdev.reset = milkymist_ac97_reset,
-};
-
-static void milkymist_ac97_register(void)
+static void milkymist_ac97_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&milkymist_ac97_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = milkymist_ac97_init;
+    dc->reset = milkymist_ac97_reset;
+    dc->vmsd = &vmstate_milkymist_ac97;
 }
 
-device_init(milkymist_ac97_register)
+static TypeInfo milkymist_ac97_info = {
+    .name          = "milkymist-ac97",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(MilkymistAC97State),
+    .class_init    = milkymist_ac97_class_init,
+};
+
+static void milkymist_ac97_register_types(void)
+{
+    type_register_static(&milkymist_ac97_info);
+}
+
+type_init(milkymist_ac97_register_types)

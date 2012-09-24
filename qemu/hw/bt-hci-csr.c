@@ -222,7 +222,7 @@ static void csrhci_in_packet(struct csrhci_s *s, uint8_t *pkt)
 
         rpkt = csrhci_out_packet_csr(s, H4_NEG_PKT, 10);
 
-        *rpkt ++ = 0x20;	/* Operational settings negotation Ok */
+        *rpkt ++ = 0x20;	/* Operational settings negotiation Ok */
         memcpy(rpkt, pkt, 7); rpkt += 7;
         *rpkt ++ = 0xff;
         *rpkt = 0xff;
@@ -434,7 +434,7 @@ qemu_irq *csrhci_pins_get(CharDriverState *chr)
 CharDriverState *uart_hci_init(qemu_irq wakeup)
 {
     struct csrhci_s *s = (struct csrhci_s *)
-            qemu_mallocz(sizeof(struct csrhci_s));
+            g_malloc0(sizeof(struct csrhci_s));
 
     s->chr.opaque = s;
     s->chr.chr_write = csrhci_write;

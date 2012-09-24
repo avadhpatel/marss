@@ -25,6 +25,7 @@
 #include "arm-misc.h"
 #include "devices.h"
 #include "loader.h"
+#include "exec-memory.h"
 
 static uint32_t static_readb(void *opaque, target_phys_addr_t offset)
 {
@@ -53,16 +54,12 @@ static void static_write(void *opaque, target_phys_addr_t offset,
 #endif
 }
 
-static CPUReadMemoryFunc * const static_readfn[] = {
-    static_readb,
-    static_readh,
-    static_readw,
-};
-
-static CPUWriteMemoryFunc * const static_writefn[] = {
-    static_write,
-    static_write,
-    static_write,
+static const MemoryRegionOps static_ops = {
+    .old_mmio = {
+        .read = { static_readb, static_readh, static_readw, },
+        .write = { static_write, static_write, static_write, },
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 /* Palm Tunsgten|E support */
@@ -94,7 +91,7 @@ static void palmte_microwire_setup(struct omap_mpu_state_s *cpu)
 {
     uWireSlave *tsc;
 
-    tsc = tsc2102_init(omap_gpio_in_get(cpu->gpio)[PALMTE_PINTDAV_GPIO]);
+    tsc = tsc2102_init(qdev_get_gpio_in(cpu->gpio, PALMTE_PINTDAV_GPIO));
 
     omap_uwire_attach(cpu->microwire, tsc, 0);
     omap_mcbsp_i2s_attach(cpu->mcbsp1, tsc210x_codec(tsc));
@@ -163,24 +160,24 @@ static void palmte_gpio_setup(struct omap_mpu_state_s *cpu)
     qemu_irq *misc_gpio;
 
     omap_mmc_handlers(cpu->mmc,
-                    omap_gpio_in_get(cpu->gpio)[PALMTE_MMC_WP_GPIO],
+                    qdev_get_gpio_in(cpu->gpio, PALMTE_MMC_WP_GPIO),
                     qemu_irq_invert(omap_mpuio_in_get(cpu->mpuio)
                             [PALMTE_MMC_SWITCH_GPIO]));
 
     misc_gpio = qemu_allocate_irqs(palmte_onoff_gpios, cpu, 7);
-    omap_gpio_out_set(cpu->gpio, PALMTE_MMC_POWER_GPIO,	misc_gpio[0]);
-    omap_gpio_out_set(cpu->gpio, PALMTE_SPEAKER_GPIO,	misc_gpio[1]);
-    omap_gpio_out_set(cpu->gpio, 11,			misc_gpio[2]);
-    omap_gpio_out_set(cpu->gpio, 12,			misc_gpio[3]);
-    omap_gpio_out_set(cpu->gpio, 13,			misc_gpio[4]);
-    omap_mpuio_out_set(cpu->mpuio, 1,			misc_gpio[5]);
-    omap_mpuio_out_set(cpu->mpuio, 3,			misc_gpio[6]);
+    qdev_connect_gpio_out(cpu->gpio, PALMTE_MMC_POWER_GPIO,	misc_gpio[0]);
+    qdev_connect_gpio_out(cpu->gpio, PALMTE_SPEAKER_GPIO,	misc_gpio[1]);
+    qdev_connect_gpio_out(cpu->gpio, 11,			misc_gpio[2]);
+    qdev_connect_gpio_out(cpu->gpio, 12,			misc_gpio[3]);
+    qdev_connect_gpio_out(cpu->gpio, 13,			misc_gpio[4]);
+    omap_mpuio_out_set(cpu->mpuio, 1,				misc_gpio[5]);
+    omap_mpuio_out_set(cpu->mpuio, 3,				misc_gpio[6]);
 
     /* Reset some inputs to initial state.  */
-    qemu_irq_lower(omap_gpio_in_get(cpu->gpio)[PALMTE_USBDETECT_GPIO]);
-    qemu_irq_lower(omap_gpio_in_get(cpu->gpio)[PALMTE_USB_OR_DC_GPIO]);
-    qemu_irq_lower(omap_gpio_in_get(cpu->gpio)[4]);
-    qemu_irq_lower(omap_gpio_in_get(cpu->gpio)[PALMTE_HEADPHONES_GPIO]);
+    qemu_irq_lower(qdev_get_gpio_in(cpu->gpio, PALMTE_USBDETECT_GPIO));
+    qemu_irq_lower(qdev_get_gpio_in(cpu->gpio, PALMTE_USB_OR_DC_GPIO));
+    qemu_irq_lower(qdev_get_gpio_in(cpu->gpio, 4));
+    qemu_irq_lower(qdev_get_gpio_in(cpu->gpio, PALMTE_HEADPHONES_GPIO));
     qemu_irq_lower(omap_mpuio_in_get(cpu->mpuio)[PALMTE_DC_GPIO]);
     qemu_irq_raise(omap_mpuio_in_get(cpu->mpuio)[6]);
     qemu_irq_raise(omap_mpuio_in_get(cpu->mpuio)[7]);
@@ -198,37 +195,40 @@ static void palmte_init(ram_addr_t ram_size,
                 const char *kernel_filename, const char *kernel_cmdline,
                 const char *initrd_filename, const char *cpu_model)
 {
+    MemoryRegion *address_space_mem = get_system_memory();
     struct omap_mpu_state_s *cpu;
     int flash_size = 0x00800000;
     int sdram_size = palmte_binfo.ram_size;
-    int io;
     static uint32_t cs0val = 0xffffffff;
     static uint32_t cs1val = 0x0000e1a0;
     static uint32_t cs2val = 0x0000e1a0;
     static uint32_t cs3val = 0xe1a0e1a0;
     int rom_size, rom_loaded = 0;
     DisplayState *ds = get_displaystate();
+    MemoryRegion *flash = g_new(MemoryRegion, 1);
+    MemoryRegion *cs = g_new(MemoryRegion, 4);
 
-    cpu = omap310_mpu_init(sdram_size, cpu_model);
+    cpu = omap310_mpu_init(address_space_mem, sdram_size, cpu_model);
 
     /* External Flash (EMIFS) */
-    cpu_register_physical_memory(OMAP_CS0_BASE, flash_size,
-                                 qemu_ram_alloc(NULL, "palmte.flash",
-                                                flash_size) | IO_MEM_ROM);
+    memory_region_init_ram(flash, "palmte.flash", flash_size);
+    vmstate_register_ram_global(flash);
+    memory_region_set_readonly(flash, true);
+    memory_region_add_subregion(address_space_mem, OMAP_CS0_BASE, flash);
 
-    io = cpu_register_io_memory(static_readfn, static_writefn, &cs0val,
-                                DEVICE_NATIVE_ENDIAN);
-    cpu_register_physical_memory(OMAP_CS0_BASE + flash_size,
-                    OMAP_CS0_SIZE - flash_size, io);
-    io = cpu_register_io_memory(static_readfn, static_writefn, &cs1val,
-                                DEVICE_NATIVE_ENDIAN);
-    cpu_register_physical_memory(OMAP_CS1_BASE, OMAP_CS1_SIZE, io);
-    io = cpu_register_io_memory(static_readfn, static_writefn, &cs2val,
-                                DEVICE_NATIVE_ENDIAN);
-    cpu_register_physical_memory(OMAP_CS2_BASE, OMAP_CS2_SIZE, io);
-    io = cpu_register_io_memory(static_readfn, static_writefn, &cs3val,
-                                DEVICE_NATIVE_ENDIAN);
-    cpu_register_physical_memory(OMAP_CS3_BASE, OMAP_CS3_SIZE, io);
+    memory_region_init_io(&cs[0], &static_ops, &cs0val, "palmte-cs0",
+                          OMAP_CS0_SIZE - flash_size);
+    memory_region_add_subregion(address_space_mem, OMAP_CS0_BASE + flash_size,
+                                &cs[0]);
+    memory_region_init_io(&cs[1], &static_ops, &cs1val, "palmte-cs1",
+                          OMAP_CS1_SIZE);
+    memory_region_add_subregion(address_space_mem, OMAP_CS1_BASE, &cs[1]);
+    memory_region_init_io(&cs[2], &static_ops, &cs2val, "palmte-cs2",
+                          OMAP_CS2_SIZE);
+    memory_region_add_subregion(address_space_mem, OMAP_CS2_BASE, &cs[2]);
+    memory_region_init_io(&cs[3], &static_ops, &cs3val, "palmte-cs3",
+                          OMAP_CS3_SIZE);
+    memory_region_add_subregion(address_space_mem, OMAP_CS3_BASE, &cs[3]);
 
     palmte_microwire_setup(cpu);
 

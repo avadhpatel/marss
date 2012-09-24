@@ -42,13 +42,14 @@
 @chapter Introduction
 
 @menu
-* intro_features::        Features
-* intro_x86_emulation::   x86 and x86-64 emulation
-* intro_arm_emulation::   ARM emulation
-* intro_mips_emulation::  MIPS emulation
-* intro_ppc_emulation::   PowerPC emulation
-* intro_sparc_emulation:: Sparc32 and Sparc64 emulation
-* intro_other_emulation:: Other CPU emulation
+* intro_features::         Features
+* intro_x86_emulation::    x86 and x86-64 emulation
+* intro_arm_emulation::    ARM emulation
+* intro_mips_emulation::   MIPS emulation
+* intro_ppc_emulation::    PowerPC emulation
+* intro_sparc_emulation::  Sparc32 and Sparc64 emulation
+* intro_xtensa_emulation:: Xtensa emulation
+* intro_other_emulation::  Other CPU emulation
 @end menu
 
 @node intro_features
@@ -95,10 +96,6 @@ Alpha and S390 hosts, but TCG (see below) doesn't support those yet.
 
 @item Precise exceptions support.
 
-@item The virtual CPU is a library (@code{libqemu}) which can be used
-in other projects (look at @file{qemu/tests/qruncom.c} to have an
-example of user mode @code{libqemu} usage).
-
 @item
 Floating point library supporting both full software emulation and
 native host FPU instructions.
@@ -115,8 +112,7 @@ QEMU user mode emulation features:
 @end itemize
 
 Linux user emulator (Linux host only) can be used to launch the Wine
-Windows API emulator (@url{http://www.winehq.org}). A Darwin user
-emulator (Darwin hosts only) exists and a BSD user emulator for BSD
+Windows API emulator (@url{http://www.winehq.org}). A BSD user emulator for BSD
 hosts is under development. It would also be possible to develop a
 similar user emulator for Solaris.
 
@@ -256,6 +252,31 @@ Current QEMU limitations:
 @item Atomic instructions are not correctly implemented.
 
 @item There are still some problems with Sparc64 emulators.
+
+@end itemize
+
+@node intro_xtensa_emulation
+@section Xtensa emulation
+
+@itemize
+
+@item Core Xtensa ISA emulation, including most options: code density,
+loop, extended L32R, 16- and 32-bit multiplication, 32-bit division,
+MAC16, miscellaneous operations, boolean, multiprocessor synchronization,
+conditional store, exceptions, relocatable vectors, unaligned exception,
+interrupts (including high priority and timer), hardware alignment,
+region protection, region translation, MMU, windowed registers, thread
+pointer, processor ID.
+
+@item Not implemented options: FP coprocessor, coprocessor context,
+data/instruction cache (including cache prefetch and locking), XLMI,
+processor interface, debug. Also options not covered by the core ISA
+(e.g. FLIX, wide branches) are not implemented.
+
+@item Can run most Xtensa Linux binaries.
+
+@item New core configuration that requires no additional instructions
+may be created from overlay with minimal amount of hand-written code.
 
 @end itemize
 
@@ -409,7 +430,7 @@ generate an addition for the segment base.
 @node Translation cache
 @section Translation cache
 
-A 16 MByte cache holds the most recently used translations. For
+A 32 MByte cache holds the most recently used translations. For
 simplicity, it is completely flushed when it is full. A translation unit
 contains just a single basic block (a block of x86 instructions
 terminated by a jump or by a virtual CPU state change which the
@@ -659,7 +680,6 @@ are available. They are used for regression testing.
 @menu
 * test-i386::
 * linux-test::
-* qruncom.c::
 @end menu
 
 @node test-i386
@@ -684,11 +704,6 @@ exception reporting.
 This program tests various Linux system calls. It is used to verify
 that the system call parameters are correctly converted between target
 and host CPUs.
-
-@node qruncom.c
-@section @file{qruncom.c}
-
-Example of usage of @code{libqemu} to emulate a user mode i386 CPU.
 
 @node Index
 @chapter Index

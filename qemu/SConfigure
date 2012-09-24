@@ -10,6 +10,7 @@ except:
     env['LDFLAGS'] = ""
 
 from subprocess import call
+from copy import copy
 
 #env.Append(CCFLAGS = "-g")
 
@@ -426,6 +427,162 @@ def CheckPosixMadvise(context):
     return res
 custom_tests['CheckPosixMadvise'] = CheckPosixMadvise
 
+def CheckEpoll(context):
+    src = """
+    #include <sys/epoll.h>
+
+    int main(void)
+    {
+        epoll_create(0);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckEpoll'] = CheckEpoll
+
+def CheckEpollCreate1(context):
+    src = """
+    #include <sys/epoll.h>
+
+    int main(void)
+    {
+        /* Note that we use epoll_create1 as a value, not as
+         * a function being called. This is necessary so that on
+         * old SPARC glibc versions where the function was present in
+         * the library but not declared in the header file we will
+         * fail the configure check. (Otherwise we will get a compiler
+         * warning but not an error, and will proceed to fail the
+         * qemu compile where we compile with -Werror.)
+         */
+        return epoll_create1 == epoll_create1;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckEpollCreate1'] = CheckEpollCreate1
+
+def CheckEpollPwait(context):
+    src = """
+    #include <sys/epoll.h>
+
+    int main(void)
+    {
+        epoll_pwait(0, 0, 0, 0, 0);
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckEpollPwait'] = CheckEpollPwait
+
+def CheckOpenGL(context):
+    src = """
+    #include <X11/Xlib.h>
+    #include <GL/gl.h>
+    #include <GL/glx.h>
+    int main(void) { return GL_VERSION != 0; }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckOpenGL'] = CheckOpenGL
+
+def CheckCoroutine(context):
+    src = """
+    #include <ucontext.h>
+    #ifdef __stub_makecontext
+    #error Ignoring glibc stub makecontext which will always fail
+    #endif
+    int main(void) { makecontext(0, 0, 0); return 0; }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckCoroutine'] = CheckCoroutine
+
+def CheckOpenByHandle(context):
+    src = """
+    #include <fcntl.h>
+    #if !defined(AT_EMPTY_PATH)
+    # error missing definition
+    #else
+    int main(void) {
+        struct file_handle fh;
+        return open_by_handle_at(0, &fh, 0);
+    }
+    #endif
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckOpenByHandle'] = CheckOpenByHandle
+
+def CheckLinuxMagic(context):
+    src = """
+    #include <linux/magic.h>
+    int main(void) {
+      return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckLinuxMagic'] = CheckLinuxMagic
+
+def CheckHasEnviron(context):
+    src = """
+    #include <unistd.h>
+    int main(void) {
+        environ = environ;
+        return 0;
+    }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckHasEnviron'] = CheckHasEnviron
+
+def CheckLibiscsi(context):
+    src = """
+    #include <stdio.h>
+    #include <iscsi/iscsi.h>
+    int main(void) { iscsi_unmap_sync(NULL,0,0,0,NULL,0); return 0; }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckLibiscsi'] = CheckLibiscsi
+
+def CheckTraceBackend(context):
+    cmd = "python qemu/scripts/tracetool.py --backend=%s" % \
+            env['trace_backend']
+    cmd += " --check-backend"
+    res = context.TryAction(cmd)[0]
+    context.Result(res)
+    return res
+custom_tests['CheckTraceBackend'] = CheckTraceBackend
+
+def CheckUstTraceBackend(context):
+    src = """
+    #include <ust/tracepoint.h>
+    #include <ust/marker.h>
+    int main(void) { return 0; }
+    """
+    res = context.TryLink(src, '.cpp')
+    context.Result(res)
+    return res
+custom_tests['CheckUstTraceBackend'] = CheckUstTraceBackend
+
+def CheckDtraceBackend(context):
+    res = context.TryAction("dtrace")[0]
+    context.Result(res)
+    return res
+custom_tests['CheckDtraceBackend'] = CheckDtraceBackend
+
 # Start testing
 conf = Configure(env, custom_tests = custom_tests)
 
@@ -516,48 +673,28 @@ env['pkgversion']=""
 env['check_utests']=False
 env['user_pie']=False
 env['zero_malloc']=""
+env['epoll']=False
+env['epoll_create1']=False
+env['epoll_pwait']=False
+env['opengl']=False
+env['coroutine']=""
+env['open_by_handle']=False
+env['linux_magic_h']=False
+env['has_environ']=False
+env['libiscsi']=False
+env['smbd']="/usr/sbin/smbd"
+env['trace_default']=True
+env['trace_backend']="nop"
+env['trace_file']="trace"
 
 target_short_alignment = 2
 target_int_alignment   = 4
 target_long_alignment  = 4
 target_llong_alignment = 8
 
-# gprof=False
-# sparse=False
-# bigendian=False
-# mingw32=False
-# EXESUF=""
 env['gdbstub']=True
-# slirp=True
-# vde=True
-# fmod_lib=""
-# fmod_inc=""
-# oss_lib=""
-# vnc_tls=True
-# bsd=False
-# linux=False
-# solaris=False
-# kqemu=False
-# profiler=False
-# cocoa=False
 env['check_gfx']=True
 env['softmmu']=True
-# linux_user=False
-# darwin_user=False
-# bsd_user=False
-# build_docs=False
-# uname_release=""
-# curses=True
-# aio=True
-# nptl=True
-# mixemu=False
-# bluez=True
-# kvm=False
-# kerneldir=""
-# aix=False
-# blobs=True
-# fdt=True
-# sdl_x11=False
 
 audio_drv_list = "oss"
 audio_possible_drivers = "oss sdl esd pa fmod"
@@ -746,6 +883,13 @@ if env['fdt'] != False and conf.CheckLib('fdt'):
 else:
     env['fdt'] = False
 
+# opengl
+old_link = copy(env['LINKFLAGS'])
+env.Append(LINKFLAGS = '-lGL')
+env['opengl'] = True if conf.CheckOpenGL() else False
+if env['opengl'] == False:
+    env.Replace(LINKFLAGS = old_link)
+
 # preadv probe
 if conf.CheckPreadv():
     env['preadv'] = True
@@ -806,6 +950,15 @@ if conf.CheckDup3():
 else:
     env['dup3'] = False
 
+# epoll
+env['epoll'] = True if conf.CheckEpoll() else False
+
+# epoll_create1
+env['epoll_create1'] = True if conf.CheckEpollCreate1() else False
+
+# epoll_pwawit
+env['epoll_pwait'] = True if conf.CheckEpollPwait() else False
+
 # Check Header files
 if conf.CheckCHeader('signal.h') and conf.CheckCHeader('time.h'):
     env['rt'] = True
@@ -826,6 +979,13 @@ try:
     env['curl'] = True
 except OSError:
     env['curl'] = False
+
+# glib
+try:
+    env.ParseConfig("pkg-config --cflags --libs gthread-2.0")
+    env['glib'] = True
+except OSError:
+    env['glib'] = False
 
 # KVM
 if env['kvm'] == True and conf.CheckKVM():
@@ -862,6 +1022,43 @@ if env['vnc_sasl'] != False and conf.CheckLibWithHeader('sasl', 'sasl.h', 'c'):
 else:
     env['vnc_sasl'] = False
 
+# coroutine
+if env['coroutine'] == "":
+    res = conf.CheckCoroutine()
+    if res != None:
+        env['coroutine'] = "ucontext"
+    else:
+        env['coroutine'] = "gthread"
+
+# open_by_handle
+env['open_by_handle'] = True if conf.CheckOpenByHandle() else False
+
+# linux_magic_h
+env['linux_magic_h'] = True if conf.CheckLinuxMagic() else False
+
+# has_environ
+env['has_environ'] = True if conf.CheckHasEnviron() else False
+
+if conf.CheckTraceBackend() == 0:
+    print("Error: Invalid trace backend")
+    print("Please choose a supported trace backend")
+    exit_with_error("Invalid Trace backend")
+
+if env['trace_backend'] == "ust" and \
+        not conf.CheckUstTraceBackend():
+    exit_with_error("Error: Trace backend 'ust' missing libust header files")
+elif env['trace_backend'] == "dtrace" and \
+        not conf.CheckDtraceBackend():
+    # TODO: Check for 'stap'
+    exit_wit_error("Error: Can't find 'dtrace' command")
+
+# libiscsi
+old_link = copy(env['LINKFLAGS'])
+env.Append(LINKFLAGS = '-liscsi')
+env['libiscsi'] = True if conf.CheckLibiscsi() else False
+if env['libiscsi'] == False:
+    env.Replace(LINKFLAGS = old_link)
+
 env['bios_dir'] = "qemu/pc-bios"
 import os
 env['source_path'] = os.getcwd()
@@ -877,16 +1074,24 @@ prefix = env['source_path']
 
 config_mak.write("""
 all:
-prefix=%s
-bindir=%s/bin
-mandir=%s/share/man
-datadir=%s
-sysconfdir=%s/etc
-docdir=%s/share/doc/qemu
-confdir=%s/etc/qemu
-""" % (prefix, prefix, prefix, env['bios_dir'], prefix, prefix, prefix))
+prefix=%(prefix)s
+bindir=%(prefix)s/bin
+libdir=%(prefix)s/lib
+includedir=%(prefix)s/include
+mandir=%(prefix)s/share/man
+sysconfdir=%(prefix)s/etc
+qemu_confdir=%(prefix)s/etc/qemu
+qemu_datadir=%(data_dir)s
+qemu_docdir=%(prefix)s/share/doc/qemu
+libexecdir=%(prefix)s/libexec
+CONFIG_QEMU_HELPERDIR="%(prefix)s/libexec"
+""" % {'prefix' : prefix,
+    'data_dir' : env['bios_dir'],
+    })
+#(prefix, prefix, prefix, env['bios_dir'], prefix, prefix, prefix,
+#    prefix, prefix))
 
-config_mak.write("CONFIG_QEMU_SHAREDIR=\"%s\"\n" % env['bios_dir'])
+# config_mak.write("CONFIG_QEMU_SHAREDIR=\"%s\"\n" % env['bios_dir'])
 
 config_mak.write("ARCH=%s\n" % env['cpu'])
 if env['strip_opt'] == True:
@@ -895,7 +1100,7 @@ if env['strip_opt'] == True:
 if bigendian == True:
     config_mak.write("HOST_WORDS_BIGENDIAN=y\n")
 
-config_mak.write("HOST_LONG_BITS=%s\n" % hostlongbits)
+# config_mak.write("HOST_LONG_BITS=%s\n" % hostlongbits)
 config_mak.write("CONFIG_POSIX=y\n")
 config_mak.write("CONFIG_BDRV_WHITELIST=\n")
 
@@ -905,7 +1110,9 @@ write_config_y_list = ['linux', 'profiler', 'slirp', 'vde', 'mixemu',
         'dup3', 'inotify', 'curl', 'brlapi', 'bluez', 'xen', 'iothread',
         'linux_aio', 'iovec', 'preadv', 'fdt', 'fdatasync', 'zero_malloc',
         'sync_file_range', 'fiemap', 'inotify1', 'attr', 'signalfd',
-        'madvise', 'posix_madvise']
+        'madvise', 'posix_madvise', 'opengl', 'open_by_handle',
+        'linux_magic_h', 'has_environ',
+        'epoll', 'epoll_create1', 'epoll_pwait', 'libiscsi']
 for conf_opt in write_config_y_list:
     if env[conf_opt] == True:
         config_mak.write("CONFIG_%s=y\n" % conf_opt.upper())
@@ -922,6 +1129,14 @@ if conf.CheckCHeader('byteswap.h'):
 
 if conf.CheckCHeader('machine/bswap.h'):
     config_mak.write("CONFIG_MACHINE_BSWAP_H=y\n")
+
+if env['coroutine'] == "ucontext":
+    config_mak.write("CONFIG_UCONTEXT_COROUTINE=y\n")
+elif env['coroutine'] == "sigaltstack":
+    config_mak.write("CONFIG_SIGALTSTACK_COROUTINE=y\n")
+
+if env['slirp'] == True:
+    config_mak.write("CONFIG_SMBD_COMMAND=\"%s\"\n" % env['smbd'])
 
 # if env['gdbstub'] == True:
     # config_mak.write("CONFIG_GDBSTUB=y\n")
@@ -964,6 +1179,21 @@ if env['vnc_thread'] == True:
     config_mak.write("CONFIG_VNC_THREAD=y\n")
     config_mak.write("CONFIG_THREAD=y\n")
 
+config_mak.write("TRACE_BACKEND=%s\n" % env['trace_backend'])
+if env['trace_backend'] == "nop":
+    config_mak.write("CONFIG_TRACE_NOP=y\n")
+elif env['trace_backend'] == "simple":
+    config_mak.write("CONFIG_TRACE_SIMPLE=y\n")
+    env['trace_default'] = False
+elif env['trace_backend'] == "ust":
+    config_mak.write("CONFIG_TRACE_UST=y\n")
+elif env['trace_backend'] == "dtrace":
+    config_mak.write("CONFIG_TRACE_DTRACE=y\n")
+
+config_mak.write("CONFIG_TRACE_FILE=%s\n" % env['trace_file'])
+if env['trace_default']:
+    config_mak.write("CONFIG_TRACE_DEFAULT=y\n")
+
 config_mak.close()
 
 # Call create_config script to create .h file
@@ -972,7 +1202,8 @@ config_bld = "%s/scripts/create_config < %s > %s" % (env['source_path'],
         config_mak_name, config_host_name)
 call(config_bld, shell=True)
 
-env.Append(CCFLAGS = CFLAGS)
+env['config_flags'] = env['CCFLAGS']
+env.Append(CCFLAGS = CFLAGS.split())
 env.Append(LIBS = libs_softmmu)
 env.Append(LINKFLAGS = LDFLAGS.split())
 env['aiolibs'] = AIOLIBS
@@ -1107,6 +1338,18 @@ for rom in ['seabios', 'vgabios']:
     rom_config_mak.write("IASL=iasl\n")
     rom_config_mak.write("HOST_CC=%s\n" % env['CC'])
     rom_config_mak.write("LD=ld\n")
+
+for dirname in ['tests', 'tests/tcg', 'tests/tcg/cris', 'tests/tcg/lm32',
+        'slirp', 'audio', 'block', 'net', 'pc-bios/optionrom',
+        'pc-bios/spapr-rtas',
+        'roms/seabios', 'roms/vgabios',
+        'fsdev', 'ui', 'usb',
+        'qapi', 'qapi-generated',
+        'qga', 'trace', 'qom']:
+    try:
+        os.mkdir(dirname)
+    except OSError:
+        pass
 
 for hwlib in ['32', '64']:
     try:

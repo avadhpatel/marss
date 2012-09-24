@@ -43,9 +43,10 @@ struct parallels_header {
     uint32_t catalog_entries;
     uint32_t nb_sectors;
     char padding[24];
-} __attribute__((packed));
+} QEMU_PACKED;
 
 typedef struct BDRVParallelsState {
+    CoMutex lock;
 
     uint32_t *catalog_bitmap;
     int catalog_size;
@@ -88,17 +89,18 @@ static int parallels_open(BlockDriverState *bs, int flags)
     s->tracks = le32_to_cpu(ph.tracks);
 
     s->catalog_size = le32_to_cpu(ph.catalog_entries);
-    s->catalog_bitmap = qemu_malloc(s->catalog_size * 4);
+    s->catalog_bitmap = g_malloc(s->catalog_size * 4);
     if (bdrv_pread(bs->file, 64, s->catalog_bitmap, s->catalog_size * 4) !=
 	s->catalog_size * 4)
 	goto fail;
     for (i = 0; i < s->catalog_size; i++)
 	le32_to_cpus(&s->catalog_bitmap[i]);
 
+    qemu_co_mutex_init(&s->lock);
     return 0;
 fail:
     if (s->catalog_bitmap)
-	qemu_free(s->catalog_bitmap);
+	g_free(s->catalog_bitmap);
     return -1;
 }
 
@@ -134,10 +136,21 @@ static int parallels_read(BlockDriverState *bs, int64_t sector_num,
     return 0;
 }
 
+static coroutine_fn int parallels_co_read(BlockDriverState *bs, int64_t sector_num,
+                                          uint8_t *buf, int nb_sectors)
+{
+    int ret;
+    BDRVParallelsState *s = bs->opaque;
+    qemu_co_mutex_lock(&s->lock);
+    ret = parallels_read(bs, sector_num, buf, nb_sectors);
+    qemu_co_mutex_unlock(&s->lock);
+    return ret;
+}
+
 static void parallels_close(BlockDriverState *bs)
 {
     BDRVParallelsState *s = bs->opaque;
-    qemu_free(s->catalog_bitmap);
+    g_free(s->catalog_bitmap);
 }
 
 static BlockDriver bdrv_parallels = {
@@ -145,7 +158,7 @@ static BlockDriver bdrv_parallels = {
     .instance_size	= sizeof(BDRVParallelsState),
     .bdrv_probe		= parallels_probe,
     .bdrv_open		= parallels_open,
-    .bdrv_read		= parallels_read,
+    .bdrv_read          = parallels_co_read,
     .bdrv_close		= parallels_close,
 };
 

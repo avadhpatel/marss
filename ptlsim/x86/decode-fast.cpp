@@ -49,7 +49,7 @@ bool TraceDecoder::decode_fast() {
 			int r = REG_temp0;
 
 			TransOp ldp(OP_ld, r, REG_ctx, REG_imm, REG_zero, size,
-					offsetof_t(Context, segs[seg_reg].selector));
+					offsetof_t(CPUX86State, segs[seg_reg].selector));
 			ldp.internal = 1;
 			this << ldp;
 
@@ -73,7 +73,7 @@ bool TraceDecoder::decode_fast() {
         this << TransOp(OP_ld, r, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
 
         TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, r, size,
-                offsetof_t(Context, segs[seg_reg].selector));
+                offsetof_t(CPUX86State, segs[seg_reg].selector));
         stp.internal = 1;
         this << stp;
 
@@ -932,7 +932,7 @@ bool TraceDecoder::decode_fast() {
 	int r = REG_temp0;
 
     TransOp ldp(OP_ld, r, REG_ctx, REG_imm, REG_zero, size,
-			offsetof_t(Context, segs[seg_reg].selector));
+			offsetof_t(CPUX86State, segs[seg_reg].selector));
 	ldp.internal = 1;
 	this << ldp;
 
@@ -956,7 +956,7 @@ bool TraceDecoder::decode_fast() {
       this << TransOp(OP_ld, r, REG_rsp, REG_imm, REG_zero, sizeshift, 0);
 
       TransOp stp(OP_st, REG_mem, REG_ctx, REG_imm, r, size,
-              offsetof_t(Context, segs[seg_reg].selector));
+              offsetof_t(CPUX86State, segs[seg_reg].selector));
       stp.internal = 1;
       this << stp;
 

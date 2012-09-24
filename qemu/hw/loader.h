@@ -4,7 +4,8 @@
 /* loader.c */
 int get_image_size(const char *filename);
 int load_image(const char *filename, uint8_t *addr); /* deprecated */
-int load_image_targphys(const char *filename, target_phys_addr_t, int max_sz);
+int load_image_targphys(const char *filename, target_phys_addr_t,
+                        uint64_t max_sz);
 int load_elf(const char *filename, uint64_t (*translate_fn)(void *, uint64_t),
              void *translate_opaque, uint64_t *pentry, uint64_t *lowaddr,
              uint64_t *highaddr, int big_endian, int elf_machine,
@@ -14,8 +15,8 @@ int load_aout(const char *filename, target_phys_addr_t addr, int max_sz,
 int load_uimage(const char *filename, target_phys_addr_t *ep,
                 target_phys_addr_t *loadaddr, int *is_linux);
 
-int read_targphys(const char *name,
-                  int fd, target_phys_addr_t dst_addr, size_t nbytes);
+ssize_t read_targphys(const char *name,
+                      int fd, target_phys_addr_t dst_addr, size_t nbytes);
 void pstrcpy_targphys(const char *name,
                       target_phys_addr_t dest, int buf_size,
                       const char *source);

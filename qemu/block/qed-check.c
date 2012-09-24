@@ -68,6 +68,7 @@ static unsigned int qed_check_l2_table(QEDCheck *check, QEDTable *table)
 {
     BDRVQEDState *s = check->s;
     unsigned int i, num_invalid = 0;
+    uint64_t last_offset = 0;
 
     for (i = 0; i < s->table_nelems; i++) {
         uint64_t offset = table->offsets[i];
@@ -76,6 +77,11 @@ static unsigned int qed_check_l2_table(QEDCheck *check, QEDTable *table)
             qed_offset_is_zero_cluster(offset)) {
             continue;
         }
+        check->result->bfi.allocated_clusters++;
+        if (last_offset && (last_offset + s->header.cluster_size != offset)) {
+            check->result->bfi.fragmented_clusters++;
+        }
+        last_offset = offset;
 
         /* Detect invalid cluster offset */
         if (!qed_check_cluster_offset(s, offset)) {
@@ -197,15 +203,18 @@ int qed_check(BDRVQEDState *s, BdrvCheckResult *result, bool fix)
     };
     int ret;
 
-    check.used_clusters = qemu_mallocz(((check.nclusters + 31) / 32) *
+    check.used_clusters = g_malloc0(((check.nclusters + 31) / 32) *
                                        sizeof(check.used_clusters[0]));
 
+    check.result->bfi.total_clusters =
+        (s->header.image_size + s->header.cluster_size - 1) /
+            s->header.cluster_size;
     ret = qed_check_l1_table(&check, s->l1_table);
     if (ret == 0) {
         /* Only check for leaks if entire image was scanned successfully */
         qed_check_for_leaks(&check);
     }
 
-    qemu_free(check.used_clusters);
+    g_free(check.used_clusters);
     return ret;
 }

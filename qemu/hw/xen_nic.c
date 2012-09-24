@@ -14,6 +14,9 @@
  *
  *  You should have received a copy of the GNU General Public License along
  *  with this program; if not, see <http://www.gnu.org/licenses/>.
+ *
+ *  Contributions after 2012-01-13 are licensed under the terms of the
+ *  GNU GPL, version 2 or (at your option) any later version.
  */
 
 #include <stdio.h>
@@ -25,7 +28,6 @@
 #include <inttypes.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <pthread.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
@@ -183,7 +185,7 @@ static void net_tx_packets(struct XenNetDev *netdev)
             if (txreq.flags & NETTXF_csum_blank) {
                 /* have read-only mapping -> can't fill checksum in-place */
                 if (!tmpbuf) {
-                    tmpbuf = qemu_malloc(XC_PAGE_SIZE);
+                    tmpbuf = g_malloc(XC_PAGE_SIZE);
                 }
                 memcpy(tmpbuf, page + txreq.offset, txreq.size);
                 net_checksum_calculate(tmpbuf, txreq.size);
@@ -199,7 +201,7 @@ static void net_tx_packets(struct XenNetDev *netdev)
         }
         netdev->tx_work = 0;
     }
-    qemu_free(tmpbuf);
+    g_free(tmpbuf);
 }
 
 /* ------------------------------------------------------------- */
@@ -423,7 +425,7 @@ static int net_free(struct XenDevice *xendev)
 {
     struct XenNetDev *netdev = container_of(xendev, struct XenNetDev, xendev);
 
-    qemu_free(netdev->mac);
+    g_free(netdev->mac);
     return 0;
 }
 
@@ -433,7 +435,7 @@ struct XenDevOps xen_netdev_ops = {
     .size       = sizeof(struct XenNetDev),
     .flags      = DEVOPS_FLAG_NEED_GNTDEV,
     .init       = net_init,
-    .connect    = net_connect,
+    .initialise    = net_connect,
     .event      = net_event,
     .disconnect = net_disconnect,
     .free       = net_free,

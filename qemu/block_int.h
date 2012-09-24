@@ -27,9 +27,19 @@
 #include "block.h"
 #include "qemu-option.h"
 #include "qemu-queue.h"
+#include "qemu-coroutine.h"
+#include "qemu-timer.h"
+#include "qapi-types.h"
 
 #define BLOCK_FLAG_ENCRYPT	1
 #define BLOCK_FLAG_COMPAT6	4
+
+#define BLOCK_IO_LIMIT_READ     0
+#define BLOCK_IO_LIMIT_WRITE    1
+#define BLOCK_IO_LIMIT_TOTAL    2
+
+#define BLOCK_IO_SLICE_TIME     100000000
+#define NANOSECONDS_PER_SECOND  1000000000.0
 
 #define BLOCK_OPT_SIZE          "size"
 #define BLOCK_OPT_ENCRYPT       "encryption"
@@ -40,12 +50,86 @@
 #define BLOCK_OPT_TABLE_SIZE    "table_size"
 #define BLOCK_OPT_PREALLOC      "preallocation"
 #define BLOCK_OPT_SUBFMT        "subformat"
+#define BLOCK_OPT_COMPAT_LEVEL  "compat"
 
-typedef struct AIOPool {
-    void (*cancel)(BlockDriverAIOCB *acb);
-    int aiocb_size;
-    BlockDriverAIOCB *free_aiocb;
-} AIOPool;
+typedef struct BdrvTrackedRequest BdrvTrackedRequest;
+
+typedef struct BlockIOLimit {
+    int64_t bps[3];
+    int64_t iops[3];
+} BlockIOLimit;
+
+typedef struct BlockIOBaseValue {
+    uint64_t bytes[2];
+    uint64_t ios[2];
+} BlockIOBaseValue;
+
+typedef struct BlockJob BlockJob;
+
+/**
+ * BlockJobType:
+ *
+ * A class type for block job objects.
+ */
+typedef struct BlockJobType {
+    /** Derived BlockJob struct size */
+    size_t instance_size;
+
+    /** String describing the operation, part of query-block-jobs QMP API */
+    const char *job_type;
+
+    /** Optional callback for job types that support setting a speed limit */
+    void (*set_speed)(BlockJob *job, int64_t speed, Error **errp);
+} BlockJobType;
+
+/**
+ * BlockJob:
+ *
+ * Long-running operation on a BlockDriverState.
+ */
+struct BlockJob {
+    /** The job type, including the job vtable.  */
+    const BlockJobType *job_type;
+
+    /** The block device on which the job is operating.  */
+    BlockDriverState *bs;
+
+    /**
+     * The coroutine that executes the job.  If not NULL, it is
+     * reentered when busy is false and the job is cancelled.
+     */
+    Coroutine *co;
+
+    /**
+     * Set to true if the job should cancel itself.  The flag must
+     * always be tested just before toggling the busy flag from false
+     * to true.  After a job has been cancelled, it should only yield
+     * if #qemu_aio_wait will ("sooner or later") reenter the coroutine.
+     */
+    bool cancelled;
+
+    /**
+     * Set to false by the job while it is in a quiescent state, where
+     * no I/O is pending and the job has yielded on any condition
+     * that is not detected by #qemu_aio_wait, such as a timer.
+     */
+    bool busy;
+
+    /** Offset that is published by the query-block-jobs QMP API */
+    int64_t offset;
+
+    /** Length that is published by the query-block-jobs QMP API */
+    int64_t len;
+
+    /** Speed that was set with @block_job_set_speed.  */
+    int64_t speed;
+
+    /** The completion function that will be called when the job completes.  */
+    BlockDriverCompletionFunc *cb;
+
+    /** The opaque value that is passed to the completion function.  */
+    void *opaque;
+};
 
 struct BlockDriver {
     const char *format_name;
@@ -59,10 +143,8 @@ struct BlockDriver {
     int (*bdrv_write)(BlockDriverState *bs, int64_t sector_num,
                       const uint8_t *buf, int nb_sectors);
     void (*bdrv_close)(BlockDriverState *bs);
+    void (*bdrv_rebind)(BlockDriverState *bs);
     int (*bdrv_create)(const char *filename, QEMUOptionParameter *options);
-    int (*bdrv_flush)(BlockDriverState *bs);
-    int (*bdrv_is_allocated)(BlockDriverState *bs, int64_t sector_num,
-                             int nb_sectors, int *pnum);
     int (*bdrv_set_key)(BlockDriverState *bs, const char *key);
     int (*bdrv_make_empty)(BlockDriverState *bs);
     /* aio */
@@ -74,14 +156,44 @@ struct BlockDriver {
         BlockDriverCompletionFunc *cb, void *opaque);
     BlockDriverAIOCB *(*bdrv_aio_flush)(BlockDriverState *bs,
         BlockDriverCompletionFunc *cb, void *opaque);
-    int (*bdrv_discard)(BlockDriverState *bs, int64_t sector_num,
-                        int nb_sectors);
+    BlockDriverAIOCB *(*bdrv_aio_discard)(BlockDriverState *bs,
+        int64_t sector_num, int nb_sectors,
+        BlockDriverCompletionFunc *cb, void *opaque);
 
-    int (*bdrv_aio_multiwrite)(BlockDriverState *bs, BlockRequest *reqs,
-        int num_reqs);
-    int (*bdrv_merge_requests)(BlockDriverState *bs, BlockRequest* a,
-        BlockRequest *b);
+    int coroutine_fn (*bdrv_co_readv)(BlockDriverState *bs,
+        int64_t sector_num, int nb_sectors, QEMUIOVector *qiov);
+    int coroutine_fn (*bdrv_co_writev)(BlockDriverState *bs,
+        int64_t sector_num, int nb_sectors, QEMUIOVector *qiov);
+    /*
+     * Efficiently zero a region of the disk image.  Typically an image format
+     * would use a compact metadata representation to implement this.  This
+     * function pointer may be NULL and .bdrv_co_writev() will be called
+     * instead.
+     */
+    int coroutine_fn (*bdrv_co_write_zeroes)(BlockDriverState *bs,
+        int64_t sector_num, int nb_sectors);
+    int coroutine_fn (*bdrv_co_discard)(BlockDriverState *bs,
+        int64_t sector_num, int nb_sectors);
+    int coroutine_fn (*bdrv_co_is_allocated)(BlockDriverState *bs,
+        int64_t sector_num, int nb_sectors, int *pnum);
 
+    /*
+     * Invalidate any cached meta-data.
+     */
+    void (*bdrv_invalidate_cache)(BlockDriverState *bs);
+
+    /*
+     * Flushes all data that was already written to the OS all the way down to
+     * the disk (for example raw-posix calls fsync()).
+     */
+    int coroutine_fn (*bdrv_co_flush_to_disk)(BlockDriverState *bs);
+
+    /*
+     * Flushes all internal caches to the OS. The data may still sit in a
+     * writeback cache of the host OS, but it will survive a crash of the qemu
+     * process.
+     */
+    int coroutine_fn (*bdrv_co_flush_to_os)(BlockDriverState *bs);
 
     const char *protocol_name;
     int (*bdrv_truncate)(BlockDriverState *bs, int64_t offset);
@@ -112,8 +224,8 @@ struct BlockDriver {
     /* removable device specific */
     int (*bdrv_is_inserted)(BlockDriverState *bs);
     int (*bdrv_media_changed)(BlockDriverState *bs);
-    int (*bdrv_eject)(BlockDriverState *bs, int eject_flag);
-    int (*bdrv_set_locked)(BlockDriverState *bs, int locked);
+    void (*bdrv_eject)(BlockDriverState *bs, bool eject_flag);
+    void (*bdrv_lock_medium)(BlockDriverState *bs, bool locked);
 
     /* to control generic scsi devices */
     int (*bdrv_ioctl)(BlockDriverState *bs, unsigned long int req, void *buf);
@@ -142,46 +254,58 @@ struct BlockDriver {
     QLIST_ENTRY(BlockDriver) list;
 };
 
+/*
+ * Note: the function bdrv_append() copies and swaps contents of
+ * BlockDriverStates, so if you add new fields to this struct, please
+ * inspect bdrv_append() to determine if the new fields need to be
+ * copied as well.
+ */
 struct BlockDriverState {
     int64_t total_sectors; /* if we are reading a disk image, give its
                               size in sectors */
     int read_only; /* if true, the media is read only */
     int keep_read_only; /* if true, the media was requested to stay read only */
     int open_flags; /* flags used to open the file, re-used for re-open */
-    int removable; /* if true, the media can be removed */
-    int locked;    /* if true, the media cannot temporarily be ejected */
-    int tray_open; /* if true, the virtual tray is open */
     int encrypted; /* if true, the media is encrypted */
     int valid_key; /* if true, a valid encryption key has been set */
     int sg;        /* if true, the device is a /dev/sg* */
-    /* event callback when inserting/removing */
-    void (*change_cb)(void *opaque, int reason);
-    void *change_opaque;
+    int copy_on_read; /* if true, copy read backing sectors into image
+                         note this is a reference count */
 
     BlockDriver *drv; /* NULL means no media */
     void *opaque;
 
-    DeviceState *peer;
+    void *dev;                  /* attached device model, if any */
+    /* TODO change to DeviceState when all users are qdevified */
+    const BlockDevOps *dev_ops;
+    void *dev_opaque;
 
     char filename[1024];
     char backing_file[1024]; /* if non zero, the image is a diff of
                                 this file image */
     char backing_format[16]; /* if non-zero and backing_file exists */
     int is_temporary;
-    int media_changed;
 
     BlockDriverState *backing_hd;
     BlockDriverState *file;
 
-    /* async read/write emulation */
+    /* number of in-flight copy-on-read requests */
+    unsigned int copy_on_read_in_flight;
 
-    void *sync_aiocb;
+    /* the time for latest disk I/O */
+    int64_t slice_time;
+    int64_t slice_start;
+    int64_t slice_end;
+    BlockIOLimit io_limits;
+    BlockIOBaseValue  io_base;
+    CoQueue      throttled_reqs;
+    QEMUTimer    *block_timer;
+    bool         io_limits_enabled;
 
     /* I/O stats (display with "info blockstats"). */
-    uint64_t rd_bytes;
-    uint64_t wr_bytes;
-    uint64_t rd_ops;
-    uint64_t wr_ops;
+    uint64_t nr_bytes[BDRV_MAX_IOTYPE];
+    uint64_t nr_ops[BDRV_MAX_IOTYPE];
+    uint64_t total_time_ns[BDRV_MAX_IOTYPE];
     uint64_t wr_highest_sector;
 
     /* Whether the disk can expand beyond total_sectors */
@@ -197,70 +321,136 @@ struct BlockDriverState {
        drivers. They are not used by the block driver */
     int cyls, heads, secs, translation;
     BlockErrorAction on_read_error, on_write_error;
+    bool iostatus_enabled;
+    BlockDeviceIoStatus iostatus;
     char device_name[32];
     unsigned long *dirty_bitmap;
     int64_t dirty_count;
     int in_use; /* users other than guest access, eg. block migration */
     QTAILQ_ENTRY(BlockDriverState) list;
-    void *private;
+
+    QLIST_HEAD(, BdrvTrackedRequest) tracked_requests;
+
+    /* long-running background operation */
+    BlockJob *job;
 };
 
-#define CHANGE_MEDIA    0x01
-#define CHANGE_SIZE     0x02
+int get_tmp_filename(char *filename, int size);
 
-struct BlockDriverAIOCB {
-    AIOPool *pool;
-    BlockDriverState *bs;
-    BlockDriverCompletionFunc *cb;
-    void *opaque;
-    BlockDriverAIOCB *next;
-};
-
-void get_tmp_filename(char *filename, int size);
-
-void *qemu_aio_get(AIOPool *pool, BlockDriverState *bs,
-                   BlockDriverCompletionFunc *cb, void *opaque);
-void qemu_aio_release(void *p);
-
-void *qemu_blockalign(BlockDriverState *bs, size_t size);
+void bdrv_set_io_limits(BlockDriverState *bs,
+                        BlockIOLimit *io_limits);
 
 #ifdef _WIN32
 int is_windows_drive(const char *filename);
 #endif
 
-typedef struct BlockConf {
-    BlockDriverState *bs;
-    uint16_t physical_block_size;
-    uint16_t logical_block_size;
-    uint16_t min_io_size;
-    uint32_t opt_io_size;
-    int32_t bootindex;
-    uint32_t discard_granularity;
-} BlockConf;
+/**
+ * block_job_create:
+ * @job_type: The class object for the newly-created job.
+ * @bs: The block
+ * @speed: The maximum speed, in bytes per second, or 0 for unlimited.
+ * @cb: Completion function for the job.
+ * @opaque: Opaque pointer value passed to @cb.
+ * @errp: Error object.
+ *
+ * Create a new long-running block device job and return it.  The job
+ * will call @cb asynchronously when the job completes.  Note that
+ * @bs may have been closed at the time the @cb it is called.  If
+ * this is the case, the job may be reported as either cancelled or
+ * completed.
+ *
+ * This function is not part of the public job interface; it should be
+ * called from a wrapper that is specific to the job type.
+ */
+void *block_job_create(const BlockJobType *job_type, BlockDriverState *bs,
+                       int64_t speed, BlockDriverCompletionFunc *cb,
+                       void *opaque, Error **errp);
 
-static inline unsigned int get_physical_block_exp(BlockConf *conf)
-{
-    unsigned int exp = 0, size;
+/**
+ * block_job_sleep_ns:
+ * @job: The job that calls the function.
+ * @clock: The clock to sleep on.
+ * @ns: How many nanoseconds to stop for.
+ *
+ * Put the job to sleep (assuming that it wasn't canceled) for @ns
+ * nanoseconds.  Canceling the job will interrupt the wait immediately.
+ */
+void block_job_sleep_ns(BlockJob *job, QEMUClock *clock, int64_t ns);
 
-    for (size = conf->physical_block_size;
-        size > conf->logical_block_size;
-        size >>= 1) {
-        exp++;
-    }
+/**
+ * block_job_complete:
+ * @job: The job being completed.
+ * @ret: The status code.
+ *
+ * Call the completion function that was registered at creation time, and
+ * free @job.
+ */
+void block_job_complete(BlockJob *job, int ret);
 
-    return exp;
-}
+/**
+ * block_job_set_speed:
+ * @job: The job to set the speed for.
+ * @speed: The new value
+ * @errp: Error object.
+ *
+ * Set a rate-limiting parameter for the job; the actual meaning may
+ * vary depending on the job type.
+ */
+void block_job_set_speed(BlockJob *job, int64_t speed, Error **errp);
 
-#define DEFINE_BLOCK_PROPERTIES(_state, _conf)                          \
-    DEFINE_PROP_DRIVE("drive", _state, _conf.bs),                       \
-    DEFINE_PROP_UINT16("logical_block_size", _state,                    \
-                       _conf.logical_block_size, 512),                  \
-    DEFINE_PROP_UINT16("physical_block_size", _state,                   \
-                       _conf.physical_block_size, 512),                 \
-    DEFINE_PROP_UINT16("min_io_size", _state, _conf.min_io_size, 0),  \
-    DEFINE_PROP_UINT32("opt_io_size", _state, _conf.opt_io_size, 0),    \
-    DEFINE_PROP_INT32("bootindex", _state, _conf.bootindex, -1),        \
-    DEFINE_PROP_UINT32("discard_granularity", _state, \
-                       _conf.discard_granularity, 0)
+/**
+ * block_job_cancel:
+ * @job: The job to be canceled.
+ *
+ * Asynchronously cancel the specified job.
+ */
+void block_job_cancel(BlockJob *job);
+
+/**
+ * block_job_is_cancelled:
+ * @job: The job being queried.
+ *
+ * Returns whether the job is scheduled for cancellation.
+ */
+bool block_job_is_cancelled(BlockJob *job);
+
+/**
+ * block_job_cancel:
+ * @job: The job to be canceled.
+ *
+ * Asynchronously cancel the job and wait for it to reach a quiescent
+ * state.  Note that the completion callback will still be called
+ * asynchronously, hence it is *not* valid to call #bdrv_delete
+ * immediately after #block_job_cancel_sync.  Users of block jobs
+ * will usually protect the BlockDriverState objects with a reference
+ * count, should this be a concern.
+ *
+ * Returns the return value from the job if the job actually completed
+ * during the call, or -ECANCELED if it was canceled.
+ */
+int block_job_cancel_sync(BlockJob *job);
+
+/**
+ * stream_start:
+ * @bs: Block device to operate on.
+ * @base: Block device that will become the new base, or %NULL to
+ * flatten the whole backing file chain onto @bs.
+ * @base_id: The file name that will be written to @bs as the new
+ * backing file if the job completes.  Ignored if @base is %NULL.
+ * @speed: The maximum speed, in bytes per second, or 0 for unlimited.
+ * @cb: Completion function for the job.
+ * @opaque: Opaque pointer value passed to @cb.
+ * @errp: Error object.
+ *
+ * Start a streaming operation on @bs.  Clusters that are unallocated
+ * in @bs, but allocated in any image between @base and @bs (both
+ * exclusive) will be written to @bs.  At the end of a successful
+ * streaming job, the backing file of @bs will be changed to
+ * @base_id in the written image and to @base in the live BlockDriverState.
+ */
+void stream_start(BlockDriverState *bs, BlockDriverState *base,
+                  const char *base_id, int64_t speed,
+                  BlockDriverCompletionFunc *cb,
+                  void *opaque, Error **errp);
 
 #endif /* BLOCK_INT_H */

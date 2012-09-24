@@ -70,7 +70,7 @@ const char *%(name)s_lookup[] = {
         ret += mcgen('''
     "%(value)s",
 ''',
-                     value=c_var(value).lower())
+                     value=value.lower())
 
     ret += mcgen('''
     NULL,
@@ -91,13 +91,16 @@ typedef enum %(name)s
 ''',
                 name=name)
 
+    # append automatically generated _MAX value
+    enum_values = values + [ 'MAX' ]
+
     i = 0
-    for value in values:
+    for value in enum_values:
         enum_decl += mcgen('''
     %(abbrev)s_%(value)s = %(i)d,
 ''',
                      abbrev=de_camel_case(name).upper(),
-                     value=c_var(value).upper(),
+                     value=c_fun(value).upper(),
                      i=i)
         i += 1
 
@@ -114,6 +117,7 @@ struct %(name)s
 {
     %(name)sKind kind;
     union {
+        void *data;
 ''',
                 name=name)
 
@@ -122,7 +126,7 @@ struct %(name)s
         %(c_type)s %(c_name)s;
 ''',
                      c_type=c_type(typeinfo[key]),
-                     c_name=c_var(key))
+                     c_name=c_fun(key))
 
     ret += mcgen('''
     };
@@ -160,7 +164,8 @@ void qapi_free_%(type)s(%(c_type)s obj)
 
 
 try:
-    opts, args = getopt.gnu_getopt(sys.argv[1:], "p:o:", ["prefix=", "output-dir="])
+    opts, args = getopt.gnu_getopt(sys.argv[1:], "chp:o:",
+                                   ["source", "header", "prefix=", "output-dir="])
 except getopt.GetoptError, err:
     print str(err)
     sys.exit(1)
@@ -170,11 +175,22 @@ prefix = ""
 c_file = 'qapi-types.c'
 h_file = 'qapi-types.h'
 
+do_c = False
+do_h = False
+
 for o, a in opts:
     if o in ("-p", "--prefix"):
         prefix = a
     elif o in ("-o", "--output-dir"):
         output_dir = a + "/"
+    elif o in ("-c", "--source"):
+        do_c = True
+    elif o in ("-h", "--header"):
+        do_h = True
+
+if not do_c and not do_h:
+    do_c = True
+    do_h = True
 
 c_file = output_dir + prefix + c_file
 h_file = output_dir + prefix + h_file
@@ -185,8 +201,15 @@ except os.error, e:
     if e.errno != errno.EEXIST:
         raise
 
-fdef = open(c_file, 'w')
-fdecl = open(h_file, 'w')
+def maybe_open(really, name, opt):
+    if really:
+        return open(name, opt)
+    else:
+        import StringIO
+        return StringIO.StringIO()
+
+fdef = maybe_open(do_c, c_file, 'w')
+fdecl = maybe_open(do_h, h_file, 'w')
 
 fdef.write(mcgen('''
 /* AUTOMATICALLY GENERATED, DO NOT MODIFY */
@@ -235,6 +258,7 @@ fdecl.write(mcgen('''
                   guard=guardname(h_file)))
 
 exprs = parse_schema(sys.stdin)
+exprs = filter(lambda expr: not expr.has_key('gen'), exprs)
 
 for expr in exprs:
     ret = "\n"
@@ -246,6 +270,7 @@ for expr in exprs:
     elif expr.has_key('union'):
         ret += generate_fwd_struct(expr['union'], expr['data']) + "\n"
         ret += generate_enum('%sKind' % expr['union'], expr['data'].keys())
+        fdef.write(generate_enum_lookup('%sKind' % expr['union'], expr['data'].keys()))
     else:
         continue
     fdecl.write(ret)
@@ -254,10 +279,16 @@ for expr in exprs:
     ret = "\n"
     if expr.has_key('type'):
         ret += generate_struct(expr['type'], "", expr['data']) + "\n"
+        ret += generate_type_cleanup_decl(expr['type'] + "List")
+        fdef.write(generate_type_cleanup(expr['type'] + "List") + "\n")
         ret += generate_type_cleanup_decl(expr['type'])
         fdef.write(generate_type_cleanup(expr['type']) + "\n")
     elif expr.has_key('union'):
         ret += generate_union(expr['union'], expr['data'])
+        ret += generate_type_cleanup_decl(expr['union'] + "List")
+        fdef.write(generate_type_cleanup(expr['union'] + "List") + "\n")
+        ret += generate_type_cleanup_decl(expr['union'])
+        fdef.write(generate_type_cleanup(expr['union']) + "\n")
     else:
         continue
     fdecl.write(ret)
@@ -268,3 +299,6 @@ fdecl.write('''
 
 fdecl.flush()
 fdecl.close()
+
+fdef.flush()
+fdef.close()

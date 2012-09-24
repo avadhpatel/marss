@@ -208,9 +208,9 @@ namespace {
     void TestAtomThread(AtomThread* thread, int i)
     {
         ASSERT_EQ(thread->threadid, 0);
-        ASSERT_EQ(thread->ctx.cpu_index, i);
+        ASSERT_EQ(thread->ctx.env->cpu_index, i);
 
-        ASSERT_EQ(thread->fetchrip.rip, thread->ctx.eip);
+        ASSERT_EQ(thread->fetchrip.rip, thread->ctx.env->eip);
         ASSERT_FALSE(thread->current_bb);
         ASSERT_EQ(thread->bb_transop_index, 0);
 

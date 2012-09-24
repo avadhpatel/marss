@@ -41,139 +41,29 @@ int setenv(const char *name, const char *value, int overwrite)
     int result = 0;
     if (overwrite || !getenv(name)) {
         size_t length = strlen(name) + strlen(value) + 2;
-        char *string = qemu_malloc(length);
+        char *string = g_malloc(length);
         snprintf(string, length, "%s=%s", name, value);
         result = putenv(string);
+
+        /* Windows takes a copy and does not continue to use our string.
+         * Therefore it can be safely freed on this platform.  POSIX code
+         * typically has to leak the string because according to the spec it
+         * becomes part of the environment.
+         */
+        g_free(string);
     }
     return result;
 }
 
-/***********************************************************/
-/* Polling handling */
-
-typedef struct PollingEntry {
-    PollingFunc *func;
-    void *opaque;
-    struct PollingEntry *next;
-} PollingEntry;
-
-static PollingEntry *first_polling_entry;
-
-int qemu_add_polling_cb(PollingFunc *func, void *opaque)
-{
-    PollingEntry **ppe, *pe;
-    pe = qemu_mallocz(sizeof(PollingEntry));
-    pe->func = func;
-    pe->opaque = opaque;
-    for(ppe = &first_polling_entry; *ppe != NULL; ppe = &(*ppe)->next);
-    *ppe = pe;
-    return 0;
-}
-
-void qemu_del_polling_cb(PollingFunc *func, void *opaque)
-{
-    PollingEntry **ppe, *pe;
-    for(ppe = &first_polling_entry; *ppe != NULL; ppe = &(*ppe)->next) {
-        pe = *ppe;
-        if (pe->func == func && pe->opaque == opaque) {
-            *ppe = pe->next;
-            qemu_free(pe);
-            break;
-        }
-    }
-}
-
-/***********************************************************/
-/* Wait objects support */
-typedef struct WaitObjects {
-    int num;
-    HANDLE events[MAXIMUM_WAIT_OBJECTS + 1];
-    WaitObjectFunc *func[MAXIMUM_WAIT_OBJECTS + 1];
-    void *opaque[MAXIMUM_WAIT_OBJECTS + 1];
-} WaitObjects;
-
-static WaitObjects wait_objects = {0};
-
-int qemu_add_wait_object(HANDLE handle, WaitObjectFunc *func, void *opaque)
-{
-    WaitObjects *w = &wait_objects;
-
-    if (w->num >= MAXIMUM_WAIT_OBJECTS)
-        return -1;
-    w->events[w->num] = handle;
-    w->func[w->num] = func;
-    w->opaque[w->num] = opaque;
-    w->num++;
-    return 0;
-}
-
-void qemu_del_wait_object(HANDLE handle, WaitObjectFunc *func, void *opaque)
-{
-    int i, found;
-    WaitObjects *w = &wait_objects;
-
-    found = 0;
-    for (i = 0; i < w->num; i++) {
-        if (w->events[i] == handle)
-            found = 1;
-        if (found) {
-            w->events[i] = w->events[i + 1];
-            w->func[i] = w->func[i + 1];
-            w->opaque[i] = w->opaque[i + 1];
-        }
-    }
-    if (found)
-        w->num--;
-}
-
-void os_host_main_loop_wait(int *timeout)
-{
-    int ret, ret2, i;
-    PollingEntry *pe;
-
-    /* XXX: need to suppress polling by better using win32 events */
-    ret = 0;
-    for(pe = first_polling_entry; pe != NULL; pe = pe->next) {
-        ret |= pe->func(pe->opaque);
-    }
-    if (ret == 0) {
-        int err;
-        WaitObjects *w = &wait_objects;
-
-        qemu_mutex_unlock_iothread();
-        ret = WaitForMultipleObjects(w->num, w->events, FALSE, *timeout);
-        qemu_mutex_lock_iothread();
-        if (WAIT_OBJECT_0 + 0 <= ret && ret <= WAIT_OBJECT_0 + w->num - 1) {
-            if (w->func[ret - WAIT_OBJECT_0])
-                w->func[ret - WAIT_OBJECT_0](w->opaque[ret - WAIT_OBJECT_0]);
-
-            /* Check for additional signaled events */
-            for(i = (ret - WAIT_OBJECT_0 + 1); i < w->num; i++) {
-
-                /* Check if event is signaled */
-                ret2 = WaitForSingleObject(w->events[i], 0);
-                if(ret2 == WAIT_OBJECT_0) {
-                    if (w->func[i])
-                        w->func[i](w->opaque[i]);
-                } else if (ret2 == WAIT_TIMEOUT) {
-                } else {
-                    err = GetLastError();
-                    fprintf(stderr, "WaitForSingleObject error %d %d\n", i, err);
-                }
-            }
-        } else if (ret == WAIT_TIMEOUT) {
-        } else {
-            err = GetLastError();
-            fprintf(stderr, "WaitForMultipleObjects error %d %d\n", ret, err);
-        }
-    }
-
-    *timeout = 0;
-}
-
 static BOOL WINAPI qemu_ctrl_handler(DWORD type)
 {
-    exit(STATUS_CONTROL_C_EXIT);
+    qemu_system_shutdown_request();
+    /* Windows 7 kills application when the function returns.
+       Sleep here to give QEMU a try for closing.
+       Sleep period is 10000ms because Windows kills the program
+       after 10 seconds anyway. */
+    Sleep(10000);
+
     return TRUE;
 }
 
@@ -218,7 +108,7 @@ char *os_find_datadir(const char *argv0)
         p--;
     *p = 0;
     if (access(buf, R_OK) == 0) {
-        return qemu_strdup(buf);
+        return g_strdup(buf);
     }
     return NULL;
 }
@@ -253,21 +143,17 @@ int qemu_create_pidfile(const char *filename)
     memset(&overlap, 0, sizeof(overlap));
 
     file = CreateFile(filename, GENERIC_WRITE, FILE_SHARE_READ, NULL,
-		      OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                      OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
     if (file == INVALID_HANDLE_VALUE) {
         return -1;
     }
-    len = snprintf(buffer, sizeof(buffer), FMT_pid "\n", getpid());
-    ret = WriteFileEx(file, (LPCVOID)buffer, (DWORD)len,
-		      &overlap, NULL);
+    len = snprintf(buffer, sizeof(buffer), "%d\n", getpid());
+    ret = WriteFile(file, (LPCVOID)buffer, (DWORD)len,
+                    NULL, &overlap);
+    CloseHandle(file);
     if (ret == 0) {
         return -1;
     }
     return 0;
-}
-
-int qemu_get_thread_id(void)
-{
-    return GetCurrentThreadId();
 }

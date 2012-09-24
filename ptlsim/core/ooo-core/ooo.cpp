@@ -117,7 +117,7 @@ ThreadContext::ThreadContext(OooCore& core_, W8 threadid_, Context& ctx_)
     thread_stats.update_name(stats_name.buf);
 
     // Set decoder stats
-    set_decoder_stats(&thread_stats, ctx.cpu_index);
+    set_decoder_stats(&thread_stats, ctx.env->cpu_index);
 
     // Connect stats equations
     thread_stats.issue.uipc.add_elem(&thread_stats.issue.uops);
@@ -180,8 +180,8 @@ void ThreadContext::reset() {
 
 void ThreadContext::setupTLB() {
     foreach(i, CPU_TLB_SIZE) {
-        W64 dtlb_addr = ctx.tlb_table[!ctx.kernel_mode][i].addr_read;
-        W64 itlb_addr = ctx.tlb_table[!ctx.kernel_mode][i].addr_code;
+        W64 dtlb_addr = ctx.env->tlb_table[!ctx.kernel_mode][i].addr_read;
+        W64 itlb_addr = ctx.env->tlb_table[!ctx.kernel_mode][i].addr_code;
         if(dtlb_addr != (W64)-1) {
             dtlb.insert(dtlb_addr);
         }
@@ -783,7 +783,7 @@ bool OooCore::runcycle(void* none) {
                 {
                     if (logable(3) && thread->current_basic_block &&
                             thread->current_basic_block->rip) {
-                        ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in exception handling at rip ", thread->current_basic_block->rip, endl, flush;
+                        ptl_logfile << " [vcpu ", thread->ctx.env->cpu_index, "] in exception handling at rip ", thread->current_basic_block->rip, endl, flush;
                     }
                     exiting = !thread->handle_exception();
                     break;
@@ -792,7 +792,7 @@ bool OooCore::runcycle(void* none) {
                 {
                     if (logable(3) && thread->current_basic_block &&
                             thread->current_basic_block->rip) {
-                        ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in barrier handling at rip ", thread->current_basic_block->rip, endl, flush;
+                        ptl_logfile << " [vcpu ", thread->ctx.env->cpu_index, "] in barrier handling at rip ", thread->current_basic_block->rip, endl, flush;
                     }
                     exiting = !thread->handle_barrier();
                     break;
@@ -801,7 +801,7 @@ bool OooCore::runcycle(void* none) {
                 {
                     if (logable(3) && thread->current_basic_block &&
                             thread->current_basic_block->rip) {
-                        ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in interrupt handling at rip ", thread->current_basic_block->rip, endl, flush;
+                        ptl_logfile << " [vcpu ", thread->ctx.env->cpu_index, "] in interrupt handling at rip ", thread->current_basic_block->rip, endl, flush;
                     }
                     exiting = 1;
                     thread->handle_interrupt();
@@ -852,7 +852,7 @@ bool OooCore::runcycle(void* none) {
         ThreadContext* thread = threads[i];
         if (logable(9)) {
             stringbuf sb;
-            sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
+            sb << "[vcpu ", thread->ctx.env->cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
                sim_cycle, ", ", total_insns_committed,  " user commits: ",
                (sim_cycle - thread->last_commit_at_cycle), " cycles;", endl;
             ptl_logfile << sb, flush;
@@ -865,7 +865,7 @@ bool OooCore::runcycle(void* none) {
 
         if unlikely ((sim_cycle - thread->last_commit_at_cycle) > (W64)1024*1024*threadcount) {
             stringbuf sb;
-            sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
+            sb << "[vcpu ", thread->ctx.env->cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
                sim_cycle, ", ", total_insns_committed,  " user commits: no instructions have committed for ",
                (sim_cycle - thread->last_commit_at_cycle), " cycles; the pipeline could be deadlocked", endl;
             ptl_logfile << sb, flush;
@@ -1228,7 +1228,7 @@ bool ThreadContext::handle_barrier() {
         current_basic_block = NULL;
     }
 
-    int assistid = ctx.eip;
+    int assistid = ctx.env->eip;
     assist_func_t assist = (assist_func_t)(Waddr)assistid_to_func[assistid];
 
     // Special case for write_cr3 to flush before calling assist
@@ -1237,7 +1237,7 @@ bool ThreadContext::handle_barrier() {
     }
 
     if (logable(1)) {
-        ptl_logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
+        ptl_logfile << "[vcpu ", ctx.env->cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
                     (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
                     ") at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl, flush;
     }
@@ -1266,7 +1266,7 @@ bool ThreadContext::handle_barrier() {
             clear_checker();
         }
     } else {
-        reset_fetch_unit(ctx.eip);
+        reset_fetch_unit(ctx.env->eip);
     }
 
     return true;
@@ -1279,7 +1279,7 @@ bool ThreadContext::handle_exception() {
     flush_pipeline();
 
     if (logable(4)) {
-        ptl_logfile << "[vcpu ", ctx.cpu_index, "] Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip,
+        ptl_logfile << "[vcpu ", ctx.env->cpu_index, "] Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.env->eip,
                     " at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl, flush;
     }
 
@@ -1302,8 +1302,8 @@ bool ThreadContext::handle_exception() {
     // arise.
     //
     if (ctx.exception == EXCEPTION_SkipBlock) {
-        ctx.eip = chk_recovery_rip;
-        if (logable(6)) ptl_logfile << "SkipBlock pseudo-exception: skipping to ", (void*)(Waddr)ctx.eip, endl, flush;
+        ctx.env->eip = chk_recovery_rip;
+        if (logable(6)) ptl_logfile << "SkipBlock pseudo-exception: skipping to ", (void*)(Waddr)ctx.env->eip, endl, flush;
         if (logable(3)) ptl_logfile << " EXCEPTION_SkipBlock, flush_pipeline.",endl;
         flush_pipeline();
         return true;
@@ -1336,23 +1336,23 @@ handle_page_fault:
                                 hexstring(exception_address, 64),
                                 " is_write: ", write_exception, endl, ctx, endl;
                 assert(ctx.page_fault_addr != 0);
-                int old_exception = ctx.exception_index;
-                ctx.handle_interrupt = 1;
+                int old_exception = ctx.env->exception_index;
+                ctx.env->handle_interrupt = 1;
                 ctx.handle_page_fault(exception_address, write_exception);
                 // If we return here means the QEMU has fix the page fault
                 // witout causing any CPU faults so we can clear the pipeline
                 // and continue from current eip
                 flush_pipeline();
                 ctx.exception = 0;
-                ctx.exception_index = old_exception;
-                ctx.exception_is_int = 0;
+                ctx.env->exception_index = old_exception;
+                ctx.env->exception_is_int = 0;
                 return true;
             }
             break;
         case EXCEPTION_FloatingPointNotAvailable:
-            ctx.exception_index= EXCEPTION_x86_fpu_not_avail; break;
+            ctx.env->exception_index= EXCEPTION_x86_fpu_not_avail; break;
         case EXCEPTION_FloatingPoint:
-            ctx.exception_index= EXCEPTION_x86_fpu; break;
+            ctx.env->exception_index= EXCEPTION_x86_fpu; break;
         default:
             ptl_logfile << "Unsupported internal exception type ", exception_name(ctx.exception), endl, flush;
             assert(false);
@@ -1364,7 +1364,7 @@ handle_page_fault:
 
     // We are not coming back from this call so flush the pipeline
     // and all other things.
-    ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code, ctx.page_fault_addr);
+    ctx.propagate_x86_exception(ctx.env->exception_index, ctx.env->error_code, ctx.page_fault_addr);
 
     // Flush again, but restart at modified rip
     if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline again.",endl;
@@ -1397,7 +1397,7 @@ bool ThreadContext::handle_interrupt() {
     if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline again.",endl;
 
     // update the stats
-    if(ctx.exit_request) {
+    if(ctx.env->exit_request) {
         thread_stats.cpu_exit_requests++;
     } else {
         thread_stats.interrupt_requests++;
@@ -1446,14 +1446,14 @@ void OooCore::check_ctx_changes()
 {
     foreach(i, threadcount) {
         Context& ctx = threads[i]->ctx;
-        ctx.handle_interrupt = 0;
+        ctx.env->handle_interrupt = 0;
 
         if(logable(4))
-            ptl_logfile << " Ctx[", ctx.cpu_index, "] eflags: ", (void*)ctx.eflags, endl;
-        if(ctx.eip != ctx.old_eip) {
+            ptl_logfile << " Ctx[", ctx.env->cpu_index, "] eflags: ", (void*)ctx.env->eflags, endl;
+        if(ctx.env->eip != ctx.old_eip) {
             if(logable(5))
                 ptl_logfile << "Old_eip: ", (void*)(ctx.old_eip), " New_eip: " ,
-                            (void*)(ctx.eip), endl;
+                            (void*)(ctx.env->eip), endl;
 
             // IP address is changed, so flush the pipeline
             threads[i]->flush_pipeline();

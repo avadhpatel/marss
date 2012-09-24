@@ -891,11 +891,15 @@ static int virtio_net_load(QEMUFile *f, void *opaque, int version_id)
 {
     VirtIONet *n = opaque;
     int i;
+    int ret;
 
     if (version_id < 2 || version_id > VIRTIO_NET_VM_VERSION)
         return -EINVAL;
 
-    virtio_load(&n->vdev, f);
+    ret = virtio_load(&n->vdev, f);
+    if (ret) {
+        return ret;
+    }
 
     qemu_get_buffer(f, n->mac, ETH_ALEN);
     n->tx_waiting = qemu_get_be32(f);
@@ -1030,7 +1034,7 @@ VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
     memcpy(&n->mac[0], &conf->macaddr, sizeof(n->mac));
     n->status = VIRTIO_NET_S_LINK_UP;
 
-    n->nic = qemu_new_nic(&net_virtio_info, conf, dev->info->name, dev->id, n);
+    n->nic = qemu_new_nic(&net_virtio_info, conf, object_get_typename(OBJECT(dev)), dev->id, n);
 
     qemu_format_nic_info_str(&n->nic->nc, conf->macaddr.a);
 
@@ -1039,9 +1043,9 @@ VirtIODevice *virtio_net_init(DeviceState *dev, NICConf *conf,
     n->mergeable_rx_bufs = 0;
     n->promisc = 1; /* for compatibility */
 
-    n->mac_table.macs = qemu_mallocz(MAC_TABLE_ENTRIES * ETH_ALEN);
+    n->mac_table.macs = g_malloc0(MAC_TABLE_ENTRIES * ETH_ALEN);
 
-    n->vlans = qemu_mallocz(MAX_VLAN >> 3);
+    n->vlans = g_malloc0(MAX_VLAN >> 3);
 
     n->qdev = dev;
     register_savevm(dev, "virtio-net", -1, VIRTIO_NET_VM_VERSION,
@@ -1063,8 +1067,8 @@ void virtio_net_exit(VirtIODevice *vdev)
 
     unregister_savevm(n->qdev, "virtio-net", n);
 
-    qemu_free(n->mac_table.macs);
-    qemu_free(n->vlans);
+    g_free(n->mac_table.macs);
+    g_free(n->vlans);
 
     if (n->tx_timer) {
         qemu_del_timer(n->tx_timer);
@@ -1073,6 +1077,6 @@ void virtio_net_exit(VirtIODevice *vdev)
         qemu_bh_delete(n->tx_bh);
     }
 
-    virtio_cleanup(&n->vdev);
     qemu_del_vlan_client(&n->nic->nc);
+    virtio_cleanup(&n->vdev);
 }

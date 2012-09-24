@@ -5,8 +5,13 @@
 #include <dirent.h>
 #include <sys/time.h>
 #include <utime.h>
-
+#include <sys/resource.h>
+#include "hw/virtio.h"
 #include "fsdev/file-op-9p.h"
+#include "fsdev/virtio-9p-marshal.h"
+#include "qemu-thread.h"
+#include "qemu-coroutine.h"
+
 
 /* The feature bitmap for virtio 9P */
 /* The mount point is specified in a config variable */
@@ -49,6 +54,10 @@ enum {
     P9_RLINK,
     P9_TMKDIR = 72,
     P9_RMKDIR,
+    P9_TRENAMEAT = 74,
+    P9_RRENAMEAT,
+    P9_TUNLINKAT = 76,
+    P9_RUNLINKAT,
     P9_TVERSION = 100,
     P9_RVERSION,
     P9_TAUTH = 102,
@@ -101,6 +110,9 @@ enum p9_proto_version {
 #define P9_NOTAG    (u16)(~0)
 #define P9_NOFID    (u32)(~0)
 #define P9_MAXWELEM 16
+
+#define FID_REFERENCED          0x1
+#define FID_NON_RECLAIMABLE     0x2
 static inline const char *rpath(FsContext *ctx, const char *path, char *buffer)
 {
     snprintf(buffer, PATH_MAX, "%s/%s", ctx->fs_root, path);
@@ -114,13 +126,17 @@ static inline const char *rpath(FsContext *ctx, const char *path, char *buffer)
 #define P9_IOHDRSZ 24
 
 typedef struct V9fsPDU V9fsPDU;
+struct V9fsState;
 
 struct V9fsPDU
 {
     uint32_t size;
     uint16_t tag;
     uint8_t id;
+    uint8_t cancelled;
+    CoQueue complete;
     VirtQueueElement elem;
+    struct V9fsState *s;
     QLIST_ENTRY(V9fsPDU) next;
 };
 
@@ -140,40 +156,6 @@ struct V9fsPDU
 
 typedef struct V9fsFidState V9fsFidState;
 
-typedef struct V9fsString
-{
-    int16_t size;
-    char *data;
-} V9fsString;
-
-typedef struct V9fsQID
-{
-    int8_t type;
-    int32_t version;
-    int64_t path;
-} V9fsQID;
-
-typedef struct V9fsStat
-{
-    int16_t size;
-    int16_t type;
-    int32_t dev;
-    V9fsQID qid;
-    int32_t mode;
-    int32_t atime;
-    int32_t mtime;
-    int64_t length;
-    V9fsString name;
-    V9fsString uid;
-    V9fsString gid;
-    V9fsString muid;
-    /* 9p2000.u */
-    V9fsString extension;
-   int32_t n_uid;
-    int32_t n_gid;
-    int32_t n_muid;
-} V9fsStat;
-
 enum {
     P9_FID_NONE = 0,
     P9_FID_FILE,
@@ -190,18 +172,36 @@ typedef struct V9fsXattr
     int flags;
 } V9fsXattr;
 
+/*
+ * Filled by fs driver on open and other
+ * calls.
+ */
+union V9fsFidOpenState {
+    int fd;
+    DIR *dir;
+    V9fsXattr xattr;
+    /*
+     * private pointer for fs drivers, that
+     * have its own internal representation of
+     * open files.
+     */
+    void *private;
+};
+
 struct V9fsFidState
 {
     int fid_type;
     int32_t fid;
-    V9fsString path;
-    union {
-	int fd;
-	DIR *dir;
-	V9fsXattr xattr;
-    } fs;
+    V9fsPath path;
+    V9fsFidOpenState fs;
+    V9fsFidOpenState fs_reclaim;
+    int flags;
+    int open_flags;
     uid_t uid;
+    int ref;
+    int clunked;
     V9fsFidState *next;
+    V9fsFidState *rclm_lst;
 };
 
 typedef struct V9fsState
@@ -210,40 +210,22 @@ typedef struct V9fsState
     VirtQueue *vq;
     V9fsPDU pdus[MAX_REQ];
     QLIST_HEAD(, V9fsPDU) free_list;
+    QLIST_HEAD(, V9fsPDU) active_list;
     V9fsFidState *fid_list;
     FileOperations *ops;
     FsContext ctx;
-    uint16_t tag_len;
-    uint8_t *tag;
+    char *tag;
     size_t config_size;
     enum p9_proto_version proto_version;
     int32_t msize;
+    /*
+     * lock ensuring atomic path update
+     * on rename.
+     */
+    CoRwlock rename_lock;
+    int32_t root_fid;
+    Error *migration_blocker;
 } V9fsState;
-
-typedef struct V9fsCreateState {
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsFidState *fidp;
-    V9fsQID qid;
-    int32_t perm;
-    int8_t mode;
-    struct stat stbuf;
-    V9fsString name;
-    V9fsString extension;
-    V9fsString fullname;
-    int iounit;
-} V9fsCreateState;
-
-typedef struct V9fsLcreateState {
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsFidState *fidp;
-    V9fsQID qid;
-    int32_t iounit;
-    struct stat stbuf;
-    V9fsString name;
-    V9fsString fullname;
-} V9fsLcreateState;
 
 typedef struct V9fsStatState {
     V9fsPDU *pdu;
@@ -252,50 +234,6 @@ typedef struct V9fsStatState {
     V9fsFidState *fidp;
     struct stat stbuf;
 } V9fsStatState;
-
-typedef struct V9fsStatDotl {
-    uint64_t st_result_mask;
-    V9fsQID qid;
-    uint32_t st_mode;
-    uint32_t st_uid;
-    uint32_t st_gid;
-    uint64_t st_nlink;
-    uint64_t st_rdev;
-    uint64_t st_size;
-    uint64_t st_blksize;
-    uint64_t st_blocks;
-    uint64_t st_atime_sec;
-    uint64_t st_atime_nsec;
-    uint64_t st_mtime_sec;
-    uint64_t st_mtime_nsec;
-    uint64_t st_ctime_sec;
-    uint64_t st_ctime_nsec;
-    uint64_t st_btime_sec;
-    uint64_t st_btime_nsec;
-    uint64_t st_gen;
-    uint64_t st_data_version;
-} V9fsStatDotl;
-
-typedef struct V9fsStatStateDotl {
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsStatDotl v9stat_dotl;
-    struct stat stbuf;
-} V9fsStatStateDotl;
-
-
-typedef struct V9fsWalkState {
-    V9fsPDU *pdu;
-    size_t offset;
-    uint16_t nwnames;
-    int name_idx;
-    V9fsQID *qids;
-    V9fsFidState *fidp;
-    V9fsFidState *newfidp;
-    V9fsString path;
-    V9fsString *wnames;
-    struct stat stbuf;
-} V9fsWalkState;
 
 typedef struct V9fsOpenState {
     V9fsPDU *pdu;
@@ -339,84 +277,13 @@ typedef struct V9fsWriteState {
     int cnt;
 } V9fsWriteState;
 
-typedef struct V9fsRemoveState {
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsFidState *fidp;
-} V9fsRemoveState;
-
-typedef struct V9fsWstatState
-{
-    V9fsPDU *pdu;
-    size_t offset;
-    int16_t unused;
-    V9fsStat v9stat;
-    V9fsFidState *fidp;
-    struct stat stbuf;
-} V9fsWstatState;
-
-typedef struct V9fsSymlinkState
-{
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsString name;
-    V9fsString symname;
-    V9fsString fullname;
-    V9fsFidState *dfidp;
-    V9fsQID qid;
-    struct stat stbuf;
-} V9fsSymlinkState;
-
-typedef struct V9fsIattr
-{
-    int32_t valid;
-    int32_t mode;
-    int32_t uid;
-    int32_t gid;
-    int64_t size;
-    int64_t atime_sec;
-    int64_t atime_nsec;
-    int64_t mtime_sec;
-    int64_t mtime_nsec;
-} V9fsIattr;
-
-typedef struct V9fsSetattrState
-{
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsIattr v9iattr;
-    V9fsFidState *fidp;
-} V9fsSetattrState;
-
 struct virtio_9p_config
 {
     /* number of characters in tag */
     uint16_t tag_len;
     /* Variable size tag name */
     uint8_t tag[0];
-} __attribute__((packed));
-
-typedef struct V9fsStatfs
-{
-    uint32_t f_type;
-    uint32_t f_bsize;
-    uint64_t f_blocks;
-    uint64_t f_bfree;
-    uint64_t f_bavail;
-    uint64_t f_files;
-    uint64_t f_ffree;
-    uint64_t fsid_val;
-    uint32_t f_namelen;
-} V9fsStatfs;
-
-typedef struct V9fsStatfsState {
-    V9fsPDU *pdu;
-    size_t offset;
-    int32_t fid;
-    V9fsStatfs v9statfs;
-    V9fsFidState *fidp;
-    struct statfs stbuf;
-} V9fsStatfsState;
+} QEMU_PACKED;
 
 typedef struct V9fsMkState {
     V9fsPDU *pdu;
@@ -427,25 +294,34 @@ typedef struct V9fsMkState {
     V9fsString fullname;
 } V9fsMkState;
 
-typedef struct V9fsRenameState {
-    V9fsPDU *pdu;
-    V9fsFidState *fidp;
-    size_t offset;
-    int32_t newdirfid;
-    V9fsString name;
-} V9fsRenameState;
+/* 9p2000.L open flags */
+#define P9_DOTL_RDONLY        00000000
+#define P9_DOTL_WRONLY        00000001
+#define P9_DOTL_RDWR          00000002
+#define P9_DOTL_NOACCESS      00000003
+#define P9_DOTL_CREATE        00000100
+#define P9_DOTL_EXCL          00000200
+#define P9_DOTL_NOCTTY        00000400
+#define P9_DOTL_TRUNC         00001000
+#define P9_DOTL_APPEND        00002000
+#define P9_DOTL_NONBLOCK      00004000
+#define P9_DOTL_DSYNC         00010000
+#define P9_DOTL_FASYNC        00020000
+#define P9_DOTL_DIRECT        00040000
+#define P9_DOTL_LARGEFILE     00100000
+#define P9_DOTL_DIRECTORY     00200000
+#define P9_DOTL_NOFOLLOW      00400000
+#define P9_DOTL_NOATIME       01000000
+#define P9_DOTL_CLOEXEC       02000000
+#define P9_DOTL_SYNC          04000000
 
-typedef struct V9fsXattrState
-{
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsFidState *file_fidp;
-    V9fsFidState *xattr_fidp;
-    V9fsString name;
-    int64_t size;
-    int flags;
-    void *value;
-} V9fsXattrState;
+/* 9p2000.L at flags */
+#define P9_DOTL_AT_REMOVEDIR         0x200
+
+/* 9P2000.L lock type */
+#define P9_LOCK_TYPE_RDLCK 0
+#define P9_LOCK_TYPE_WRLCK 1
+#define P9_LOCK_TYPE_UNLCK 2
 
 #define P9_LOCK_SUCCESS 0
 #define P9_LOCK_BLOCKED 1
@@ -465,16 +341,6 @@ typedef struct V9fsFlock
     V9fsString client_id;
 } V9fsFlock;
 
-typedef struct V9fsLockState
-{
-    V9fsPDU *pdu;
-    size_t offset;
-    int8_t status;
-    struct stat stbuf;
-    V9fsFidState *fidp;
-    V9fsFlock *flock;
-} V9fsLockState;
-
 typedef struct V9fsGetlock
 {
     uint8_t type;
@@ -484,21 +350,8 @@ typedef struct V9fsGetlock
     V9fsString client_id;
 } V9fsGetlock;
 
-typedef struct V9fsGetlockState
-{
-    V9fsPDU *pdu;
-    size_t offset;
-    struct stat stbuf;
-    V9fsFidState *fidp;
-    V9fsGetlock *glock;
-} V9fsGetlockState;
-
-typedef struct V9fsReadLinkState
-{
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsString target;
-} V9fsReadLinkState;
+extern int open_fd_hw;
+extern int total_open_fd;
 
 size_t pdu_packunpack(void *addr, struct iovec *sg, int sg_count,
                       size_t offset, size_t size, int pack);
@@ -509,6 +362,44 @@ static inline size_t do_pdu_unpack(void *dst, struct iovec *sg, int sg_count,
     return pdu_packunpack(dst, sg, sg_count, offset, size, 0);
 }
 
+static inline void v9fs_path_write_lock(V9fsState *s)
+{
+    if (s->ctx.export_flags & V9FS_PATHNAME_FSCONTEXT) {
+        qemu_co_rwlock_wrlock(&s->rename_lock);
+    }
+}
+
+static inline void v9fs_path_read_lock(V9fsState *s)
+{
+    if (s->ctx.export_flags & V9FS_PATHNAME_FSCONTEXT) {
+        qemu_co_rwlock_rdlock(&s->rename_lock);
+    }
+}
+
+static inline void v9fs_path_unlock(V9fsState *s)
+{
+    if (s->ctx.export_flags & V9FS_PATHNAME_FSCONTEXT) {
+        qemu_co_rwlock_unlock(&s->rename_lock);
+    }
+}
+
+static inline uint8_t v9fs_request_cancelled(V9fsPDU *pdu)
+{
+    return pdu->cancelled;
+}
+
 extern void handle_9p_output(VirtIODevice *vdev, VirtQueue *vq);
+extern void virtio_9p_set_fd_limit(void);
+extern void v9fs_reclaim_fd(V9fsPDU *pdu);
+extern void v9fs_path_init(V9fsPath *path);
+extern void v9fs_path_free(V9fsPath *path);
+extern void v9fs_path_copy(V9fsPath *lhs, V9fsPath *rhs);
+extern int v9fs_name_to_path(V9fsState *s, V9fsPath *dirpath,
+                             const char *name, V9fsPath *path);
+
+#define pdu_marshal(pdu, offset, fmt, args...)  \
+    v9fs_marshal(pdu->elem.in_sg, pdu->elem.in_num, offset, 1, fmt, ##args)
+#define pdu_unmarshal(pdu, offset, fmt, args...)  \
+    v9fs_unmarshal(pdu->elem.out_sg, pdu->elem.out_num, offset, 1, fmt, ##args)
 
 #endif

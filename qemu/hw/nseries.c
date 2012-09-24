@@ -31,6 +31,9 @@
 #include "hw.h"
 #include "bt.h"
 #include "loader.h"
+#include "blockdev.h"
+#include "sysbus.h"
+#include "exec-memory.h"
 
 /* Nokia N8x0 support */
 struct n800_s {
@@ -42,15 +45,14 @@ struct n800_s {
         uint32_t (*txrx)(void *opaque, uint32_t value, int len);
         uWireSlave *chip;
     } ts;
-    i2c_bus *i2c;
 
     int keymap[0x80];
-    i2c_slave *kbd;
+    DeviceState *kbd;
 
-    TUSBState *usb;
+    DeviceState *usb;
     void *retu;
     void *tahvo;
-    void *nand;
+    DeviceState *nand;
 };
 
 /* GPIO pins */
@@ -134,9 +136,9 @@ static void n800_mmc_cs_cb(void *opaque, int line, int level)
 static void n8x0_gpio_setup(struct n800_s *s)
 {
     qemu_irq *mmc_cs = qemu_allocate_irqs(n800_mmc_cs_cb, s->cpu->mmc, 1);
-    omap2_gpio_out_set(s->cpu->gpif, N8X0_MMC_CS_GPIO, mmc_cs[0]);
+    qdev_connect_gpio_out(s->cpu->gpio, N8X0_MMC_CS_GPIO, mmc_cs[0]);
 
-    qemu_irq_lower(omap2_gpio_in_get(s->cpu->gpif, N800_BAT_COVER_GPIO)[0]);
+    qemu_irq_lower(qdev_get_gpio_in(s->cpu->gpio, N800_BAT_COVER_GPIO));
 }
 
 #define MAEMO_CAL_HEADER(...)				\
@@ -163,13 +165,23 @@ static const uint8_t n8x0_cal_bt_id[] = {
 static void n8x0_nand_setup(struct n800_s *s)
 {
     char *otp_region;
+    DriveInfo *dinfo;
 
-    /* Either ec40xx or ec48xx are OK for the ID */
-    omap_gpmc_attach(s->cpu->gpmc, N8X0_ONENAND_CS, 0, onenand_base_update,
-                    onenand_base_unmap,
-                    (s->nand = onenand_init(0xec4800, 1,
-                                            omap2_gpio_in_get(s->cpu->gpif,
-                                                    N8X0_ONENAND_GPIO)[0])));
+    s->nand = qdev_create(NULL, "onenand");
+    qdev_prop_set_uint16(s->nand, "manufacturer_id", NAND_MFR_SAMSUNG);
+    /* Either 0x40 or 0x48 are OK for the device ID */
+    qdev_prop_set_uint16(s->nand, "device_id", 0x48);
+    qdev_prop_set_uint16(s->nand, "version_id", 0);
+    qdev_prop_set_int32(s->nand, "shift", 1);
+    dinfo = drive_get(IF_MTD, 0, 0);
+    if (dinfo && dinfo->bdrv) {
+        qdev_prop_set_drive_nofail(s->nand, "drive", dinfo->bdrv);
+    }
+    qdev_init_nofail(s->nand);
+    sysbus_connect_irq(sysbus_from_qdev(s->nand), 0,
+                       qdev_get_gpio_in(s->cpu->gpio, N8X0_ONENAND_GPIO));
+    omap_gpmc_attach(s->cpu->gpmc, N8X0_ONENAND_CS,
+                     sysbus_mmio_get_region(sysbus_from_qdev(s->nand), 0));
     otp_region = onenand_raw_otp(s->nand);
 
     memcpy(otp_region + 0x000, n8x0_cal_wlan_mac, sizeof(n8x0_cal_wlan_mac));
@@ -180,17 +192,19 @@ static void n8x0_nand_setup(struct n800_s *s)
 static void n8x0_i2c_setup(struct n800_s *s)
 {
     DeviceState *dev;
-    qemu_irq tmp_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_TMP105_GPIO)[0];
-
-    /* Attach the CPU on one end of our I2C bus.  */
-    s->i2c = omap_i2c_bus(s->cpu->i2c[0]);
+    qemu_irq tmp_irq = qdev_get_gpio_in(s->cpu->gpio, N8X0_TMP105_GPIO);
+    i2c_bus *i2c = omap_i2c_bus(s->cpu->i2c[0]);
 
     /* Attach a menelaus PM chip */
-    dev = i2c_create_slave(s->i2c, "twl92230", N8X0_MENELAUS_ADDR);
-    qdev_connect_gpio_out(dev, 3, s->cpu->irq[0][OMAP_INT_24XX_SYS_NIRQ]);
+    dev = i2c_create_slave(i2c, "twl92230", N8X0_MENELAUS_ADDR);
+    qdev_connect_gpio_out(dev, 3,
+                          qdev_get_gpio_in(s->cpu->ih[0],
+                                           OMAP_INT_24XX_SYS_NIRQ));
+
+    qemu_system_powerdown = qdev_get_gpio_in(dev, 3);
 
     /* Attach a TMP105 PM chip (A0 wired to ground) */
-    dev = i2c_create_slave(s->i2c, "tmp105", N8X0_TMP105_ADDR);
+    dev = i2c_create_slave(i2c, "tmp105", N8X0_TMP105_ADDR);
     qdev_connect_gpio_out(dev, 0, tmp_irq);
 }
 
@@ -249,8 +263,8 @@ static void n800_tsc_kbd_setup(struct n800_s *s)
     /* XXX: are the three pins inverted inside the chip between the
      * tsc and the cpu (N4111)?  */
     qemu_irq penirq = NULL;	/* NC */
-    qemu_irq kbirq = omap2_gpio_in_get(s->cpu->gpif, N800_TSC_KP_IRQ_GPIO)[0];
-    qemu_irq dav = omap2_gpio_in_get(s->cpu->gpif, N800_TSC_TS_GPIO)[0];
+    qemu_irq kbirq = qdev_get_gpio_in(s->cpu->gpio, N800_TSC_KP_IRQ_GPIO);
+    qemu_irq dav = qdev_get_gpio_in(s->cpu->gpio, N800_TSC_TS_GPIO);
 
     s->ts.chip = tsc2301_init(penirq, kbirq, dav);
     s->ts.opaque = s->ts.chip->opaque;
@@ -269,7 +283,7 @@ static void n800_tsc_kbd_setup(struct n800_s *s)
 
 static void n810_tsc_setup(struct n800_s *s)
 {
-    qemu_irq pintdav = omap2_gpio_in_get(s->cpu->gpif, N810_TSC_TS_GPIO)[0];
+    qemu_irq pintdav = qdev_get_gpio_in(s->cpu->gpio, N810_TSC_TS_GPIO);
 
     s->ts.opaque = tsc2005_init(pintdav);
     s->ts.txrx = tsc2005_txrx;
@@ -361,8 +375,7 @@ static int n810_keys[0x80] = {
 
 static void n810_kbd_setup(struct n800_s *s)
 {
-    qemu_irq kbd_irq = omap2_gpio_in_get(s->cpu->gpif, N810_KEYBOARD_GPIO)[0];
-    DeviceState *dev;
+    qemu_irq kbd_irq = qdev_get_gpio_in(s->cpu->gpio, N810_KEYBOARD_GPIO);
     int i;
 
     for (i = 0; i < 0x80; i ++)
@@ -375,8 +388,9 @@ static void n810_kbd_setup(struct n800_s *s)
 
     /* Attach the LM8322 keyboard to the I2C bus,
      * should happen in n8x0_i2c_setup and s->kbd be initialised here.  */
-    dev = i2c_create_slave(s->i2c, "lm8323", N810_LM8323_ADDR);
-    qdev_connect_gpio_out(dev, 0, kbd_irq);
+    s->kbd = i2c_create_slave(omap_i2c_bus(s->cpu->i2c[0]),
+                           "lm8323", N810_LM8323_ADDR);
+    qdev_connect_gpio_out(s->kbd, 0, kbd_irq);
 }
 
 /* LCD MIPI DBI-C controller (URAL) */
@@ -652,7 +666,7 @@ static uint32_t mipid_txrx(void *opaque, uint32_t cmd, int len)
 
 static void *mipid_init(void)
 {
-    struct mipid_s *s = (struct mipid_s *) qemu_mallocz(sizeof(*s));
+    struct mipid_s *s = (struct mipid_s *) g_malloc0(sizeof(*s));
 
     s->id = 0x838f03;
     mipid_reset(s);
@@ -708,10 +722,10 @@ static void n800_dss_init(struct rfbi_chip_s *chip)
     chip->write(chip->opaque, 1, 0x01);		/* Input Data Format */
     chip->write(chip->opaque, 1, 0x01);		/* Data Source Select */
 
-    fb_blank = memset(qemu_malloc(800 * 480 * 2), 0xff, 800 * 480 * 2);
+    fb_blank = memset(g_malloc(800 * 480 * 2), 0xff, 800 * 480 * 2);
     /* Display Memory Data Port */
     chip->block(chip->opaque, 1, fb_blank, 800 * 480 * 2, 800);
-    qemu_free(fb_blank);
+    g_free(fb_blank);
 }
 
 static void n8x0_dss_setup(struct n800_s *s)
@@ -726,15 +740,15 @@ static void n8x0_dss_setup(struct n800_s *s)
 
 static void n8x0_cbus_setup(struct n800_s *s)
 {
-    qemu_irq dat_out = omap2_gpio_in_get(s->cpu->gpif, N8X0_CBUS_DAT_GPIO)[0];
-    qemu_irq retu_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_RETU_GPIO)[0];
-    qemu_irq tahvo_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_TAHVO_GPIO)[0];
+    qemu_irq dat_out = qdev_get_gpio_in(s->cpu->gpio, N8X0_CBUS_DAT_GPIO);
+    qemu_irq retu_irq = qdev_get_gpio_in(s->cpu->gpio, N8X0_RETU_GPIO);
+    qemu_irq tahvo_irq = qdev_get_gpio_in(s->cpu->gpio, N8X0_TAHVO_GPIO);
 
     CBus *cbus = cbus_init(dat_out);
 
-    omap2_gpio_out_set(s->cpu->gpif, N8X0_CBUS_CLK_GPIO, cbus->clk);
-    omap2_gpio_out_set(s->cpu->gpif, N8X0_CBUS_DAT_GPIO, cbus->dat);
-    omap2_gpio_out_set(s->cpu->gpif, N8X0_CBUS_SEL_GPIO, cbus->sel);
+    qdev_connect_gpio_out(s->cpu->gpio, N8X0_CBUS_CLK_GPIO, cbus->clk);
+    qdev_connect_gpio_out(s->cpu->gpio, N8X0_CBUS_DAT_GPIO, cbus->dat);
+    qdev_connect_gpio_out(s->cpu->gpio, N8X0_CBUS_SEL_GPIO, cbus->sel);
 
     cbus_attach(cbus, s->retu = retu_init(retu_irq, 1));
     cbus_attach(cbus, s->tahvo = tahvo_init(tahvo_irq, 1));
@@ -743,38 +757,31 @@ static void n8x0_cbus_setup(struct n800_s *s)
 static void n8x0_uart_setup(struct n800_s *s)
 {
     CharDriverState *radio = uart_hci_init(
-                    omap2_gpio_in_get(s->cpu->gpif,
-                            N8X0_BT_HOST_WKUP_GPIO)[0]);
+                    qdev_get_gpio_in(s->cpu->gpio, N8X0_BT_HOST_WKUP_GPIO));
 
-    omap2_gpio_out_set(s->cpu->gpif, N8X0_BT_RESET_GPIO,
+    qdev_connect_gpio_out(s->cpu->gpio, N8X0_BT_RESET_GPIO,
                     csrhci_pins_get(radio)[csrhci_pin_reset]);
-    omap2_gpio_out_set(s->cpu->gpif, N8X0_BT_WKUP_GPIO,
+    qdev_connect_gpio_out(s->cpu->gpio, N8X0_BT_WKUP_GPIO,
                     csrhci_pins_get(radio)[csrhci_pin_wakeup]);
 
     omap_uart_attach(s->cpu->uart[BT_UART], radio);
 }
 
-static void n8x0_usb_power_cb(void *opaque, int line, int level)
-{
-    struct n800_s *s = opaque;
-
-    tusb6010_power(s->usb, level);
-}
-
 static void n8x0_usb_setup(struct n800_s *s)
 {
-    qemu_irq tusb_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_TUSB_INT_GPIO)[0];
-    qemu_irq tusb_pwr = qemu_allocate_irqs(n8x0_usb_power_cb, s, 1)[0];
-    TUSBState *tusb = tusb6010_init(tusb_irq);
-
+    SysBusDevice *dev;
+    s->usb = qdev_create(NULL, "tusb6010");
+    dev = sysbus_from_qdev(s->usb);
+    qdev_init_nofail(s->usb);
+    sysbus_connect_irq(dev, 0,
+                       qdev_get_gpio_in(s->cpu->gpio, N8X0_TUSB_INT_GPIO));
     /* Using the NOR interface */
     omap_gpmc_attach(s->cpu->gpmc, N8X0_USB_ASYNC_CS,
-                    tusb6010_async_io(tusb), NULL, NULL, tusb);
+                     sysbus_mmio_get_region(dev, 0));
     omap_gpmc_attach(s->cpu->gpmc, N8X0_USB_SYNC_CS,
-                    tusb6010_sync_io(tusb), NULL, NULL, tusb);
-
-    s->usb = tusb;
-    omap2_gpio_out_set(s->cpu->gpif, N8X0_TUSB_ENABLE_GPIO, tusb_pwr);
+                     sysbus_mmio_get_region(dev, 1));
+    qdev_connect_gpio_out(s->cpu->gpio, N8X0_TUSB_ENABLE_GPIO,
+                          qdev_get_gpio_in(s->usb, 0)); /* tusb_pwr */
 }
 
 /* Setup done before the main bootloader starts by some early setup code
@@ -1020,7 +1027,7 @@ static void n8x0_boot_init(void *opaque)
 
     /* If the machine has a slided keyboard, open it */
     if (s->kbd)
-        qemu_irq_raise(omap2_gpio_in_get(s->cpu->gpif, N810_SLIDE_GPIO)[0]);
+        qemu_irq_raise(qdev_get_gpio_in(s->cpu->gpio, N810_SLIDE_GPIO));
 }
 
 #define OMAP_TAG_NOKIA_BT	0x4e01
@@ -1269,11 +1276,12 @@ static void n8x0_init(ram_addr_t ram_size, const char *boot_device,
                 const char *kernel_cmdline, const char *initrd_filename,
                 const char *cpu_model, struct arm_boot_info *binfo, int model)
 {
-    struct n800_s *s = (struct n800_s *) qemu_mallocz(sizeof(*s));
+    MemoryRegion *sysmem = get_system_memory();
+    struct n800_s *s = (struct n800_s *) g_malloc0(sizeof(*s));
     int sdram_size = binfo->ram_size;
     DisplayState *ds;
 
-    s->cpu = omap2420_mpu_init(sdram_size, cpu_model);
+    s->cpu = omap2420_mpu_init(sysmem, sdram_size, cpu_model);
 
     /* Setup peripherals
      *

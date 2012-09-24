@@ -23,11 +23,6 @@
  */
 #define TCG_TARGET_I386 1
 
-#if defined(__x86_64__)
-# define TCG_TARGET_REG_BITS 64
-#else
-# define TCG_TARGET_REG_BITS 32
-#endif
 //#define TCG_TARGET_WORDS_BIGENDIAN
 
 #if TCG_TARGET_REG_BITS == 64
@@ -36,7 +31,7 @@
 # define TCG_TARGET_NB_REGS 8
 #endif
 
-enum {
+typedef enum {
     TCG_REG_EAX = 0,
     TCG_REG_ECX,
     TCG_REG_EDX,
@@ -64,7 +59,7 @@ enum {
     TCG_REG_RBP = TCG_REG_EBP,
     TCG_REG_RSI = TCG_REG_ESI,
     TCG_REG_RDI = TCG_REG_EDI,
-};
+} TCGReg;
 
 #define TCG_CT_CONST_S32 0x100
 #define TCG_CT_CONST_U32 0x200
@@ -75,42 +70,49 @@ enum {
 #define TCG_TARGET_CALL_STACK_OFFSET 0
 
 /* optional instructions */
-#define TCG_TARGET_HAS_div2_i32
-#define TCG_TARGET_HAS_rot_i32
-#define TCG_TARGET_HAS_ext8s_i32
-#define TCG_TARGET_HAS_ext16s_i32
-#define TCG_TARGET_HAS_ext8u_i32
-#define TCG_TARGET_HAS_ext16u_i32
-#define TCG_TARGET_HAS_bswap16_i32
-#define TCG_TARGET_HAS_bswap32_i32
-#define TCG_TARGET_HAS_neg_i32
-#define TCG_TARGET_HAS_not_i32
-// #define TCG_TARGET_HAS_andc_i32
-// #define TCG_TARGET_HAS_orc_i32
-// #define TCG_TARGET_HAS_eqv_i32
-// #define TCG_TARGET_HAS_nand_i32
-// #define TCG_TARGET_HAS_nor_i32
+#define TCG_TARGET_HAS_div2_i32         1
+#define TCG_TARGET_HAS_rot_i32          1
+#define TCG_TARGET_HAS_ext8s_i32        1
+#define TCG_TARGET_HAS_ext16s_i32       1
+#define TCG_TARGET_HAS_ext8u_i32        1
+#define TCG_TARGET_HAS_ext16u_i32       1
+#define TCG_TARGET_HAS_bswap16_i32      1
+#define TCG_TARGET_HAS_bswap32_i32      1
+#define TCG_TARGET_HAS_neg_i32          1
+#define TCG_TARGET_HAS_not_i32          1
+#define TCG_TARGET_HAS_andc_i32         0
+#define TCG_TARGET_HAS_orc_i32          0
+#define TCG_TARGET_HAS_eqv_i32          0
+#define TCG_TARGET_HAS_nand_i32         0
+#define TCG_TARGET_HAS_nor_i32          0
+#define TCG_TARGET_HAS_deposit_i32      1
 
 #if TCG_TARGET_REG_BITS == 64
-#define TCG_TARGET_HAS_div2_i64
-#define TCG_TARGET_HAS_rot_i64
-#define TCG_TARGET_HAS_ext8s_i64
-#define TCG_TARGET_HAS_ext16s_i64
-#define TCG_TARGET_HAS_ext32s_i64
-#define TCG_TARGET_HAS_ext8u_i64
-#define TCG_TARGET_HAS_ext16u_i64
-#define TCG_TARGET_HAS_ext32u_i64
-#define TCG_TARGET_HAS_bswap16_i64
-#define TCG_TARGET_HAS_bswap32_i64
-#define TCG_TARGET_HAS_bswap64_i64
-#define TCG_TARGET_HAS_neg_i64
-#define TCG_TARGET_HAS_not_i64
-// #define TCG_TARGET_HAS_andc_i64
-// #define TCG_TARGET_HAS_orc_i64
-// #define TCG_TARGET_HAS_eqv_i64
-// #define TCG_TARGET_HAS_nand_i64
-// #define TCG_TARGET_HAS_nor_i64
+#define TCG_TARGET_HAS_div2_i64         1
+#define TCG_TARGET_HAS_rot_i64          1
+#define TCG_TARGET_HAS_ext8s_i64        1
+#define TCG_TARGET_HAS_ext16s_i64       1
+#define TCG_TARGET_HAS_ext32s_i64       1
+#define TCG_TARGET_HAS_ext8u_i64        1
+#define TCG_TARGET_HAS_ext16u_i64       1
+#define TCG_TARGET_HAS_ext32u_i64       1
+#define TCG_TARGET_HAS_bswap16_i64      1
+#define TCG_TARGET_HAS_bswap32_i64      1
+#define TCG_TARGET_HAS_bswap64_i64      1
+#define TCG_TARGET_HAS_neg_i64          1
+#define TCG_TARGET_HAS_not_i64          1
+#define TCG_TARGET_HAS_andc_i64         0
+#define TCG_TARGET_HAS_orc_i64          0
+#define TCG_TARGET_HAS_eqv_i64          0
+#define TCG_TARGET_HAS_nand_i64         0
+#define TCG_TARGET_HAS_nor_i64          0
+#define TCG_TARGET_HAS_deposit_i64      1
 #endif
+
+#define TCG_TARGET_deposit_i32_valid(ofs, len) \
+    (((ofs) == 0 && (len) == 8) || ((ofs) == 8 && (len) == 8) || \
+     ((ofs) == 0 && (len) == 16))
+#define TCG_TARGET_deposit_i64_valid    TCG_TARGET_deposit_i32_valid
 
 #define TCG_TARGET_HAS_GUEST_BASE
 
@@ -121,6 +123,7 @@ enum {
 # define TCG_AREG0 TCG_REG_EBP
 #endif
 
-static inline void flush_icache_range(unsigned long start, unsigned long stop)
+static inline void flush_icache_range(tcg_target_ulong start,
+                                      tcg_target_ulong stop)
 {
 }

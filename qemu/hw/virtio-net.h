@@ -72,13 +72,14 @@ struct virtio_net_config
     uint8_t mac[ETH_ALEN];
     /* See VIRTIO_NET_F_STATUS and VIRTIO_NET_S_* above */
     uint16_t status;
-} __attribute__((packed));
+} QEMU_PACKED;
 
 /* This is the first element of the scatter-gather list.  If you don't
  * specify GSO or CSUM features, you can simply ignore the header. */
 struct virtio_net_hdr
 {
 #define VIRTIO_NET_HDR_F_NEEDS_CSUM     1       // Use csum_start, csum_offset
+#define VIRTIO_NET_HDR_F_DATA_VALID	2	// Csum is valid
     uint8_t flags;
 #define VIRTIO_NET_HDR_GSO_NONE         0       // Not a GSO frame
 #define VIRTIO_NET_HDR_GSO_TCPV4        1       // GSO frame, IPv4 TCP (TSO)

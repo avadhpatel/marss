@@ -25,6 +25,7 @@
 
 #include "cmd.h"
 #include "qemu-aio.h"
+#include "main-loop.h"
 
 #define _(x)	x	/* not gettext support yet */
 
@@ -45,13 +46,11 @@ compare(const void *a, const void *b)
 		      ((const cmdinfo_t *)b)->name);
 }
 
-void
-add_command(
-	const cmdinfo_t	*ci)
+void add_command(const cmdinfo_t *ci)
 {
-	cmdtab = realloc((void *)cmdtab, ++ncmds * sizeof(*cmdtab));
-	cmdtab[ncmds - 1] = *ci;
-	qsort(cmdtab, ncmds, sizeof(*cmdtab), compare);
+    cmdtab = g_realloc((void *)cmdtab, ++ncmds * sizeof(*cmdtab));
+    cmdtab[ncmds - 1] = *ci;
+    qsort(cmdtab, ncmds, sizeof(*cmdtab), compare);
 }
 
 static int
@@ -122,16 +121,10 @@ find_command(
 	return NULL;
 }
 
-void
-add_user_command(char *optarg)
+void add_user_command(char *optarg)
 {
-	ncmdline++;
-	cmdline = realloc(cmdline, sizeof(char*) * (ncmdline));
-	if (!cmdline) {
-		perror("realloc");
-		exit(1);
-	}
-	cmdline[ncmdline-1] = optarg;
+    cmdline = g_realloc(cmdline, ++ncmdline * sizeof(char *));
+    cmdline[ncmdline-1] = optarg;
 }
 
 static int
@@ -154,81 +147,81 @@ static void prep_fetchline(void *opaque)
 {
     int *fetchable = opaque;
 
-    qemu_aio_set_fd_handler(STDIN_FILENO, NULL, NULL, NULL, NULL, NULL);
+    qemu_set_fd_handler(STDIN_FILENO, NULL, NULL, NULL);
     *fetchable= 1;
 }
 
 static char *get_prompt(void);
 
-void
-command_loop(void)
+void command_loop(void)
 {
-	int		c, i, j = 0, done = 0, fetchable = 0, prompted = 0;
-	char		*input;
-	char		**v;
-	const cmdinfo_t	*ct;
+    int c, i, j = 0, done = 0, fetchable = 0, prompted = 0;
+    char *input;
+    char **v;
+    const cmdinfo_t *ct;
 
-	for (i = 0; !done && i < ncmdline; i++) {
-		input = strdup(cmdline[i]);
-		if (!input) {
-			fprintf(stderr,
-				_("cannot strdup command '%s': %s\n"),
-				cmdline[i], strerror(errno));
-			exit(1);
-		}
-		v = breakline(input, &c);
-		if (c) {
-			ct = find_command(v[0]);
-			if (ct) {
-				if (ct->flags & CMD_FLAG_GLOBAL)
-					done = command(ct, c, v);
-				else {
-					j = 0;
-					while (!done && (j = args_command(j)))
-						done = command(ct, c, v);
-				}
-			} else
-				fprintf(stderr, _("command \"%s\" not found\n"),
-					v[0]);
-		}
-		doneline(input, v);
+    for (i = 0; !done && i < ncmdline; i++) {
+        input = strdup(cmdline[i]);
+        if (!input) {
+            fprintf(stderr, _("cannot strdup command '%s': %s\n"),
+                    cmdline[i], strerror(errno));
+            exit(1);
+        }
+        v = breakline(input, &c);
+        if (c) {
+            ct = find_command(v[0]);
+            if (ct) {
+                if (ct->flags & CMD_FLAG_GLOBAL) {
+                    done = command(ct, c, v);
+                } else {
+                    j = 0;
+                    while (!done && (j = args_command(j))) {
+                        done = command(ct, c, v);
+                    }
+                }
+            } else {
+                fprintf(stderr, _("command \"%s\" not found\n"), v[0]);
+            }
 	}
-	if (cmdline) {
-		free(cmdline);
-		return;
-	}
+        doneline(input, v);
+    }
+    if (cmdline) {
+        g_free(cmdline);
+        return;
+    }
 
-	while (!done) {
+    while (!done) {
         if (!prompted) {
             printf("%s", get_prompt());
             fflush(stdout);
-            qemu_aio_set_fd_handler(STDIN_FILENO, prep_fetchline, NULL, NULL,
-                                    NULL, &fetchable);
+            qemu_set_fd_handler(STDIN_FILENO, prep_fetchline, NULL, &fetchable);
             prompted = 1;
         }
 
-        qemu_aio_wait();
+        main_loop_wait(false);
 
         if (!fetchable) {
             continue;
         }
-		if ((input = fetchline()) == NULL)
-			break;
-		v = breakline(input, &c);
-		if (c) {
-			ct = find_command(v[0]);
-			if (ct)
-				done = command(ct, c, v);
-			else
-				fprintf(stderr, _("command \"%s\" not found\n"),
-					v[0]);
-		}
-		doneline(input, v);
+        input = fetchline();
+        if (input == NULL) {
+            break;
+        }
+        v = breakline(input, &c);
+        if (c) {
+            ct = find_command(v[0]);
+            if (ct) {
+                done = command(ct, c, v);
+            } else {
+                fprintf(stderr, _("command \"%s\" not found\n"), v[0]);
+            }
+        }
+        doneline(input, v);
 
         prompted = 0;
         fetchable = 0;
-	}
-    qemu_aio_set_fd_handler(STDIN_FILENO, NULL, NULL, NULL, NULL, NULL);
+    }
+    qemu_set_fd_handler(STDIN_FILENO, NULL, NULL, NULL);
 }
 
 /* from libxcmd/input.c */
@@ -331,29 +324,32 @@ static char *qemu_strsep(char **input, const char *delim)
     return result;
 }
 
-char **
-breakline(
-	char	*input,
-	int	*count)
+char **breakline(char *input, int *count)
 {
-	int	c = 0;
-	char	*p;
-	char	**rval = calloc(sizeof(char *), 1);
+    int c = 0;
+    char *p;
+    char **rval = calloc(sizeof(char *), 1);
+    char **tmp;
 
-	while (rval && (p = qemu_strsep(&input, " ")) != NULL) {
-		if (!*p)
-			continue;
-		c++;
-		rval = realloc(rval, sizeof(*rval) * (c + 1));
-		if (!rval) {
-			c = 0;
-			break;
-		}
-		rval[c - 1] = p;
-		rval[c] = NULL;
-	}
-	*count = c;
-	return rval;
+    while (rval && (p = qemu_strsep(&input, " ")) != NULL) {
+        if (!*p) {
+            continue;
+        }
+        c++;
+        tmp = realloc(rval, sizeof(*rval) * (c + 1));
+        if (!tmp) {
+            free(rval);
+            rval = NULL;
+            c = 0;
+            break;
+        } else {
+            rval = tmp;
+        }
+        rval[c - 1] = p;
+        rval[c] = NULL;
+    }
+    *count = c;
+    return rval;
 }
 
 void
@@ -389,7 +385,7 @@ cvtnum(
 	if (sp[1] != '\0')
 		return -1LL;
 
-	c = tolower(*sp);
+	c = qemu_tolower(*sp);
 	switch (c) {
 	default:
 		return i;
@@ -422,31 +418,37 @@ cvtstr(
 	char		*str,
 	size_t		size)
 {
-	const char	*fmt;
-	int		precise;
-
-	precise = ((double)value * 1000 == (double)(int)value * 1000);
+	char		*trim;
+	const char	*suffix;
 
 	if (value >= EXABYTES(1)) {
-		fmt = precise ? "%.f EiB" : "%.3f EiB";
-		snprintf(str, size, fmt, TO_EXABYTES(value));
+		suffix = " EiB";
+		snprintf(str, size - 4, "%.3f", TO_EXABYTES(value));
 	} else if (value >= PETABYTES(1)) {
-		fmt = precise ? "%.f PiB" : "%.3f PiB";
-		snprintf(str, size, fmt, TO_PETABYTES(value));
+		suffix = " PiB";
+		snprintf(str, size - 4, "%.3f", TO_PETABYTES(value));
 	} else if (value >= TERABYTES(1)) {
-		fmt = precise ? "%.f TiB" : "%.3f TiB";
-		snprintf(str, size, fmt, TO_TERABYTES(value));
+		suffix = " TiB";
+		snprintf(str, size - 4, "%.3f", TO_TERABYTES(value));
 	} else if (value >= GIGABYTES(1)) {
-		fmt = precise ? "%.f GiB" : "%.3f GiB";
-		snprintf(str, size, fmt, TO_GIGABYTES(value));
+		suffix = " GiB";
+		snprintf(str, size - 4, "%.3f", TO_GIGABYTES(value));
 	} else if (value >= MEGABYTES(1)) {
-		fmt = precise ? "%.f MiB" : "%.3f MiB";
-		snprintf(str, size, fmt, TO_MEGABYTES(value));
+		suffix = " MiB";
+		snprintf(str, size - 4, "%.3f", TO_MEGABYTES(value));
 	} else if (value >= KILOBYTES(1)) {
-		fmt = precise ? "%.f KiB" : "%.3f KiB";
-		snprintf(str, size, fmt, TO_KILOBYTES(value));
+		suffix = " KiB";
+		snprintf(str, size - 4, "%.3f", TO_KILOBYTES(value));
 	} else {
-		snprintf(str, size, "%f bytes", value);
+		suffix = " bytes";
+		snprintf(str, size - 6, "%f", value);
+	}
+
+	trim = strstr(str, ".000");
+	if (trim) {
+		strcpy(trim, suffix);
+	} else {
+		strcat(str, suffix);
 	}
 }
 

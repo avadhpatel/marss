@@ -32,8 +32,8 @@
 #include "xen_common.h"
 #include "net.h"
 #include "xen_backend.h"
-#include "rwhandler.h"
 #include "trace.h"
+#include "exec-memory.h"
 
 #include <xenguest.h>
 
@@ -51,6 +51,9 @@
 
 typedef struct PCIXenPlatformState {
     PCIDevice  pci_dev;
+    MemoryRegion fixed_io;
+    MemoryRegion bar;
+    MemoryRegion mmio_bar;
     uint8_t flags; /* used only for version_id == 2 */
     int drivers_blacklisted;
     uint16_t driver_product_version;
@@ -76,17 +79,61 @@ static void log_writeb(PCIXenPlatformState *s, char val)
 }
 
 /* Xen Platform, Fixed IOPort */
+#define UNPLUG_ALL_IDE_DISKS 1
+#define UNPLUG_ALL_NICS 2
+#define UNPLUG_AUX_IDE_DISKS 4
+
+static void unplug_nic(PCIBus *b, PCIDevice *d)
+{
+    if (pci_get_word(d->config + PCI_CLASS_DEVICE) ==
+            PCI_CLASS_NETWORK_ETHERNET) {
+        /* Until qdev_free includes a call to object_unparent, we call it here
+         */
+        object_unparent(&d->qdev.parent_obj);
+        qdev_free(&d->qdev);
+    }
+}
+
+static void pci_unplug_nics(PCIBus *bus)
+{
+    pci_for_each_device(bus, 0, unplug_nic);
+}
+
+static void unplug_disks(PCIBus *b, PCIDevice *d)
+{
+    if (pci_get_word(d->config + PCI_CLASS_DEVICE) ==
+            PCI_CLASS_STORAGE_IDE) {
+        qdev_unplug(&(d->qdev), NULL);
+    }
+}
+
+static void pci_unplug_disks(PCIBus *bus)
+{
+    pci_for_each_device(bus, 0, unplug_disks);
+}
 
 static void platform_fixed_ioport_writew(void *opaque, uint32_t addr, uint32_t val)
 {
     PCIXenPlatformState *s = opaque;
 
-    switch (addr - XEN_PLATFORM_IOPORT) {
+    switch (addr) {
     case 0:
-        /* TODO: */
         /* Unplug devices.  Value is a bitmask of which devices to
            unplug, with bit 0 the IDE devices, bit 1 the network
            devices, and bit 2 the non-primary-master IDE devices. */
+        if (val & UNPLUG_ALL_IDE_DISKS) {
+            DPRINTF("unplug disks\n");
+            bdrv_drain_all();
+            bdrv_flush_all();
+            pci_unplug_disks(s->pci_dev.bus);
+        }
+        if (val & UNPLUG_ALL_NICS) {
+            DPRINTF("unplug nics\n");
+            pci_unplug_nics(s->pci_dev.bus);
+        }
+        if (val & UNPLUG_AUX_IDE_DISKS) {
+            DPRINTF("unplug auxiliary disks not supported\n");
+        }
         break;
     case 2:
         switch (val) {
@@ -108,7 +155,7 @@ static void platform_fixed_ioport_writew(void *opaque, uint32_t addr, uint32_t v
 static void platform_fixed_ioport_writel(void *opaque, uint32_t addr,
                                          uint32_t val)
 {
-    switch (addr - XEN_PLATFORM_IOPORT) {
+    switch (addr) {
     case 0:
         /* PV driver version */
         break;
@@ -119,7 +166,7 @@ static void platform_fixed_ioport_writeb(void *opaque, uint32_t addr, uint32_t v
 {
     PCIXenPlatformState *s = opaque;
 
-    switch (addr - XEN_PLATFORM_IOPORT) {
+    switch (addr) {
     case 0: /* Platform flags */ {
         hvmmem_type_t mem_type = (val & PFFLAG_ROM_LOCK) ?
             HVMMEM_ram_ro : HVMMEM_ram_rw;
@@ -142,7 +189,7 @@ static uint32_t platform_fixed_ioport_readw(void *opaque, uint32_t addr)
 {
     PCIXenPlatformState *s = opaque;
 
-    switch (addr - XEN_PLATFORM_IOPORT) {
+    switch (addr) {
     case 0:
         if (s->drivers_blacklisted) {
             /* The drivers will recognise this magic number and refuse
@@ -161,7 +208,7 @@ static uint32_t platform_fixed_ioport_readb(void *opaque, uint32_t addr)
 {
     PCIXenPlatformState *s = opaque;
 
-    switch (addr - XEN_PLATFORM_IOPORT) {
+    switch (addr) {
     case 0:
         /* Platform flags */
         return s->flags;
@@ -177,26 +224,37 @@ static void platform_fixed_ioport_reset(void *opaque)
 {
     PCIXenPlatformState *s = opaque;
 
-    platform_fixed_ioport_writeb(s, XEN_PLATFORM_IOPORT, 0);
+    platform_fixed_ioport_writeb(s, 0, 0);
 }
+
+const MemoryRegionPortio xen_platform_ioport[] = {
+    { 0, 16, 4, .write = platform_fixed_ioport_writel, },
+    { 0, 16, 2, .write = platform_fixed_ioport_writew, },
+    { 0, 16, 1, .write = platform_fixed_ioport_writeb, },
+    { 0, 16, 2, .read = platform_fixed_ioport_readw, },
+    { 0, 16, 1, .read = platform_fixed_ioport_readb, },
+    PORTIO_END_OF_LIST()
+};
+
+static const MemoryRegionOps platform_fixed_io_ops = {
+    .old_portio = xen_platform_ioport,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
 
 static void platform_fixed_ioport_init(PCIXenPlatformState* s)
 {
-    register_ioport_write(XEN_PLATFORM_IOPORT, 16, 4, platform_fixed_ioport_writel, s);
-    register_ioport_write(XEN_PLATFORM_IOPORT, 16, 2, platform_fixed_ioport_writew, s);
-    register_ioport_write(XEN_PLATFORM_IOPORT, 16, 1, platform_fixed_ioport_writeb, s);
-    register_ioport_read(XEN_PLATFORM_IOPORT, 16, 2, platform_fixed_ioport_readw, s);
-    register_ioport_read(XEN_PLATFORM_IOPORT, 16, 1, platform_fixed_ioport_readb, s);
+    memory_region_init_io(&s->fixed_io, &platform_fixed_io_ops, s,
+                          "xen-fixed", 16);
+    memory_region_add_subregion(get_system_io(), XEN_PLATFORM_IOPORT,
+                                &s->fixed_io);
 }
 
 /* Xen Platform PCI Device */
 
 static uint32_t xen_platform_ioport_readb(void *opaque, uint32_t addr)
 {
-    addr &= 0xff;
-
     if (addr == 0) {
-        return platform_fixed_ioport_readb(opaque, XEN_PLATFORM_IOPORT);
+        return platform_fixed_ioport_readb(opaque, 0);
     } else {
         return ~0u;
     }
@@ -206,12 +264,9 @@ static void xen_platform_ioport_writeb(void *opaque, uint32_t addr, uint32_t val
 {
     PCIXenPlatformState *s = opaque;
 
-    addr &= 0xff;
-    val  &= 0xff;
-
     switch (addr) {
     case 0: /* Platform flags */
-        platform_fixed_ioport_writeb(opaque, XEN_PLATFORM_IOPORT, val);
+        platform_fixed_ioport_writeb(opaque, 0, val);
         break;
     case 8:
         log_writeb(s, val);
@@ -221,15 +276,23 @@ static void xen_platform_ioport_writeb(void *opaque, uint32_t addr, uint32_t val
     }
 }
 
-static void platform_ioport_map(PCIDevice *pci_dev, int region_num, pcibus_t addr, pcibus_t size, int type)
-{
-    PCIXenPlatformState *d = DO_UPCAST(PCIXenPlatformState, pci_dev, pci_dev);
+static MemoryRegionPortio xen_pci_portio[] = {
+    { 0, 0x100, 1, .read = xen_platform_ioport_readb, },
+    { 0, 0x100, 1, .write = xen_platform_ioport_writeb, },
+    PORTIO_END_OF_LIST()
+};
 
-    register_ioport_write(addr, size, 1, xen_platform_ioport_writeb, d);
-    register_ioport_read(addr, size, 1, xen_platform_ioport_readb, d);
+static const MemoryRegionOps xen_pci_io_ops = {
+    .old_portio = xen_pci_portio,
+};
+
+static void platform_ioport_bar_setup(PCIXenPlatformState *d)
+{
+    memory_region_init_io(&d->bar, &xen_pci_io_ops, d, "xen-pci", 0x100);
 }
 
-static uint32_t platform_mmio_read(ReadWriteHandler *handler, pcibus_t addr, int len)
+static uint64_t platform_mmio_read(void *opaque, target_phys_addr_t addr,
+                                   unsigned size)
 {
     DPRINTF("Warning: attempted read from physical address "
             "0x" TARGET_FMT_plx " in xen platform mmio space\n", addr);
@@ -237,35 +300,31 @@ static uint32_t platform_mmio_read(ReadWriteHandler *handler, pcibus_t addr, int
     return 0;
 }
 
-static void platform_mmio_write(ReadWriteHandler *handler, pcibus_t addr,
-                                uint32_t val, int len)
+static void platform_mmio_write(void *opaque, target_phys_addr_t addr,
+                                uint64_t val, unsigned size)
 {
-    DPRINTF("Warning: attempted write of 0x%x to physical "
+    DPRINTF("Warning: attempted write of 0x%"PRIx64" to physical "
             "address 0x" TARGET_FMT_plx " in xen platform mmio space\n",
             val, addr);
 }
 
-static ReadWriteHandler platform_mmio_handler = {
+static const MemoryRegionOps platform_mmio_handler = {
     .read = &platform_mmio_read,
     .write = &platform_mmio_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-static void platform_mmio_map(PCIDevice *d, int region_num,
-                              pcibus_t addr, pcibus_t size, int type)
+static void platform_mmio_setup(PCIXenPlatformState *d)
 {
-    int mmio_io_addr;
-
-    mmio_io_addr = cpu_register_io_memory_simple(&platform_mmio_handler,
-                                                 DEVICE_NATIVE_ENDIAN);
-
-    cpu_register_physical_memory(addr, size, mmio_io_addr);
+    memory_region_init_io(&d->mmio_bar, &platform_mmio_handler, d,
+                          "xen-mmio", 0x1000000);
 }
 
 static int xen_platform_post_load(void *opaque, int version_id)
 {
     PCIXenPlatformState *s = opaque;
 
-    platform_fixed_ioport_writeb(s, XEN_PLATFORM_IOPORT, s->flags);
+    platform_fixed_ioport_writeb(s, 0, s->flags);
 
     return 0;
 }
@@ -296,12 +355,13 @@ static int xen_platform_initfn(PCIDevice *dev)
 
     pci_conf[PCI_INTERRUPT_PIN] = 1;
 
-    pci_register_bar(&d->pci_dev, 0, 0x100,
-            PCI_BASE_ADDRESS_SPACE_IO, platform_ioport_map);
+    platform_ioport_bar_setup(d);
+    pci_register_bar(&d->pci_dev, 0, PCI_BASE_ADDRESS_SPACE_IO, &d->bar);
 
     /* reserve 16MB mmio address for share memory*/
-    pci_register_bar(&d->pci_dev, 1, 0x1000000,
-            PCI_BASE_ADDRESS_MEM_PREFETCH, platform_mmio_map);
+    platform_mmio_setup(d);
+    pci_register_bar(&d->pci_dev, 1, PCI_BASE_ADDRESS_MEM_PREFETCH,
+                     &d->mmio_bar);
 
     platform_fixed_ioport_init(d);
 
@@ -315,25 +375,33 @@ static void platform_reset(DeviceState *dev)
     platform_fixed_ioport_reset(s);
 }
 
-static PCIDeviceInfo xen_platform_info = {
-    .init = xen_platform_initfn,
-    .qdev.name = "xen-platform",
-    .qdev.desc = "XEN platform pci device",
-    .qdev.size = sizeof(PCIXenPlatformState),
-    .qdev.vmsd = &vmstate_xen_platform,
-    .qdev.reset = platform_reset,
-
-    .vendor_id    =  PCI_VENDOR_ID_XEN,
-    .device_id    = PCI_DEVICE_ID_XEN_PLATFORM,
-    .class_id     = PCI_CLASS_OTHERS << 8 | 0x80,
-    .subsystem_vendor_id = PCI_VENDOR_ID_XEN,
-    .subsystem_id = PCI_DEVICE_ID_XEN_PLATFORM,
-    .revision = 1,
-};
-
-static void xen_platform_register(void)
+static void xen_platform_class_init(ObjectClass *klass, void *data)
 {
-    pci_qdev_register(&xen_platform_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->init = xen_platform_initfn;
+    k->vendor_id = PCI_VENDOR_ID_XEN;
+    k->device_id = PCI_DEVICE_ID_XEN_PLATFORM;
+    k->class_id = PCI_CLASS_OTHERS << 8 | 0x80;
+    k->subsystem_vendor_id = PCI_VENDOR_ID_XEN;
+    k->subsystem_id = PCI_DEVICE_ID_XEN_PLATFORM;
+    k->revision = 1;
+    dc->desc = "XEN platform pci device";
+    dc->reset = platform_reset;
+    dc->vmsd = &vmstate_xen_platform;
 }
 
-device_init(xen_platform_register);
+static TypeInfo xen_platform_info = {
+    .name          = "xen-platform",
+    .parent        = TYPE_PCI_DEVICE,
+    .instance_size = sizeof(PCIXenPlatformState),
+    .class_init    = xen_platform_class_init,
+};
+
+static void xen_platform_register_types(void)
+{
+    type_register_static(&xen_platform_info);
+}
+
+type_init(xen_platform_register_types)

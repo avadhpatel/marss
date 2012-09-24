@@ -18,10 +18,6 @@
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <string.h>
-
-#include "config.h"
 #include "cpu.h"
 #include "mmu.h"
 #include "host-utils.h"
@@ -40,14 +36,14 @@
 
 #if defined(CONFIG_USER_ONLY)
 
-void do_interrupt (CPUState *env)
+void do_interrupt (CPUCRISState *env)
 {
 	env->exception_index = -1;
 	env->pregs[PR_ERP] = env->pc;
 }
 
-int cpu_cris_handle_mmu_fault(CPUState * env, target_ulong address, int rw,
-                             int mmu_idx, int is_softmmu)
+int cpu_cris_handle_mmu_fault(CPUCRISState * env, target_ulong address, int rw,
+                              int mmu_idx)
 {
 	env->exception_index = 0xaa;
 	env->pregs[PR_EDA] = address;
@@ -58,7 +54,7 @@ int cpu_cris_handle_mmu_fault(CPUState * env, target_ulong address, int rw,
 #else /* !CONFIG_USER_ONLY */
 
 
-static void cris_shift_ccs(CPUState *env)
+static void cris_shift_ccs(CPUCRISState *env)
 {
 	uint32_t ccs;
 	/* Apply the ccs shift.  */
@@ -67,8 +63,8 @@ static void cris_shift_ccs(CPUState *env)
 	env->pregs[PR_CCS] = ccs;
 }
 
-int cpu_cris_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
-                               int mmu_idx, int is_softmmu)
+int cpu_cris_handle_mmu_fault (CPUCRISState *env, target_ulong address, int rw,
+                               int mmu_idx)
 {
 	struct cris_mmu_result res;
 	int prot, miss;
@@ -104,14 +100,13 @@ int cpu_cris_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
                 r = 0;
 	}
 	if (r > 0)
-		D_LOG("%s returns %d irqreq=%x addr=%x"
-			  " phy=%x ismmu=%d vec=%x pc=%x\n", 
-			  __func__, r, env->interrupt_request, 
-			  address, res.phy, is_softmmu, res.bf_vec, env->pc);
+            D_LOG("%s returns %d irqreq=%x addr=%x phy=%x vec=%x pc=%x\n",
+                  __func__, r, env->interrupt_request, address, res.phy,
+                  res.bf_vec, env->pc);
 	return r;
 }
 
-static void do_interruptv10(CPUState *env)
+static void do_interruptv10(CPUCRISState *env)
 {
 	int ex_vec = -1;
 
@@ -158,6 +153,7 @@ static void do_interruptv10(CPUState *env)
 	/* Now that we are in kernel mode, load the handlers address.  */
 	env->pc = ldl_code(env->pregs[PR_EBP] + ex_vec * 4);
 	env->locked_irq = 1;
+	env->pregs[PR_CCS] |= F_FLAG_V10; /* set F.  */
 
 	qemu_log_mask(CPU_LOG_INT, "%s isr=%x vec=%x ccs=%x pid=%d erp=%x\n",
 		      __func__, env->pc, ex_vec,
@@ -166,7 +162,7 @@ static void do_interruptv10(CPUState *env)
 		      env->pregs[PR_ERP]);
 }
 
-void do_interrupt(CPUState *env)
+void do_interrupt(CPUCRISState *env)
 {
 	int ex_vec = -1;
 
@@ -250,7 +246,7 @@ void do_interrupt(CPUState *env)
 		   env->pregs[PR_ERP]);
 }
 
-target_phys_addr_t cpu_get_phys_page_debug(CPUState * env, target_ulong addr)
+target_phys_addr_t cpu_get_phys_page_debug(CPUCRISState * env, target_ulong addr)
 {
 	uint32_t phy = addr;
 	struct cris_mmu_result res;

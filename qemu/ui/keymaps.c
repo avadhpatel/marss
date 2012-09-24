@@ -52,7 +52,7 @@ static void add_to_key_range(struct key_range **krp, int code) {
 	}
     }
     if (kr == NULL) {
-	kr = qemu_mallocz(sizeof(*kr));
+	kr = g_malloc0(sizeof(*kr));
         kr->start = kr->end = code;
         kr->next = *krp;
         *krp = kr;
@@ -92,15 +92,17 @@ static kbd_layout_t *parse_keyboard_layout(const name2keysym_t *table,
     int len;
 
     filename = qemu_find_file(QEMU_FILE_TYPE_KEYMAP, language);
-
-    if (!k)
-	k = qemu_mallocz(sizeof(kbd_layout_t));
-    if (!(filename && (f = fopen(filename, "r")))) {
+    f = filename ? fopen(filename, "r") : NULL;
+    g_free(filename);
+    if (!f) {
 	fprintf(stderr,
 		"Could not read keymap file: '%s'\n", language);
 	return NULL;
     }
-    qemu_free(filename);
+
+    if (!k)
+	k = g_malloc0(sizeof(kbd_layout_t));
+
     for(;;) {
 	if (fgets(line, 1024, f) == NULL)
             break;
@@ -146,7 +148,7 @@ static kbd_layout_t *parse_keyboard_layout(const name2keysym_t *table,
 		    if (rest && strstr(rest, "addupper")) {
 			char *c;
 			for (c = line; *c; c++)
-			    *c = toupper(*c);
+			    *c = qemu_toupper(*c);
 			keysym = get_keysym(table, line);
 			if (keysym)
 			    add_keysym(line, keysym, keycode | SCANCODE_SHIFT, k);

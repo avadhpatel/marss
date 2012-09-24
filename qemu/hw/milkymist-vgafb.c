@@ -2,7 +2,7 @@
 /*
  *  QEMU model of the Milkymist VGA framebuffer.
  *
- *  Copyright (c) 2010 Michael Walle <michael@walle.cc>
+ *  Copyright (c) 2010-2012 Michael Walle <michael@walle.cc>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -54,6 +54,7 @@ enum {
     R_BASEADDRESS,
     R_BASEADDRESS_ACT,
     R_BURST_COUNT,
+    R_DDC,
     R_SOURCE_CLOCK,
     R_MAX
 };
@@ -64,6 +65,7 @@ enum {
 
 struct MilkymistVgafbState {
     SysBusDevice busdev;
+    MemoryRegion regs_region;
     DisplayState *ds;
 
     int invalidate;
@@ -119,7 +121,7 @@ static void vgafb_update_display(void *opaque)
         break;
     }
 
-    framebuffer_update_display(s->ds,
+    framebuffer_update_display(s->ds, sysbus_address_space(&s->busdev),
                                s->regs[R_BASEADDRESS] + s->fb_offset,
                                s->regs[R_HRES],
                                s->regs[R_VRES],
@@ -153,7 +155,8 @@ static void vgafb_resize(MilkymistVgafbState *s)
     s->invalidate = 1;
 }
 
-static uint32_t vgafb_read(void *opaque, target_phys_addr_t addr)
+static uint64_t vgafb_read(void *opaque, target_phys_addr_t addr,
+                           unsigned size)
 {
     MilkymistVgafbState *s = opaque;
     uint32_t r = 0;
@@ -171,6 +174,7 @@ static uint32_t vgafb_read(void *opaque, target_phys_addr_t addr)
     case R_VSCAN:
     case R_BASEADDRESS:
     case R_BURST_COUNT:
+    case R_DDC:
     case R_SOURCE_CLOCK:
         r = s->regs[addr];
     break;
@@ -189,8 +193,8 @@ static uint32_t vgafb_read(void *opaque, target_phys_addr_t addr)
     return r;
 }
 
-static void
-vgafb_write(void *opaque, target_phys_addr_t addr, uint32_t value)
+static void vgafb_write(void *opaque, target_phys_addr_t addr, uint64_t value,
+                        unsigned size)
 {
     MilkymistVgafbState *s = opaque;
 
@@ -209,6 +213,7 @@ vgafb_write(void *opaque, target_phys_addr_t addr, uint32_t value)
     case R_VSYNC_END:
     case R_VSCAN:
     case R_BURST_COUNT:
+    case R_DDC:
     case R_SOURCE_CLOCK:
         s->regs[addr] = value;
         break;
@@ -238,16 +243,14 @@ vgafb_write(void *opaque, target_phys_addr_t addr, uint32_t value)
     }
 }
 
-static CPUReadMemoryFunc * const vgafb_read_fn[] = {
-   NULL,
-   NULL,
-   &vgafb_read
-};
-
-static CPUWriteMemoryFunc * const vgafb_write_fn[] = {
-   NULL,
-   NULL,
-   &vgafb_write
+static const MemoryRegionOps vgafb_mmio_ops = {
+    .read = vgafb_read,
+    .write = vgafb_write,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 static void milkymist_vgafb_reset(DeviceState *d)
@@ -269,11 +272,10 @@ static void milkymist_vgafb_reset(DeviceState *d)
 static int milkymist_vgafb_init(SysBusDevice *dev)
 {
     MilkymistVgafbState *s = FROM_SYSBUS(typeof(*s), dev);
-    int vgafb_regs;
 
-    vgafb_regs = cpu_register_io_memory(vgafb_read_fn, vgafb_write_fn, s,
-            DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, R_MAX * 4, vgafb_regs);
+    memory_region_init_io(&s->regs_region, &vgafb_mmio_ops, s,
+            "milkymist-vgafb", R_MAX * 4);
+    sysbus_init_mmio(dev, &s->regs_region);
 
     s->ds = graphic_console_init(vgafb_update_display,
                                  vgafb_invalidate_display,
@@ -300,22 +302,33 @@ static const VMStateDescription vmstate_milkymist_vgafb = {
     }
 };
 
-static SysBusDeviceInfo milkymist_vgafb_info = {
-    .init = milkymist_vgafb_init,
-    .qdev.name  = "milkymist-vgafb",
-    .qdev.size  = sizeof(MilkymistVgafbState),
-    .qdev.vmsd  = &vmstate_milkymist_vgafb,
-    .qdev.reset = milkymist_vgafb_reset,
-    .qdev.props = (Property[]) {
-        DEFINE_PROP_UINT32("fb_offset", MilkymistVgafbState, fb_offset, 0x0),
-        DEFINE_PROP_UINT32("fb_mask", MilkymistVgafbState, fb_mask, 0xffffffff),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+static Property milkymist_vgafb_properties[] = {
+    DEFINE_PROP_UINT32("fb_offset", MilkymistVgafbState, fb_offset, 0x0),
+    DEFINE_PROP_UINT32("fb_mask", MilkymistVgafbState, fb_mask, 0xffffffff),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void milkymist_vgafb_register(void)
+static void milkymist_vgafb_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&milkymist_vgafb_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = milkymist_vgafb_init;
+    dc->reset = milkymist_vgafb_reset;
+    dc->vmsd = &vmstate_milkymist_vgafb;
+    dc->props = milkymist_vgafb_properties;
 }
 
-device_init(milkymist_vgafb_register)
+static TypeInfo milkymist_vgafb_info = {
+    .name          = "milkymist-vgafb",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(MilkymistVgafbState),
+    .class_init    = milkymist_vgafb_class_init,
+};
+
+static void milkymist_vgafb_register_types(void)
+{
+    type_register_static(&milkymist_vgafb_info);
+}
+
+type_init(milkymist_vgafb_register_types)

@@ -20,11 +20,8 @@
 #include "monitor.h"
 #include "sysbus.h"
 #include "isa.h"
+#include "exec-memory.h"
 
-struct ISABus {
-    BusState qbus;
-    qemu_irq *irqs;
-};
 static ISABus *isabus;
 target_phys_addr_t isa_mem_base = 0;
 
@@ -38,7 +35,7 @@ static struct BusInfo isa_bus_info = {
     .get_fw_dev_path = isabus_get_fw_dev_path,
 };
 
-ISABus *isa_bus_new(DeviceState *dev)
+ISABus *isa_bus_new(DeviceState *dev, MemoryRegion *address_space_io)
 {
     if (isabus) {
         fprintf(stderr, "Can't create a second ISA bus\n");
@@ -50,12 +47,16 @@ ISABus *isa_bus_new(DeviceState *dev)
     }
 
     isabus = FROM_QBUS(ISABus, qbus_create(&isa_bus_info, dev, NULL));
+    isabus->address_space_io = address_space_io;
     return isabus;
 }
 
-void isa_bus_irqs(qemu_irq *irqs)
+void isa_bus_irqs(ISABus *bus, qemu_irq *irqs)
 {
-    isabus->irqs = irqs;
+    if (!bus) {
+        hw_error("Can't set isa irqs with no isa bus present.");
+    }
+    bus->irqs = irqs;
 }
 
 /*
@@ -64,8 +65,9 @@ void isa_bus_irqs(qemu_irq *irqs)
  * This function is only for special cases such as the 'ferr', and
  * temporary use for normal devices until they are converted to qdev.
  */
-qemu_irq isa_get_irq(int isairq)
+qemu_irq isa_get_irq(ISADevice *dev, int isairq)
 {
+    assert(!dev || DO_UPCAST(ISABus, qbus, dev->qdev.parent_bus) == isabus);
     if (isairq < 0 || isairq > 15) {
         hw_error("isa irq %d invalid", isairq);
     }
@@ -76,89 +78,89 @@ void isa_init_irq(ISADevice *dev, qemu_irq *p, int isairq)
 {
     assert(dev->nirqs < ARRAY_SIZE(dev->isairq));
     dev->isairq[dev->nirqs] = isairq;
-    *p = isa_get_irq(isairq);
+    *p = isa_get_irq(dev, isairq);
     dev->nirqs++;
 }
 
-static void isa_init_ioport_one(ISADevice *dev, uint16_t ioport)
+static inline void isa_init_ioport(ISADevice *dev, uint16_t ioport)
 {
-    assert(dev->nioports < ARRAY_SIZE(dev->ioports));
-    dev->ioports[dev->nioports++] = ioport;
-}
-
-static int isa_cmp_ports(const void *p1, const void *p2)
-{
-    return *(uint16_t*)p1 - *(uint16_t*)p2;
-}
-
-void isa_init_ioport_range(ISADevice *dev, uint16_t start, uint16_t length)
-{
-    int i;
-    for (i = start; i < start + length; i++) {
-        isa_init_ioport_one(dev, i);
+    if (dev && (dev->ioport_id == 0 || ioport < dev->ioport_id)) {
+        dev->ioport_id = ioport;
     }
-    qsort(dev->ioports, dev->nioports, sizeof(dev->ioports[0]), isa_cmp_ports);
 }
 
-void isa_init_ioport(ISADevice *dev, uint16_t ioport)
+void isa_register_ioport(ISADevice *dev, MemoryRegion *io, uint16_t start)
 {
-    isa_init_ioport_range(dev, ioport, 1);
+    memory_region_add_subregion(isabus->address_space_io, start, io);
+    isa_init_ioport(dev, start);
 }
 
-static int isa_qdev_init(DeviceState *qdev, DeviceInfo *base)
+void isa_register_portio_list(ISADevice *dev, uint16_t start,
+                              const MemoryRegionPortio *pio_start,
+                              void *opaque, const char *name)
 {
-    ISADevice *dev = DO_UPCAST(ISADevice, qdev, qdev);
-    ISADeviceInfo *info = DO_UPCAST(ISADeviceInfo, qdev, base);
+    PortioList *piolist = g_new(PortioList, 1);
+
+    /* START is how we should treat DEV, regardless of the actual
+       contents of the portio array.  This is how the old code
+       actually handled e.g. the FDC device.  */
+    isa_init_ioport(dev, start);
+
+    portio_list_init(piolist, pio_start, opaque, name);
+    portio_list_add(piolist, isabus->address_space_io, start);
+}
+
+static int isa_qdev_init(DeviceState *qdev)
+{
+    ISADevice *dev = ISA_DEVICE(qdev);
+    ISADeviceClass *klass = ISA_DEVICE_GET_CLASS(dev);
 
     dev->isairq[0] = -1;
     dev->isairq[1] = -1;
 
-    return info->init(dev);
+    if (klass->init) {
+        return klass->init(dev);
+    }
+
+    return 0;
 }
 
-void isa_qdev_register(ISADeviceInfo *info)
-{
-    info->qdev.init = isa_qdev_init;
-    info->qdev.bus_info = &isa_bus_info;
-    qdev_register(&info->qdev);
-}
-
-ISADevice *isa_create(const char *name)
+ISADevice *isa_create(ISABus *bus, const char *name)
 {
     DeviceState *dev;
 
-    if (!isabus) {
+    if (!bus) {
         hw_error("Tried to create isa device %s with no isa bus present.",
                  name);
     }
-    dev = qdev_create(&isabus->qbus, name);
-    return DO_UPCAST(ISADevice, qdev, dev);
+    dev = qdev_create(&bus->qbus, name);
+    return ISA_DEVICE(dev);
 }
 
-ISADevice *isa_try_create(const char *name)
+ISADevice *isa_try_create(ISABus *bus, const char *name)
 {
     DeviceState *dev;
 
-    if (!isabus) {
+    if (!bus) {
         hw_error("Tried to create isa device %s with no isa bus present.",
                  name);
     }
-    dev = qdev_try_create(&isabus->qbus, name);
-    return DO_UPCAST(ISADevice, qdev, dev);
+    dev = qdev_try_create(&bus->qbus, name);
+    return ISA_DEVICE(dev);
 }
 
-ISADevice *isa_create_simple(const char *name)
+ISADevice *isa_create_simple(ISABus *bus, const char *name)
 {
     ISADevice *dev;
 
-    dev = isa_create(name);
+    dev = isa_create(bus, name);
     qdev_init_nofail(&dev->qdev);
     return dev;
 }
 
 static void isabus_dev_print(Monitor *mon, DeviceState *dev, int indent)
 {
-    ISADevice *d = DO_UPCAST(ISADevice, qdev, dev);
+    ISADevice *d = ISA_DEVICE(dev);
 
     if (d->isairq[1] != -1) {
         monitor_printf(mon, "%*sisa irqs %d,%d\n", indent, "",
@@ -175,17 +177,43 @@ static int isabus_bridge_init(SysBusDevice *dev)
     return 0;
 }
 
-static SysBusDeviceInfo isabus_bridge_info = {
-    .init = isabus_bridge_init,
-    .qdev.name  = "isabus-bridge",
-    .qdev.fw_name  = "isa",
-    .qdev.size  = sizeof(SysBusDevice),
-    .qdev.no_user = 1,
+static void isabus_bridge_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = isabus_bridge_init;
+    dc->fw_name = "isa";
+    dc->no_user = 1;
+}
+
+static TypeInfo isabus_bridge_info = {
+    .name          = "isabus-bridge",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(SysBusDevice),
+    .class_init    = isabus_bridge_class_init,
 };
 
-static void isabus_register_devices(void)
+static void isa_device_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&isabus_bridge_info);
+    DeviceClass *k = DEVICE_CLASS(klass);
+    k->init = isa_qdev_init;
+    k->bus_info = &isa_bus_info;
+}
+
+static TypeInfo isa_device_type_info = {
+    .name = TYPE_ISA_DEVICE,
+    .parent = TYPE_DEVICE,
+    .instance_size = sizeof(ISADevice),
+    .abstract = true,
+    .class_size = sizeof(ISADeviceClass),
+    .class_init = isa_device_class_init,
+};
+
+static void isabus_register_types(void)
+{
+    type_register_static(&isabus_bridge_info);
+    type_register_static(&isa_device_type_info);
 }
 
 static char *isabus_get_fw_dev_path(DeviceState *dev)
@@ -195,11 +223,16 @@ static char *isabus_get_fw_dev_path(DeviceState *dev)
     int off;
 
     off = snprintf(path, sizeof(path), "%s", qdev_fw_name(dev));
-    if (d->nioports) {
-        snprintf(path + off, sizeof(path) - off, "@%04x", d->ioports[0]);
+    if (d->ioport_id) {
+        snprintf(path + off, sizeof(path) - off, "@%04x", d->ioport_id);
     }
 
     return strdup(path);
 }
 
-device_init(isabus_register_devices)
+MemoryRegion *isa_address_space(ISADevice *dev)
+{
+    return get_system_memory();
+}
+
+type_init(isabus_register_types)

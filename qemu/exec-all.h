@@ -76,32 +76,44 @@ extern uint16_t gen_opc_icount[OPC_BUF_SIZE];
 
 #include "qemu-log.h"
 
-void gen_intermediate_code(CPUState *env, struct TranslationBlock *tb);
-void gen_intermediate_code_pc(CPUState *env, struct TranslationBlock *tb);
-void restore_state_to_opc(CPUState *env, struct TranslationBlock *tb,
+void gen_intermediate_code(CPUArchState *env, struct TranslationBlock *tb);
+void gen_intermediate_code_pc(CPUArchState *env, struct TranslationBlock *tb);
+void restore_state_to_opc(CPUArchState *env, struct TranslationBlock *tb,
                           int pc_pos);
 
 void cpu_gen_init(void);
-int cpu_gen_code(CPUState *env, struct TranslationBlock *tb,
+int cpu_gen_code(CPUArchState *env, struct TranslationBlock *tb,
                  int *gen_code_size_ptr);
 int cpu_restore_state(struct TranslationBlock *tb,
-                      CPUState *env, unsigned long searched_pc);
-void cpu_resume_from_signal(CPUState *env1, void *puc);
-void cpu_io_recompile(CPUState *env, void *retaddr);
-TranslationBlock *tb_gen_code(CPUState *env, 
+                      CPUArchState *env, uintptr_t searched_pc);
+void QEMU_NORETURN cpu_resume_from_signal(CPUArchState *env1, void *puc);
+void QEMU_NORETURN cpu_io_recompile(CPUArchState *env, uintptr_t retaddr);
+TranslationBlock *tb_gen_code(CPUArchState *env,
                               target_ulong pc, target_ulong cs_base, int flags,
                               int cflags);
-void cpu_exec_init(CPUState *env);
-void QEMU_NORETURN cpu_loop_exit(CPUState *env1);
-int page_unprotect(target_ulong address, unsigned long pc, void *puc);
+void cpu_exec_init(CPUArchState *env);
+void QEMU_NORETURN cpu_loop_exit(CPUArchState *env1);
+int page_unprotect(target_ulong address, uintptr_t pc, void *puc);
 void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
                                    int is_cpu_write_access);
-void tlb_flush_page(CPUState *env, target_ulong addr);
-void tlb_flush(CPUState *env, int flush_global);
+void tb_invalidate_phys_range(tb_page_addr_t start, tb_page_addr_t end,
+                              int is_cpu_write_access);
 #if !defined(CONFIG_USER_ONLY)
-void tlb_set_page(CPUState *env, target_ulong vaddr,
+/* cputlb.c */
+void tlb_flush_page(CPUArchState *env, target_ulong addr);
+void tlb_flush(CPUArchState *env, int flush_global);
+void tlb_set_page(CPUArchState *env, target_ulong vaddr,
                   target_phys_addr_t paddr, int prot,
                   int mmu_idx, target_ulong size);
+void tb_invalidate_phys_addr(target_phys_addr_t addr);
+#else
+static inline void tlb_flush_page(CPUArchState *env, target_ulong addr)
+{
+}
+
+static inline void tlb_flush(CPUArchState *env, int flush_global)
+{
+}
 #endif
 
 #define CODE_GEN_ALIGN           16 /* must be >= of the size of a icache line */
@@ -121,6 +133,8 @@ void tlb_set_page(CPUState *env, target_ulong vaddr,
 #endif
 
 #if defined(_ARCH_PPC) || defined(__x86_64__) || defined(__arm__) || defined(__i386__)
+#define USE_DIRECT_JUMP
+#elif defined(CONFIG_TCG_INTERPRETER)
 #define USE_DIRECT_JUMP
 #endif
 
@@ -148,7 +162,7 @@ struct TranslationBlock {
 #ifdef USE_DIRECT_JUMP
     uint16_t tb_jmp_offset[2]; /* offset of jump instruction */
 #else
-    unsigned long tb_next[2]; /* address of jump generated code */
+    uintptr_t tb_next[2]; /* address of jump generated code */
 #endif
     /* list of TBs jumping to this one. This is a circular list using
        the two least significant bits of the pointers to tell what is
@@ -180,7 +194,7 @@ static inline unsigned int tb_phys_hash_func(tb_page_addr_t pc)
 }
 
 void tb_free(TranslationBlock *tb);
-void tb_flush(CPUState *env);
+void tb_flush(CPUArchState *env);
 void tb_link_page(TranslationBlock *tb,
                   tb_page_addr_t phys_pc, tb_page_addr_t phys_page2);
 void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr);
@@ -189,18 +203,25 @@ extern TranslationBlock *tb_phys_hash[CODE_GEN_PHYS_HASH_SIZE];
 
 #if defined(USE_DIRECT_JUMP)
 
-#if defined(_ARCH_PPC)
+#if defined(CONFIG_TCG_INTERPRETER)
+static inline void tb_set_jmp_target1(uintptr_t jmp_addr, uintptr_t addr)
+{
+    /* patch the branch destination */
+    *(uint32_t *)jmp_addr = addr - (jmp_addr + 4);
+    /* no need to flush icache explicitly */
+}
+#elif defined(_ARCH_PPC)
 void ppc_tb_set_jmp_target(unsigned long jmp_addr, unsigned long addr);
 #define tb_set_jmp_target1 ppc_tb_set_jmp_target
 #elif defined(__i386__) || defined(__x86_64__)
-static inline void tb_set_jmp_target1(unsigned long jmp_addr, unsigned long addr)
+static inline void tb_set_jmp_target1(uintptr_t jmp_addr, uintptr_t addr)
 {
     /* patch the branch destination */
     *(uint32_t *)jmp_addr = addr - (jmp_addr + 4);
     /* no need to flush icache explicitly */
 }
 #elif defined(__arm__)
-static inline void tb_set_jmp_target1(unsigned long jmp_addr, unsigned long addr)
+static inline void tb_set_jmp_target1(uintptr_t jmp_addr, uintptr_t addr)
 {
 #if !QEMU_GNUC_PREREQ(4, 1)
     register unsigned long _beg __asm ("a1");
@@ -223,22 +244,22 @@ static inline void tb_set_jmp_target1(unsigned long jmp_addr, unsigned long addr
     __asm __volatile__ ("swi 0x9f0002" : : "r" (_beg), "r" (_end), "r" (_flg));
 #endif
 }
+#else
+#error tb_set_jmp_target1 is missing
 #endif
 
 static inline void tb_set_jmp_target(TranslationBlock *tb,
-                                     int n, unsigned long addr)
+                                     int n, uintptr_t addr)
 {
-    unsigned long offset;
-
-    offset = tb->tb_jmp_offset[n];
-    tb_set_jmp_target1((unsigned long)(tb->tc_ptr + offset), addr);
+    uint16_t offset = tb->tb_jmp_offset[n];
+    tb_set_jmp_target1((uintptr_t)(tb->tc_ptr + offset), addr);
 }
 
 #else
 
 /* set the jump target */
 static inline void tb_set_jmp_target(TranslationBlock *tb,
-                                     int n, unsigned long addr)
+                                     int n, uintptr_t addr)
 {
     tb->tb_next[n] = addr;
 }
@@ -251,15 +272,15 @@ static inline void tb_add_jump(TranslationBlock *tb, int n,
     /* NOTE: this test is only needed for thread safety */
     if (!tb->jmp_next[n]) {
         /* patch the native jump address */
-        tb_set_jmp_target(tb, n, (unsigned long)tb_next->tc_ptr);
+        tb_set_jmp_target(tb, n, (uintptr_t)tb_next->tc_ptr);
 
         /* add in TB jmp circular list */
         tb->jmp_next[n] = tb_next->jmp_first;
-        tb_next->jmp_first = (TranslationBlock *)((long)(tb) | (n));
+        tb_next->jmp_first = (TranslationBlock *)((uintptr_t)(tb) | (n));
     }
 }
 
-TranslationBlock *tb_find_pc(unsigned long pc_ptr);
+TranslationBlock *tb_find_pc(uintptr_t pc_ptr);
 
 #include "qemu-lock.h"
 
@@ -267,20 +288,44 @@ extern spinlock_t tb_lock;
 
 extern int tb_invalidated_flag;
 
+/* The return address may point to the start of the next instruction.
+   Subtracting one gets us the call instruction itself.  */
+#if defined(CONFIG_TCG_INTERPRETER)
+/* Alpha and SH4 user mode emulations and Softmmu call GETPC().
+   For all others, GETPC remains undefined (which makes TCI a little faster. */
+# if defined(CONFIG_SOFTMMU) || defined(TARGET_ALPHA) || defined(TARGET_SH4)
+extern uintptr_t tci_tb_ptr;
+#  define GETPC() tci_tb_ptr
+# endif
+#elif defined(__s390__) && !defined(__s390x__)
+# define GETPC() \
+    (((uintptr_t)__builtin_return_address(0) & 0x7fffffffUL) - 1)
+#elif defined(__arm__)
+/* Thumb return addresses have the low bit set, so we need to subtract two.
+   This is still safe in ARM mode because instructions are 4 bytes.  */
+# define GETPC() ((uintptr_t)__builtin_return_address(0) - 2)
+#else
+# define GETPC() ((uintptr_t)__builtin_return_address(0) - 1)
+#endif
+
 #if !defined(CONFIG_USER_ONLY)
 
-extern CPUWriteMemoryFunc *io_mem_write[IO_MEM_NB_ENTRIES][4];
-extern CPUReadMemoryFunc *io_mem_read[IO_MEM_NB_ENTRIES][4];
-extern void *io_mem_opaque[IO_MEM_NB_ENTRIES];
+struct MemoryRegion *iotlb_to_region(target_phys_addr_t index);
+uint64_t io_mem_read(struct MemoryRegion *mr, target_phys_addr_t addr,
+                     unsigned size);
+void io_mem_write(struct MemoryRegion *mr, target_phys_addr_t addr,
+                  uint64_t value, unsigned size);
 
-void tlb_fill(target_ulong addr, int is_write, int mmu_idx,
-              void *retaddr);
+void tlb_fill(CPUArchState *env1, target_ulong addr, int is_write, int mmu_idx,
+              uintptr_t retaddr);
 
 #include "softmmu_defs.h"
 
 #define ACCESS_TYPE (NB_MMU_MODES + 1)
 #define MEMSUFFIX _code
+#ifndef CONFIG_TCG_PASS_AREG0
 #define env cpu_single_env
+#endif
 
 #define DATA_SIZE 1
 #include "softmmu_header.h"
@@ -301,40 +346,16 @@ void tlb_fill(target_ulong addr, int is_write, int mmu_idx,
 #endif
 
 #if defined(CONFIG_USER_ONLY)
-static inline tb_page_addr_t get_page_addr_code(CPUState *env1, target_ulong addr)
+static inline tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr)
 {
     return addr;
 }
 #else
-/* NOTE: this function can trigger an exception */
-/* NOTE2: the returned address is not exactly the physical address: it
-   is the offset relative to phys_ram_base */
-static inline tb_page_addr_t get_page_addr_code(CPUState *env1, target_ulong addr)
-{
-    int mmu_idx, page_index, pd;
-    void *p;
-
-    page_index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
-    mmu_idx = cpu_mmu_index(env1);
-    if (unlikely(env1->tlb_table[mmu_idx][page_index].addr_code !=
-                 (addr & TARGET_PAGE_MASK))) {
-        ldub_code(addr);
-    }
-    pd = env1->tlb_table[mmu_idx][page_index].addr_code & ~TARGET_PAGE_MASK;
-    if (pd > IO_MEM_ROM && !(pd & IO_MEM_ROMD)) {
-#if defined(TARGET_ALPHA) || defined(TARGET_MIPS) || defined(TARGET_SPARC)
-        cpu_unassigned_access(env1, addr, 0, 1, 0, 4);
-#else
-        cpu_abort(env1, "Trying to execute code outside RAM or ROM at 0x" TARGET_FMT_lx "\n", addr);
-#endif
-    }
-    p = (void *)((unsigned long)addr
-        + (unsigned long)env1->tlb_table[mmu_idx][page_index].addend);
-    return qemu_ram_addr_from_host_nofail(p);
-}
+/* cputlb.c */
+tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr);
 #endif
 
-typedef void (CPUDebugExcpHandler)(CPUState *env);
+typedef void (CPUDebugExcpHandler)(CPUArchState *env);
 
 CPUDebugExcpHandler *cpu_set_debug_excp_handler(CPUDebugExcpHandler *handler);
 
@@ -343,5 +364,19 @@ extern int singlestep;
 
 /* cpu-exec.c */
 extern volatile sig_atomic_t exit_request;
+
+/* Deterministic execution requires that IO only be performed on the last
+   instruction of a TB so that interrupts take effect immediately.  */
+static inline int can_do_io(CPUArchState *env)
+{
+    if (!use_icount) {
+        return 1;
+    }
+    /* If not executing code then assume we are ok.  */
+    if (!env->current_tb) {
+        return 1;
+    }
+    return env->can_do_io != 0;
+}
 
 #endif

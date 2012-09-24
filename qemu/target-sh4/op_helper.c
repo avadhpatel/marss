@@ -18,26 +18,26 @@
  */
 #include <assert.h>
 #include <stdlib.h>
-#include "exec.h"
+#include "cpu.h"
+#include "dyngen-exec.h"
 #include "helper.h"
 
-static void cpu_restore_state_from_retaddr(void *retaddr)
+static void cpu_restore_state_from_retaddr(uintptr_t retaddr)
 {
     TranslationBlock *tb;
-    unsigned long pc;
 
     if (retaddr) {
-        pc = (unsigned long) retaddr;
-        tb = tb_find_pc(pc);
+        tb = tb_find_pc(retaddr);
         if (tb) {
             /* the PC is inside the translated code. It means that we have
                a virtual CPU fault */
-            cpu_restore_state(tb, env, pc);
+            cpu_restore_state(tb, env, retaddr);
         }
     }
 }
 
 #ifndef CONFIG_USER_ONLY
+#include "softmmu_exec.h"
 
 #define MMUSUFFIX _mmu
 
@@ -53,16 +53,15 @@ static void cpu_restore_state_from_retaddr(void *retaddr)
 #define SHIFT 3
 #include "softmmu_template.h"
 
-void tlb_fill(target_ulong addr, int is_write, int mmu_idx, void *retaddr)
+void tlb_fill(CPUSH4State *env1, target_ulong addr, int is_write, int mmu_idx,
+              uintptr_t retaddr)
 {
-    CPUState *saved_env;
+    CPUSH4State *saved_env;
     int ret;
 
-    /* XXX: hack to restore env in all cases, even if not called from
-       generated code */
     saved_env = env;
-    env = cpu_single_env;
-    ret = cpu_sh4_handle_mmu_fault(env, addr, is_write, mmu_idx, 1);
+    env = env1;
+    ret = cpu_sh4_handle_mmu_fault(env, addr, is_write, mmu_idx);
     if (ret) {
         /* now we have a real cpu fault */
         cpu_restore_state_from_retaddr(retaddr);
@@ -83,7 +82,7 @@ void helper_ldtlb(void)
 #endif
 }
 
-static inline void raise_exception(int index, void *retaddr)
+static inline void raise_exception(int index, uintptr_t retaddr)
 {
     env->exception_index = index;
     cpu_restore_state_from_retaddr(retaddr);
@@ -446,7 +445,7 @@ void helper_ld_fpscr(uint32_t val)
     set_flush_to_zero((val & FPSCR_DN) != 0, &env->fp_status);
 }
 
-static void update_fpscr(void *retaddr)
+static void update_fpscr(uintptr_t retaddr)
 {
     int xcpt, cause, enable;
 

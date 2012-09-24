@@ -4,6 +4,7 @@
 #include "hw.h"
 #include "pci.h"
 #include "vga_int.h"
+#include "qemu-thread.h"
 
 #include "ui/qemu-spice.h"
 #include "ui/spice-display.h"
@@ -14,6 +15,14 @@ enum qxl_mode {
     QXL_MODE_COMPAT, /* spice 0.4.x */
     QXL_MODE_NATIVE,
 };
+
+#ifndef QXL_VRAM64_RANGE_INDEX
+#define QXL_VRAM64_RANGE_INDEX 4
+#endif
+
+#define QXL_UNDEFINED_IO UINT32_MAX
+
+#define QXL_NUM_DIRTY_RECTS 64
 
 typedef struct PCIQXLDevice {
     PCIDevice          pci;
@@ -30,6 +39,9 @@ typedef struct PCIQXLDevice {
     int32_t            num_memslots;
     int32_t            num_surfaces;
 
+    uint32_t           current_async;
+    QemuMutex          async_lock;
+
     struct guest_slots {
         QXLMemSlot     slot;
         void           *ptr;
@@ -42,10 +54,11 @@ typedef struct PCIQXLDevice {
         QXLSurfaceCreate surface;
         uint32_t       commands;
         uint32_t       resized;
-        int32_t        stride;
+        int32_t        qxl_stride;
+        uint32_t       abs_stride;
         uint32_t       bits_pp;
         uint32_t       bytes_pp;
-        uint8_t        *data, *flipped;
+        uint8_t        *data;
     } guest_primary;
 
     struct surfaces {
@@ -55,8 +68,10 @@ typedef struct PCIQXLDevice {
     } guest_surfaces;
     QXLPHYSICAL        guest_cursor;
 
+    QemuMutex          track_lock;
+
     /* thread signaling */
-    pthread_t          main;
+    QemuThread         main;
     int                pipe[2];
 
     /* ram pci bar */
@@ -72,19 +87,32 @@ typedef struct PCIQXLDevice {
     QXLRom             *rom;
     QXLModes           *modes;
     uint32_t           rom_size;
-    uint64_t           rom_offset;
+    MemoryRegion       rom_bar;
 
     /* vram pci bar */
     uint32_t           vram_size;
-    uint64_t           vram_offset;
+    MemoryRegion       vram_bar;
+    uint32_t           vram32_size;
+    MemoryRegion       vram32_bar;
 
     /* io bar */
-    uint32_t           io_base;
+    MemoryRegion       io_bar;
+
+    /* user-friendly properties (in megabytes) */
+    uint32_t          ram_size_mb;
+    uint32_t          vram_size_mb;
+    uint32_t          vram32_size_mb;
+
+    /* qxl_render_update state */
+    int                render_update_cookie_num;
+    int                num_dirty_rects;
+    QXLRect            dirty[QXL_NUM_DIRTY_RECTS];
+    QEMUBH            *update_area_bh;
 } PCIQXLDevice;
 
 #define PANIC_ON(x) if ((x)) {                         \
     printf("%s: PANIC %s failed\n", __FUNCTION__, #x); \
-    exit(-1);                                          \
+    abort();                                           \
 }
 
 #define dprint(_qxl, _level, _fmt, ...)                                 \
@@ -95,14 +123,31 @@ typedef struct PCIQXLDevice {
         }                                                               \
     } while (0)
 
+#define QXL_DEFAULT_REVISION QXL_REVISION_STABLE_V10
+
 /* qxl.c */
 void *qxl_phys2virt(PCIQXLDevice *qxl, QXLPHYSICAL phys, int group_id);
+void qxl_guest_bug(PCIQXLDevice *qxl, const char *msg, ...) GCC_FMT_ATTR(2, 3);
+
+void qxl_spice_update_area(PCIQXLDevice *qxl, uint32_t surface_id,
+                           struct QXLRect *area, struct QXLRect *dirty_rects,
+                           uint32_t num_dirty_rects,
+                           uint32_t clear_dirty_region,
+                           qxl_async_io async, QXLCookie *cookie);
+void qxl_spice_loadvm_commands(PCIQXLDevice *qxl, struct QXLCommandExt *ext,
+                               uint32_t count);
+void qxl_spice_oom(PCIQXLDevice *qxl);
+void qxl_spice_reset_memslots(PCIQXLDevice *qxl);
+void qxl_spice_reset_image_cache(PCIQXLDevice *qxl);
+void qxl_spice_reset_cursor(PCIQXLDevice *qxl);
 
 /* qxl-logger.c */
-void qxl_log_cmd_cursor(PCIQXLDevice *qxl, QXLCursorCmd *cmd, int group_id);
-void qxl_log_command(PCIQXLDevice *qxl, const char *ring, QXLCommandExt *ext);
+int qxl_log_cmd_cursor(PCIQXLDevice *qxl, QXLCursorCmd *cmd, int group_id);
+int qxl_log_command(PCIQXLDevice *qxl, const char *ring, QXLCommandExt *ext);
 
 /* qxl-render.c */
 void qxl_render_resize(PCIQXLDevice *qxl);
 void qxl_render_update(PCIQXLDevice *qxl);
-void qxl_render_cursor(PCIQXLDevice *qxl, QXLCommandExt *ext);
+int qxl_render_cursor(PCIQXLDevice *qxl, QXLCommandExt *ext);
+void qxl_render_update_area_done(PCIQXLDevice *qxl, QXLCookie *cookie);
+void qxl_render_update_area_bh(void *opaque);

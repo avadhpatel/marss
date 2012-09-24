@@ -1,7 +1,7 @@
 /* common syscall defines for all architectures */
 
 /* Note: although the syscall numbers change between architectures,
-   most of them stay the same, so we handle it by puting ifdefs if
+   most of them stay the same, so we handle it by putting ifdefs if
    necessary */
 
 #include "syscall_nr.h"
@@ -209,9 +209,9 @@ __target_cmsg_nxthdr (struct target_msghdr *__mhdr, struct target_cmsghdr *__cms
   struct target_cmsghdr *__ptr;
 
   __ptr = (struct target_cmsghdr *)((unsigned char *) __cmsg
-                                    + TARGET_CMSG_ALIGN (tswapl(__cmsg->cmsg_len)));
-  if ((unsigned long)((char *)(__ptr+1) - (char *)(size_t)tswapl(__mhdr->msg_control))
-      > tswapl(__mhdr->msg_controllen))
+                                    + TARGET_CMSG_ALIGN (tswapal(__cmsg->cmsg_len)));
+  if ((unsigned long)((char *)(__ptr+1) - (char *)(size_t)tswapal(__mhdr->msg_control))
+      > tswapal(__mhdr->msg_controllen))
     /* No more entries.  */
     return (struct target_cmsghdr *)0;
   return __cmsg;
@@ -292,7 +292,7 @@ static inline void tswap_sigset(target_sigset_t *d, const target_sigset_t *s)
 {
     int i;
     for(i = 0;i < TARGET_NSIG_WORDS; i++)
-        d->sig[i] = tswapl(s->sig[i]);
+        d->sig[i] = tswapal(s->sig[i]);
 }
 #else
 static inline void tswap_sigset(target_sigset_t *d, const target_sigset_t *s)
@@ -669,7 +669,7 @@ typedef struct target_siginfo {
  * SIGBUS si_codes
  */
 #define TARGET_BUS_ADRALN       (1)	/* invalid address alignment */
-#define TARGET_BUS_ADRERR       (2)	/* non-existant physical address */
+#define TARGET_BUS_ADRERR       (2)	/* non-existent physical address */
 #define TARGET_BUS_OBJERR       (3)	/* object specific hardware error */
 
 /*
@@ -687,10 +687,10 @@ struct target_rlimit {
 
 #if defined(TARGET_ALPHA)
 #define TARGET_RLIM_INFINITY	0x7fffffffffffffffull
-#elif defined(TARGET_MIPS) || defined(TARGET_SPARC)
+#elif defined(TARGET_MIPS) || (defined(TARGET_SPARC) && TARGET_ABI_BITS == 32)
 #define TARGET_RLIM_INFINITY	0x7fffffffUL
 #else
-#define TARGET_RLIM_INFINITY	((target_ulong)~0UL)
+#define TARGET_RLIM_INFINITY	((abi_ulong)-1)
 #endif
 
 #if defined(TARGET_MIPS)
@@ -716,8 +716,13 @@ struct target_rlimit {
 #define TARGET_RLIMIT_STACK		3
 #define TARGET_RLIMIT_CORE		4
 #define TARGET_RLIMIT_RSS		5
+#if defined(TARGET_SPARC)
+#define TARGET_RLIMIT_NOFILE		6
+#define TARGET_RLIMIT_NPROC		7
+#else
 #define TARGET_RLIMIT_NPROC		6
 #define TARGET_RLIMIT_NOFILE		7
+#endif
 #define TARGET_RLIMIT_MEMLOCK		8
 #define TARGET_RLIMIT_AS		9
 #define TARGET_RLIMIT_LOCKS		10
@@ -827,9 +832,11 @@ struct target_pollfd {
 #define TARGET_BLKSECTGET TARGET_IO(0x12,103)/* get max sectors per request (ll_rw_blk.c) */
 #define TARGET_BLKSSZGET  TARGET_IO(0x12,104)/* get block device sector size */
 /* A jump here: 108-111 have been used for various private purposes. */
-#define TARGET_BLKBSZGET  TARGET_IOR(0x12,112,sizeof(int))
-#define TARGET_BLKBSZSET  TARGET_IOW(0x12,113,sizeof(int))
-#define TARGET_BLKGETSIZE64 TARGET_IOR(0x12,114,sizeof(uint64_t)) /* return device size in bytes (u64 *arg) */
+#define TARGET_BLKBSZGET  TARGET_IOR(0x12,112,int)
+#define TARGET_BLKBSZSET  TARGET_IOW(0x12,113,int)
+#define TARGET_BLKGETSIZE64 TARGET_IOR(0x12,114,abi_ulong)
+                                             /* return device size in bytes
+                                                (u64 *arg) */
 #define TARGET_FIBMAP     TARGET_IO(0x00,1)  /* bmap access */
 #define TARGET_FIGETBSZ   TARGET_IO(0x00,2)  /* get the block size used for bmap */
 #define TARGET_FS_IOC_FIEMAP TARGET_IOWR('f',11,struct fiemap)
@@ -863,7 +870,7 @@ struct target_pollfd {
 #define TARGET_CDROM_GET_MCN		0x5311 /* Obtain the "Universal Product Code"
                                            if available (struct cdrom_mcn) */
 #define TARGET_CDROM_GET_UPC		TARGET_CDROM_GET_MCN  /* This one is depricated,
-                                          but here anyway for compatability */
+                                          but here anyway for compatibility */
 #define TARGET_CDROMRESET		0x5312 /* hard-reset the drive */
 #define TARGET_CDROMVOLREAD		0x5313 /* Get the drive's volume setting
                                           (struct cdrom_volctrl) */
@@ -983,6 +990,24 @@ struct target_pollfd {
 #define TARGET_VT_SETMODE             0x5602
 #define TARGET_VT_RELDISP             0x5605
 #define TARGET_VT_DISALLOCATE         0x5608
+
+/* device mapper */
+#define TARGET_DM_VERSION             TARGET_IOWRU(0xfd, 0x00)
+#define TARGET_DM_REMOVE_ALL          TARGET_IOWRU(0xfd, 0x01)
+#define TARGET_DM_LIST_DEVICES        TARGET_IOWRU(0xfd, 0x02)
+#define TARGET_DM_DEV_CREATE          TARGET_IOWRU(0xfd, 0x03)
+#define TARGET_DM_DEV_REMOVE          TARGET_IOWRU(0xfd, 0x04)
+#define TARGET_DM_DEV_RENAME          TARGET_IOWRU(0xfd, 0x05)
+#define TARGET_DM_DEV_SUSPEND         TARGET_IOWRU(0xfd, 0x06)
+#define TARGET_DM_DEV_STATUS          TARGET_IOWRU(0xfd, 0x07)
+#define TARGET_DM_DEV_WAIT            TARGET_IOWRU(0xfd, 0x08)
+#define TARGET_DM_TABLE_LOAD          TARGET_IOWRU(0xfd, 0x09)
+#define TARGET_DM_TABLE_CLEAR         TARGET_IOWRU(0xfd, 0x0a)
+#define TARGET_DM_TABLE_DEPS          TARGET_IOWRU(0xfd, 0x0b)
+#define TARGET_DM_TABLE_STATUS        TARGET_IOWRU(0xfd, 0x0c)
+#define TARGET_DM_LIST_VERSIONS       TARGET_IOWRU(0xfd, 0x0d)
+#define TARGET_DM_TARGET_MSG          TARGET_IOWRU(0xfd, 0x0e)
+#define TARGET_DM_DEV_SET_GEOMETRY    TARGET_IOWRU(0xfd, 0x0f)
 
 /* from asm/termbits.h */
 
@@ -1120,7 +1145,7 @@ struct target_stat64 {
 	abi_ulong	__pad7;		/* will be high 32 bits of ctime someday */
 
 	unsigned long long	st_ino;
-} __attribute__((packed));
+} QEMU_PACKED;
 
 #ifdef TARGET_ARM
 struct target_eabi_stat64 {
@@ -1151,7 +1176,7 @@ struct target_eabi_stat64 {
         abi_ulong    target_st_ctime_nsec;
 
         unsigned long long st_ino;
-} __attribute__ ((packed));
+} QEMU_PACKED;
 #endif
 
 #elif defined(TARGET_SPARC64) && !defined(TARGET_ABI32)
@@ -1294,7 +1319,7 @@ struct target_stat {
 #endif
 };
 
-struct __attribute__((__packed__)) target_stat64 {
+struct QEMU_PACKED target_stat64 {
 	unsigned long long st_dev;
         unsigned long long st_ino;
 	unsigned int st_mode;
@@ -1341,7 +1366,7 @@ struct target_stat {
 };
 
 /* FIXME: Microblaze no-mmu user-space has a difference stat64 layout...  */
-struct __attribute__((__packed__)) target_stat64 {
+struct QEMU_PACKED target_stat64 {
 	uint64_t st_dev;
 #define TARGET_STAT64_HAS_BROKEN_ST_INO 1
 	uint32_t pad0;
@@ -1428,7 +1453,7 @@ struct target_stat64 {
 	abi_ulong	target_st_ctime_nsec;
 
 	unsigned long long	st_ino;
-} __attribute__((packed));
+} QEMU_PACKED;
 
 #elif defined(TARGET_ABI_MIPSN64)
 
@@ -1680,7 +1705,7 @@ struct target_stat {
 /* This matches struct stat64 in glibc2.1, hence the absolutely
  * insane amounts of padding around dev_t's.
  */
-struct __attribute__((__packed__)) target_stat64 {
+struct QEMU_PACKED target_stat64 {
 	unsigned long long	st_dev;
 	unsigned char	__pad0[4];
 
@@ -2095,7 +2120,7 @@ struct target_flock64 {
 	unsigned long long l_start;
 	unsigned long long l_len;
 	int  l_pid;
-}__attribute__((packed));
+} QEMU_PACKED;
 
 #ifdef TARGET_ARM
 struct target_eabi_flock64 {
@@ -2105,7 +2130,7 @@ struct target_eabi_flock64 {
 	unsigned long long l_start;
 	unsigned long long l_len;
 	int  l_pid;
-}__attribute__((packed));
+} QEMU_PACKED;
 #endif
 
 /* soundcard defines */
@@ -2330,4 +2355,10 @@ struct target_epoll_event {
 struct target_rlimit64 {
     uint64_t rlim_cur;
     uint64_t rlim_max;
+};
+
+struct target_ucred {
+    uint32_t pid;
+    uint32_t uid;
+    uint32_t gid;
 };

@@ -40,6 +40,7 @@
 #include "flash.h"
 #include "block.h"
 #include "qemu-timer.h"
+#include "exec-memory.h"
 
 #define PFLASH_BUG(fmt, ...) \
 do { \
@@ -74,8 +75,7 @@ struct pflash_t {
     target_phys_addr_t counter;
     unsigned int writeblock_size;
     QEMUTimer *timer;
-    ram_addr_t off;
-    int fl_mem;
+    MemoryRegion mem;
     void *storage;
 };
 
@@ -89,8 +89,7 @@ static void pflash_timer (void *opaque)
     if (pfl->bypass) {
         pfl->wcycle = 2;
     } else {
-        cpu_register_physical_memory(pfl->base, pfl->total_len,
-                        pfl->off | IO_MEM_ROMD | pfl->fl_mem);
+        memory_region_rom_device_set_readable(&pfl->mem, true);
         pfl->wcycle = 0;
     }
     pfl->cmd = 0;
@@ -144,7 +143,6 @@ static uint32_t pflash_read (pflash_t *pfl, target_phys_addr_t offset,
                 ret |= p[offset + 3];
             } else {
                 ret = p[offset];
-                ret |= p[offset + 1] << 8;
                 ret |= p[offset + 1] << 8;
                 ret |= p[offset + 2] << 16;
                 ret |= p[offset + 3] << 24;
@@ -263,7 +261,7 @@ static void pflash_write(pflash_t *pfl, target_phys_addr_t offset,
 
     if (!pfl->wcycle) {
         /* Set the device in I/O access mode */
-        cpu_register_physical_memory(pfl->base, pfl->total_len, pfl->fl_mem);
+        memory_region_rom_device_set_readable(&pfl->mem, false);
     }
 
     switch (pfl->wcycle) {
@@ -284,8 +282,12 @@ static void pflash_write(pflash_t *pfl, target_phys_addr_t offset,
                     TARGET_FMT_plx "\n",
                     __func__, offset, pfl->sector_len);
 
-            memset(p + offset, 0xff, pfl->sector_len);
-            pflash_update(pfl, offset, pfl->sector_len);
+            if (!pfl->ro) {
+                memset(p + offset, 0xff, pfl->sector_len);
+                pflash_update(pfl, offset, pfl->sector_len);
+            } else {
+                pfl->status |= 0x20; /* Block erase error */
+            }
             pfl->status |= 0x80; /* Ready! */
             break;
         case 0x50: /* Clear status bits */
@@ -324,8 +326,12 @@ static void pflash_write(pflash_t *pfl, target_phys_addr_t offset,
         case 0x10: /* Single Byte Program */
         case 0x40: /* Single Byte Program */
             DPRINTF("%s: Single Byte Program\n", __func__);
-            pflash_data_write(pfl, offset, value, width, be);
-            pflash_update(pfl, offset, width);
+            if (!pfl->ro) {
+                pflash_data_write(pfl, offset, value, width, be);
+                pflash_update(pfl, offset, width);
+            } else {
+                pfl->status |= 0x10; /* Programming error */
+            }
             pfl->status |= 0x80; /* Ready! */
             pfl->wcycle = 0;
         break;
@@ -373,7 +379,11 @@ static void pflash_write(pflash_t *pfl, target_phys_addr_t offset,
     case 2:
         switch (pfl->cmd) {
         case 0xe8: /* Block write */
-            pflash_data_write(pfl, offset, value, width, be);
+            if (!pfl->ro) {
+                pflash_data_write(pfl, offset, value, width, be);
+            } else {
+                pfl->status |= 0x10; /* Programming error */
+            }
 
             pfl->status |= 0x80;
 
@@ -383,8 +393,12 @@ static void pflash_write(pflash_t *pfl, target_phys_addr_t offset,
 
                 DPRINTF("%s: block write finished\n", __func__);
                 pfl->wcycle++;
-                /* Flush the entire write buffer onto backing storage.  */
-                pflash_update(pfl, offset & mask, pfl->writeblock_size);
+                if (!pfl->ro) {
+                    /* Flush the entire write buffer onto backing storage.  */
+                    pflash_update(pfl, offset & mask, pfl->writeblock_size);
+                } else {
+                    pfl->status |= 0x10; /* Programming error */
+                }
             }
 
             pfl->counter--;
@@ -422,8 +436,7 @@ static void pflash_write(pflash_t *pfl, target_phys_addr_t offset,
            __func__, offset, pfl->wcycle, pfl->cmd, value);
 
  reset_flash:
-    cpu_register_physical_memory(pfl->base, pfl->total_len,
-                    pfl->off | IO_MEM_ROMD | pfl->fl_mem);
+    memory_region_rom_device_set_readable(&pfl->mem, true);
 
     pfl->bypass = 0;
     pfl->wcycle = 0;
@@ -514,28 +527,20 @@ static void pflash_writel_le(void *opaque, target_phys_addr_t addr,
     pflash_write(pfl, addr, value, 4, 0);
 }
 
-static CPUWriteMemoryFunc * const pflash_write_ops_be[] = {
-    &pflash_writeb_be,
-    &pflash_writew_be,
-    &pflash_writel_be,
+static const MemoryRegionOps pflash_cfi01_ops_be = {
+    .old_mmio = {
+        .read = { pflash_readb_be, pflash_readw_be, pflash_readl_be, },
+        .write = { pflash_writeb_be, pflash_writew_be, pflash_writel_be, },
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-static CPUReadMemoryFunc * const pflash_read_ops_be[] = {
-    &pflash_readb_be,
-    &pflash_readw_be,
-    &pflash_readl_be,
-};
-
-static CPUWriteMemoryFunc * const pflash_write_ops_le[] = {
-    &pflash_writeb_le,
-    &pflash_writew_le,
-    &pflash_writel_le,
-};
-
-static CPUReadMemoryFunc * const pflash_read_ops_le[] = {
-    &pflash_readb_le,
-    &pflash_readw_le,
-    &pflash_readl_le,
+static const MemoryRegionOps pflash_cfi01_ops_le = {
+    .old_mmio = {
+        .read = { pflash_readb_le, pflash_readw_le, pflash_readl_le, },
+        .write = { pflash_writeb_le, pflash_writew_le, pflash_writel_le, },
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 /* Count trailing zeroes of a 32 bits quantity */
@@ -574,12 +579,13 @@ static int ctz32 (uint32_t n)
     return ret;
 }
 
-pflash_t *pflash_cfi01_register(target_phys_addr_t base, ram_addr_t off,
+pflash_t *pflash_cfi01_register(target_phys_addr_t base,
+                                DeviceState *qdev, const char *name,
+                                target_phys_addr_t size,
                                 BlockDriverState *bs, uint32_t sector_len,
                                 int nb_blocs, int width,
                                 uint16_t id0, uint16_t id1,
-                                uint16_t id2, uint16_t id3,
-                                int be)
+                                uint16_t id2, uint16_t id3, int be)
 {
     pflash_t *pfl;
     target_phys_addr_t total_len;
@@ -594,40 +600,35 @@ pflash_t *pflash_cfi01_register(target_phys_addr_t base, ram_addr_t off,
         return NULL;
 #endif
 
-    pfl = qemu_mallocz(sizeof(pflash_t));
+    pfl = g_malloc0(sizeof(pflash_t));
 
-    /* FIXME: Allocate ram ourselves.  */
-    pfl->storage = qemu_get_ram_ptr(off);
-    if (be) {
-        pfl->fl_mem = cpu_register_io_memory(pflash_read_ops_be,
-                                             pflash_write_ops_be, pfl,
-                                             DEVICE_NATIVE_ENDIAN);
-    } else {
-        pfl->fl_mem = cpu_register_io_memory(pflash_read_ops_le,
-                                             pflash_write_ops_le, pfl,
-                                             DEVICE_NATIVE_ENDIAN);
-    }
-    pfl->off = off;
-    cpu_register_physical_memory(base, total_len,
-                    off | pfl->fl_mem | IO_MEM_ROMD);
+    memory_region_init_rom_device(
+        &pfl->mem, be ? &pflash_cfi01_ops_be : &pflash_cfi01_ops_le, pfl,
+        name, size);
+    vmstate_register_ram(&pfl->mem, qdev);
+    pfl->storage = memory_region_get_ram_ptr(&pfl->mem);
+    memory_region_add_subregion(get_system_memory(), base, &pfl->mem);
 
     pfl->bs = bs;
     if (pfl->bs) {
         /* read the initial flash content */
         ret = bdrv_read(pfl->bs, 0, pfl->storage, total_len >> 9);
         if (ret < 0) {
-            cpu_unregister_io_memory(pfl->fl_mem);
-            qemu_free(pfl);
+            memory_region_del_subregion(get_system_memory(), &pfl->mem);
+            vmstate_unregister_ram(&pfl->mem, qdev);
+            memory_region_destroy(&pfl->mem);
+            g_free(pfl);
             return NULL;
         }
+        bdrv_attach_dev_nofail(pfl->bs, pfl);
     }
-#if 0 /* XXX: there should be a bit to set up read-only,
-       *      the same way the hardware does (with WP pin).
-       */
-    pfl->ro = 1;
-#else
-    pfl->ro = 0;
-#endif
+
+    if (pfl->bs) {
+        pfl->ro = bdrv_is_read_only(pfl->bs);
+    } else {
+        pfl->ro = 0;
+    }
+
     pfl->timer = qemu_new_timer_ns(vm_clock, pflash_timer, pfl);
     pfl->base = base;
     pfl->sector_len = sector_len;
@@ -723,4 +724,9 @@ pflash_t *pflash_cfi01_register(target_phys_addr_t base, ram_addr_t off,
     pfl->cfi_table[0x3c] = 0x00;
 
     return pfl;
+}
+
+MemoryRegion *pflash_cfi01_get_memory(pflash_t *fl)
+{
+    return &fl->mem;
 }

@@ -28,25 +28,45 @@
 
 #include <windows.h>
 #include <winsock2.h>
+#include "main-loop.h"
+
+/* Workaround for older versions of MinGW. */
+#ifndef ECONNREFUSED
+# define ECONNREFUSED WSAECONNREFUSED
+#endif
+#ifndef EINPROGRESS
+# define EINPROGRESS  WSAEINPROGRESS
+#endif
+#ifndef EHOSTUNREACH
+# define EHOSTUNREACH WSAEHOSTUNREACH
+#endif
+#ifndef EINTR
+# define EINTR        WSAEINTR
+#endif
+#ifndef EINPROGRESS
+# define EINPROGRESS  WSAEINPROGRESS
+#endif
+#ifndef ENETUNREACH
+# define ENETUNREACH  WSAENETUNREACH
+#endif
+#ifndef ENOTCONN
+# define ENOTCONN     WSAENOTCONN
+#endif
+#ifndef EWOULDBLOCK
+# define EWOULDBLOCK  WSAEWOULDBLOCK
+#endif
+
+#if defined(_WIN64)
+/* On w64, setjmp is implemented by _setjmp which needs a second parameter.
+ * If this parameter is NULL, longjump does no stack unwinding.
+ * That is what we need for QEMU. Passing the value of register rsp (default)
+ * lets longjmp try a stack unwinding which will crash with generated code. */
+# undef setjmp
+# define setjmp(env) _setjmp(env, NULL)
+#endif
 
 /* Declaration of ffs() is missing in MinGW's strings.h. */
 int ffs(int i);
-
-/* Polling handling */
-
-/* return TRUE if no sleep should be done afterwards */
-typedef int PollingFunc(void *opaque);
-
-int qemu_add_polling_cb(PollingFunc *func, void *opaque);
-void qemu_del_polling_cb(PollingFunc *func, void *opaque);
-
-/* Wait objects handling */
-typedef void WaitObjectFunc(void *opaque);
-
-int qemu_add_wait_object(HANDLE handle, WaitObjectFunc *func, void *opaque);
-void qemu_del_wait_object(HANDLE handle, WaitObjectFunc *func, void *opaque);
-
-void os_host_main_loop_wait(int *timeout);
 
 static inline void os_setup_signal_handling(void) {}
 static inline void os_daemonize(void) {}

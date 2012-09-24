@@ -65,6 +65,7 @@
 #define PARA_CTR_SIGNAL (PARA_CTR_SELECT|PARA_CTR_INIT|PARA_CTR_AUTOLF|PARA_CTR_STROBE)
 
 typedef struct ParallelState {
+    MemoryRegion iomem;
     uint8_t dataw;
     uint8_t datar;
     uint8_t status;
@@ -120,7 +121,7 @@ parallel_ioport_write_sw(void *opaque, uint32_t addr, uint32_t val)
             if (val & PARA_CTR_STROBE) {
                 s->status &= ~PARA_STS_BUSY;
                 if ((s->control & PARA_CTR_STROBE) == 0)
-                    qemu_chr_write(s->chr, &s->dataw, 1);
+                    qemu_chr_fe_write(s->chr, &s->dataw, 1);
             } else {
                 if (s->control & PARA_CTR_INTEN) {
                     s->irq_pending = 1;
@@ -150,7 +151,7 @@ static void parallel_ioport_write_hw(void *opaque, uint32_t addr, uint32_t val)
         if (s->dataw == val)
             return;
         pdebug("wd%02x\n", val);
-        qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_WRITE_DATA, &parm);
+        qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_WRITE_DATA, &parm);
         s->dataw = val;
         break;
     case PARA_REG_STS:
@@ -170,11 +171,11 @@ static void parallel_ioport_write_hw(void *opaque, uint32_t addr, uint32_t val)
             } else {
                 dir = 0;
             }
-            qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_DATA_DIR, &dir);
+            qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_DATA_DIR, &dir);
             parm &= ~PARA_CTR_DIR;
         }
 
-        qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_WRITE_CONTROL, &parm);
+        qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_WRITE_CONTROL, &parm);
         s->control = val;
         break;
     case PARA_REG_EPP_ADDR:
@@ -183,7 +184,7 @@ static void parallel_ioport_write_hw(void *opaque, uint32_t addr, uint32_t val)
             pdebug("wa%02x s\n", val);
         else {
             struct ParallelIOArg ioarg = { .buffer = &parm, .count = 1 };
-            if (qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_EPP_WRITE_ADDR, &ioarg)) {
+            if (qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_EPP_WRITE_ADDR, &ioarg)) {
                 s->epp_timeout = 1;
                 pdebug("wa%02x t\n", val);
             }
@@ -197,7 +198,7 @@ static void parallel_ioport_write_hw(void *opaque, uint32_t addr, uint32_t val)
             pdebug("we%02x s\n", val);
         else {
             struct ParallelIOArg ioarg = { .buffer = &parm, .count = 1 };
-            if (qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_EPP_WRITE, &ioarg)) {
+            if (qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_EPP_WRITE, &ioarg)) {
                 s->epp_timeout = 1;
                 pdebug("we%02x t\n", val);
             }
@@ -222,7 +223,7 @@ parallel_ioport_eppdata_write_hw2(void *opaque, uint32_t addr, uint32_t val)
         pdebug("we%04x s\n", val);
         return;
     }
-    err = qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_EPP_WRITE, &ioarg);
+    err = qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_EPP_WRITE, &ioarg);
     if (err) {
         s->epp_timeout = 1;
         pdebug("we%04x t\n", val);
@@ -245,7 +246,7 @@ parallel_ioport_eppdata_write_hw4(void *opaque, uint32_t addr, uint32_t val)
         pdebug("we%08x s\n", val);
         return;
     }
-    err = qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_EPP_WRITE, &ioarg);
+    err = qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_EPP_WRITE, &ioarg);
     if (err) {
         s->epp_timeout = 1;
         pdebug("we%08x t\n", val);
@@ -297,13 +298,13 @@ static uint32_t parallel_ioport_read_hw(void *opaque, uint32_t addr)
     addr &= 7;
     switch(addr) {
     case PARA_REG_DATA:
-        qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_READ_DATA, &ret);
+        qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_READ_DATA, &ret);
         if (s->last_read_offset != addr || s->datar != ret)
             pdebug("rd%02x\n", ret);
         s->datar = ret;
         break;
     case PARA_REG_STS:
-        qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_READ_STATUS, &ret);
+        qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_READ_STATUS, &ret);
         ret &= ~PARA_STS_TMOUT;
         if (s->epp_timeout)
             ret |= PARA_STS_TMOUT;
@@ -315,7 +316,7 @@ static uint32_t parallel_ioport_read_hw(void *opaque, uint32_t addr)
         /* s->control has some bits fixed to 1. It is zero only when
            it has not been yet written to.  */
         if (s->control == 0) {
-            qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_READ_CONTROL, &ret);
+            qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_READ_CONTROL, &ret);
             if (s->last_read_offset != addr)
                 pdebug("rc%02x\n", ret);
             s->control = ret;
@@ -332,7 +333,7 @@ static uint32_t parallel_ioport_read_hw(void *opaque, uint32_t addr)
             pdebug("ra%02x s\n", ret);
         else {
             struct ParallelIOArg ioarg = { .buffer = &ret, .count = 1 };
-            if (qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_EPP_READ_ADDR, &ioarg)) {
+            if (qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_EPP_READ_ADDR, &ioarg)) {
                 s->epp_timeout = 1;
                 pdebug("ra%02x t\n", ret);
             }
@@ -346,7 +347,7 @@ static uint32_t parallel_ioport_read_hw(void *opaque, uint32_t addr)
             pdebug("re%02x s\n", ret);
         else {
             struct ParallelIOArg ioarg = { .buffer = &ret, .count = 1 };
-            if (qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_EPP_READ, &ioarg)) {
+            if (qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_EPP_READ, &ioarg)) {
                 s->epp_timeout = 1;
                 pdebug("re%02x t\n", ret);
             }
@@ -374,7 +375,7 @@ parallel_ioport_eppdata_read_hw2(void *opaque, uint32_t addr)
         pdebug("re%04x s\n", eppdata);
         return eppdata;
     }
-    err = qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_EPP_READ, &ioarg);
+    err = qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_EPP_READ, &ioarg);
     ret = le16_to_cpu(eppdata);
 
     if (err) {
@@ -401,7 +402,7 @@ parallel_ioport_eppdata_read_hw4(void *opaque, uint32_t addr)
         pdebug("re%08x s\n", eppdata);
         return eppdata;
     }
-    err = qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_EPP_READ, &ioarg);
+    err = qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_EPP_READ, &ioarg);
     ret = le32_to_cpu(eppdata);
 
     if (err) {
@@ -448,6 +449,29 @@ static void parallel_reset(void *opaque)
 
 static const int isa_parallel_io[MAX_PARALLEL_PORTS] = { 0x378, 0x278, 0x3bc };
 
+static const MemoryRegionPortio isa_parallel_portio_hw_list[] = {
+    { 0, 8, 1,
+      .read = parallel_ioport_read_hw,
+      .write = parallel_ioport_write_hw },
+    { 4, 1, 2,
+      .read = parallel_ioport_eppdata_read_hw2,
+      .write = parallel_ioport_eppdata_write_hw2 },
+    { 4, 1, 4,
+      .read = parallel_ioport_eppdata_read_hw4,
+      .write = parallel_ioport_eppdata_write_hw4 },
+    { 0x400, 8, 1,
+      .read = parallel_ioport_ecp_read,
+      .write = parallel_ioport_ecp_write },
+    PORTIO_END_OF_LIST(),
+};
+
+static const MemoryRegionPortio isa_parallel_portio_sw_list[] = {
+    { 0, 8, 1,
+      .read = parallel_ioport_read_sw,
+      .write = parallel_ioport_write_sw },
+    PORTIO_END_OF_LIST(),
+};
+
 static int parallel_isa_initfn(ISADevice *dev)
 {
     static int index;
@@ -473,30 +497,16 @@ static int parallel_isa_initfn(ISADevice *dev)
     isa_init_irq(dev, &s->irq, isa->isairq);
     qemu_register_reset(parallel_reset, s);
 
-    if (qemu_chr_ioctl(s->chr, CHR_IOCTL_PP_READ_STATUS, &dummy) == 0) {
+    if (qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_PP_READ_STATUS, &dummy) == 0) {
         s->hw_driver = 1;
         s->status = dummy;
     }
 
-    if (s->hw_driver) {
-        register_ioport_write(base, 8, 1, parallel_ioport_write_hw, s);
-        register_ioport_read(base, 8, 1, parallel_ioport_read_hw, s);
-        isa_init_ioport_range(dev, base, 8);
-
-        register_ioport_write(base+4, 1, 2, parallel_ioport_eppdata_write_hw2, s);
-        register_ioport_read(base+4, 1, 2, parallel_ioport_eppdata_read_hw2, s);
-        register_ioport_write(base+4, 1, 4, parallel_ioport_eppdata_write_hw4, s);
-        register_ioport_read(base+4, 1, 4, parallel_ioport_eppdata_read_hw4, s);
-        isa_init_ioport(dev, base+4);
-        register_ioport_write(base+0x400, 8, 1, parallel_ioport_ecp_write, s);
-        register_ioport_read(base+0x400, 8, 1, parallel_ioport_ecp_read, s);
-        isa_init_ioport_range(dev, base+0x400, 8);
-    }
-    else {
-        register_ioport_write(base, 8, 1, parallel_ioport_write_sw, s);
-        register_ioport_read(base, 8, 1, parallel_ioport_read_sw, s);
-        isa_init_ioport_range(dev, base, 8);
-    }
+    isa_register_portio_list(dev, base,
+                             (s->hw_driver
+                              ? &isa_parallel_portio_hw_list[0]
+                              : &isa_parallel_portio_sw_list[0]),
+                             s, "parallel");
     return 0;
 }
 
@@ -546,53 +556,59 @@ static void parallel_mm_writel (void *opaque,
     parallel_ioport_write_sw(s, addr >> s->it_shift, value);
 }
 
-static CPUReadMemoryFunc * const parallel_mm_read_sw[] = {
-    &parallel_mm_readb,
-    &parallel_mm_readw,
-    &parallel_mm_readl,
-};
-
-static CPUWriteMemoryFunc * const parallel_mm_write_sw[] = {
-    &parallel_mm_writeb,
-    &parallel_mm_writew,
-    &parallel_mm_writel,
+static const MemoryRegionOps parallel_mm_ops = {
+    .old_mmio = {
+        .read = { parallel_mm_readb, parallel_mm_readw, parallel_mm_readl },
+        .write = { parallel_mm_writeb, parallel_mm_writew, parallel_mm_writel },
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 /* If fd is zero, it means that the parallel device uses the console */
-bool parallel_mm_init(target_phys_addr_t base, int it_shift, qemu_irq irq,
+bool parallel_mm_init(MemoryRegion *address_space,
+                      target_phys_addr_t base, int it_shift, qemu_irq irq,
                       CharDriverState *chr)
 {
     ParallelState *s;
-    int io_sw;
 
-    s = qemu_mallocz(sizeof(ParallelState));
+    s = g_malloc0(sizeof(ParallelState));
     s->irq = irq;
     s->chr = chr;
     s->it_shift = it_shift;
     qemu_register_reset(parallel_reset, s);
 
-    io_sw = cpu_register_io_memory(parallel_mm_read_sw, parallel_mm_write_sw,
-                                   s, DEVICE_NATIVE_ENDIAN);
-    cpu_register_physical_memory(base, 8 << it_shift, io_sw);
+    memory_region_init_io(&s->iomem, &parallel_mm_ops, s,
+                          "parallel", 8 << it_shift);
+    memory_region_add_subregion(address_space, base, &s->iomem);
     return true;
 }
 
-static ISADeviceInfo parallel_isa_info = {
-    .qdev.name  = "isa-parallel",
-    .qdev.size  = sizeof(ISAParallelState),
-    .init       = parallel_isa_initfn,
-    .qdev.props = (Property[]) {
-        DEFINE_PROP_UINT32("index", ISAParallelState, index,   -1),
-        DEFINE_PROP_HEX32("iobase", ISAParallelState, iobase,  -1),
-        DEFINE_PROP_UINT32("irq",   ISAParallelState, isairq,  7),
-        DEFINE_PROP_CHR("chardev",  ISAParallelState, state.chr),
-        DEFINE_PROP_END_OF_LIST(),
-    },
+static Property parallel_isa_properties[] = {
+    DEFINE_PROP_UINT32("index", ISAParallelState, index,   -1),
+    DEFINE_PROP_HEX32("iobase", ISAParallelState, iobase,  -1),
+    DEFINE_PROP_UINT32("irq",   ISAParallelState, isairq,  7),
+    DEFINE_PROP_CHR("chardev",  ISAParallelState, state.chr),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void parallel_register_devices(void)
+static void parallel_isa_class_initfn(ObjectClass *klass, void *data)
 {
-    isa_qdev_register(&parallel_isa_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    ISADeviceClass *ic = ISA_DEVICE_CLASS(klass);
+    ic->init = parallel_isa_initfn;
+    dc->props = parallel_isa_properties;
 }
 
-device_init(parallel_register_devices)
+static TypeInfo parallel_isa_info = {
+    .name          = "isa-parallel",
+    .parent        = TYPE_ISA_DEVICE,
+    .instance_size = sizeof(ISAParallelState),
+    .class_init    = parallel_isa_class_initfn,
+};
+
+static void parallel_register_types(void)
+{
+    type_register_static(&parallel_isa_info);
+}
+
+type_init(parallel_register_types)

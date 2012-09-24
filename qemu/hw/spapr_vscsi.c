@@ -80,7 +80,6 @@ typedef struct vscsi_req {
     int                     active;
     long                    data_len;
     int                     writing;
-    int                     sensing;
     int                     senselen;
     uint8_t                 sense[SCSI_SENSE_BUF_SIZE];
 
@@ -99,10 +98,6 @@ typedef struct {
     SCSIBus bus;
     vscsi_req reqs[VSCSI_REQ_LIMIT];
 } VSCSIState;
-
-/* XXX Debug only */
-static VSCSIState *dbg_vscsi_state;
-
 
 static struct vscsi_req *vscsi_get_req(VSCSIState *s)
 {
@@ -130,11 +125,38 @@ static void vscsi_put_req(vscsi_req *req)
     req->active = 0;
 }
 
-static void vscsi_decode_id_lun(uint64_t srp_lun, int *id, int *lun)
+static SCSIDevice *vscsi_device_find(SCSIBus *bus, uint64_t srp_lun, int *lun)
 {
-    /* XXX Figure that one out properly ! This is crackpot */
-    *id = (srp_lun >> 56) & 0x7f;
-    *lun = (srp_lun >> 48) & 0xff;
+    int channel = 0, id = 0;
+
+retry:
+    switch (srp_lun >> 62) {
+    case 0:
+        if ((srp_lun >> 56) != 0) {
+            channel = (srp_lun >> 56) & 0x3f;
+            id = (srp_lun >> 48) & 0xff;
+            srp_lun <<= 16;
+            goto retry;
+        }
+        *lun = (srp_lun >> 48) & 0xff;
+        break;
+
+    case 1:
+        *lun = (srp_lun >> 48) & 0x3fff;
+        break;
+    case 2:
+        channel = (srp_lun >> 53) & 0x7;
+        id = (srp_lun >> 56) & 0x3f;
+        *lun = (srp_lun >> 48) & 0x1f;
+        break;
+    case 3:
+        *lun = -1;
+        return NULL;
+    default:
+        abort();
+    }
+
+    return scsi_device_find(bus, channel, id, *lun);
 }
 
 static int vscsi_send_iu(VSCSIState *s, vscsi_req *req,
@@ -436,40 +458,6 @@ static int vscsi_preprocess_desc(vscsi_req *req)
     return 0;
 }
 
-static void vscsi_send_request_sense(VSCSIState *s, vscsi_req *req)
-{
-    uint8_t *cdb = req->iu.srp.cmd.cdb;
-    int n;
-
-    n = scsi_req_get_sense(req->sreq, req->sense, sizeof(req->sense));
-    if (n) {
-        req->senselen = n;
-        vscsi_send_rsp(s, req, CHECK_CONDITION, 0, 0);
-        vscsi_put_req(req);
-        return;
-    }
-
-    dprintf("VSCSI: Got CHECK_CONDITION, requesting sense...\n");
-    cdb[0] = 3;
-    cdb[1] = 0;
-    cdb[2] = 0;
-    cdb[3] = 0;
-    cdb[4] = 96;
-    cdb[5] = 0;
-    req->sensing = 1;
-    n = scsi_req_enqueue(req->sreq, cdb);
-    dprintf("VSCSI: Queued request sense tag 0x%x\n", req->qtag);
-    if (n < 0) {
-        fprintf(stderr, "VSCSI: REQUEST_SENSE wants write data !?!?!?\n");
-        vscsi_makeup_sense(s, req, HARDWARE_ERROR, 0, 0);
-        scsi_req_abort(req->sreq, CHECK_CONDITION);
-        return;
-    } else if (n == 0) {
-        return;
-    }
-    scsi_req_continue(req->sreq);
-}
-
 /* Callback to indicate that the SCSI layer has completed a transfer.  */
 static void vscsi_transfer_data(SCSIRequest *sreq, uint32_t len)
 {
@@ -482,23 +470,6 @@ static void vscsi_transfer_data(SCSIRequest *sreq, uint32_t len)
             sreq->tag, len, req);
     if (req == NULL) {
         fprintf(stderr, "VSCSI: Can't find request for tag 0x%x\n", sreq->tag);
-        return;
-    }
-
-    if (req->sensing) {
-        uint8_t *buf = scsi_req_get_buf(sreq);
-
-        len = MIN(len, SCSI_SENSE_BUF_SIZE);
-        dprintf("VSCSI: Sense data, %d bytes:\n", len);
-        dprintf("       %02x  %02x  %02x  %02x  %02x  %02x  %02x  %02x\n",
-                buf[0], buf[1], buf[2], buf[3],
-                buf[4], buf[5], buf[6], buf[7]);
-        dprintf("       %02x  %02x  %02x  %02x  %02x  %02x  %02x  %02x\n",
-                buf[8], buf[9], buf[10], buf[11],
-                buf[12], buf[13], buf[14], buf[15]);
-        memcpy(req->sense, buf, len);
-        req->senselen = len;
-        scsi_req_continue(req->sreq);
         return;
     }
 
@@ -519,7 +490,7 @@ static void vscsi_transfer_data(SCSIRequest *sreq, uint32_t len)
 }
 
 /* Callback to indicate that the SCSI layer has completed a transfer.  */
-static void vscsi_command_complete(SCSIRequest *sreq, uint32_t status)
+static void vscsi_command_complete(SCSIRequest *sreq, uint32_t status, size_t resid)
 {
     VSCSIState *s = DO_UPCAST(VSCSIState, vdev.qdev, sreq->bus->qbus.parent);
     vscsi_req *req = sreq->hba_private;
@@ -532,28 +503,30 @@ static void vscsi_command_complete(SCSIRequest *sreq, uint32_t status)
         return;
     }
 
-    if (!req->sensing && status == CHECK_CONDITION) {
-        vscsi_send_request_sense(s, req);
-        return;
+    if (status == CHECK_CONDITION) {
+        req->senselen = scsi_req_get_sense(req->sreq, req->sense,
+                                           sizeof(req->sense));
+        dprintf("VSCSI: Sense data, %d bytes:\n", len);
+        dprintf("       %02x  %02x  %02x  %02x  %02x  %02x  %02x  %02x\n",
+                req->sense[0], req->sense[1], req->sense[2], req->sense[3],
+                req->sense[4], req->sense[5], req->sense[6], req->sense[7]);
+        dprintf("       %02x  %02x  %02x  %02x  %02x  %02x  %02x  %02x\n",
+                req->sense[8], req->sense[9], req->sense[10], req->sense[11],
+                req->sense[12], req->sense[13], req->sense[14], req->sense[15]);
     }
 
-    if (req->sensing) {
-        dprintf("VSCSI: Sense done !\n");
-        status = CHECK_CONDITION;
-    } else {
-        dprintf("VSCSI: Command complete err=%d\n", status);
-        if (status == 0) {
-            /* We handle overflows, not underflows for normal commands,
-             * but hopefully nobody cares
-             */
-            if (req->writing) {
-                res_out = req->data_len;
-            } else {
-                res_in = req->data_len;
-            }
+    dprintf("VSCSI: Command complete err=%d\n", status);
+    if (status == 0) {
+        /* We handle overflows, not underflows for normal commands,
+         * but hopefully nobody cares
+         */
+        if (req->writing) {
+            res_out = req->data_len;
+        } else {
+            res_in = req->data_len;
         }
     }
-    vscsi_send_rsp(s, req, 0, res_in, res_out);
+    vscsi_send_rsp(s, req, status, res_in, res_out);
     vscsi_put_req(req);
 }
 
@@ -632,14 +605,11 @@ static int vscsi_queue_cmd(VSCSIState *s, vscsi_req *req)
 {
     union srp_iu *srp = &req->iu.srp;
     SCSIDevice *sdev;
-    int n, id, lun;
+    int n, lun;
 
-    vscsi_decode_id_lun(be64_to_cpu(srp->cmd.lun), &id, &lun);
-
-    /* Qemu vs. linux issue with LUNs to be sorted out ... */
-    sdev = (id < 8 && lun < 16) ? s->bus.devs[id] : NULL;
+    sdev = vscsi_device_find(&s->bus, be64_to_cpu(srp->cmd.lun), &lun);
     if (!sdev) {
-        dprintf("VSCSI: Command for id %d with no drive\n", id);
+        dprintf("VSCSI: Command for lun %08" PRIx64 " with no drive\n", be64_to_cpu(srp->cmd.lun));
         if (srp->cmd.cdb[0] == INQUIRY) {
             vscsi_inquiry_no_target(s, req);
         } else {
@@ -649,8 +619,8 @@ static int vscsi_queue_cmd(VSCSIState *s, vscsi_req *req)
     }
 
     req->lun = lun;
-    req->sreq = scsi_req_new(sdev, req->qtag, lun, req);
-    n = scsi_req_enqueue(req->sreq, srp->cmd.cdb);
+    req->sreq = scsi_req_new(sdev, req->qtag, lun, srp->cmd.cdb, req);
+    n = scsi_req_enqueue(req->sreq);
 
     dprintf("VSCSI: Queued command tag 0x%x CMD 0x%x ID %d LUN %d ret: %d\n",
             req->qtag, srp->cmd.cdb[0], id, lun, n);
@@ -837,7 +807,7 @@ static void vscsi_got_payload(VSCSIState *s, vscsi_crq *crq)
     if (spapr_tce_dma_read(&s->vdev, crq->s.IU_data_ptr, &req->iu,
                            crq->s.IU_length)) {
         fprintf(stderr, "vscsi_got_payload: DMA read failure !\n");
-        qemu_free(req);
+        g_free(req);
     }
     memcpy(&req->crq, crq, sizeof(vscsi_crq));
 
@@ -912,29 +882,35 @@ static int vscsi_do_crq(struct VIOsPAPRDevice *dev, uint8_t *crq_data)
     return 0;
 }
 
-static const struct SCSIBusOps vscsi_scsi_ops = {
+static const struct SCSIBusInfo vscsi_scsi_info = {
+    .tcq = true,
+    .max_channel = 7, /* logical unit addressing format */
+    .max_target = 63,
+    .max_lun = 31,
+
     .transfer_data = vscsi_transfer_data,
     .complete = vscsi_command_complete,
     .cancel = vscsi_request_cancelled
 };
 
-static int spapr_vscsi_init(VIOsPAPRDevice *dev)
+static void spapr_vscsi_reset(VIOsPAPRDevice *dev)
 {
     VSCSIState *s = DO_UPCAST(VSCSIState, vdev, dev);
     int i;
 
-    dbg_vscsi_state = s;
-
-    /* Initialize qemu request tags */
     memset(s->reqs, 0, sizeof(s->reqs));
     for (i = 0; i < VSCSI_REQ_LIMIT; i++) {
         s->reqs[i].qtag = i;
     }
+}
+
+static int spapr_vscsi_init(VIOsPAPRDevice *dev)
+{
+    VSCSIState *s = DO_UPCAST(VSCSIState, vdev, dev);
 
     dev->crq.SendFunc = vscsi_do_crq;
 
-    scsi_bus_new(&s->bus, &dev->qdev, 1, VSCSI_REQ_LIMIT,
-                 &vscsi_scsi_ops);
+    scsi_bus_new(&s->bus, &dev->qdev, &vscsi_scsi_info);
     if (!dev->qdev.hotplugged) {
         scsi_bus_legacy_handle_cmdline(&s->bus);
     }
@@ -942,20 +918,13 @@ static int spapr_vscsi_init(VIOsPAPRDevice *dev)
     return 0;
 }
 
-void spapr_vscsi_create(VIOsPAPRBus *bus, uint32_t reg,
-                        qemu_irq qirq, uint32_t vio_irq_num)
+void spapr_vscsi_create(VIOsPAPRBus *bus)
 {
     DeviceState *dev;
-    VIOsPAPRDevice *sdev;
 
     dev = qdev_create(&bus->bus, "spapr-vscsi");
-    qdev_prop_set_uint32(dev, "reg", reg);
 
     qdev_init_nofail(dev);
-
-    sdev = (VIOsPAPRDevice *)dev;
-    sdev->qirq = qirq;
-    sdev->vio_irq_num = vio_irq_num;
 }
 
 static int spapr_vscsi_devnode(VIOsPAPRDevice *dev, void *fdt, int node_off)
@@ -975,25 +944,36 @@ static int spapr_vscsi_devnode(VIOsPAPRDevice *dev, void *fdt, int node_off)
     return 0;
 }
 
-static VIOsPAPRDeviceInfo spapr_vscsi = {
-    .init = spapr_vscsi_init,
-    .devnode = spapr_vscsi_devnode,
-    .dt_name = "v-scsi",
-    .dt_type = "vscsi",
-    .dt_compatible = "IBM,v-scsi",
-    .signal_mask = 0x00000001,
-    .qdev.name = "spapr-vscsi",
-    .qdev.size = sizeof(VSCSIState),
-    .qdev.props = (Property[]) {
-        DEFINE_PROP_UINT32("reg", VIOsPAPRDevice, reg, 0x2000),
-        DEFINE_PROP_UINT32("dma-window", VIOsPAPRDevice,
-                           rtce_window_size, 0x10000000),
-        DEFINE_PROP_END_OF_LIST(),
-    },
+static Property spapr_vscsi_properties[] = {
+    DEFINE_SPAPR_PROPERTIES(VSCSIState, vdev, 0x10000000),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void spapr_vscsi_register(void)
+static void spapr_vscsi_class_init(ObjectClass *klass, void *data)
 {
-    spapr_vio_bus_register_withprop(&spapr_vscsi);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    VIOsPAPRDeviceClass *k = VIO_SPAPR_DEVICE_CLASS(klass);
+
+    k->init = spapr_vscsi_init;
+    k->reset = spapr_vscsi_reset;
+    k->devnode = spapr_vscsi_devnode;
+    k->dt_name = "v-scsi";
+    k->dt_type = "vscsi";
+    k->dt_compatible = "IBM,v-scsi";
+    k->signal_mask = 0x00000001;
+    dc->props = spapr_vscsi_properties;
 }
-device_init(spapr_vscsi_register);
+
+static TypeInfo spapr_vscsi_info = {
+    .name          = "spapr-vscsi",
+    .parent        = TYPE_VIO_SPAPR_DEVICE,
+    .instance_size = sizeof(VSCSIState),
+    .class_init    = spapr_vscsi_class_init,
+};
+
+static void spapr_vscsi_register_types(void)
+{
+    type_register_static(&spapr_vscsi_info);
+}
+
+type_init(spapr_vscsi_register_types)

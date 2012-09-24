@@ -129,6 +129,8 @@ if config_success != "success":
 # 2. Compile PTLsim
 ptl_compile_script = "%s/SConstruct" % ptl_dir
 ptl_env = base_env.Clone()
+ptl_env.Append(CCFLAGS = qemu_env['config_flags'])
+ptl_env.Append(CPPPATH = qemu_env['CPPPATH'])
 ptl_env.Decider('MD5-timestamp')
 ptl_env.SetDefault(qemu_dir = qemu_dir)
 ptl_env.SetDefault(RT_DIR = "%s" % curr_dir)

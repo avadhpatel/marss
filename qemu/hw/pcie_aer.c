@@ -111,7 +111,7 @@ int pcie_aer_init(PCIDevice *dev, uint16_t offset)
     if (dev->exp.aer_log.log_max > PCIE_AER_LOG_MAX_LIMIT) {
         return -EINVAL;
     }
-    dev->exp.aer_log.log = qemu_mallocz(sizeof dev->exp.aer_log.log[0] *
+    dev->exp.aer_log.log = g_malloc0(sizeof dev->exp.aer_log.log[0] *
                                         dev->exp.aer_log.log_max);
 
     pci_set_long(dev->w1cmask + offset + PCI_ERR_UNCOR_STATUS,
@@ -165,7 +165,7 @@ int pcie_aer_init(PCIDevice *dev, uint16_t offset)
 
 void pcie_aer_exit(PCIDevice *dev)
 {
-    qemu_free(dev->exp.aer_log.log);
+    g_free(dev->exp.aer_log.log);
 }
 
 static void pcie_aer_update_uncor_status(PCIDevice *dev)
@@ -415,7 +415,7 @@ static void pcie_aer_update_log(PCIDevice *dev, const PCIEAERErr *err)
     int i;
 
     assert(err->status);
-    assert(err->status & (err->status - 1));
+    assert(!(err->status & (err->status - 1)));
 
     errcap &= ~(PCI_ERR_CAP_FEP_MASK | PCI_ERR_CAP_TLP);
     errcap |= PCI_ERR_CAP_FEP(first_bit);
@@ -495,7 +495,7 @@ static int pcie_aer_record_error(PCIDevice *dev,
     int fep = PCI_ERR_CAP_FEP(errcap);
 
     assert(err->status);
-    assert(err->status & (err->status - 1));
+    assert(!(err->status & (err->status - 1)));
 
     if (errcap & PCI_ERR_CAP_MHRE &&
         (pci_get_long(aer_cap + PCI_ERR_UNCOR_STATUS) & (1U << fep))) {
@@ -826,7 +826,7 @@ typedef struct PCIEAERErrorName {
 } PCIEAERErrorName;
 
 /*
- * AER error name -> value convertion table
+ * AER error name -> value conversion table
  * This naming scheme is same to linux aer-injection tool.
  */
 static const struct PCIEAERErrorName pcie_aer_error_list[] = {
@@ -951,7 +951,7 @@ static int pcie_aer_parse_error_string(const char *error_name,
     return -EINVAL;
 }
 
-int do_pcie_aer_inejct_error(Monitor *mon,
+int do_pcie_aer_inject_error(Monitor *mon,
                              const QDict *qdict, QObject **ret_data)
 {
     const char *id = qdict_get_str(qdict, "id");
@@ -979,20 +979,21 @@ int do_pcie_aer_inejct_error(Monitor *mon,
     if (pcie_aer_parse_error_string(error_name, &error_status, &correctable)) {
         char *e = NULL;
         error_status = strtoul(error_name, &e, 0);
-        correctable = !!qdict_get_int(qdict, "correctable");
+        correctable = qdict_get_try_bool(qdict, "correctable", 0);
         if (!e || *e != '\0') {
             monitor_printf(mon, "invalid error status value. \"%s\"",
                            error_name);
             return -EINVAL;
         }
     }
+    err.status = error_status;
     err.source_id = (pci_bus_num(dev->bus) << 8) | dev->devfn;
 
     err.flags = 0;
     if (correctable) {
         err.flags |= PCIE_AER_ERR_IS_CORRECTABLE;
     }
-    if (qdict_get_int(qdict, "advisory_non_fatal")) {
+    if (qdict_get_try_bool(qdict, "advisory_non_fatal", 0)) {
         err.flags |= PCIE_AER_ERR_MAYBE_ADVISORY;
     }
     if (qdict_haskey(qdict, "header0")) {

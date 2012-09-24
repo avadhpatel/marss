@@ -115,6 +115,8 @@ void ptl_machine_configure(const char* config_str);
 struct CPUX86State;
 CPUX86State* ptl_create_new_context(void);
 
+void ptl_set_new_context(CPUX86State* env);
+
 /*
  * ptl_reconfigure
  * config_str	: string containing new configuration options for PTLsim

@@ -49,8 +49,20 @@ SECTIONS
   .rela.sbss2     : { *(.rela.sbss2 .rela.sbss2.* .rela.gnu.linkonce.sb2.*) }
   .rel.bss        : { *(.rel.bss .rel.bss.* .rel.gnu.linkonce.b.*) }
   .rela.bss       : { *(.rela.bss .rela.bss.* .rela.gnu.linkonce.b.*) }
-  .rel.plt        : { *(.rel.plt) }
-  .rela.plt       : { *(.rela.plt) }
+  .rel.plt      :
+  {
+    *(.rel.plt)
+    PROVIDE (__rel_iplt_start = .);
+    *(.rel.iplt)
+    PROVIDE (__rel_iplt_end = .);
+  }
+  .rela.plt       :
+  {
+    *(.rela.plt)
+    PROVIDE (__rela_iplt_start = .);
+    *(.rela.iplt)
+    PROVIDE (__rela_iplt_end = .);
+  }
   .init           :
   {
     KEEP (*(.init))
@@ -79,36 +91,34 @@ SECTIONS
   }
   .sbss2          : { *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*) }
   .eh_frame_hdr : { *(.eh_frame_hdr) }
-  .eh_frame       : ONLY_IF_RO { KEEP (*(.eh_frame)) }
-  .gcc_except_table   : ONLY_IF_RO { *(.gcc_except_table .gcc_except_table.*) }
   /* Adjust the address for the data segment.  We want to adjust up to
      the same address within the page on the next page up.  */
   . = ALIGN (0x10000) - ((0x10000 - .) & (0x10000 - 1)); . = DATA_SEGMENT_ALIGN (0x10000, 0x1000);
   /* Exception handling  */
-  .eh_frame       : ONLY_IF_RW { KEEP (*(.eh_frame)) }
-  .gcc_except_table   : ONLY_IF_RW { *(.gcc_except_table .gcc_except_table.*) }
+  .eh_frame       : { KEEP (*(.eh_frame)) }
+  .gcc_except_table   : { *(.gcc_except_table .gcc_except_table.*) }
   /* Thread Local Storage sections  */
   .tdata	  : { *(.tdata .tdata.* .gnu.linkonce.td.*) }
   .tbss		  : { *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon) }
   .preinit_array     :
   {
-    PROVIDE_HIDDEN (__preinit_array_start = .);
+    PROVIDE (__preinit_array_start = .);
     KEEP (*(.preinit_array))
-    PROVIDE_HIDDEN (__preinit_array_end = .);
+    PROVIDE (__preinit_array_end = .);
   }
   .init_array     :
   {
-     PROVIDE_HIDDEN (__init_array_start = .);
+     PROVIDE (__init_array_start = .);
      KEEP (*(SORT(.init_array.*)))
      KEEP (*(.init_array))
-     PROVIDE_HIDDEN (__init_array_end = .);
+     PROVIDE (__init_array_end = .);
   }
   .fini_array     :
   {
-    PROVIDE_HIDDEN (__fini_array_start = .);
+    PROVIDE (__fini_array_start = .);
     KEEP (*(.fini_array))
     KEEP (*(SORT(.fini_array.*)))
-    PROVIDE_HIDDEN (__fini_array_end = .);
+    PROVIDE (__fini_array_end = .);
   }
   .ctors          :
   {

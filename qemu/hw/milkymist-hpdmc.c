@@ -42,12 +42,14 @@ enum {
 
 struct MilkymistHpdmcState {
     SysBusDevice busdev;
+    MemoryRegion regs_region;
 
     uint32_t regs[R_MAX];
 };
 typedef struct MilkymistHpdmcState MilkymistHpdmcState;
 
-static uint32_t hpdmc_read(void *opaque, target_phys_addr_t addr)
+static uint64_t hpdmc_read(void *opaque, target_phys_addr_t addr,
+                           unsigned size)
 {
     MilkymistHpdmcState *s = opaque;
     uint32_t r = 0;
@@ -72,7 +74,8 @@ static uint32_t hpdmc_read(void *opaque, target_phys_addr_t addr)
     return r;
 }
 
-static void hpdmc_write(void *opaque, target_phys_addr_t addr, uint32_t value)
+static void hpdmc_write(void *opaque, target_phys_addr_t addr, uint64_t value,
+                        unsigned size)
 {
     MilkymistHpdmcState *s = opaque;
 
@@ -96,16 +99,14 @@ static void hpdmc_write(void *opaque, target_phys_addr_t addr, uint32_t value)
     }
 }
 
-static CPUReadMemoryFunc * const hpdmc_read_fn[] = {
-    NULL,
-    NULL,
-    &hpdmc_read,
-};
-
-static CPUWriteMemoryFunc * const hpdmc_write_fn[] = {
-    NULL,
-    NULL,
-    &hpdmc_write,
+static const MemoryRegionOps hpdmc_mmio_ops = {
+    .read = hpdmc_read,
+    .write = hpdmc_write,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 static void milkymist_hpdmc_reset(DeviceState *d)
@@ -125,11 +126,10 @@ static void milkymist_hpdmc_reset(DeviceState *d)
 static int milkymist_hpdmc_init(SysBusDevice *dev)
 {
     MilkymistHpdmcState *s = FROM_SYSBUS(typeof(*s), dev);
-    int hpdmc_regs;
 
-    hpdmc_regs = cpu_register_io_memory(hpdmc_read_fn, hpdmc_write_fn, s,
-            DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, R_MAX * 4, hpdmc_regs);
+    memory_region_init_io(&s->regs_region, &hpdmc_mmio_ops, s,
+            "milkymist-hpdmc", R_MAX * 4);
+    sysbus_init_mmio(dev, &s->regs_region);
 
     return 0;
 }
@@ -145,17 +145,26 @@ static const VMStateDescription vmstate_milkymist_hpdmc = {
     }
 };
 
-static SysBusDeviceInfo milkymist_hpdmc_info = {
-    .init = milkymist_hpdmc_init,
-    .qdev.name  = "milkymist-hpdmc",
-    .qdev.size  = sizeof(MilkymistHpdmcState),
-    .qdev.vmsd  = &vmstate_milkymist_hpdmc,
-    .qdev.reset = milkymist_hpdmc_reset,
-};
-
-static void milkymist_hpdmc_register(void)
+static void milkymist_hpdmc_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&milkymist_hpdmc_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = milkymist_hpdmc_init;
+    dc->reset = milkymist_hpdmc_reset;
+    dc->vmsd = &vmstate_milkymist_hpdmc;
 }
 
-device_init(milkymist_hpdmc_register)
+static TypeInfo milkymist_hpdmc_info = {
+    .name          = "milkymist-hpdmc",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(MilkymistHpdmcState),
+    .class_init    = milkymist_hpdmc_class_init,
+};
+
+static void milkymist_hpdmc_register_types(void)
+{
+    type_register_static(&milkymist_hpdmc_info);
+}
+
+type_init(milkymist_hpdmc_register_types)

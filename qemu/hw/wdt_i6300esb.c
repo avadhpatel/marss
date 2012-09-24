@@ -66,6 +66,7 @@
 /* Device state. */
 struct I6300State {
     PCIDevice dev;
+    MemoryRegion io_mem;
 
     int reboot_enabled;         /* "Reboot" on timer expiry.  The real action
                                  * performed depends on the -watchdog-action
@@ -142,7 +143,7 @@ static void i6300esb_disable_timer(I6300State *d)
 
 static void i6300esb_reset(DeviceState *dev)
 {
-    PCIDevice *pdev = DO_UPCAST(PCIDevice, qdev, dev);
+    PCIDevice *pdev = PCI_DEVICE(dev);
     I6300State *d = DO_UPCAST(I6300State, dev, pdev);
 
     i6300esb_debug("I6300State = %p\n", d);
@@ -355,6 +356,22 @@ static void i6300esb_mem_writel(void *vp, target_phys_addr_t addr, uint32_t val)
     }
 }
 
+static const MemoryRegionOps i6300esb_ops = {
+    .old_mmio = {
+        .read = {
+            i6300esb_mem_readb,
+            i6300esb_mem_readw,
+            i6300esb_mem_readl,
+        },
+        .write = {
+            i6300esb_mem_writeb,
+            i6300esb_mem_writew,
+            i6300esb_mem_writel,
+        },
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
 static const VMStateDescription vmstate_i6300esb = {
     .name = "i6300esb_wdt",
     .version_id = sizeof(I6300State),
@@ -381,27 +398,24 @@ static const VMStateDescription vmstate_i6300esb = {
 static int i6300esb_init(PCIDevice *dev)
 {
     I6300State *d = DO_UPCAST(I6300State, dev, dev);
-    int io_mem;
-    static CPUReadMemoryFunc * const mem_read[3] = {
-        i6300esb_mem_readb,
-        i6300esb_mem_readw,
-        i6300esb_mem_readl,
-    };
-    static CPUWriteMemoryFunc * const mem_write[3] = {
-        i6300esb_mem_writeb,
-        i6300esb_mem_writew,
-        i6300esb_mem_writel,
-    };
 
     i6300esb_debug("I6300State = %p\n", d);
 
     d->timer = qemu_new_timer_ns(vm_clock, i6300esb_timer_expired, d);
     d->previous_reboot_flag = 0;
 
-    io_mem = cpu_register_io_memory(mem_read, mem_write, d,
-                                    DEVICE_NATIVE_ENDIAN);
-    pci_register_bar_simple(&d->dev, 0, 0x10, 0, io_mem);
+    memory_region_init_io(&d->io_mem, &i6300esb_ops, d, "i6300esb", 0x10);
+    pci_register_bar(&d->dev, 0, 0, &d->io_mem);
     /* qemu_register_coalesced_mmio (addr, 0x10); ? */
+
+    return 0;
+}
+
+static int i6300esb_exit(PCIDevice *dev)
+{
+    I6300State *d = DO_UPCAST(I6300State, dev, dev);
+
+    memory_region_destroy(&d->io_mem);
 
     return 0;
 }
@@ -411,23 +425,33 @@ static WatchdogTimerModel model = {
     .wdt_description = "Intel 6300ESB",
 };
 
-static PCIDeviceInfo i6300esb_info = {
-    .qdev.name    = "i6300esb",
-    .qdev.size    = sizeof(I6300State),
-    .qdev.vmsd    = &vmstate_i6300esb,
-    .qdev.reset   = i6300esb_reset,
-    .config_read  = i6300esb_config_read,
-    .config_write = i6300esb_config_write,
-    .init         = i6300esb_init,
-    .vendor_id    = PCI_VENDOR_ID_INTEL,
-    .device_id    = PCI_DEVICE_ID_INTEL_ESB_9,
-    .class_id     = PCI_CLASS_SYSTEM_OTHER,
-};
-
-static void i6300esb_register_devices(void)
+static void i6300esb_class_init(ObjectClass *klass, void *data)
 {
-    watchdog_add_model(&model);
-    pci_qdev_register(&i6300esb_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->config_read = i6300esb_config_read;
+    k->config_write = i6300esb_config_write;
+    k->init = i6300esb_init;
+    k->exit = i6300esb_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->device_id = PCI_DEVICE_ID_INTEL_ESB_9;
+    k->class_id = PCI_CLASS_SYSTEM_OTHER;
+    dc->reset = i6300esb_reset;
+    dc->vmsd = &vmstate_i6300esb;
 }
 
-device_init(i6300esb_register_devices);
+static TypeInfo i6300esb_info = {
+    .name          = "i6300esb",
+    .parent        = TYPE_PCI_DEVICE,
+    .instance_size = sizeof(I6300State),
+    .class_init    = i6300esb_class_init,
+};
+
+static void i6300esb_register_types(void)
+{
+    watchdog_add_model(&model);
+    type_register_static(&i6300esb_info);
+}
+
+type_init(i6300esb_register_types)

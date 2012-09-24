@@ -25,6 +25,8 @@
 #include "host-utils.h"
 #include <math.h>
 
+#include "qemu_socket.h"
+
 void pstrcpy(char *buf, int buf_size, const char *str)
 {
     int c;
@@ -136,7 +138,7 @@ int qemu_fdatasync(int fd)
 
 void qemu_iovec_init(QEMUIOVector *qiov, int alloc_hint)
 {
-    qiov->iov = qemu_malloc(alloc_hint * sizeof(struct iovec));
+    qiov->iov = g_malloc(alloc_hint * sizeof(struct iovec));
     qiov->niov = 0;
     qiov->nalloc = alloc_hint;
     qiov->size = 0;
@@ -160,7 +162,7 @@ void qemu_iovec_add(QEMUIOVector *qiov, void *base, size_t len)
 
     if (qiov->niov == qiov->nalloc) {
         qiov->nalloc = 2 * qiov->nalloc + 1;
-        qiov->iov = qemu_realloc(qiov->iov, qiov->nalloc * sizeof(struct iovec));
+        qiov->iov = g_realloc(qiov->iov, qiov->nalloc * sizeof(struct iovec));
     }
     qiov->iov[qiov->niov].iov_base = base;
     qiov->iov[qiov->niov].iov_len = len;
@@ -217,7 +219,10 @@ void qemu_iovec_destroy(QEMUIOVector *qiov)
 {
     assert(qiov->nalloc != -1);
 
-    qemu_free(qiov->iov);
+    qemu_iovec_reset(qiov);
+    g_free(qiov->iov);
+    qiov->nalloc = 0;
+    qiov->iov = NULL;
 }
 
 void qemu_iovec_reset(QEMUIOVector *qiov)
@@ -298,6 +303,41 @@ void qemu_iovec_memset_skip(QEMUIOVector *qiov, int c, size_t count,
     }
 }
 
+/*
+ * Checks if a buffer is all zeroes
+ *
+ * Attention! The len must be a multiple of 4 * sizeof(long) due to
+ * restriction of optimizations in this function.
+ */
+bool buffer_is_zero(const void *buf, size_t len)
+{
+    /*
+     * Use long as the biggest available internal data type that fits into the
+     * CPU register and unroll the loop to smooth out the effect of memory
+     * latency.
+     */
+
+    size_t i;
+    long d0, d1, d2, d3;
+    const long * const data = buf;
+
+    assert(len % (4 * sizeof(long)) == 0);
+    len /= sizeof(long);
+
+    for (i = 0; i < len; i += 4) {
+        d0 = data[i + 0];
+        d1 = data[i + 1];
+        d2 = data[i + 2];
+        d3 = data[i + 3];
+
+        if (d0 || d1 || d2 || d3) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 #ifndef _WIN32
 /* Sets a specific flag */
 int fcntl_setfl(int fd, int flag)
@@ -315,18 +355,34 @@ int fcntl_setfl(int fd, int flag)
 }
 #endif
 
+static int64_t suffix_mul(char suffix, int64_t unit)
+{
+    switch (qemu_toupper(suffix)) {
+    case STRTOSZ_DEFSUFFIX_B:
+        return 1;
+    case STRTOSZ_DEFSUFFIX_KB:
+        return unit;
+    case STRTOSZ_DEFSUFFIX_MB:
+        return unit * unit;
+    case STRTOSZ_DEFSUFFIX_GB:
+        return unit * unit * unit;
+    case STRTOSZ_DEFSUFFIX_TB:
+        return unit * unit * unit * unit;
+    }
+    return -1;
+}
+
 /*
  * Convert string to bytes, allowing either B/b for bytes, K/k for KB,
- * M/m for MB, G/g for GB or T/t for TB. Default without any postfix
- * is MB. End pointer will be returned in *end, if not NULL. A valid
- * value must be terminated by whitespace, ',' or '\0'. Return -1 on
- * error.
+ * M/m for MB, G/g for GB or T/t for TB. End pointer will be returned
+ * in *end, if not NULL. Return -1 on error.
  */
-int64_t strtosz_suffix(const char *nptr, char **end, const char default_suffix)
+int64_t strtosz_suffix_unit(const char *nptr, char **end,
+                            const char default_suffix, int64_t unit)
 {
     int64_t retval = -1;
     char *endptr;
-    unsigned char c, d;
+    unsigned char c;
     int mul_required = 0;
     double val, mul, integral, fraction;
 
@@ -339,58 +395,16 @@ int64_t strtosz_suffix(const char *nptr, char **end, const char default_suffix)
     if (fraction != 0) {
         mul_required = 1;
     }
-    /*
-     * Any whitespace character is fine for terminating the number,
-     * in addition we accept ',' to handle strings where the size is
-     * part of a multi token argument.
-     */
     c = *endptr;
-    d = c;
-    if (qemu_isspace(c) || c == '\0' || c == ',') {
-        c = 0;
-        if (default_suffix) {
-            d = default_suffix;
-        } else {
-            d = c;
-        }
-    }
-    switch (qemu_toupper(d)) {
-    case STRTOSZ_DEFSUFFIX_B:
-        mul = 1;
-        if (mul_required) {
-            goto fail;
-        }
-        break;
-    case STRTOSZ_DEFSUFFIX_KB:
-        mul = 1 << 10;
-        break;
-    case 0:
-        if (mul_required) {
-            goto fail;
-        }
-    case STRTOSZ_DEFSUFFIX_MB:
-        mul = 1ULL << 20;
-        break;
-    case STRTOSZ_DEFSUFFIX_GB:
-        mul = 1ULL << 30;
-        break;
-    case STRTOSZ_DEFSUFFIX_TB:
-        mul = 1ULL << 40;
-        break;
-    default:
-        goto fail;
-    }
-    /*
-     * If not terminated by whitespace, ',', or \0, increment endptr
-     * to point to next character, then check that we are terminated
-     * by an appropriate separating character, ie. whitespace, ',', or
-     * \0. If not, we are seeing trailing garbage, thus fail.
-     */
-    if (c != 0) {
+    mul = suffix_mul(c, unit);
+    if (mul >= 0) {
         endptr++;
-        if (!qemu_isspace(*endptr) && *endptr != ',' && *endptr != 0) {
-            goto fail;
-        }
+    } else {
+        mul = suffix_mul(default_suffix, unit);
+        assert(mul >= 0);
+    }
+    if (mul == 1 && mul_required) {
+        goto fail;
     }
     if ((val * mul >= INT64_MAX) || val < 0) {
         goto fail;
@@ -405,7 +419,132 @@ fail:
     return retval;
 }
 
+int64_t strtosz_suffix(const char *nptr, char **end, const char default_suffix)
+{
+    return strtosz_suffix_unit(nptr, end, default_suffix, 1024);
+}
+
 int64_t strtosz(const char *nptr, char **end)
 {
     return strtosz_suffix(nptr, end, STRTOSZ_DEFSUFFIX_MB);
+}
+
+int qemu_parse_fd(const char *param)
+{
+    int fd;
+    char *endptr = NULL;
+
+    fd = strtol(param, &endptr, 10);
+    if (*endptr || (fd == 0 && param == endptr)) {
+        return -1;
+    }
+    return fd;
+}
+
+/*
+ * Send/recv data with iovec buffers
+ *
+ * This function send/recv data from/to the iovec buffer directly.
+ * The first `offset' bytes in the iovec buffer are skipped and next
+ * `len' bytes are used.
+ *
+ * For example,
+ *
+ *   do_sendv_recvv(sockfd, iov, len, offset, 1);
+ *
+ * is equal to
+ *
+ *   char *buf = malloc(size);
+ *   iov_to_buf(iov, iovcnt, buf, offset, size);
+ *   send(sockfd, buf, size, 0);
+ *   free(buf);
+ */
+static int do_sendv_recvv(int sockfd, struct iovec *iov, int len, int offset,
+                          int do_sendv)
+{
+    int ret, diff, iovlen;
+    struct iovec *last_iov;
+
+    /* last_iov is inclusive, so count from one.  */
+    iovlen = 1;
+    last_iov = iov;
+    len += offset;
+
+    while (last_iov->iov_len < len) {
+        len -= last_iov->iov_len;
+
+        last_iov++;
+        iovlen++;
+    }
+
+    diff = last_iov->iov_len - len;
+    last_iov->iov_len -= diff;
+
+    while (iov->iov_len <= offset) {
+        offset -= iov->iov_len;
+
+        iov++;
+        iovlen--;
+    }
+
+    iov->iov_base = (char *) iov->iov_base + offset;
+    iov->iov_len -= offset;
+
+    {
+#if defined CONFIG_IOVEC && defined CONFIG_POSIX
+        struct msghdr msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.msg_iov = iov;
+        msg.msg_iovlen = iovlen;
+
+        do {
+            if (do_sendv) {
+                ret = sendmsg(sockfd, &msg, 0);
+            } else {
+                ret = recvmsg(sockfd, &msg, 0);
+            }
+        } while (ret == -1 && errno == EINTR);
+#else
+        struct iovec *p = iov;
+        ret = 0;
+        while (iovlen > 0) {
+            int rc;
+            if (do_sendv) {
+                rc = send(sockfd, p->iov_base, p->iov_len, 0);
+            } else {
+                rc = qemu_recv(sockfd, p->iov_base, p->iov_len, 0);
+            }
+            if (rc == -1) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                if (ret == 0) {
+                    ret = -1;
+                }
+                break;
+            }
+            if (rc == 0) {
+                break;
+            }
+            ret += rc;
+            iovlen--, p++;
+        }
+#endif
+    }
+
+    /* Undo the changes above */
+    iov->iov_base = (char *) iov->iov_base - offset;
+    iov->iov_len += offset;
+    last_iov->iov_len += diff;
+    return ret;
+}
+
+int qemu_recvv(int sockfd, struct iovec *iov, int len, int iov_offset)
+{
+    return do_sendv_recvv(sockfd, iov, len, iov_offset, 0);
+}
+
+int qemu_sendv(int sockfd, struct iovec *iov, int len, int iov_offset)
+{
+    return do_sendv_recvv(sockfd, iov, len, iov_offset, 1);
 }

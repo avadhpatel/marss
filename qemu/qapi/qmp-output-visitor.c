@@ -12,6 +12,7 @@
  */
 
 #include "qmp-output-visitor.h"
+#include "qapi/qapi-visit-impl.h"
 #include "qemu-queue.h"
 #include "qemu-common.h"
 #include "qemu-objects.h"
@@ -20,6 +21,7 @@
 typedef struct QStackEntry
 {
     QObject *value;
+    bool is_list_head;
     QTAILQ_ENTRY(QStackEntry) node;
 } QStackEntry;
 
@@ -42,9 +44,12 @@ static QmpOutputVisitor *to_qov(Visitor *v)
 
 static void qmp_output_push_obj(QmpOutputVisitor *qov, QObject *value)
 {
-    QStackEntry *e = qemu_mallocz(sizeof(*e));
+    QStackEntry *e = g_malloc0(sizeof(*e));
 
     e->value = value;
+    if (qobject_type(e->value) == QTYPE_QLIST) {
+        e->is_list_head = true;
+    }
     QTAILQ_INSERT_HEAD(&qov->stack, e, node);
 }
 
@@ -54,7 +59,7 @@ static QObject *qmp_output_pop(QmpOutputVisitor *qov)
     QObject *value;
     QTAILQ_REMOVE(&qov->stack, e, node);
     value = e->value;
-    qemu_free(e);
+    g_free(e);
     return value;
 }
 
@@ -122,12 +127,20 @@ static void qmp_output_start_list(Visitor *v, const char *name, Error **errp)
     qmp_output_push(qov, list);
 }
 
-static GenericList *qmp_output_next_list(Visitor *v, GenericList **list,
+static GenericList *qmp_output_next_list(Visitor *v, GenericList **listp,
                                          Error **errp)
 {
-    GenericList *retval = *list;
-    *list = retval->next;
-    return retval;
+    GenericList *list = *listp;
+    QmpOutputVisitor *qov = to_qov(v);
+    QStackEntry *e = QTAILQ_FIRST(&qov->stack);
+
+    assert(e);
+    if (e->is_list_head) {
+        e->is_list_head = false;
+        return list;
+    }
+
+    return list ? list->next : NULL;
 }
 
 static void qmp_output_end_list(Visitor *v, Error **errp)
@@ -168,25 +181,6 @@ static void qmp_output_type_number(Visitor *v, double *obj, const char *name,
     qmp_output_add(qov, name, qfloat_from_double(*obj));
 }
 
-static void qmp_output_type_enum(Visitor *v, int *obj, const char *strings[],
-                                 const char *kind, const char *name,
-                                 Error **errp)
-{
-    int i = 0;
-    int value = *obj;
-    char *enum_str;
-
-    assert(strings);
-    while (strings[i++] != NULL);
-    if (value >= i - 1) {
-        error_set(errp, QERR_INVALID_PARAMETER, name ? name : "null");
-        return;
-    }
-
-    enum_str = (char *)strings[value];
-    qmp_output_type_str(v, &enum_str, name, errp);
-}
-
 QObject *qmp_output_get_qobject(QmpOutputVisitor *qov)
 {
     QObject *obj = qmp_output_first(qov);
@@ -205,29 +199,31 @@ void qmp_output_visitor_cleanup(QmpOutputVisitor *v)
 {
     QStackEntry *e, *tmp;
 
+    /* The bottom QStackEntry, if any, owns the root QObject. See the
+     * qmp_output_push_obj() invocations in qmp_output_add_obj(). */
+    QObject *root = QTAILQ_EMPTY(&v->stack) ? NULL : qmp_output_first(v);
+
     QTAILQ_FOREACH_SAFE(e, &v->stack, node, tmp) {
         QTAILQ_REMOVE(&v->stack, e, node);
-        if (e->value) {
-            qobject_decref(e->value);
-        }
-        qemu_free(e);
+        g_free(e);
     }
 
-    qemu_free(v);
+    qobject_decref(root);
+    g_free(v);
 }
 
 QmpOutputVisitor *qmp_output_visitor_new(void)
 {
     QmpOutputVisitor *v;
 
-    v = qemu_mallocz(sizeof(*v));
+    v = g_malloc0(sizeof(*v));
 
     v->visitor.start_struct = qmp_output_start_struct;
     v->visitor.end_struct = qmp_output_end_struct;
     v->visitor.start_list = qmp_output_start_list;
     v->visitor.next_list = qmp_output_next_list;
     v->visitor.end_list = qmp_output_end_list;
-    v->visitor.type_enum = qmp_output_type_enum;
+    v->visitor.type_enum = output_type_enum;
     v->visitor.type_int = qmp_output_type_int;
     v->visitor.type_bool = qmp_output_type_bool;
     v->visitor.type_str = qmp_output_type_str;

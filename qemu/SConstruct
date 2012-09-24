@@ -1,6 +1,8 @@
 
 # SCons File to compile QEMU
 
+from subprocess import call
+
 Import('qemu_env')
 Import('qemu_target')
 Import('ptlsim_lib')
@@ -16,12 +18,12 @@ if target_base_arch == "x86_64":
 target_path = "%s/target-%s" % (env['source_path'], target_base_arch)
 target_build_path = "%s/%s-softmmu" % (env['source_path'], target['arch'])
 hw_path = "%s/hw" % env['source_path']
-env['CPPPATH'] = []
+env['CPPPATH'].append("%s/include" % env['source_path'])
 env['CPPPATH'].append([".", "..", target_path, env['source_path']])
 env['CPPPATH'].append(target['dir'])
 env['CPPPATH'].append(ptlsim_inc_dir)
 env['CPPPATH'].append("%s/linux-headers" % env['source_path'])
-env.Append(CCFLAGS = "-MMD -MP -DNEED_CPU_H")
+env.Append(CCFLAGS = "-MMD -MP -DNEED_CPU_H".split())
 env.Append(CCFLAGS = "-DMARSS_QEMU")
 
 num_sim_cores = ARGUMENTS.get('c', 1)
@@ -48,9 +50,30 @@ if google_perftools != None:
 
 error_str = "failure"
 
+# Read in user configuration from 'default-config/*.mak' files
+# First create config-devices.mak file
+target_mak_file = "%s/%s-softmmu/config-devices.mak" % (env['source_path'],
+        target['arch'])
+src_mak_file = "%s/default-configs/%s-softmmu.mak" % (env['source_path'],
+        target['arch'])
+call("sh %s/scripts/make_device_config.sh %s %s" % (env['source_path'],
+    target_mak_file, src_mak_file), shell=True)
+# FIXME later - if config-devices.mak already exitsts then rename it..
+call("mv %s.tmp %s" % (target_mak_file, target_mak_file), shell=True)
+
+# Now read in the file and set env variables
+t_mak = open(target_mak_file, 'r')
+for line in t_mak.readlines():
+    if line.startswith("CONFIG_") and \
+            line.strip().endswith("y"):
+        var = line.split('=')[0].split('_')[1:]
+        var = '_'.join(var)
+        var = var.lower()
+        env[var] = True
+
 # if compiling with g++ add -x c flag
 if "g++" in env['CC'] :
-    env.Append(CCFLAGS = "-x c")
+    env.Append(CCFLAGS = '-x c'.split())
 
 # If we add user space emulator support then 
 # add user space compilation from QEMU's makefile
@@ -73,22 +96,41 @@ q_object_files += " qjson.c json-lexer.c json-streamer.c json-parser.c"
 q_object_files += " qerror.c error.c"
 
 #######################
+# qom
+qom_files = "qom/object.c qom/container.c qom/qom-qobject.c "
+qom_files += " qom/cpu.c"
+
+#######################
 # oslib-obj
-oslib_files = "osdep.c oslib-posix.c"
+oslib_files = "osdep.c oslib-posix.c qemu-thread-posix.c"
+
+#######################
+# coroutines
+coroutines = "qemu-coroutine.c qemu-coroutine-lock.c qemu-coroutine-io.c "
+coroutines += "qemu-coroutine-sleep.c "
+if env['coroutine'] == "ucontext":
+    coroutines += "coroutine-ucontext.c "
+elif env['coroutines'] == "sigaltstack":
+    coroutines += "coroutine-sigalstack.c "
+    #TODO : Windows support
 
 #######################
 # block-obj
-block_files = "cutils.c cache-utils.c qemu-malloc.c qemu-option.c module.c"
+block_files = "cutils.c cache-utils.c qemu-option.c module.c"
 block_files += " nbd.c block.c aio.c aes.c qemu-progress.c qemu-sockets.c"
-block_files += " posix-aio-compat.c qemu-config.c async.c"
+block_files += " posix-aio-compat.c qemu-config.c async.c "
 if env['linux_aio'] == True:
     block_files += " linux-aio.c"
+
+block_files += coroutines
 
 block_files += " " + " ".join(Glob("block/*.c", strings=True))
 block_files = block_files.replace("block/raw-win32.c", "")
 block_files = block_files.replace("block/rbd.c", "")
 if env['curl'] == False:
     block_files = block_files.replace("block/curl.c ", " ")
+if not env['libiscsi']:
+    block_files = block_files.replace("block/iscsi.c", "")
 
 net_files = "net.c "
 net_files += " ".join(Glob("net/*.c", strings=True))
@@ -115,12 +157,9 @@ comm_lib_env = env.Clone()
 comm_files = "readline.c console.c tcg-runtime.c host-utils.c ioport.c "
 comm_hw_files = "irq.c i2c.c smbus.c smbus_eeprom.c eeprom93xx.c "
 comm_hw_files += " scsi-disk.c cdrom.c scsi-generic.c scsi-bus.c "
-comm_hw_files += " usb.c usb-hub.c usb-hid.c usb-desc.c "
-comm_hw_files += " usb-msd.c usb-wacom.c usb-serial.c usb-net.c usb-bus.c "
-comm_hw_files += " msmouse.c ps2.c qdev.c qdev-properties.c"
+comm_hw_files += " msmouse.c ps2.c qdev.c qdev-properties.c qdev-monitor.c"
 comm_hw_files += " bt.c bt-l2cap.c bt-sdp.c "
-comm_hw_files += " bt-hci.c bt-hid.c usb-bt.c bt-hci-csr.c"
-comm_hw_files += " event_notifier.c "
+comm_hw_files += " bt-hci.c bt-hid.c bt-hci-csr.c"
 
 # List of files that are not going to used for x86[_64]
 # max7310.c max111x.c wm8750.c twl92230.c tsc2005.c lm832x.c
@@ -130,14 +169,21 @@ comm_hw_files += " event_notifier.c "
 comm_files += " buffered_file.c migration.c migration-tcp.c "
 comm_files += " qemu-char.c"
 comm_files += " savevm.c cache-utils.c bt-host.c bt-vhci.c"
-comm_files += " usb-%s.c" % env['usb']
 comm_files += " migration-exec.c migration-unix.c migration-fd.c"
 comm_files += " block-migration.c blockdev.c cursor.c "
 comm_files += " qemu-error.c input.c pflib.c iohandler.c"
 comm_files += " bitmap.c bitops.c"
 
 # We only add POSIX/Linux related files
-comm_files += " os-posix.c"
+comm_files += " os-posix.c "
+
+# USB Files
+comm_hw_files += " usb/core.c "
+comm_hw_files += " usb/dev-hub.c usb/dev-hid.c usb/desc.c "
+comm_hw_files += " usb/dev-wacom.c usb/dev-serial.c "
+comm_hw_files += " usb/dev-network.c usb/bus.c usb/dev-audio.c "
+comm_hw_files += " usb/host-%s.c" % env['usb']
+comm_hw_files += " usb/dev-bluetooth.c"
 
 comm_libs = ""
 comm_ldflags = ""
@@ -209,6 +255,8 @@ if env['iothread'] == True:
 comm_files += " acl.c iov.c"
 comm_files += " notify.c compatfd.c"
 comm_files += " qemu-timer.c qemu-timer-common.c"
+comm_files += " event_notifier.c hmp.c qmp.c"
+comm_files += " main-loop.c"
 
 slirp_files = " "
 if env['slirp'] == True:
@@ -220,6 +268,8 @@ if env['xen'] == True:
     comm_files += " xen_disk.c xen_nic.c"
 else:
     comm_files += " xen-stub.c"
+
+comm_files += " " + qom_files
 
 comm_hw_list = []
 for h in Split(comm_hw_files):
@@ -248,6 +298,37 @@ hxtool_bld = "sh %s/scripts/hxtool -h < $SOURCE > $TARGET" % env['source_path']
 env['BUILDERS']['HXTOOL'] = Builder(action = Action(hxtool_bld,
     cmdstr="$CREATECOMSTR"))
 
+##########################
+# trace
+
+trace_h_bld = "%s/scripts/tracetool.py --backend=nop --format=h < $SOURCE > $TARGET " % env['source_path']
+trace_c_bld = "%s/scripts/tracetool.py --backend=nop --format=c < $SOURCE > $TARGET " % env['source_path']
+
+env['BUILDERS']['TRACE_H_CR'] = Builder(action = Action(trace_h_bld,
+    cmdstr="$CREATECOMSTR"))
+env['BUILDERS']['TRACE_C_CR'] = Builder(action = Action(trace_c_bld,
+    cmdstr="$CREATECOMSTR"))
+
+trace_h = env.TRACE_H_CR('trace.h', 'trace-events')
+trace_c = env.TRACE_C_CR('trace.c', 'trace-events')
+
+trace_files = ""
+
+if env['trace_backend'] == 'dtrace':
+    trace_files += "trace-dtrace.c "
+
+if env['trace_default']:
+    trace_files += "trace/default.c "
+
+if env['trace_backend'] == 'simple':
+    trace_files += "trace/simple.c "
+    trace_files += "qemu-timer-common.c "
+
+if env['trace_backend'] == 'stderr':
+    trace_files += "trace/stderr.c "
+
+trace_files += "trace/control.c "
+
 #######################
 # qemu-img :
 
@@ -255,9 +336,18 @@ env['BUILDERS']['HXTOOL'] = Builder(action = Action(hxtool_bld,
 qemu_img_cmds_h = env.HXTOOL('qemu-img-cmds.h', 'qemu-img-cmds.hx')
 
 # osdep_o = env.Object("osdep.c")
-qemu_tool_o = comm_lib_env.Object("qemu-tool.c")
+tool_files = "qemu-tool.c main-loop.c notify.c iohandler.c "
+tool_files += "compatfd.c "
+tool_files += trace_files
+
+qemu_tool_o = comm_lib_env.Object(Split(tool_files))
+
+if env['trace_backend'] != 'dtrace':
+    qemu_tool_o += comm_lib_env.Object(trace_c)
+
 qemu_err_o = comm_lib_env.Object("qemu-error.c")
 qemu_timer_comm_o = comm_lib_env.Object("qemu-timer-common.c")
+qemu_timer_comm_o += comm_lib_env.Object("qemu-timer.c")
 qemu_img_comm_objs = qemu_tool_o + block_objs + q_objs + oslib_objs
 qemu_img_comm_objs += qemu_err_o
 qemu_img_comm_objs += qemu_timer_comm_o
@@ -282,22 +372,29 @@ qemu_io = comm_lib_env.QEMU_BIN('qemu-io',
 
 cpu_emu_objs = "exec.c translate-all.c "
 cpu_emu_objs += " %s/translate.c" % target_path
+cpu_emu_objs += " %s/cpu.c" % target_path
 # TCG code generator
 cpu_emu_objs += " tcg/tcg.c" # tcg/tcg-runtime.c"
-cpu_emu_objs += " %s/cpuid.c" % target_path
+cpu_emu_objs += " tcg/optimize.c" # tcg/tcg-runtime.c"
 env['CPPPATH'].append("%s/tcg" % env['source_path'])
 env['CPPPATH'].append("%s/tcg/%s" % (env['source_path'], target_base_arch))
 
 cpu_emu_objs += " fpu/softfloat.c"
 
 env['CPPPATH'].append("%s/fpu" % env['source_path'])
+helper_cflags = []
+if type(env['CCFLAGS']) == list:
+    helper_cflags.extend(env['CCFLAGS'])
+else:
+    helper_cflags.append(env['CCFLAGS'])
+helper_cflags.append(HELPER_CFLAGS)
 
 op_helper_obj = env.Object('%s/op_helper.c' % target_path, 
-        CCFLAGS = env['CCFLAGS'] + HELPER_CFLAGS)
+        CCFLAGS = helper_cflags)
 helper_obj = env.Object('%s/helper.c' % target_path,
-        CCFLAGS = env['CCFLAGS'] + HELPER_CFLAGS)
+        CCFLAGS = helper_cflags)
 cpu_exec_obj = env.Object('cpu-exec.c', 
-        CCFLAGS = env['CCFLAGS'] + HELPER_CFLAGS)
+        CCFLAGS = helper_cflags)
 
 cpu_emu_objs += " %s/op_helper.o %s/helper.o" % (target_path, target_path)
 cpu_emu_objs += " cpu-exec.o"
@@ -333,7 +430,8 @@ if target['user_only']:
 obj_files = "monitor.c dma-helpers.c"
 obj_files += " %s/machine.c" % target_path
 obj_files += " cpus.c arch_init.c balloon.c "
-obj_files += " rwhandler.c"
+obj_files += " memory.c cputlb.c "
+obj_files += " qtest.c"
 hw_files = "pci.c isa_mmio.c pci_host.c loader.c sysbus.c isa-bus.c"
 hw_files += " pci_bridge.c msi.c pcie_host.c "
 hw_files += " ioh3420.c xio3130_upstream.c xio3130_downstream.c qdev-addr.c "
@@ -343,11 +441,15 @@ hw_files += " virtio.c virtio-pci.c virtio-blk.c virtio-balloon.c"
 hw_files += " virtio-net.c virtio-console.c virtio-serial-bus.c"
 hw_files += " vhost_net.c"
 hw_files += " fw_cfg.c watchdog.c wdt_i6300esb.c msix.c "
+hw_files += " virtio-scsi.c "
 
 if env['kvm']:
     obj_files += " kvm-all.c"
     obj_files += " %s/kvm.c" % target_path
-    obj_files += " hw/kvmclock.c"
+    obj_files += " hw/kvmvapic.c"
+    obj_files += " hw/kvm/clock.c hw/kvm/apic.c hw/kvm/i8259.c"
+    obj_files += " hw/kvm/ioapic.c hw/kvm/i8254.c"
+    obj_files += " %s/hyperv.c" % target_path
 else:
     obj_files += " kvm-stub.c"
 
@@ -384,7 +486,7 @@ hw_files += " %s" % sound_hw_files
 # Bluez flags are added in configuration
 
 hw_files += " lsi53c895a.c esp.c"
-hw_files += " usb-ohci.c"
+hw_files += " usb/libhw.c"
 # hw_files += " eeprom93xx.c"
 hw_files += " eepro100.c ne2000.c pcnet-pci.c pcnet.c rtl8139.c e1000.c"
 # hw_files += " msmouse.c"
@@ -393,17 +495,29 @@ if target_base_arch == "i386":
     hw_files += " pckbd.c vga.c dma.c vga-isa.c vga-pci.c ioapic.c"
     hw_files += " fdc.c mc146818rtc.c serial.c i8259.c i8254.c acpi_piix4.c "
     hw_files += " pcspk.c pc.c cirrus_vga.c apic.c parallel.c acpi.c smbios.c"
-    hw_files += " piix_pci.c usb-uhci.c vmmouse.c vmport.c ne2000-isa.c"
+    hw_files += " piix_pci.c vmmouse.c vmport.c ne2000-isa.c"
     hw_files += " vmware_vga.c hpet.c device-hotplug.c pci-hotplug.c"
     hw_files += " pm_smbus.c apm.c"
     hw_files += " multiboot.c debugcon.c "
     hw_files += " pc_piix.c sga.c "
+    hw_files += " apic_common.c pc_sysfw.c i8259_common.c "
+    hw_files += " i8254_common.c ioapic_common.c "
     env.Append(CPPFLAGS = " -DHAS_AUDIO -DHAS_AUDIO_CHOICE")
 else:
     print("ERROR: Unsupported arch.")
     print("MARSSx86 Only supports x86_64 architecture")
 
+if env['usb_ohci']:
+    hw_files += " usb/hcd-ohci.c"
+if env['usb_uhci']:
+    hw_files += " usb/hcd-uhci.c"
+if env['usb_ehci']:
+    hw_files += " usb/hcd-ehci.c"
+if env['usb_xhci']:
+    hw_files += " usb/hcd-xhci.c"
+
 hw_files += " pcie.c pcie_aer.c pcie_port.c "
+hw_files += " hid.c "
 
 ide_files = " ".join(env.Glob("hw/ide/*.c", strings=True))
 
@@ -415,19 +529,7 @@ if env['gdbstub']:
     # We are not including any gdbstub xml files as 
     # its not required in arch that we support
 
-##########################
-# trace - is disabled
-
-trace_h_bld = "%s/scripts/tracetool --nop -h < $SOURCE > $TARGET " % env['source_path']
-trace_c_bld = "%s/scripts/tracetool --nop -c < $SOURCE > $TARGET " % env['source_path']
-
-env['BUILDERS']['TRACE_H_CR'] = Builder(action = Action(trace_h_bld,
-    cmdstr="$CREATECOMSTR"))
-env['BUILDERS']['TRACE_C_CR'] = Builder(action = Action(trace_c_bld,
-    cmdstr="$CREATECOMSTR"))
-
-trace_h = env.TRACE_H_CR('trace.h', 'trace-events')
-trace_c = env.TRACE_C_CR('trace.c', 'trace-events')
+hw_files += " pflash_cfi01.c pflash_cfi02.c "
 
 ##########################
 # qemu-options.def
@@ -440,7 +542,71 @@ qemu_options_def = env.HXTOOL('qemu-options.def', 'qemu-options.hx')
 hmp_commands_h = env.HXTOOL('hmp-commands.h', 'hmp-commands.hx')
 
 # qmp-commands.h
-qmp_commands_h = env.HXTOOL('qmp-commands.h', 'qmp-commands.hx')
+qmp_commands_old_h = env.HXTOOL(
+        '%s/qmp-commands-old.h' % (target_build_path), 'qmp-commands.hx')
+
+##########################
+# qapi and qga
+qapi_type_bld = "python %s/scripts/qapi-types.py -o %s < $SOURCE " % (
+        env['source_path'], env['source_path'])
+qapi_visit_bld = "python %s/scripts/qapi-visit.py -o %s < $SOURCE " % (
+        env['source_path'], env['source_path'])
+qapi_command_bld = "python %s/scripts/qapi-commands.py -m -o %s < $SOURCE " % (
+        env['source_path'], env['source_path'])
+
+qga_type_bld = "python %s/scripts/qapi-types.py -o %s/qapi-generated " \
+        "-p \"qga-\" < $SOURCE " % (
+     env['source_path'], env['source_path'])
+qga_visit_bld = "python %s/scripts/qapi-visit.py -o %s/qapi-generated " \
+        "-p \"qga-\" < $SOURCE " % (
+     env['source_path'], env['source_path'])
+qga_command_bld = "python %s/scripts/qapi-commands.py " \
+        "-o %s/qapi-generated -p \"qga-\" < $SOURCE " % (
+        env['source_path'], env['source_path'])
+
+env['BUILDERS']['QAPI_TYPE'] = Builder(action = Action(qapi_type_bld,
+    cmdstr="$CREATECOMSTR"))
+env['BUILDERS']['QAPI_VISIT'] = Builder(action = Action(qapi_visit_bld,
+    cmdstr="$CREATECOMSTR"))
+env['BUILDERS']['QAPI_CMD'] = Builder(action = Action(qapi_command_bld,
+    cmdstr="$CREATECOMSTR"))
+
+env['BUILDERS']['QGA_TYPE'] = Builder(action = Action(qga_type_bld,
+    cmdstr="$CREATECOMSTR"))
+env['BUILDERS']['QGA_VISIT'] = Builder(action = Action(qga_visit_bld,
+    cmdstr="$CREATECOMSTR"))
+env['BUILDERS']['QGA_CMD'] = Builder(action = Action(qga_command_bld,
+    cmdstr="$CREATECOMSTR"))
+
+qapi_type_ch = env.QAPI_TYPE(
+        'qapi-types.c', 'qapi-schema.json')
+qapi_visit_ch = env.QAPI_VISIT(
+        'qapi-visit.c', 'qapi-schema.json')
+qapi_cmd_ch = env.QAPI_CMD(
+        'qmp-marshal.c', 'qapi-schema.json')
+
+qga_type_ch = env.QGA_TYPE(
+        'qapi-generated/qga-qapi-types.c', 'qapi-schema-guest.json')
+qga_visit_ch = env.QGA_VISIT(
+        'qapi-generated/qga-qapi-visit.c', 'qapi-schema-guest.json')
+qga_cmd_ch = env.QGA_CMD(
+        'qapi-generated/qga-qmp-marshal.c', 'qapi-schema-guest.json')
+
+env.Depends(['config-host.h'], [qapi_type_ch, qapi_cmd_ch])
+env.Depends(qapi_type_ch, qapi_visit_ch)
+env.Depends(qga_type_ch, qga_visit_ch)
+
+qapi_n_files = "qapi-visit-core.c qapi-dealloc-visitor.c "
+qapi_n_files += "qmp-input-visitor.c qmp-output-visitor.c "
+qapi_n_files += "qmp-registry.c qmp-dispatch.c "
+qapi_n_files += "string-input-visitor.c string-output-visitor.c "
+
+qapi_files_list = []
+for q_f in Split(qapi_n_files):
+    qapi_files_list.append("qapi/%s" % q_f)
+
+qga_n_files = "commands.c guest-agent-command-state.c "
+qga_n_files += "commands-posix.c channel-posix.c "
 
 ##########################
 # pc-bios and option-rom
@@ -471,7 +637,14 @@ for hw_f in Split(hw_files):
     hw_files_list.append("hw/%s" % hw_f)
 
 hw_files_o = env.Object(Split(obj_files) + hw_files_list + Split(ide_files))
-trace_o = env.Object(trace_c)
+trace_o = comm_lib_env.Object(Split(trace_files))
+if env['trace_backend'] != 'dtrace':
+    trace_o += comm_lib_env.Object(trace_c)
+
+generated_objs = env.Object([qapi_type_ch, qapi_visit_ch, qapi_cmd_ch])
+    # qga_type_ch, qga_visit_ch, qga_cmd_ch])
+
+universal_objs = env.Object(qapi_files_list)
 
 env.Append(LIBPATH = "%s/../plugins" % env['source_path'])
 env.Append(LINKFLAGS = "-Wl,-rpath=%s/../plugins" % env['source_path'])
@@ -479,6 +652,7 @@ env.Append(LINKFLAGS = "-Wl,--no-as-needed")
 env.Append(LIBS = plugins)
 env['ARLIB'] = libqemu_comm + libqemu + ptlsim_lib
 qemu_bin = env.QEMU_BIN(qemu_prog_name, hw_files_o + pc_bios_objs +
+        generated_objs + universal_objs +
         trace_o)
 env.Depends(qemu_bin, env['ARLIB'])
 

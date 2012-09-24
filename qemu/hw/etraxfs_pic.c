@@ -39,6 +39,7 @@
 struct etrax_pic
 {
     SysBusDevice busdev;
+    MemoryRegion mmio;
     void *interrupt_vector;
     qemu_irq parent_irq;
     qemu_irq parent_nmi;
@@ -52,7 +53,7 @@ static void pic_update(struct etrax_pic *fs)
 
     fs->regs[R_R_MASKED_VECT] = fs->regs[R_R_VECT] & fs->regs[R_RW_MASK];
 
-    /* The ETRAX interrupt controller signals interrupts to teh core
+    /* The ETRAX interrupt controller signals interrupts to the core
        through an interrupt request wire and an irq vector bus. If 
        multiple interrupts are simultaneously active it chooses vector 
        0x30 and lets the sw choose the priorities.  */
@@ -77,7 +78,8 @@ static void pic_update(struct etrax_pic *fs)
     qemu_set_irq(fs->parent_irq, !!vector);
 }
 
-static uint32_t pic_readl (void *opaque, target_phys_addr_t addr)
+static uint64_t
+pic_read(void *opaque, target_phys_addr_t addr, unsigned int size)
 {
     struct etrax_pic *fs = opaque;
     uint32_t rval;
@@ -87,8 +89,8 @@ static uint32_t pic_readl (void *opaque, target_phys_addr_t addr)
     return rval;
 }
 
-static void
-pic_writel (void *opaque, target_phys_addr_t addr, uint32_t value)
+static void pic_write(void *opaque, target_phys_addr_t addr,
+                      uint64_t value, unsigned int size)
 {
     struct etrax_pic *fs = opaque;
     D(printf("%s addr=%x val=%x\n", __func__, addr, value));
@@ -99,14 +101,14 @@ pic_writel (void *opaque, target_phys_addr_t addr, uint32_t value)
     }
 }
 
-static CPUReadMemoryFunc * const pic_read[] = {
-    NULL, NULL,
-    &pic_readl,
-};
-
-static CPUWriteMemoryFunc * const pic_write[] = {
-    NULL, NULL,
-    &pic_writel,
+static const MemoryRegionOps pic_ops = {
+    .read = pic_read,
+    .write = pic_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4
+    }
 };
 
 static void nmi_handler(void *opaque, int irq, int level)
@@ -139,31 +141,40 @@ static void irq_handler(void *opaque, int irq, int level)
 static int etraxfs_pic_init(SysBusDevice *dev)
 {
     struct etrax_pic *s = FROM_SYSBUS(typeof (*s), dev);
-    int intr_vect_regs;
 
     qdev_init_gpio_in(&dev->qdev, irq_handler, 32);
     sysbus_init_irq(dev, &s->parent_irq);
     sysbus_init_irq(dev, &s->parent_nmi);
 
-    intr_vect_regs = cpu_register_io_memory(pic_read, pic_write, s,
-                                            DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, R_MAX * 4, intr_vect_regs);
+    memory_region_init_io(&s->mmio, &pic_ops, s, "etraxfs-pic", R_MAX * 4);
+    sysbus_init_mmio(dev, &s->mmio);
     return 0;
 }
 
-static SysBusDeviceInfo etraxfs_pic_info = {
-    .init = etraxfs_pic_init,
-    .qdev.name  = "etraxfs,pic",
-    .qdev.size  = sizeof(struct etrax_pic),
-    .qdev.props = (Property[]) {
-        DEFINE_PROP_PTR("interrupt_vector", struct etrax_pic, interrupt_vector),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+static Property etraxfs_pic_properties[] = {
+    DEFINE_PROP_PTR("interrupt_vector", struct etrax_pic, interrupt_vector),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void etraxfs_pic_register(void)
+static void etraxfs_pic_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&etraxfs_pic_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = etraxfs_pic_init;
+    dc->props = etraxfs_pic_properties;
 }
 
-device_init(etraxfs_pic_register)
+static TypeInfo etraxfs_pic_info = {
+    .name          = "etraxfs,pic",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(struct etrax_pic),
+    .class_init    = etraxfs_pic_class_init,
+};
+
+static void etraxfs_pic_register_types(void)
+{
+    type_register_static(&etraxfs_pic_info);
+}
+
+type_init(etraxfs_pic_register_types)

@@ -20,7 +20,7 @@ Descriptions of section entries:
 	   Supported:	Someone is actually paid to look after this.
 	   Maintained:	Someone actually looks after it.
 	   Odd Fixes:	It has a maintainer but they don't have time to do
-			much other than throw the odd patch in. See below..
+			much other than throw the odd patch in. See below.
 	   Orphan:	No current maintainer [but maybe you could take the
 			role as you write your new code].
 	   Obsolete:	Old code. Something tagged obsolete generally means
@@ -62,6 +62,7 @@ F: target-alpha/
 
 ARM
 M: Paul Brook <paul@codesourcery.com>
+M: Peter Maydell <peter.maydell@linaro.org>
 S: Maintained
 F: target-arm/
 
@@ -77,7 +78,7 @@ F: target-lm32/
 
 M68K
 M: Paul Brook <paul@codesourcery.com>
-S: Maintained
+S: Odd Fixes
 F: target-m68k/
 
 MicroBlaze
@@ -87,11 +88,12 @@ F: target-microblaze/
 
 MIPS
 M: Aurelien Jarno <aurelien@aurel32.net>
-S: Maintained
+S: Odd Fixes
 F: target-mips/
 
 PowerPC
 M: Alexander Graf <agraf@suse.de>
+L: qemu-ppc@nongnu.org
 S: Maintained
 F: target-ppc/
 
@@ -102,7 +104,7 @@ F: target-s390x/
 
 SH4
 M: Aurelien Jarno <aurelien@aurel32.net>
-S: Maintained
+S: Odd Fixes
 F: target-sh4/
 
 SPARC
@@ -110,10 +112,21 @@ M: Blue Swirl <blauwirbel@gmail.com>
 S: Maintained
 F: target-sparc/
 
+UniCore32
+M: Guan Xuetao <gxt@mprc.pku.edu.cn>
+S: Maintained
+F: target-unicore32/
+
 X86
 M: qemu-devel@nongnu.org
 S: Odd Fixes
 F: target-i386/
+
+Xtensa
+M: Max Filippov <jcmvbkbc@gmail.com>
+W: http://wiki.osll.spb.ru/doku.php?id=etc:users:jcmvbkbc:qemu-target-xtensa
+S: Maintained
+F: target-xtensa/
 
 Guest CPU Cores (KVM):
 ----------------------
@@ -143,8 +156,52 @@ L: kvm@vger.kernel.org
 S: Supported
 F: target-i386/kvm.c
 
+Guest CPU Cores (Xen):
+----------------------
+
+X86
+M: Stefano Stabellini <stefano.stabellini@eu.citrix.com>
+L: xen-devel@lists.xensource.com
+S: Supported
+F: xen-*
+F: */xen*
+
+Hosts:
+------
+
+LINUX
+L: qemu-devel@nongnu.org
+S: Maintained
+F: linux-*
+F: linux-headers/
+
+POSIX
+L: qemu-devel@nongnu.org
+S: Maintained
+F: *posix*
+
+W32, W64
+L: qemu-devel@nongnu.org
+M: Stefan Weil <sw@weilnetz.de>
+S: Maintained
+F: *win32*
+
 ARM Machines
 ------------
+Exynos
+M: Evgeny Voevodin <e.voevodin@samsung.com>
+M: Maksim Kozlov <m.kozlov@samsung.com>
+M: Igor Mitsyanko <i.mitsyanko@samsung.com>
+M: Dmitry Solodkiy <d.solodkiy@samsung.com>
+S: Maintained
+F: hw/exynos*
+
+Calxeda Highbank
+M: Mark Langsdorf <mark.langsdorf@calxeda.com>
+S: Supported
+F: hw/highbank.c
+F: hw/xgmac.c
+
 Gumstix
 M: qemu-devel@nongnu.org
 S: Orphan
@@ -152,6 +209,7 @@ F: hw/gumstix.c
 
 Integrator CP
 M: Paul Brook <paul@codesourcery.com>
+M: Peter Maydell <peter.maydell@linaro.org>
 S: Maintained
 F: hw/integratorcp.c
 
@@ -177,6 +235,7 @@ F: hw/palm.c
 
 Real View
 M: Paul Brook <paul@codesourcery.com>
+M: Peter Maydell <peter.maydell@linaro.org>
 S: Maintained
 F: hw/realview*
 
@@ -187,13 +246,22 @@ F: hw/spitz.c
 
 Stellaris
 M: Paul Brook <paul@codesourcery.com>
+M: Peter Maydell <peter.maydell@linaro.org>
 S: Maintained
 F: hw/stellaris.c
 
 Versatile PB
 M: Paul Brook <paul@codesourcery.com>
+M: Peter Maydell <peter.maydell@linaro.org>
 S: Maintained
 F: hw/versatilepb.c
+
+Xilinx Zynq
+M: Peter Crosthwaite <peter.crosthwaite@petalogix.com>
+S: Maintained
+F: hw/xilinx_zynq.c
+F: hw/zynq_slcr.c
+F: hw/cadence_*
 
 CRIS Machines
 -------------
@@ -269,23 +337,31 @@ PowerPC Machines
 ----------------
 405
 M: Alexander Graf <agraf@suse.de>
+L: qemu-ppc@nongnu.org
 S: Maintained
 F: hw/ppc405_boards.c
 
 New World
 M: Alexander Graf <agraf@suse.de>
+L: qemu-ppc@nongnu.org
 S: Maintained
 F: hw/ppc_newworld.c
+F: hw/unin_pci.c
+F: hw/dec_pci.[hc]
 
 Old World
 M: Alexander Graf <agraf@suse.de>
+L: qemu-ppc@nongnu.org
 S: Maintained
 F: hw/ppc_oldworld.c
+F: hw/grackle_pci.c
 
-Prep
-M: qemu-devel@nongnu.org
-S: Orphan
+PReP
+M: Andreas Färber <andreas.faerber@web.de>
+L: qemu-ppc@nongnu.org
+S: Odd Fixes
 F: hw/ppc_prep.c
+F: hw/prep_pci.[hc]
 
 SH4 Machines
 ------------
@@ -323,7 +399,20 @@ X86 Machines
 PC
 M: Anthony Liguori <aliguori@us.ibm.com>
 S: Supported
-F: hw/pc.[ch] hw/pc_piix.c
+F: hw/pc.[ch]
+F: hw/pc_piix.c
+
+Xtensa Machines
+---------------
+sim
+M: Max Filippov <jcmvbkbc@gmail.com>
+S: Maintained
+F: hw/xtensa_sim.c
+
+Avnet LX60
+M: Max Filippov <jcmvbkbc@gmail.com>
+S: Maintained
+F: hw/xtensa_lx60.c
 
 Devices
 -------
@@ -332,6 +421,11 @@ M: Kevin Wolf <kwolf@redhat.com>
 S: Odd Fixes
 F: hw/ide/
 
+OMAP
+M: Peter Maydell <peter.maydell@linaro.org>
+S: Maintained
+F: hw/omap*
+
 PCI
 M: Michael S. Tsirkin <mst@redhat.com>
 S: Supported
@@ -339,11 +433,16 @@ F: hw/pci*
 F: hw/piix*
 
 SCSI
+M: Paolo Bonzini <pbonzini@redhat.com>
+S: Supported
+F: hw/virtio-scsi.*
+F: hw/scsi*
+T: git git://github.com/bonzini/qemu.git scsi-next
+
+LSI53C895A
 M: Paul Brook <paul@codesourcery.com>
-M: Kevin Wolf <kwolf@redhat.com>
 S: Odd Fixes
 F: hw/lsi53c895a.c
-F: hw/scsi*
 
 USB
 M: Gerd Hoffmann <kraxel@redhat.com>
@@ -361,9 +460,11 @@ S: Supported
 F: hw/virtio*
 
 virtio-9p
-M: Venkateswararao Jujjuri (JV) <jvrao@linux.vnet.ibm.com>
+M: Aneesh Kumar K.V <aneesh.kumar@linux.vnet.ibm.com>
 S: Supported
-F: hw/virtio-9p*
+F: hw/9pfs/
+F: fsdev/
+T: git git://github.com/kvaneesh/QEMU.git
 
 virtio-blk
 M: Kevin Wolf <kwolf@redhat.com>
@@ -413,6 +514,11 @@ M: Anthony Liguori <aliguori@us.ibm.com>
 S: Maintained
 F: ui/
 
+Cocoa graphics
+M: Andreas Färber <andreas.faerber@web.de>
+S: Odd Fixes
+F: ui/cocoa.m
+
 Main loop
 M: Anthony Liguori <aliguori@us.ibm.com>
 S: Supported
@@ -430,10 +536,33 @@ M: Mark McLoughlin <markmc@redhat.com>
 S: Maintained
 F: net/
 
+Network Block Device (NBD)
+M: Paolo Bonzini <pbonzini@redhat.com>
+S: Odd Fixes
+F: block/nbd.c
+F: nbd.*
+F: qemu-nbd.c
+T: git git://github.com/bonzini/qemu.git nbd-next
+
 SLIRP
-M: qemu-devel@nongnu.org
-S: Orphan
+M: Jan Kiszka <jan.kiszka@siemens.com>
+S: Maintained
 F: slirp/
+T: git git://git.kiszka.org/qemu.git queues/slirp
+
+Tracing
+M: Stefan Hajnoczi <stefanha@linux.vnet.ibm.com>
+S: Maintained
+F: trace/
+F: scripts/tracetool.py
+F: scripts/tracetool/
+F: docs/tracing.txt
+T: git git://github.com/stefanha/qemu.git tracing
+
+Checkpatch
+M: Blue Swirl <blauwirbel@gmail.com>
+S: Odd Fixes
+F: scripts/checkpatch.pl
 
 Usermode Emulation
 ------------------
@@ -441,11 +570,6 @@ BSD user
 M: Blue Swirl <blauwirbel@gmail.com>
 S: Maintained
 F: bsd-user/
-
-Darwin user
-M: qemu-devel@nongnu.org
-S: Orphan
-F: darwin-user/
 
 Linux user
 M: Riku Voipio <riku.voipio@iki.fi>
@@ -504,3 +628,30 @@ SPARC target
 M: Blue Swirl <blauwirbel@gmail.com>
 S: Maintained
 F: tcg/sparc/
+
+TCI target
+M: Stefan Weil <sw@weilnetz.de>
+S: Maintained
+F: tcg/tci/
+
+Stable branches
+---------------
+Stable 1.0
+L: qemu-stable@nongnu.org
+T: git git://git.qemu.org/qemu-stable-1.0.git
+S: Orphan
+
+Stable 0.15
+L: qemu-stable@nongnu.org
+T: git git://git.qemu.org/qemu-stable-0.15.git
+S: Orphan
+
+Stable 0.14
+L: qemu-stable@nongnu.org
+T: git git://git.qemu.org/qemu-stable-0.14.git
+S: Orphan
+
+Stable 0.10
+L: qemu-stable@nongnu.org
+T: git git://git.qemu.org/qemu-stable-0.10.git
+S: Orphan

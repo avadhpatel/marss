@@ -45,8 +45,8 @@
 #include <sys/syscall.h>
 #endif
 
-#ifdef CONFIG_EVENTFD
-#include <sys/eventfd.h>
+#ifdef __FreeBSD__
+#include <sys/sysctl.h>
 #endif
 
 static struct passwd *user_pwd;
@@ -128,12 +128,12 @@ char *os_find_datadir(const char *argv0)
 
     max_len = strlen(dir) +
         MAX(strlen(SHARE_SUFFIX), strlen(BUILD_SUFFIX)) + 1;
-    res = qemu_mallocz(max_len);
+    res = g_malloc0(max_len);
     snprintf(res, max_len, "%s%s", dir, SHARE_SUFFIX);
     if (access(res, R_OK)) {
         snprintf(res, max_len, "%s%s", dir, BUILD_SUFFIX);
         if (access(res, R_OK)) {
-            qemu_free(res);
+            g_free(res);
             res = NULL;
         }
     }
@@ -333,34 +333,6 @@ void os_set_line_buffering(void)
     setvbuf(stdout, NULL, _IOLBF, 0);
 }
 
-/*
- * Creates an eventfd that looks like a pipe and has EFD_CLOEXEC set.
- */
-int qemu_eventfd(int fds[2])
-{
-#ifdef CONFIG_EVENTFD
-    int ret;
-
-    ret = eventfd(0, 0);
-    if (ret >= 0) {
-        fds[0] = ret;
-        qemu_set_cloexec(ret);
-        if ((fds[1] = dup(ret)) == -1) {
-            close(ret);
-            return -1;
-        }
-        qemu_set_cloexec(fds[1]);
-        return 0;
-    }
-
-    if (errno != ENOSYS) {
-        return -1;
-    }
-#endif
-
-    return qemu_pipe(fds);
-}
-
 int qemu_create_pidfile(const char *filename)
 {
     char buffer[128];
@@ -372,21 +344,15 @@ int qemu_create_pidfile(const char *filename)
         return -1;
     }
     if (lockf(fd, F_TLOCK, 0) == -1) {
+        close(fd);
         return -1;
     }
     len = snprintf(buffer, sizeof(buffer), FMT_pid "\n", getpid());
     if (write(fd, buffer, len) != len) {
+        close(fd);
         return -1;
     }
 
+    /* keep pidfile open & locked forever */
     return 0;
-}
-
-int qemu_get_thread_id(void)
-{
-#if defined (__linux__)
-    return syscall(SYS_gettid);
-#else
-    return getpid();
-#endif
 }

@@ -13,6 +13,9 @@
  *
  *  You should have received a copy of the GNU General Public License along
  *  with this program; if not, see <http://www.gnu.org/licenses/>.
+ *
+ *  Contributions after 2012-01-13 are licensed under the terms of the
+ *  GNU GPL, version 2 or (at your option) any later version.
  */
 
 /*
@@ -75,8 +78,8 @@ char *xenstore_read_str(const char *base, const char *node)
     str = xs_read(xenstore, 0, abspath, &len);
     if (str != NULL) {
         /* move to qemu-allocated memory to make sure
-         * callers can savely qemu_free() stuff. */
-        ret = qemu_strdup(str);
+         * callers can savely g_free() stuff. */
+        ret = g_strdup(str);
         free(str);
     }
     return ret;
@@ -99,7 +102,7 @@ int xenstore_read_int(const char *base, const char *node, int *ival)
     if (val && 1 == sscanf(val, "%d", ival)) {
         rc = 0;
     }
-    qemu_free(val);
+    g_free(val);
     return rc;
 }
 
@@ -199,7 +202,7 @@ static struct XenDevice *xen_be_get_xendev(const char *type, int dom, int dev,
     }
 
     /* init new xendev */
-    xendev = qemu_mallocz(ops->size);
+    xendev = g_malloc0(ops->size);
     xendev->type  = type;
     xendev->dom   = dom;
     xendev->dev   = dev;
@@ -218,7 +221,7 @@ static struct XenDevice *xen_be_get_xendev(const char *type, int dom, int dev,
     xendev->evtchndev = xen_xc_evtchn_open(NULL, 0);
     if (xendev->evtchndev == XC_HANDLER_INITIAL_VALUE) {
         xen_be_printf(NULL, 0, "can't open evtchn device\n");
-        qemu_free(xendev);
+        g_free(xendev);
         return NULL;
     }
     fcntl(xc_evtchn_fd(xendev->evtchndev), F_SETFD, FD_CLOEXEC);
@@ -228,7 +231,7 @@ static struct XenDevice *xen_be_get_xendev(const char *type, int dom, int dev,
         if (xendev->gnttabdev == XC_HANDLER_INITIAL_VALUE) {
             xen_be_printf(NULL, 0, "can't open gnttab device\n");
             xc_evtchn_close(xendev->evtchndev);
-            qemu_free(xendev);
+            g_free(xendev);
             return NULL;
         }
     } else {
@@ -275,7 +278,7 @@ static struct XenDevice *xen_be_del_xendev(int dom, int dev)
             char token[XEN_BUFSIZE];
             snprintf(token, sizeof(token), "fe:%p", xendev);
             xs_unwatch(xenstore, xendev->fe, token);
-            qemu_free(xendev->fe);
+            g_free(xendev->fe);
         }
 
         if (xendev->evtchndev != XC_HANDLER_INITIAL_VALUE) {
@@ -286,7 +289,7 @@ static struct XenDevice *xen_be_del_xendev(int dom, int dev)
         }
 
         QTAILQ_REMOVE(&xendevs, xendev, next);
-        qemu_free(xendev);
+        g_free(xendev);
     }
     return NULL;
 }
@@ -328,7 +331,7 @@ static void xen_be_frontend_changed(struct XenDevice *xendev, const char *node)
         xendev->fe_state = fe_state;
     }
     if (node == NULL  ||  strcmp(node, "protocol") == 0) {
-        qemu_free(xendev->protocol);
+        g_free(xendev->protocol);
         xendev->protocol = xenstore_read_fe_str(xendev, "protocol");
         if (xendev->protocol) {
             xen_be_printf(xendev, 1, "frontend protocol: %s\n", xendev->protocol);
@@ -421,13 +424,13 @@ static int xen_be_try_init(struct XenDevice *xendev)
 }
 
 /*
- * Try to connect xendev.  Depends on the frontend being ready
+ * Try to initialise xendev.  Depends on the frontend being ready
  * for it (shared ring and evtchn info in xenstore, state being
  * Initialised or Connected).
  *
  * Goes to Connected on success.
  */
-static int xen_be_try_connect(struct XenDevice *xendev)
+static int xen_be_try_initialise(struct XenDevice *xendev)
 {
     int rc = 0;
 
@@ -441,16 +444,39 @@ static int xen_be_try_connect(struct XenDevice *xendev)
         }
     }
 
-    if (xendev->ops->connect) {
-        rc = xendev->ops->connect(xendev);
+    if (xendev->ops->initialise) {
+        rc = xendev->ops->initialise(xendev);
     }
     if (rc != 0) {
-        xen_be_printf(xendev, 0, "connect() failed\n");
+        xen_be_printf(xendev, 0, "initialise() failed\n");
         return rc;
     }
 
     xen_be_set_state(xendev, XenbusStateConnected);
     return 0;
+}
+
+/*
+ * Try to let xendev know that it is connected.  Depends on the
+ * frontend being Connected.  Note that this may be called more
+ * than once since the backend state is not modified.
+ */
+static void xen_be_try_connected(struct XenDevice *xendev)
+{
+    if (!xendev->ops->connected) {
+        return;
+    }
+
+    if (xendev->fe_state != XenbusStateConnected) {
+        if (xendev->ops->flags & DEVOPS_FLAG_IGNORE_STATE) {
+            xen_be_printf(xendev, 2, "frontend not ready, ignoring\n");
+        } else {
+            xen_be_printf(xendev, 2, "frontend not ready (yet)\n");
+            return;
+        }
+    }
+
+    xendev->ops->connected(xendev);
 }
 
 /*
@@ -508,7 +534,12 @@ void xen_be_check_state(struct XenDevice *xendev)
             rc = xen_be_try_init(xendev);
             break;
         case XenbusStateInitWait:
-            rc = xen_be_try_connect(xendev);
+            rc = xen_be_try_initialise(xendev);
+            break;
+        case XenbusStateConnected:
+            /* xendev->be_state doesn't change */
+            xen_be_try_connected(xendev);
+            rc = -1;
             break;
         case XenbusStateClosed:
             rc = xen_be_try_reset(xendev);
@@ -561,7 +592,7 @@ static void xenstore_update_be(char *watch, char *type, int dom,
                                struct XenDevOps *ops)
 {
     struct XenDevice *xendev;
-    char path[XEN_BUFSIZE], *dom0;
+    char path[XEN_BUFSIZE], *dom0, *bepath;
     unsigned int len, dev;
 
     dom0 = xs_get_domain_path(xenstore, 0);
@@ -580,15 +611,16 @@ static void xenstore_update_be(char *watch, char *type, int dom,
         return;
     }
 
-    if (0) {
-        /* FIXME: detect devices being deleted from xenstore ... */
-        xen_be_del_xendev(dom, dev);
-    }
-
     xendev = xen_be_get_xendev(type, dom, dev, ops);
     if (xendev != NULL) {
-        xen_be_backend_changed(xendev, path);
-        xen_be_check_state(xendev);
+        bepath = xs_read(xenstore, 0, xendev->be, &len);
+        if (bepath == NULL) {
+            xen_be_del_xendev(dom, dev);
+        } else {
+            free(bepath);
+            xen_be_backend_changed(xendev, path);
+            xen_be_check_state(xendev);
+        }
     }
 }
 

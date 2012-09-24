@@ -25,17 +25,30 @@ typedef enum QmpCommandType
     QCT_NORMAL,
 } QmpCommandType;
 
+typedef enum QmpCommandOptions
+{
+    QCO_NO_OPTIONS = 0x0,
+    QCO_NO_SUCCESS_RESP = 0x1,
+} QmpCommandOptions;
+
 typedef struct QmpCommand
 {
     const char *name;
     QmpCommandType type;
     QmpCommandFunc *fn;
+    QmpCommandOptions options;
     QTAILQ_ENTRY(QmpCommand) node;
+    bool enabled;
 } QmpCommand;
 
-void qmp_register_command(const char *name, QmpCommandFunc *fn);
+void qmp_register_command(const char *name, QmpCommandFunc *fn,
+                          QmpCommandOptions options);
 QmpCommand *qmp_find_command(const char *name);
 QObject *qmp_dispatch(QObject *request);
+void qmp_disable_command(const char *name);
+void qmp_enable_command(const char *name);
+bool qmp_command_is_enabled(const char *name);
+char **qmp_get_command_list(void);
 
 #endif
 

@@ -44,8 +44,7 @@ static void rtas_display_character(sPAPREnvironment *spapr,
                                    uint32_t nret, target_ulong rets)
 {
     uint8_t c = rtas_ld(args, 0);
-    VIOsPAPRDevice *sdev = spapr_vio_find_by_reg(spapr->vio_bus,
-                                                 SPAPR_VTY_BASE_ADDRESS);
+    VIOsPAPRDevice *sdev = vty_lookup(spapr, 0);
 
     if (!sdev) {
         rtas_st(rets, 0, -1);
@@ -67,7 +66,7 @@ static void rtas_get_time_of_day(sPAPREnvironment *spapr,
         return;
     }
 
-    qemu_get_timedate(&tm, 0);
+    qemu_get_timedate(&tm, spapr->rtc_offset);
 
     rtas_st(rets, 0, 0); /* Success */
     rtas_st(rets, 1, tm.tm_year + 1900);
@@ -77,6 +76,27 @@ static void rtas_get_time_of_day(sPAPREnvironment *spapr,
     rtas_st(rets, 5, tm.tm_min);
     rtas_st(rets, 6, tm.tm_sec);
     rtas_st(rets, 7, 0); /* we don't do nanoseconds */
+}
+
+static void rtas_set_time_of_day(sPAPREnvironment *spapr,
+                                 uint32_t token, uint32_t nargs,
+                                 target_ulong args,
+                                 uint32_t nret, target_ulong rets)
+{
+    struct tm tm;
+
+    tm.tm_year = rtas_ld(args, 0) - 1900;
+    tm.tm_mon = rtas_ld(args, 1) - 1;
+    tm.tm_mday = rtas_ld(args, 2);
+    tm.tm_hour = rtas_ld(args, 3);
+    tm.tm_min = rtas_ld(args, 4);
+    tm.tm_sec = rtas_ld(args, 5);
+
+    /* Just generate a monitor event for the change */
+    rtc_change_mon_event(&tm);
+    spapr->rtc_offset = qemu_timedate_diff(&tm);
+
+    rtas_st(rets, 0, 0); /* Success */
 }
 
 static void rtas_power_off(sPAPREnvironment *spapr,
@@ -91,13 +111,26 @@ static void rtas_power_off(sPAPREnvironment *spapr,
     rtas_st(rets, 0, 0);
 }
 
+static void rtas_system_reboot(sPAPREnvironment *spapr,
+                               uint32_t token, uint32_t nargs,
+                               target_ulong args,
+                               uint32_t nret, target_ulong rets)
+{
+    if (nargs != 0 || nret != 1) {
+        rtas_st(rets, 0, -3);
+        return;
+    }
+    qemu_system_reset_request();
+    rtas_st(rets, 0, 0);
+}
+
 static void rtas_query_cpu_stopped_state(sPAPREnvironment *spapr,
                                          uint32_t token, uint32_t nargs,
                                          target_ulong args,
                                          uint32_t nret, target_ulong rets)
 {
     target_ulong id;
-    CPUState *env;
+    CPUPPCState *env;
 
     if (nargs != 1 || nret != 2) {
         rtas_st(rets, 0, -3);
@@ -130,7 +163,7 @@ static void rtas_start_cpu(sPAPREnvironment *spapr,
                            uint32_t nret, target_ulong rets)
 {
     target_ulong id, start, r3;
-    CPUState *env;
+    CPUPPCState *env;
 
     if (nargs != 3 || nret != 1) {
         rtas_st(rets, 0, -3);
@@ -267,13 +300,16 @@ int spapr_rtas_device_tree_setup(void *fdt, target_phys_addr_t rtas_addr,
     return 0;
 }
 
-static void register_core_rtas(void)
+static void core_rtas_register_types(void)
 {
     spapr_rtas_register("display-character", rtas_display_character);
     spapr_rtas_register("get-time-of-day", rtas_get_time_of_day);
+    spapr_rtas_register("set-time-of-day", rtas_set_time_of_day);
     spapr_rtas_register("power-off", rtas_power_off);
+    spapr_rtas_register("system-reboot", rtas_system_reboot);
     spapr_rtas_register("query-cpu-stopped-state",
                         rtas_query_cpu_stopped_state);
     spapr_rtas_register("start-cpu", rtas_start_cpu);
 }
-device_init(register_core_rtas);
+
+type_init(core_rtas_register_types)

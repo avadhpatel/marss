@@ -74,7 +74,7 @@ void qed_free_l2_cache(L2TableCache *l2_cache)
 
     QTAILQ_FOREACH_SAFE(entry, &l2_cache->entries, node, next_entry) {
         qemu_vfree(entry->table);
-        qemu_free(entry);
+        g_free(entry);
     }
 }
 
@@ -89,7 +89,7 @@ CachedL2Table *qed_alloc_l2_cache_entry(L2TableCache *l2_cache)
 {
     CachedL2Table *entry;
 
-    entry = qemu_mallocz(sizeof(*entry));
+    entry = g_malloc0(sizeof(*entry));
     entry->ref++;
 
     trace_qed_alloc_l2_cache_entry(l2_cache, entry);
@@ -111,7 +111,7 @@ void qed_unref_l2_cache_entry(CachedL2Table *entry)
     trace_qed_unref_l2_cache_entry(entry, entry->ref);
     if (entry->ref == 0) {
         qemu_vfree(entry->table);
-        qemu_free(entry);
+        g_free(entry);
     }
 }
 
@@ -161,11 +161,25 @@ void qed_commit_l2_cache_entry(L2TableCache *l2_cache, CachedL2Table *l2_table)
         return;
     }
 
+    /* Evict an unused cache entry so we have space.  If all entries are in use
+     * we can grow the cache temporarily and we try to shrink back down later.
+     */
     if (l2_cache->n_entries >= MAX_L2_CACHE_SIZE) {
-        entry = QTAILQ_FIRST(&l2_cache->entries);
-        QTAILQ_REMOVE(&l2_cache->entries, entry, node);
-        l2_cache->n_entries--;
-        qed_unref_l2_cache_entry(entry);
+        CachedL2Table *next;
+        QTAILQ_FOREACH_SAFE(entry, &l2_cache->entries, node, next) {
+            if (entry->ref > 1) {
+                continue;
+            }
+
+            QTAILQ_REMOVE(&l2_cache->entries, entry, node);
+            l2_cache->n_entries--;
+            qed_unref_l2_cache_entry(entry);
+
+            /* Stop evicting when we've shrunk back to max size */
+            if (l2_cache->n_entries < MAX_L2_CACHE_SIZE) {
+                break;
+            }
+        }
     }
 
     l2_cache->n_entries++;

@@ -196,7 +196,7 @@ void *audio_calloc (const char *funcname, int nmemb, size_t size)
         return NULL;
     }
 
-    return qemu_mallocz (len);
+    return g_malloc0 (len);
 }
 
 static char *audio_alloc_prefix (const char *s)
@@ -210,7 +210,7 @@ static char *audio_alloc_prefix (const char *s)
     }
 
     len = strlen (s);
-    r = qemu_malloc (len + sizeof (qemu_prefix));
+    r = g_malloc (len + sizeof (qemu_prefix));
 
     u = r + sizeof (qemu_prefix) - 1;
 
@@ -425,7 +425,7 @@ static void audio_print_options (const char *prefix,
         printf ("    %s\n", opt->descr);
     }
 
-    qemu_free (uprefix);
+    g_free (uprefix);
 }
 
 static void audio_process_options (const char *prefix,
@@ -462,7 +462,7 @@ static void audio_process_options (const char *prefix,
          * (includes trailing zero) + zero + underscore (on behalf of
          * sizeof) */
         optlen = len + preflen + sizeof (qemu_prefix) + 1;
-        optname = qemu_malloc (optlen);
+        optname = g_malloc (optlen);
 
         pstrcpy (optname, optlen, qemu_prefix);
 
@@ -507,7 +507,7 @@ static void audio_process_options (const char *prefix,
             opt->overriddenp = &opt->overridden;
         }
         *opt->overriddenp = !def;
-        qemu_free (optname);
+        g_free (optname);
     }
 }
 
@@ -585,17 +585,20 @@ static int audio_pcm_info_eq (struct audio_pcm_info *info, struct audsettings *a
     switch (as->fmt) {
     case AUD_FMT_S8:
         sign = 1;
+        /* fall through */
     case AUD_FMT_U8:
         break;
 
     case AUD_FMT_S16:
         sign = 1;
+        /* fall through */
     case AUD_FMT_U16:
         bits = 16;
         break;
 
     case AUD_FMT_S32:
         sign = 1;
+        /* fall through */
     case AUD_FMT_U32:
         bits = 32;
         break;
@@ -778,7 +781,7 @@ static void audio_detach_capture (HWVoiceOut *hw)
 
         QLIST_REMOVE (sw, entries);
         QLIST_REMOVE (sc, entries);
-        qemu_free (sc);
+        g_free (sc);
         if (was_active) {
             /* We have removed soft voice from the capture:
                this might have changed the overall status of the capture
@@ -818,7 +821,7 @@ static int audio_attach_capture (HWVoiceOut *hw)
         sw->rate = st_rate_start (sw->info.freq, hw_cap->info.freq);
         if (!sw->rate) {
             dolog ("Could not start rate conversion for `%s'\n", SW_NAME (sw));
-            qemu_free (sw);
+            g_free (sw);
             return -1;
         }
         QLIST_INSERT_HEAD (&hw_cap->sw_head, sw, entries);
@@ -954,7 +957,9 @@ int audio_pcm_sw_read (SWVoiceIn *sw, void *buf, int size)
         total += isamp;
     }
 
-    mixeng_volume (sw->buf, ret, &sw->vol);
+    if (!(hw->ctl_caps & VOICE_VOLUME_CAP)) {
+        mixeng_volume (sw->buf, ret, &sw->vol);
+    }
 
     sw->clip (buf, sw->buf, ret);
     sw->total_hw_samples_acquired += total;
@@ -1038,7 +1043,10 @@ int audio_pcm_sw_write (SWVoiceOut *sw, void *buf, int size)
     swlim = audio_MIN (swlim, samples);
     if (swlim) {
         sw->conv (sw->buf, buf, swlim);
-        mixeng_volume (sw->buf, swlim, &sw->vol);
+
+        if (!(sw->hw->ctl_caps & VOICE_VOLUME_CAP)) {
+            mixeng_volume (sw->buf, swlim, &sw->vol);
+        }
     }
 
     while (swlim) {
@@ -1665,7 +1673,7 @@ static void audio_pp_nb_voices (const char *typ, int nb)
         printf ("Theoretically supports many %s voices\n", typ);
         break;
     default:
-        printf ("Theoretically supports upto %d %s voices\n", nb, typ);
+        printf ("Theoretically supports up to %d %s voices\n", nb, typ);
         break;
     }
 
@@ -1743,7 +1751,7 @@ static int audio_driver_init (AudioState *s, struct audio_driver *drv)
 }
 
 static void audio_vm_change_state_handler (void *opaque, int running,
-                                           int reason)
+                                           RunState state)
 {
     AudioState *s = opaque;
     HWVoiceOut *hwo = NULL;
@@ -1767,10 +1775,12 @@ static void audio_atexit (void)
     HWVoiceOut *hwo = NULL;
     HWVoiceIn *hwi = NULL;
 
-    while ((hwo = audio_pcm_hw_find_any_enabled_out (hwo))) {
+    while ((hwo = audio_pcm_hw_find_any_out (hwo))) {
         SWVoiceCap *sc;
 
-        hwo->pcm_ops->ctl_out (hwo, VOICE_DISABLE);
+        if (hwo->enabled) {
+            hwo->pcm_ops->ctl_out (hwo, VOICE_DISABLE);
+        }
         hwo->pcm_ops->fini_out (hwo);
 
         for (sc = hwo->cap_head.lh_first; sc; sc = sc->entries.le_next) {
@@ -1783,8 +1793,10 @@ static void audio_atexit (void)
         }
     }
 
-    while ((hwi = audio_pcm_hw_find_any_enabled_in (hwi))) {
-        hwi->pcm_ops->ctl_in (hwi, VOICE_DISABLE);
+    while ((hwi = audio_pcm_hw_find_any_in (hwi))) {
+        if (hwi->enabled) {
+            hwi->pcm_ops->ctl_in (hwi, VOICE_DISABLE);
+        }
         hwi->pcm_ops->fini_in (hwi);
     }
 
@@ -1907,7 +1919,7 @@ static void audio_init (void)
 void AUD_register_card (const char *name, QEMUSoundCard *card)
 {
     audio_init ();
-    card->name = qemu_strdup (name);
+    card->name = g_strdup (name);
     memset (&card->entries, 0, sizeof (card->entries));
     QLIST_INSERT_HEAD (&glob_audio_state.card_head, card, entries);
 }
@@ -1915,7 +1927,7 @@ void AUD_register_card (const char *name, QEMUSoundCard *card)
 void AUD_remove_card (QEMUSoundCard *card)
 {
     QLIST_REMOVE (card, entries);
-    qemu_free (card->name);
+    g_free (card->name);
 }
 
 
@@ -2000,11 +2012,11 @@ CaptureVoiceOut *AUD_add_capture (
         return cap;
 
     err3:
-        qemu_free (cap->hw.mix_buf);
+        g_free (cap->hw.mix_buf);
     err2:
-        qemu_free (cap);
+        g_free (cap);
     err1:
-        qemu_free (cb);
+        g_free (cb);
     err0:
         return NULL;
     }
@@ -2018,7 +2030,7 @@ void AUD_del_capture (CaptureVoiceOut *cap, void *cb_opaque)
         if (cb->opaque == cb_opaque) {
             cb->ops.destroy (cb_opaque);
             QLIST_REMOVE (cb, entries);
-            qemu_free (cb);
+            g_free (cb);
 
             if (!cap->cb_head.lh_first) {
                 SWVoiceOut *sw = cap->hw.sw_head.lh_first, *sw1;
@@ -2036,11 +2048,11 @@ void AUD_del_capture (CaptureVoiceOut *cap, void *cb_opaque)
                     }
                     QLIST_REMOVE (sw, entries);
                     QLIST_REMOVE (sc, entries);
-                    qemu_free (sc);
+                    g_free (sc);
                     sw = sw1;
                 }
                 QLIST_REMOVE (cap, entries);
-                qemu_free (cap);
+                g_free (cap);
             }
             return;
         }
@@ -2050,17 +2062,29 @@ void AUD_del_capture (CaptureVoiceOut *cap, void *cb_opaque)
 void AUD_set_volume_out (SWVoiceOut *sw, int mute, uint8_t lvol, uint8_t rvol)
 {
     if (sw) {
+        HWVoiceOut *hw = sw->hw;
+
         sw->vol.mute = mute;
         sw->vol.l = nominal_volume.l * lvol / 255;
         sw->vol.r = nominal_volume.r * rvol / 255;
+
+        if (hw->pcm_ops->ctl_out) {
+            hw->pcm_ops->ctl_out (hw, VOICE_VOLUME, sw);
+        }
     }
 }
 
 void AUD_set_volume_in (SWVoiceIn *sw, int mute, uint8_t lvol, uint8_t rvol)
 {
     if (sw) {
+        HWVoiceIn *hw = sw->hw;
+
         sw->vol.mute = mute;
         sw->vol.l = nominal_volume.l * lvol / 255;
         sw->vol.r = nominal_volume.r * rvol / 255;
+
+        if (hw->pcm_ops->ctl_in) {
+            hw->pcm_ops->ctl_in (hw, VOICE_VOLUME, sw);
+        }
     }
 }

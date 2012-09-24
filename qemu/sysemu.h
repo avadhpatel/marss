@@ -6,45 +6,54 @@
 #include "qemu-option.h"
 #include "qemu-queue.h"
 #include "qemu-timer.h"
+#include "qapi-types.h"
 #include "notify.h"
+#include "main-loop.h"
 
 /* vl.c */
+
 extern const char *bios_name;
 
-extern int vm_running;
 extern const char *qemu_name;
 extern uint8_t qemu_uuid[];
 int qemu_uuid_parse(const char *str, uint8_t *uuid);
 #define UUID_FMT "%02hhx%02hhx%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx"
 
+void runstate_init(void);
+bool runstate_check(RunState state);
+void runstate_set(RunState new_state);
+int runstate_is_running(void);
 typedef struct vm_change_state_entry VMChangeStateEntry;
-typedef void VMChangeStateHandler(void *opaque, int running, int reason);
+typedef void VMChangeStateHandler(void *opaque, int running, RunState state);
 
 VMChangeStateEntry *qemu_add_vm_change_state_handler(VMChangeStateHandler *cb,
                                                      void *opaque);
 void qemu_del_vm_change_state_handler(VMChangeStateEntry *e);
-
-#define VMSTOP_USER      0
-#define VMSTOP_DEBUG     1
-#define VMSTOP_SHUTDOWN  2
-#define VMSTOP_DISKFULL  3
-#define VMSTOP_WATCHDOG  4
-#define VMSTOP_PANIC     5
-#define VMSTOP_SAVEVM    6
-#define VMSTOP_LOADVM    7
-#define VMSTOP_MIGRATE   8
+void vm_state_notify(int running, RunState state);
 
 #define VMRESET_SILENT   false
 #define VMRESET_REPORT   true
 
 void vm_start(void);
-void vm_stop(int reason);
+void vm_stop(RunState state);
+void vm_stop_force_state(RunState state);
+
+typedef enum WakeupReason {
+    QEMU_WAKEUP_REASON_OTHER = 0,
+    QEMU_WAKEUP_REASON_RTC,
+    QEMU_WAKEUP_REASON_PMTIMER,
+} WakeupReason;
 
 void qemu_system_reset_request(void);
+void qemu_system_suspend_request(void);
+void qemu_register_suspend_notifier(Notifier *notifier);
+void qemu_system_wakeup_request(WakeupReason reason);
+void qemu_system_wakeup_enable(WakeupReason reason, bool enabled);
+void qemu_register_wakeup_notifier(Notifier *notifier);
 void qemu_system_shutdown_request(void);
 void qemu_system_powerdown_request(void);
 void qemu_system_debug_request(void);
-void qemu_system_vmstop_request(int reason);
+void qemu_system_vmstop_request(RunState reason);
 int qemu_shutdown_requested_get(void);
 int qemu_reset_requested_get(void);
 int qemu_shutdown_requested(void);
@@ -67,14 +76,11 @@ void do_info_snapshots(Monitor *mon);
 
 void qemu_announce_self(void);
 
-void main_loop_wait(int nonblocking);
-
-bool qemu_savevm_state_blocked(Monitor *mon);
-int qemu_savevm_state_begin(Monitor *mon, QEMUFile *f, int blk_enable,
-                            int shared);
-int qemu_savevm_state_iterate(Monitor *mon, QEMUFile *f);
-int qemu_savevm_state_complete(Monitor *mon, QEMUFile *f);
-void qemu_savevm_state_cancel(Monitor *mon, QEMUFile *f);
+bool qemu_savevm_state_blocked(Error **errp);
+int qemu_savevm_state_begin(QEMUFile *f, int blk_enable, int shared);
+int qemu_savevm_state_iterate(QEMUFile *f);
+int qemu_savevm_state_complete(QEMUFile *f);
+void qemu_savevm_state_cancel(QEMUFile *f);
 int qemu_loadvm_state(QEMUFile *f);
 
 /* SLIRP */
@@ -106,11 +112,9 @@ extern int vga_interface_type;
 extern int graphic_width;
 extern int graphic_height;
 extern int graphic_depth;
-extern uint8_t irq0override;
 extern DisplayType display_type;
 extern const char *keyboard_layout;
 extern int win2k_install_hack;
-extern int rtc_td_hack;
 extern int alt_grab;
 extern int ctrl_grab;
 extern int usb_enabled;
@@ -123,6 +127,9 @@ extern int no_shutdown;
 extern int semihosting_enabled;
 extern int old_param;
 extern int boot_menu;
+extern uint8_t *boot_splash_filedata;
+extern int boot_splash_filedata_size;
+extern uint8_t qemu_extra_params_fw[2];
 extern QEMUClock *rtc_clock;
 
 #define MAX_NODES 64
@@ -144,12 +151,16 @@ extern unsigned int nb_prom_envs;
 
 /* pci-hotplug */
 void pci_device_hot_add(Monitor *mon, const QDict *qdict);
-void drive_hot_add(Monitor *mon, const QDict *qdict);
+int pci_drive_hot_add(Monitor *mon, const QDict *qdict,
+                      DriveInfo *dinfo, int type);
 void do_pci_device_hot_remove(Monitor *mon, const QDict *qdict);
+
+/* generic hotplug */
+void drive_hot_add(Monitor *mon, const QDict *qdict);
 
 /* pcie aer error injection */
 void pcie_aer_inject_error_print(Monitor *mon, const QObject *data);
-int do_pcie_aer_inejct_error(Monitor *mon,
+int do_pcie_aer_inject_error(Monitor *mon,
                              const QDict *qdict, QObject **ret_data);
 
 /* serial ports */

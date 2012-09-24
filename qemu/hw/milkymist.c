@@ -29,6 +29,7 @@
 #include "blockdev.h"
 #include "milkymist-hw.h"
 #include "lm32.h"
+#include "exec-memory.h"
 
 #define BIOS_FILENAME    "mmone-bios.bin"
 #define BIOS_OFFSET      0x00860000
@@ -36,7 +37,7 @@
 #define KERNEL_LOAD_ADDR 0x40000000
 
 typedef struct {
-    CPUState *env;
+    CPULM32State *env;
     target_phys_addr_t bootstrap_pc;
     target_phys_addr_t flash_base;
     target_phys_addr_t initrd_base;
@@ -46,7 +47,7 @@ typedef struct {
 
 static void cpu_irq_handler(void *opaque, int irq, int level)
 {
-    CPUState *env = opaque;
+    CPULM32State *env = opaque;
 
     if (level) {
         cpu_interrupt(env, CPU_INTERRUPT_HARD);
@@ -58,9 +59,9 @@ static void cpu_irq_handler(void *opaque, int irq, int level)
 static void main_cpu_reset(void *opaque)
 {
     ResetInfo *reset_info = opaque;
-    CPUState *env = reset_info->env;
+    CPULM32State *env = reset_info->env;
 
-    cpu_reset(env);
+    cpu_state_reset(env);
 
     /* init defaults */
     env->pc = reset_info->bootstrap_pc;
@@ -78,11 +79,11 @@ milkymist_init(ram_addr_t ram_size_not_used,
                           const char *kernel_cmdline,
                           const char *initrd_filename, const char *cpu_model)
 {
-    CPUState *env;
+    CPULM32State *env;
     int kernel_size;
     DriveInfo *dinfo;
-    ram_addr_t phys_sdram;
-    ram_addr_t phys_flash;
+    MemoryRegion *address_space_mem = get_system_memory();
+    MemoryRegion *phys_sdram = g_new(MemoryRegion, 1);
     qemu_irq irq[32], *cpu_irq;
     int i;
     char *bios_filename;
@@ -99,7 +100,7 @@ milkymist_init(ram_addr_t ram_size_not_used,
     target_phys_addr_t cmdline_base = sdram_base + 0x1000000;
     size_t initrd_max = sdram_size - 0x1002000;
 
-    reset_info = qemu_mallocz(sizeof(ResetInfo));
+    reset_info = g_malloc0(sizeof(ResetInfo));
 
     if (cpu_model == NULL) {
         cpu_model = "lm32-full";
@@ -109,14 +110,13 @@ milkymist_init(ram_addr_t ram_size_not_used,
 
     cpu_lm32_set_phys_msb_ignore(env, 1);
 
-    phys_sdram = qemu_ram_alloc(NULL, "milkymist.sdram", sdram_size);
-    cpu_register_physical_memory(sdram_base, sdram_size,
-            phys_sdram | IO_MEM_RAM);
+    memory_region_init_ram(phys_sdram, "milkymist.sdram", sdram_size);
+    vmstate_register_ram_global(phys_sdram);
+    memory_region_add_subregion(address_space_mem, sdram_base, phys_sdram);
 
-    phys_flash = qemu_ram_alloc(NULL, "milkymist.flash", flash_size);
     dinfo = drive_get(IF_PFLASH, 0, 0);
     /* Numonyx JS28F256J3F105 */
-    pflash_cfi01_register(flash_base, phys_flash,
+    pflash_cfi01_register(flash_base, NULL, "milkymist.flash", flash_size,
                           dinfo ? dinfo->bdrv : NULL, flash_sector_size,
                           flash_size / flash_sector_size, 2,
                           0x00, 0x89, 0x00, 0x1d, 1);
@@ -147,17 +147,17 @@ milkymist_init(ram_addr_t ram_size_not_used,
         exit(1);
     }
 
-    milkymist_uart_create(0x60000000, irq[0], irq[1]);
-    milkymist_sysctl_create(0x60001000, irq[2], irq[3], irq[4],
+    milkymist_uart_create(0x60000000, irq[0]);
+    milkymist_sysctl_create(0x60001000, irq[1], irq[2], irq[3],
             80000000, 0x10014d31, 0x0000041f, 0x00000001);
     milkymist_hpdmc_create(0x60002000);
     milkymist_vgafb_create(0x60003000, 0x40000000, 0x0fffffff);
     milkymist_memcard_create(0x60004000);
-    milkymist_ac97_create(0x60005000, irq[5], irq[6], irq[7], irq[8]);
-    milkymist_pfpu_create(0x60006000, irq[9]);
-    milkymist_tmu2_create(0x60007000, irq[10]);
-    milkymist_minimac2_create(0x60008000, 0x30000000, irq[11], irq[12]);
-    milkymist_softusb_create(0x6000f000, irq[17],
+    milkymist_ac97_create(0x60005000, irq[4], irq[5], irq[6], irq[7]);
+    milkymist_pfpu_create(0x60006000, irq[8]);
+    milkymist_tmu2_create(0x60007000, irq[9]);
+    milkymist_minimac2_create(0x60008000, 0x30000000, irq[10], irq[11]);
+    milkymist_softusb_create(0x6000f000, irq[15],
             0x20000000, 0x1000, 0x20020000, 0x2000);
 
     /* make sure juart isn't the first chardev */

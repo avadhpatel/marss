@@ -32,7 +32,13 @@ enum VIOsPAPR_TCEAccess {
     SPAPR_TCE_RW = 3,
 };
 
-#define SPAPR_VTY_BASE_ADDRESS     0x30000000
+#define TYPE_VIO_SPAPR_DEVICE "vio-spapr-device"
+#define VIO_SPAPR_DEVICE(obj) \
+     OBJECT_CHECK(VIOsPAPRDevice, (obj), TYPE_VIO_SPAPR_DEVICE)
+#define VIO_SPAPR_DEVICE_CLASS(klass) \
+     OBJECT_CLASS_CHECK(VIOsPAPRDeviceClass, (klass), TYPE_VIO_SPAPR_DEVICE)
+#define VIO_SPAPR_DEVICE_GET_CLASS(obj) \
+     OBJECT_GET_CLASS(VIOsPAPRDeviceClass, (obj), TYPE_VIO_SPAPR_DEVICE)
 
 struct VIOsPAPRDevice;
 
@@ -47,7 +53,20 @@ typedef struct VIOsPAPR_CRQ {
     int(*SendFunc)(struct VIOsPAPRDevice *vdev, uint8_t *crq);
 } VIOsPAPR_CRQ;
 
-typedef struct VIOsPAPRDevice {
+typedef struct VIOsPAPRDevice VIOsPAPRDevice;
+typedef struct VIOsPAPRBus VIOsPAPRBus;
+
+typedef struct VIOsPAPRDeviceClass {
+    DeviceClass parent_class;
+
+    const char *dt_name, *dt_type, *dt_compatible;
+    target_ulong signal_mask;
+    int (*init)(VIOsPAPRDevice *dev);
+    void (*reset)(VIOsPAPRDevice *dev);
+    int (*devnode)(VIOsPAPRDevice *dev, void *fdt, int node_off);
+} VIOsPAPRDeviceClass;
+
+struct VIOsPAPRDevice {
     DeviceState qdev;
     uint32_t reg;
     uint32_t flags;
@@ -57,26 +76,26 @@ typedef struct VIOsPAPRDevice {
     target_ulong signal_state;
     uint32_t rtce_window_size;
     VIOsPAPR_RTCE *rtce_table;
+    int kvmtce_fd;
     VIOsPAPR_CRQ crq;
-} VIOsPAPRDevice;
+};
 
-typedef struct VIOsPAPRBus {
+#define DEFINE_SPAPR_PROPERTIES(type, field, default_dma_window)       \
+        DEFINE_PROP_UINT32("reg", type, field.reg, -1),                \
+        DEFINE_PROP_UINT32("dma-window", type, field.rtce_window_size, \
+                           default_dma_window)
+
+struct VIOsPAPRBus {
     BusState bus;
-} VIOsPAPRBus;
-
-typedef struct {
-    DeviceInfo qdev;
-    const char *dt_name, *dt_type, *dt_compatible;
-    target_ulong signal_mask;
+    uint32_t next_reg;
     int (*init)(VIOsPAPRDevice *dev);
-    void (*hcalls)(VIOsPAPRBus *bus);
     int (*devnode)(VIOsPAPRDevice *dev, void *fdt, int node_off);
-} VIOsPAPRDeviceInfo;
+};
 
 extern VIOsPAPRBus *spapr_vio_bus_init(void);
 extern VIOsPAPRDevice *spapr_vio_find_by_reg(VIOsPAPRBus *bus, uint32_t reg);
-extern void spapr_vio_bus_register_withprop(VIOsPAPRDeviceInfo *info);
 extern int spapr_populate_vdevice(VIOsPAPRBus *bus, void *fdt);
+extern int spapr_populate_chosen_stdout(void *fdt, VIOsPAPRBus *bus);
 
 extern int spapr_vio_signal(VIOsPAPRDevice *dev, target_ulong mode);
 
@@ -97,16 +116,13 @@ uint64_t ldq_tce(VIOsPAPRDevice *dev, uint64_t taddr);
 
 int spapr_vio_send_crq(VIOsPAPRDevice *dev, uint8_t *crq);
 
+VIOsPAPRDevice *vty_lookup(sPAPREnvironment *spapr, target_ulong reg);
 void vty_putchars(VIOsPAPRDevice *sdev, uint8_t *buf, int len);
-void spapr_vty_create(VIOsPAPRBus *bus,
-                      uint32_t reg, CharDriverState *chardev,
-                      qemu_irq qirq, uint32_t vio_irq_num);
+void spapr_vty_create(VIOsPAPRBus *bus, CharDriverState *chardev);
+void spapr_vlan_create(VIOsPAPRBus *bus, NICInfo *nd);
+void spapr_vscsi_create(VIOsPAPRBus *bus);
 
-void spapr_vlan_create(VIOsPAPRBus *bus, uint32_t reg, NICInfo *nd,
-                       qemu_irq qirq, uint32_t vio_irq_num);
-
-void spapr_vscsi_create(VIOsPAPRBus *bus, uint32_t reg,
-                        qemu_irq qirq, uint32_t vio_irq_num);
+VIOsPAPRDevice *spapr_vty_get_default(VIOsPAPRBus *bus);
 
 int spapr_tce_set_bypass(uint32_t unit, uint32_t enable);
 void spapr_vio_quiesce(void);

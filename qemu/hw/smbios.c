@@ -9,6 +9,8 @@
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
  *
+ * Contributions after 2012-01-13 are licensed under the terms of the
+ * GNU GPL, version 2 or (at your option) any later version.
  */
 
 #include "sysemu.h"
@@ -21,19 +23,19 @@
 struct smbios_header {
     uint16_t length;
     uint8_t type;
-} __attribute__((__packed__));
+} QEMU_PACKED;
 
 struct smbios_field {
     struct smbios_header header;
     uint8_t type;
     uint16_t offset;
     uint8_t data[];
-} __attribute__((__packed__));
+} QEMU_PACKED;
 
 struct smbios_table {
     struct smbios_header header;
     uint8_t data[];
-} __attribute__((__packed__));
+} QEMU_PACKED;
 
 #define SMBIOS_FIELD_ENTRY 0
 #define SMBIOS_TABLE_ENTRY 1
@@ -105,9 +107,9 @@ void smbios_add_field(int type, int offset, int len, void *data)
 
     if (!smbios_entries) {
         smbios_entries_len = sizeof(uint16_t);
-        smbios_entries = qemu_mallocz(smbios_entries_len);
+        smbios_entries = g_malloc0(smbios_entries_len);
     }
-    smbios_entries = qemu_realloc(smbios_entries, smbios_entries_len +
+    smbios_entries = g_realloc(smbios_entries, smbios_entries_len +
                                                   sizeof(*field) + len);
     field = (struct smbios_field *)(smbios_entries + smbios_entries_len);
     field->header.type = SMBIOS_FIELD_ENTRY;
@@ -192,10 +194,10 @@ int smbios_entry_add(const char *t)
 
         if (!smbios_entries) {
             smbios_entries_len = sizeof(uint16_t);
-            smbios_entries = qemu_mallocz(smbios_entries_len);
+            smbios_entries = g_malloc0(smbios_entries_len);
         }
 
-        smbios_entries = qemu_realloc(smbios_entries, smbios_entries_len +
+        smbios_entries = g_realloc(smbios_entries, smbios_entries_len +
                                                       sizeof(*table) + size);
         table = (struct smbios_table *)(smbios_entries + smbios_entries_len);
         table->header.type = SMBIOS_TABLE_ENTRY;

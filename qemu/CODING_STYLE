@@ -1,4 +1,4 @@
-Qemu Coding Style
+QEMU Coding Style
 =================
 
 Please use the script checkpatch.pl in the scripts directory to check
@@ -44,7 +44,8 @@ Rationale:
 3. Naming
 
 Variables are lower_case_with_underscores; easy to type and read.  Structured
-type names are in CamelCase; harder to type but standing out.  Scalar type
+type names are in CamelCase; harder to type but standing out.  Enum type
+names and function type names should also be in CamelCase.  Scalar type
 names are lower_case_with_underscores_ending_with_a_t, like the POSIX
 uint64_t and family.  Note that this last convention contradicts POSIX
 and is therefore likely to be changed.
@@ -67,6 +68,10 @@ keyword.  Example:
     } else {
         printf("a was something else entirely.\n");
     }
+
+Note that 'else if' is considered a single statement; otherwise a long if/
+else if/else if/.../else sequence would need an indent for every else
+statement.
 
 An exception is the opening brace for a function; for reasons of tradition
 and clarity it comes on a line by itself:

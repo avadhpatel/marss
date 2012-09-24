@@ -274,7 +274,7 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA) |
                        (1 << CP0C1_CA),
         .CP0_Config2 = MIPS_CONFIG2,
-        .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt) | (1 << CP0C3_MT),
+        .CP0_Config3 = MIPS_CONFIG3 | (1 << CP0C3_VInt) | (1 << CP0C3_MT),
         .CP0_LLAddr_rw_bitmask = 0,
         .CP0_LLAddr_shift = 0,
         .SYNCI_Step = 32,
@@ -535,7 +535,7 @@ static void r4k_mmu_init (CPUMIPSState *env, const mips_def_t *def)
 
 static void mmu_init (CPUMIPSState *env, const mips_def_t *def)
 {
-    env->tlb = qemu_mallocz(sizeof(CPUMIPSTLBContext));
+    env->tlb = g_malloc0(sizeof(CPUMIPSTLBContext));
 
     switch (def->mmu_type) {
         case MMU_TYPE_NONE:
@@ -568,7 +568,7 @@ static void fpu_init (CPUMIPSState *env, const mips_def_t *def)
 
 static void mvp_init (CPUMIPSState *env, const mips_def_t *def)
 {
-    env->mvp = qemu_mallocz(sizeof(CPUMIPSMVPContext));
+    env->mvp = g_malloc0(sizeof(CPUMIPSMVPContext));
 
     /* MVPConf1 implemented, TLB sharable, no gating storage support,
        programmable cache partitioning implemented, number of allocatable
@@ -580,7 +580,7 @@ static void mvp_init (CPUMIPSState *env, const mips_def_t *def)
 //                             (1 << CP0MVPC0_TCA) | (0x1 << CP0MVPC0_PVPE) |
 //                             (0x04 << CP0MVPC0_PTC);
                              (1 << CP0MVPC0_TCA) | (0x0 << CP0MVPC0_PVPE) |
-                             (0x04 << CP0MVPC0_PTC);
+                             (0x00 << CP0MVPC0_PTC);
 #if !defined(CONFIG_USER_ONLY)
     /* Usermode has no TLB support */
     env->mvp->CP0_MVPConf0 |= (env->tlb->nb_tlb << CP0MVPC0_PTLBE);

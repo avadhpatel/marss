@@ -14,6 +14,9 @@
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>
+ *
+ * Contributions after 2012-01-13 are licensed under the terms of the
+ * GNU GPL, version 2 or (at your option) any later version.
  */
 #include "hw.h"
 #include "pc.h"
@@ -37,26 +40,24 @@
 
 #define GPE_BASE 0xafe0
 #define GPE_LEN 4
-#define PCI_BASE 0xae00
+#define PCI_UP_BASE 0xae00
+#define PCI_DOWN_BASE 0xae04
 #define PCI_EJ_BASE 0xae08
 #define PCI_RMV_BASE 0xae0c
 
 #define PIIX4_PCI_HOTPLUG_STATUS 2
 
 struct pci_status {
-    uint32_t up;
+    uint32_t up; /* deprecated, maintained for migration compatibility */
     uint32_t down;
 };
 
 typedef struct PIIX4PMState {
     PCIDevice dev;
     IORange ioport;
-    ACPIPM1EVT pm1a;
-    ACPIPM1CNT pm1_cnt;
+    ACPIREGS ar;
 
     APMState apm;
-
-    ACPIPMTimer tmr;
 
     PMSMBus smb;
     uint32_t smb_io_base;
@@ -67,9 +68,9 @@ typedef struct PIIX4PMState {
     Notifier machine_ready;
 
     /* for pci hotplug */
-    ACPIGPE gpe;
     struct pci_status pci0_status;
     uint32_t pci0_hotplug_enable;
+    uint32_t pci0_slot_device_present;
 } PIIX4PMState;
 
 static void piix4_acpi_system_hot_add_init(PCIBus *bus, PIIX4PMState *s);
@@ -81,23 +82,24 @@ static void pm_update_sci(PIIX4PMState *s)
 {
     int sci_level, pmsts;
 
-    pmsts = acpi_pm1_evt_get_sts(&s->pm1a, s->tmr.overflow_time);
-    sci_level = (((pmsts & s->pm1a.en) &
+    pmsts = acpi_pm1_evt_get_sts(&s->ar);
+    sci_level = (((pmsts & s->ar.pm1.evt.en) &
                   (ACPI_BITMASK_RT_CLOCK_ENABLE |
                    ACPI_BITMASK_POWER_BUTTON_ENABLE |
                    ACPI_BITMASK_GLOBAL_LOCK_ENABLE |
                    ACPI_BITMASK_TIMER_ENABLE)) != 0) ||
-        (((s->gpe.sts[0] & s->gpe.en[0]) & PIIX4_PCI_HOTPLUG_STATUS) != 0);
+        (((s->ar.gpe.sts[0] & s->ar.gpe.en[0])
+          & PIIX4_PCI_HOTPLUG_STATUS) != 0);
 
     qemu_set_irq(s->irq, sci_level);
     /* schedule a timer interruption if needed */
-    acpi_pm_tmr_update(&s->tmr, (s->pm1a.en & ACPI_BITMASK_TIMER_ENABLE) &&
+    acpi_pm_tmr_update(&s->ar, (s->ar.pm1.evt.en & ACPI_BITMASK_TIMER_ENABLE) &&
                        !(pmsts & ACPI_BITMASK_TIMER_STATUS));
 }
 
-static void pm_tmr_timer(ACPIPMTimer *tmr)
+static void pm_tmr_timer(ACPIREGS *ar)
 {
-    PIIX4PMState *s = container_of(tmr, PIIX4PMState, tmr);
+    PIIX4PMState *s = container_of(ar, PIIX4PMState, ar);
     pm_update_sci(s);
 }
 
@@ -113,15 +115,15 @@ static void pm_ioport_write(IORange *ioport, uint64_t addr, unsigned width,
 
     switch(addr) {
     case 0x00:
-        acpi_pm1_evt_write_sts(&s->pm1a, &s->tmr, val);
+        acpi_pm1_evt_write_sts(&s->ar, val);
         pm_update_sci(s);
         break;
     case 0x02:
-        s->pm1a.en = val;
+        acpi_pm1_evt_write_en(&s->ar, val);
         pm_update_sci(s);
         break;
     case 0x04:
-        acpi_pm1_cnt_write(&s->pm1a, &s->pm1_cnt, val);
+        acpi_pm1_cnt_write(&s->ar, val);
         break;
     default:
         break;
@@ -138,16 +140,16 @@ static void pm_ioport_read(IORange *ioport, uint64_t addr, unsigned width,
 
     switch(addr) {
     case 0x00:
-        val = acpi_pm1_evt_get_sts(&s->pm1a, s->tmr.overflow_time);
+        val = acpi_pm1_evt_get_sts(&s->ar);
         break;
     case 0x02:
-        val = s->pm1a.en;
+        val = s->ar.pm1.evt.en;
         break;
     case 0x04:
-        val = s->pm1_cnt.cnt;
+        val = s->ar.pm1.cnt.cnt;
         break;
     case 0x08:
-        val = acpi_pm_tmr_get(&s->tmr);
+        val = acpi_pm_tmr_get(&s->ar);
         break;
     default:
         val = 0;
@@ -167,7 +169,7 @@ static void apm_ctrl_changed(uint32_t val, void *arg)
     PIIX4PMState *s = arg;
 
     /* ACPI specs 3.0, 4.7.2.5 */
-    acpi_pm1_cnt_update(&s->pm1_cnt, val == ACPI_ENABLE, val == ACPI_DISABLE);
+    acpi_pm1_cnt_update(&s->ar, val == ACPI_ENABLE, val == ACPI_DISABLE);
 
     if (s->dev.config[0x5b] & (1 << 1)) {
         if (s->smi_irq) {
@@ -202,6 +204,17 @@ static void pm_write_config(PCIDevice *d,
     pci_default_write_config(d, address, val, len);
     if (range_covers_byte(address, len, 0x80))
         pm_io_space_update((PIIX4PMState *)d);
+}
+
+static void vmstate_pci_status_pre_save(void *opaque)
+{
+    struct pci_status *pci0_status = opaque;
+    PIIX4PMState *s = container_of(pci0_status, PIIX4PMState, pci0_status);
+
+    /* We no longer track up, so build a safe value for migrating
+     * to a version that still does... of course these might get lost
+     * by an old buggy implementation, but we try. */
+    pci0_status->up = s->pci0_slot_device_present & s->pci0_hotplug_enable;
 }
 
 static int vmstate_acpi_post_load(void *opaque, int version_id)
@@ -240,6 +253,7 @@ static const VMStateDescription vmstate_pci_status = {
     .version_id = 1,
     .minimum_version_id = 1,
     .minimum_version_id_old = 1,
+    .pre_save = vmstate_pci_status_pre_save,
     .fields      = (VMStateField []) {
         VMSTATE_UINT32(up, struct pci_status),
         VMSTATE_UINT32(down, struct pci_status),
@@ -255,18 +269,45 @@ static const VMStateDescription vmstate_acpi = {
     .post_load = vmstate_acpi_post_load,
     .fields      = (VMStateField []) {
         VMSTATE_PCI_DEVICE(dev, PIIX4PMState),
-        VMSTATE_UINT16(pm1a.sts, PIIX4PMState),
-        VMSTATE_UINT16(pm1a.en, PIIX4PMState),
-        VMSTATE_UINT16(pm1_cnt.cnt, PIIX4PMState),
+        VMSTATE_UINT16(ar.pm1.evt.sts, PIIX4PMState),
+        VMSTATE_UINT16(ar.pm1.evt.en, PIIX4PMState),
+        VMSTATE_UINT16(ar.pm1.cnt.cnt, PIIX4PMState),
         VMSTATE_STRUCT(apm, PIIX4PMState, 0, vmstate_apm, APMState),
-        VMSTATE_TIMER(tmr.timer, PIIX4PMState),
-        VMSTATE_INT64(tmr.overflow_time, PIIX4PMState),
-        VMSTATE_STRUCT(gpe, PIIX4PMState, 2, vmstate_gpe, ACPIGPE),
+        VMSTATE_TIMER(ar.tmr.timer, PIIX4PMState),
+        VMSTATE_INT64(ar.tmr.overflow_time, PIIX4PMState),
+        VMSTATE_STRUCT(ar.gpe, PIIX4PMState, 2, vmstate_gpe, ACPIGPE),
         VMSTATE_STRUCT(pci0_status, PIIX4PMState, 2, vmstate_pci_status,
                        struct pci_status),
         VMSTATE_END_OF_LIST()
     }
 };
+
+static void acpi_piix_eject_slot(PIIX4PMState *s, unsigned slots)
+{
+    DeviceState *qdev, *next;
+    BusState *bus = qdev_get_parent_bus(&s->dev.qdev);
+    int slot = ffs(slots) - 1;
+    bool slot_free = true;
+
+    /* Mark request as complete */
+    s->pci0_status.down &= ~(1U << slot);
+
+    QTAILQ_FOREACH_SAFE(qdev, &bus->children, sibling, next) {
+        PCIDevice *dev = PCI_DEVICE(qdev);
+        PCIDeviceClass *pc = PCI_DEVICE_GET_CLASS(dev);
+        if (PCI_SLOT(dev->devfn) == slot) {
+            if (pc->no_hotplug) {
+                slot_free = false;
+            } else {
+                object_unparent(OBJECT(dev));
+                qdev_free(qdev);
+            }
+        }
+    }
+    if (slot_free) {
+        s->pci0_slot_device_present &= ~(1U << slot);
+    }
+}
 
 static void piix4_update_hotplug(PIIX4PMState *s)
 {
@@ -274,16 +315,24 @@ static void piix4_update_hotplug(PIIX4PMState *s)
     BusState *bus = qdev_get_parent_bus(&dev->qdev);
     DeviceState *qdev, *next;
 
-    s->pci0_hotplug_enable = ~0;
+    /* Execute any pending removes during reset */
+    while (s->pci0_status.down) {
+        acpi_piix_eject_slot(s, s->pci0_status.down);
+    }
 
-    QLIST_FOREACH_SAFE(qdev, &bus->children, sibling, next) {
-        PCIDeviceInfo *info = container_of(qdev->info, PCIDeviceInfo, qdev);
-        PCIDevice *pdev = DO_UPCAST(PCIDevice, qdev, qdev);
+    s->pci0_hotplug_enable = ~0;
+    s->pci0_slot_device_present = 0;
+
+    QTAILQ_FOREACH_SAFE(qdev, &bus->children, sibling, next) {
+        PCIDevice *pdev = PCI_DEVICE(qdev);
+        PCIDeviceClass *pc = PCI_DEVICE_GET_CLASS(pdev);
         int slot = PCI_SLOT(pdev->devfn);
 
-        if (info->no_hotplug) {
-            s->pci0_hotplug_enable &= ~(1 << slot);
+        if (pc->no_hotplug) {
+            s->pci0_hotplug_enable &= ~(1U << slot);
         }
+
+        s->pci0_slot_device_present |= (1U << slot);
     }
 }
 
@@ -307,10 +356,9 @@ static void piix4_reset(void *opaque)
 static void piix4_powerdown(void *opaque, int irq, int power_failing)
 {
     PIIX4PMState *s = opaque;
-    ACPIPM1EVT *pm1a = s? &s->pm1a: NULL;
-    ACPIPMTimer *tmr = s? &s->tmr: NULL;
 
-    acpi_pm1_evt_power_down(pm1a, tmr);
+    assert(s != NULL);
+    acpi_pm1_evt_power_down(&s->ar);
 }
 
 static void piix4_pm_machine_ready(Notifier *n, void *opaque)
@@ -358,8 +406,8 @@ static int piix4_pm_initfn(PCIDevice *dev)
     register_ioport_write(s->smb_io_base, 64, 1, smb_ioport_writeb, &s->smb);
     register_ioport_read(s->smb_io_base, 64, 1, smb_ioport_readb, &s->smb);
 
-    acpi_pm_tmr_init(&s->tmr, pm_tmr_timer);
-    acpi_gpe_init(&s->gpe, GPE_LEN);
+    acpi_pm_tmr_init(&s->ar, pm_tmr_timer);
+    acpi_gpe_init(&s->ar, GPE_LEN);
 
     qemu_system_powerdown = *qemu_allocate_irqs(piix4_powerdown, s, 1);
 
@@ -373,7 +421,7 @@ static int piix4_pm_initfn(PCIDevice *dev)
 }
 
 i2c_bus *piix4_pm_init(PCIBus *bus, int devfn, uint32_t smb_io_base,
-                       qemu_irq sci_irq, qemu_irq cmos_s3, qemu_irq smi_irq,
+                       qemu_irq sci_irq, qemu_irq smi_irq,
                        int kvm_enabled)
 {
     PCIDevice *dev;
@@ -384,7 +432,7 @@ i2c_bus *piix4_pm_init(PCIBus *bus, int devfn, uint32_t smb_io_base,
 
     s = DO_UPCAST(PIIX4PMState, dev, dev);
     s->irq = sci_irq;
-    acpi_pm1_cnt_init(&s->pm1_cnt, cmos_s3);
+    acpi_pm1_cnt_init(&s->ar);
     s->smi_irq = smi_irq;
     s->kvm_enabled = kvm_enabled;
 
@@ -393,36 +441,47 @@ i2c_bus *piix4_pm_init(PCIBus *bus, int devfn, uint32_t smb_io_base,
     return s->smb.smbus;
 }
 
-static PCIDeviceInfo piix4_pm_info = {
-    .qdev.name          = "PIIX4_PM",
-    .qdev.desc          = "PM",
-    .qdev.size          = sizeof(PIIX4PMState),
-    .qdev.vmsd          = &vmstate_acpi,
-    .qdev.no_user       = 1,
-    .no_hotplug         = 1,
-    .init               = piix4_pm_initfn,
-    .config_write       = pm_write_config,
-    .vendor_id          = PCI_VENDOR_ID_INTEL,
-    .device_id          = PCI_DEVICE_ID_INTEL_82371AB_3,
-    .revision           = 0x03,
-    .class_id           = PCI_CLASS_BRIDGE_OTHER,
-    .qdev.props         = (Property[]) {
-        DEFINE_PROP_UINT32("smb_io_base", PIIX4PMState, smb_io_base, 0),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+static Property piix4_pm_properties[] = {
+    DEFINE_PROP_UINT32("smb_io_base", PIIX4PMState, smb_io_base, 0),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void piix4_pm_register(void)
+static void piix4_pm_class_init(ObjectClass *klass, void *data)
 {
-    pci_qdev_register(&piix4_pm_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->no_hotplug = 1;
+    k->init = piix4_pm_initfn;
+    k->config_write = pm_write_config;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->device_id = PCI_DEVICE_ID_INTEL_82371AB_3;
+    k->revision = 0x03;
+    k->class_id = PCI_CLASS_BRIDGE_OTHER;
+    dc->desc = "PM";
+    dc->no_user = 1;
+    dc->vmsd = &vmstate_acpi;
+    dc->props = piix4_pm_properties;
 }
 
-device_init(piix4_pm_register);
+static TypeInfo piix4_pm_info = {
+    .name          = "PIIX4_PM",
+    .parent        = TYPE_PCI_DEVICE,
+    .instance_size = sizeof(PIIX4PMState),
+    .class_init    = piix4_pm_class_init,
+};
+
+static void piix4_pm_register_types(void)
+{
+    type_register_static(&piix4_pm_info);
+}
+
+type_init(piix4_pm_register_types)
 
 static uint32_t gpe_readb(void *opaque, uint32_t addr)
 {
     PIIX4PMState *s = opaque;
-    uint32_t val = acpi_gpe_ioport_readb(&s->gpe, addr);
+    uint32_t val = acpi_gpe_ioport_readb(&s->ar, addr);
 
     PIIX4_DPRINTF("gpe read %x == %x\n", addr, val);
     return val;
@@ -432,68 +491,44 @@ static void gpe_writeb(void *opaque, uint32_t addr, uint32_t val)
 {
     PIIX4PMState *s = opaque;
 
-    acpi_gpe_ioport_writeb(&s->gpe, addr, val);
+    acpi_gpe_ioport_writeb(&s->ar, addr, val);
     pm_update_sci(s);
 
     PIIX4_DPRINTF("gpe write %x <== %d\n", addr, val);
 }
 
-static uint32_t pcihotplug_read(void *opaque, uint32_t addr)
+static uint32_t pci_up_read(void *opaque, uint32_t addr)
 {
-    uint32_t val = 0;
-    struct pci_status *g = opaque;
-    switch (addr) {
-        case PCI_BASE:
-            val = g->up;
-            break;
-        case PCI_BASE + 4:
-            val = g->down;
-            break;
-        default:
-            break;
-    }
+    PIIX4PMState *s = opaque;
+    uint32_t val;
 
-    PIIX4_DPRINTF("pcihotplug read %x == %x\n", addr, val);
+    /* Manufacture an "up" value to cause a device check on any hotplug
+     * slot with a device.  Extra device checks are harmless. */
+    val = s->pci0_slot_device_present & s->pci0_hotplug_enable;
+
+    PIIX4_DPRINTF("pci_up_read %x\n", val);
     return val;
 }
 
-static void pcihotplug_write(void *opaque, uint32_t addr, uint32_t val)
+static uint32_t pci_down_read(void *opaque, uint32_t addr)
 {
-    struct pci_status *g = opaque;
-    switch (addr) {
-        case PCI_BASE:
-            g->up = val;
-            break;
-        case PCI_BASE + 4:
-            g->down = val;
-            break;
-   }
+    PIIX4PMState *s = opaque;
+    uint32_t val = s->pci0_status.down;
 
-    PIIX4_DPRINTF("pcihotplug write %x <== %d\n", addr, val);
+    PIIX4_DPRINTF("pci_down_read %x\n", val);
+    return val;
 }
 
-static uint32_t pciej_read(void *opaque, uint32_t addr)
+static uint32_t pci_features_read(void *opaque, uint32_t addr)
 {
-    PIIX4_DPRINTF("pciej read %x\n", addr);
+    /* No feature defined yet */
+    PIIX4_DPRINTF("pci_features_read %x\n", 0);
     return 0;
 }
 
 static void pciej_write(void *opaque, uint32_t addr, uint32_t val)
 {
-    BusState *bus = opaque;
-    DeviceState *qdev, *next;
-    PCIDevice *dev;
-    PCIDeviceInfo *info;
-    int slot = ffs(val) - 1;
-
-    QLIST_FOREACH_SAFE(qdev, &bus->children, sibling, next) {
-        dev = DO_UPCAST(PCIDevice, qdev, qdev);
-        info = container_of(qdev->info, PCIDeviceInfo, qdev);
-        if (PCI_SLOT(dev->devfn) == slot && !info->no_hotplug) {
-            qdev_free(qdev);
-        }
-    }
-
+    acpi_piix_eject_slot(opaque, val);
 
     PIIX4_DPRINTF("pciej write %x <== %d\n", addr, val);
 }
@@ -505,29 +540,22 @@ static uint32_t pcirmv_read(void *opaque, uint32_t addr)
     return s->pci0_hotplug_enable;
 }
 
-static void pcirmv_write(void *opaque, uint32_t addr, uint32_t val)
-{
-    return;
-}
-
 static int piix4_device_hotplug(DeviceState *qdev, PCIDevice *dev,
                                 PCIHotplugState state);
 
 static void piix4_acpi_system_hot_add_init(PCIBus *bus, PIIX4PMState *s)
 {
-    struct pci_status *pci0_status = &s->pci0_status;
 
     register_ioport_write(GPE_BASE, GPE_LEN, 1, gpe_writeb, s);
     register_ioport_read(GPE_BASE, GPE_LEN, 1,  gpe_readb, s);
-    acpi_gpe_blk(&s->gpe, GPE_BASE);
+    acpi_gpe_blk(&s->ar, GPE_BASE);
 
-    register_ioport_write(PCI_BASE, 8, 4, pcihotplug_write, pci0_status);
-    register_ioport_read(PCI_BASE, 8, 4,  pcihotplug_read, pci0_status);
+    register_ioport_read(PCI_UP_BASE, 4, 4, pci_up_read, s);
+    register_ioport_read(PCI_DOWN_BASE, 4, 4, pci_down_read, s);
 
-    register_ioport_write(PCI_EJ_BASE, 4, 4, pciej_write, bus);
-    register_ioport_read(PCI_EJ_BASE, 4, 4,  pciej_read, bus);
+    register_ioport_write(PCI_EJ_BASE, 4, 4, pciej_write, s);
+    register_ioport_read(PCI_EJ_BASE, 4, 4,  pci_features_read, s);
 
-    register_ioport_write(PCI_RMV_BASE, 4, 4, pcirmv_write, s);
     register_ioport_read(PCI_RMV_BASE, 4, 4,  pcirmv_read, s);
 
     pci_bus_hotplug(bus, piix4_device_hotplug, &s->dev.qdev);
@@ -535,14 +563,14 @@ static void piix4_acpi_system_hot_add_init(PCIBus *bus, PIIX4PMState *s)
 
 static void enable_device(PIIX4PMState *s, int slot)
 {
-    s->gpe.sts[0] |= PIIX4_PCI_HOTPLUG_STATUS;
-    s->pci0_status.up |= (1 << slot);
+    s->ar.gpe.sts[0] |= PIIX4_PCI_HOTPLUG_STATUS;
+    s->pci0_slot_device_present |= (1U << slot);
 }
 
 static void disable_device(PIIX4PMState *s, int slot)
 {
-    s->gpe.sts[0] |= PIIX4_PCI_HOTPLUG_STATUS;
-    s->pci0_status.down |= (1 << slot);
+    s->ar.gpe.sts[0] |= PIIX4_PCI_HOTPLUG_STATUS;
+    s->pci0_status.down |= (1U << slot);
 }
 
 static int piix4_device_hotplug(DeviceState *qdev, PCIDevice *dev,
@@ -550,17 +578,16 @@ static int piix4_device_hotplug(DeviceState *qdev, PCIDevice *dev,
 {
     int slot = PCI_SLOT(dev->devfn);
     PIIX4PMState *s = DO_UPCAST(PIIX4PMState, dev,
-                                DO_UPCAST(PCIDevice, qdev, qdev));
+                                PCI_DEVICE(qdev));
 
     /* Don't send event when device is enabled during qemu machine creation:
      * it is present on boot, no hotplug event is necessary. We do send an
      * event when the device is disabled later. */
     if (state == PCI_COLDPLUG_ENABLED) {
+        s->pci0_slot_device_present |= (1U << slot);
         return 0;
     }
 
-    s->pci0_status.up = 0;
-    s->pci0_status.down = 0;
     if (state == PCI_HOTPLUG_ENABLED) {
         enable_device(s, slot);
     } else {

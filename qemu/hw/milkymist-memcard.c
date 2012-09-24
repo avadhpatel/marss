@@ -60,6 +60,7 @@ enum {
 
 struct MilkymistMemcardState {
     SysBusDevice busdev;
+    MemoryRegion regs_region;
     SDState *card;
 
     int command_write_ptr;
@@ -116,7 +117,8 @@ static void memcard_sd_command(MilkymistMemcardState *s)
     }
 }
 
-static uint32_t memcard_read(void *opaque, target_phys_addr_t addr)
+static uint64_t memcard_read(void *opaque, target_phys_addr_t addr,
+                             unsigned size)
 {
     MilkymistMemcardState *s = opaque;
     uint32_t r = 0;
@@ -164,7 +166,8 @@ static uint32_t memcard_read(void *opaque, target_phys_addr_t addr)
     return r;
 }
 
-static void memcard_write(void *opaque, target_phys_addr_t addr, uint32_t value)
+static void memcard_write(void *opaque, target_phys_addr_t addr, uint64_t value,
+                          unsigned size)
 {
     MilkymistMemcardState *s = opaque;
 
@@ -216,16 +219,14 @@ static void memcard_write(void *opaque, target_phys_addr_t addr, uint32_t value)
     }
 }
 
-static CPUReadMemoryFunc * const memcard_read_fn[] = {
-    NULL,
-    NULL,
-    &memcard_read,
-};
-
-static CPUWriteMemoryFunc * const memcard_write_fn[] = {
-    NULL,
-    NULL,
-    &memcard_write,
+static const MemoryRegionOps memcard_mmio_ops = {
+    .read = memcard_read,
+    .write = memcard_write,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 static void milkymist_memcard_reset(DeviceState *d)
@@ -247,15 +248,14 @@ static int milkymist_memcard_init(SysBusDevice *dev)
 {
     MilkymistMemcardState *s = FROM_SYSBUS(typeof(*s), dev);
     DriveInfo *dinfo;
-    int memcard_regs;
 
     dinfo = drive_get_next(IF_SD);
     s->card = sd_init(dinfo ? dinfo->bdrv : NULL, 0);
     s->enabled = dinfo ? bdrv_is_inserted(dinfo->bdrv) : 0;
 
-    memcard_regs = cpu_register_io_memory(memcard_read_fn, memcard_write_fn, s,
-            DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, R_MAX * 4, memcard_regs);
+    memory_region_init_io(&s->regs_region, &memcard_mmio_ops, s,
+            "milkymist-memcard", R_MAX * 4);
+    sysbus_init_mmio(dev, &s->regs_region);
 
     return 0;
 }
@@ -278,17 +278,26 @@ static const VMStateDescription vmstate_milkymist_memcard = {
     }
 };
 
-static SysBusDeviceInfo milkymist_memcard_info = {
-    .init = milkymist_memcard_init,
-    .qdev.name  = "milkymist-memcard",
-    .qdev.size  = sizeof(MilkymistMemcardState),
-    .qdev.vmsd  = &vmstate_milkymist_memcard,
-    .qdev.reset = milkymist_memcard_reset,
-};
-
-static void milkymist_memcard_register(void)
+static void milkymist_memcard_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&milkymist_memcard_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = milkymist_memcard_init;
+    dc->reset = milkymist_memcard_reset;
+    dc->vmsd = &vmstate_milkymist_memcard;
 }
 
-device_init(milkymist_memcard_register)
+static TypeInfo milkymist_memcard_info = {
+    .name          = "milkymist-memcard",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(MilkymistMemcardState),
+    .class_init    = milkymist_memcard_class_init,
+};
+
+static void milkymist_memcard_register_types(void)
+{
+    type_register_static(&milkymist_memcard_info);
+}
+
+type_init(milkymist_memcard_register_types)

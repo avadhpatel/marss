@@ -9,6 +9,8 @@
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
  *
+ * Contributions after 2012-01-13 are licensed under the terms of the
+ * GNU GPL, version 2 or (at your option) any later version.
  */
 
 #include "qemu-common.h"
@@ -28,37 +30,39 @@
     do { } while (0)
 #endif
 
-static int socket_errno(FdMigrationState *s)
+static int socket_errno(MigrationState *s)
 {
     return socket_error();
 }
 
-static int socket_write(FdMigrationState *s, const void * buf, size_t size)
+static int socket_write(MigrationState *s, const void * buf, size_t size)
 {
     return send(s->fd, buf, size, 0);
 }
 
-static int tcp_close(FdMigrationState *s)
+static int tcp_close(MigrationState *s)
 {
+    int r = 0;
     DPRINTF("tcp_close\n");
     if (s->fd != -1) {
-        close(s->fd);
+        if (close(s->fd) < 0) {
+            r = -errno;
+        }
         s->fd = -1;
     }
-    return 0;
+    return r;
 }
-
 
 static void tcp_wait_for_connect(void *opaque)
 {
-    FdMigrationState *s = opaque;
+    MigrationState *s = opaque;
     int val, ret;
     socklen_t valsize = sizeof(val);
 
     DPRINTF("connect completed\n");
     do {
         ret = getsockopt(s->fd, SOL_SOCKET, SO_ERROR, (void *) &val, &valsize);
-    } while (ret == -1 && (s->get_error(s)) == EINTR);
+    } while (ret == -1 && (socket_error()) == EINTR);
 
     if (ret < 0) {
         migrate_fd_error(s);
@@ -75,63 +79,33 @@ static void tcp_wait_for_connect(void *opaque)
     }
 }
 
-MigrationState *tcp_start_outgoing_migration(Monitor *mon,
-                                             const char *host_port,
-                                             int64_t bandwidth_limit,
-                                             int detach,
-					     int blk,
-					     int inc)
+int tcp_start_outgoing_migration(MigrationState *s, const char *host_port,
+                                 Error **errp)
 {
-    struct sockaddr_in addr;
-    FdMigrationState *s;
-    int ret;
-
-    if (parse_host_port(&addr, host_port) < 0)
-        return NULL;
-
-    s = qemu_mallocz(sizeof(*s));
-
     s->get_error = socket_errno;
     s->write = socket_write;
     s->close = tcp_close;
-    s->mig_state.cancel = migrate_fd_cancel;
-    s->mig_state.get_status = migrate_fd_get_status;
-    s->mig_state.release = migrate_fd_release;
 
-    s->mig_state.blk = blk;
-    s->mig_state.shared = inc;
+    s->fd = inet_connect(host_port, false, errp);
 
-    s->state = MIG_STATE_ACTIVE;
-    s->mon = NULL;
-    s->bandwidth_limit = bandwidth_limit;
-    s->fd = qemu_socket(PF_INET, SOCK_STREAM, 0);
-    if (s->fd == -1) {
-        qemu_free(s);
-        return NULL;
-    }
-
-    socket_set_nonblock(s->fd);
-
-    if (!detach) {
-        migrate_fd_monitor_suspend(s, mon);
-    }
-
-    do {
-        ret = connect(s->fd, (struct sockaddr *)&addr, sizeof(addr));
-        if (ret == -1)
-            ret = -(s->get_error(s));
-
-        if (ret == -EINPROGRESS || ret == -EWOULDBLOCK)
-            qemu_set_fd_handler2(s->fd, NULL, NULL, tcp_wait_for_connect, s);
-    } while (ret == -EINTR);
-
-    if (ret < 0 && ret != -EINPROGRESS && ret != -EWOULDBLOCK) {
+    if (!error_is_set(errp)) {
+        migrate_fd_connect(s);
+    } else if (error_is_type(*errp, QERR_SOCKET_CONNECT_IN_PROGRESS)) {
+        DPRINTF("connect in progress\n");
+        qemu_set_fd_handler2(s->fd, NULL, NULL, tcp_wait_for_connect, s);
+    } else if (error_is_type(*errp, QERR_SOCKET_CREATE_FAILED)) {
+        DPRINTF("connect failed\n");
+        return -1;
+    } else if (error_is_type(*errp, QERR_SOCKET_CONNECT_FAILED)) {
         DPRINTF("connect failed\n");
         migrate_fd_error(s);
-    } else if (ret >= 0)
-        migrate_fd_connect(s);
+        return -1;
+    } else {
+        DPRINTF("unknown error\n");
+        return -1;
+    }
 
-    return &s->mig_state;
+    return 0;
 }
 
 static void tcp_accept_incoming_migration(void *opaque)
@@ -168,36 +142,18 @@ out2:
     close(s);
 }
 
-int tcp_start_incoming_migration(const char *host_port)
+int tcp_start_incoming_migration(const char *host_port, Error **errp)
 {
-    struct sockaddr_in addr;
-    int val;
     int s;
 
-    if (parse_host_port(&addr, host_port) < 0) {
-        fprintf(stderr, "invalid host/port combination: %s\n", host_port);
-        return -EINVAL;
+    s = inet_listen(host_port, NULL, 256, SOCK_STREAM, 0, errp);
+
+    if (s < 0) {
+        return -1;
     }
-
-    s = qemu_socket(PF_INET, SOCK_STREAM, 0);
-    if (s == -1)
-        return -socket_error();
-
-    val = 1;
-    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&val, sizeof(val));
-
-    if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) == -1)
-        goto err;
-
-    if (listen(s, 1) == -1)
-        goto err;
 
     qemu_set_fd_handler2(s, NULL, tcp_accept_incoming_migration, NULL,
                          (void *)(intptr_t)s);
 
     return 0;
-
-err:
-    close(s);
-    return -socket_error();
 }

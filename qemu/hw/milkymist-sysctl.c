@@ -1,7 +1,7 @@
 /*
  *  QEMU model of the Milkymist System Controller.
  *
- *  Copyright (c) 2010 Michael Walle <michael@walle.cc>
+ *  Copyright (c) 2010-2012 Michael Walle <michael@walle.cc>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -26,6 +26,7 @@
 #include "sysemu.h"
 #include "trace.h"
 #include "qemu-timer.h"
+#include "ptimer.h"
 #include "qemu-error.h"
 
 enum {
@@ -38,20 +39,19 @@ enum {
 };
 
 enum {
-    R_GPIO_IN = 0,
+    R_GPIO_IN         = 0,
     R_GPIO_OUT,
     R_GPIO_INTEN,
-    R_RESERVED0,
-    R_TIMER0_CONTROL,
+    R_TIMER0_CONTROL  = 4,
     R_TIMER0_COMPARE,
     R_TIMER0_COUNTER,
-    R_RESERVED1,
-    R_TIMER1_CONTROL,
+    R_TIMER1_CONTROL  = 8,
     R_TIMER1_COMPARE,
     R_TIMER1_COUNTER,
-    R_RESERVED2,
-    R_RESERVED3,
-    R_ICAP,
+    R_ICAP = 16,
+    R_DBG_SCRATCHPAD  = 20,
+    R_DBG_WRITE_LOCK,
+    R_CLK_FREQUENCY   = 29,
     R_CAPABILITIES,
     R_SYSTEM_ID,
     R_MAX
@@ -59,6 +59,7 @@ enum {
 
 struct MilkymistSysctlState {
     SysBusDevice busdev;
+    MemoryRegion regs_region;
 
     QEMUBH *bh0;
     QEMUBH *bh1;
@@ -88,7 +89,8 @@ static void sysctl_icap_write(MilkymistSysctlState *s, uint32_t value)
     }
 }
 
-static uint32_t sysctl_read(void *opaque, target_phys_addr_t addr)
+static uint64_t sysctl_read(void *opaque, target_phys_addr_t addr,
+                            unsigned size)
 {
     MilkymistSysctlState *s = opaque;
     uint32_t r = 0;
@@ -113,6 +115,9 @@ static uint32_t sysctl_read(void *opaque, target_phys_addr_t addr)
     case R_TIMER1_CONTROL:
     case R_TIMER1_COMPARE:
     case R_ICAP:
+    case R_DBG_SCRATCHPAD:
+    case R_DBG_WRITE_LOCK:
+    case R_CLK_FREQUENCY:
     case R_CAPABILITIES:
     case R_SYSTEM_ID:
         r = s->regs[addr];
@@ -129,7 +134,8 @@ static uint32_t sysctl_read(void *opaque, target_phys_addr_t addr)
     return r;
 }
 
-static void sysctl_write(void *opaque, target_phys_addr_t addr, uint32_t value)
+static void sysctl_write(void *opaque, target_phys_addr_t addr, uint64_t value,
+                         unsigned size)
 {
     MilkymistSysctlState *s = opaque;
 
@@ -141,6 +147,7 @@ static void sysctl_write(void *opaque, target_phys_addr_t addr, uint32_t value)
     case R_GPIO_INTEN:
     case R_TIMER0_COUNTER:
     case R_TIMER1_COUNTER:
+    case R_DBG_SCRATCHPAD:
         s->regs[addr] = value;
         break;
     case R_TIMER0_COMPARE:
@@ -178,11 +185,15 @@ static void sysctl_write(void *opaque, target_phys_addr_t addr, uint32_t value)
     case R_ICAP:
         sysctl_icap_write(s, value);
         break;
+    case R_DBG_WRITE_LOCK:
+        s->regs[addr] = 1;
+        break;
     case R_SYSTEM_ID:
         qemu_system_reset_request();
         break;
 
     case R_GPIO_IN:
+    case R_CLK_FREQUENCY:
     case R_CAPABILITIES:
         error_report("milkymist_sysctl: write to read-only register 0x"
                 TARGET_FMT_plx, addr << 2);
@@ -195,16 +206,14 @@ static void sysctl_write(void *opaque, target_phys_addr_t addr, uint32_t value)
     }
 }
 
-static CPUReadMemoryFunc * const sysctl_read_fn[] = {
-    NULL,
-    NULL,
-    &sysctl_read,
-};
-
-static CPUWriteMemoryFunc * const sysctl_write_fn[] = {
-    NULL,
-    NULL,
-    &sysctl_write,
+static const MemoryRegionOps sysctl_mmio_ops = {
+    .read = sysctl_read,
+    .write = sysctl_write,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 static void timer0_hit(void *opaque)
@@ -251,6 +260,7 @@ static void milkymist_sysctl_reset(DeviceState *d)
     /* defaults */
     s->regs[R_ICAP] = ICAP_READY;
     s->regs[R_SYSTEM_ID] = s->systemid;
+    s->regs[R_CLK_FREQUENCY] = s->freq_hz;
     s->regs[R_CAPABILITIES] = s->capabilities;
     s->regs[R_GPIO_IN] = s->strappings;
 }
@@ -258,7 +268,6 @@ static void milkymist_sysctl_reset(DeviceState *d)
 static int milkymist_sysctl_init(SysBusDevice *dev)
 {
     MilkymistSysctlState *s = FROM_SYSBUS(typeof(*s), dev);
-    int sysctl_regs;
 
     sysbus_init_irq(dev, &s->gpio_irq);
     sysbus_init_irq(dev, &s->timer0_irq);
@@ -271,9 +280,9 @@ static int milkymist_sysctl_init(SysBusDevice *dev)
     ptimer_set_freq(s->ptimer0, s->freq_hz);
     ptimer_set_freq(s->ptimer1, s->freq_hz);
 
-    sysctl_regs = cpu_register_io_memory(sysctl_read_fn, sysctl_write_fn, s,
-            DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, R_MAX * 4, sysctl_regs);
+    memory_region_init_io(&s->regs_region, &sysctl_mmio_ops, s,
+            "milkymist-sysctl", R_MAX * 4);
+    sysbus_init_mmio(dev, &s->regs_region);
 
     return 0;
 }
@@ -291,28 +300,39 @@ static const VMStateDescription vmstate_milkymist_sysctl = {
     }
 };
 
-static SysBusDeviceInfo milkymist_sysctl_info = {
-    .init = milkymist_sysctl_init,
-    .qdev.name  = "milkymist-sysctl",
-    .qdev.size  = sizeof(MilkymistSysctlState),
-    .qdev.vmsd  = &vmstate_milkymist_sysctl,
-    .qdev.reset = milkymist_sysctl_reset,
-    .qdev.props = (Property[]) {
-        DEFINE_PROP_UINT32("frequency", MilkymistSysctlState,
-                freq_hz, 80000000),
-        DEFINE_PROP_UINT32("capabilities", MilkymistSysctlState,
-                capabilities, 0x00000000),
-        DEFINE_PROP_UINT32("systemid", MilkymistSysctlState,
-                systemid, 0x10014d31),
-        DEFINE_PROP_UINT32("gpio_strappings", MilkymistSysctlState,
-                strappings, 0x00000001),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+static Property milkymist_sysctl_properties[] = {
+    DEFINE_PROP_UINT32("frequency", MilkymistSysctlState,
+    freq_hz, 80000000),
+    DEFINE_PROP_UINT32("capabilities", MilkymistSysctlState,
+    capabilities, 0x00000000),
+    DEFINE_PROP_UINT32("systemid", MilkymistSysctlState,
+    systemid, 0x10014d31),
+    DEFINE_PROP_UINT32("gpio_strappings", MilkymistSysctlState,
+    strappings, 0x00000001),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void milkymist_sysctl_register(void)
+static void milkymist_sysctl_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&milkymist_sysctl_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = milkymist_sysctl_init;
+    dc->reset = milkymist_sysctl_reset;
+    dc->vmsd = &vmstate_milkymist_sysctl;
+    dc->props = milkymist_sysctl_properties;
 }
 
-device_init(milkymist_sysctl_register)
+static TypeInfo milkymist_sysctl_info = {
+    .name          = "milkymist-sysctl",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(MilkymistSysctlState),
+    .class_init    = milkymist_sysctl_class_init,
+};
+
+static void milkymist_sysctl_register_types(void)
+{
+    type_register_static(&milkymist_sysctl_info);
+}
+
+type_init(milkymist_sysctl_register_types)

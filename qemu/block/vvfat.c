@@ -27,6 +27,7 @@
 #include "qemu-common.h"
 #include "block_int.h"
 #include "module.h"
+#include "migration.h"
 
 #ifndef S_IWGRP
 #define S_IWGRP 0
@@ -86,8 +87,7 @@ static inline void array_init(array_t* array,unsigned int item_size)
 
 static inline void array_free(array_t* array)
 {
-    if(array->pointer)
-        free(array->pointer);
+    g_free(array->pointer);
     array->size=array->next=0;
 }
 
@@ -101,7 +101,7 @@ static inline int array_ensure_allocated(array_t* array, int index)
 {
     if((index + 1) * array->item_size > array->size) {
 	int new_size = (index + 32) * array->item_size;
-	array->pointer = qemu_realloc(array->pointer, new_size);
+	array->pointer = g_realloc(array->pointer, new_size);
 	if (!array->pointer)
 	    return -1;
 	array->size = new_size;
@@ -127,7 +127,7 @@ static inline void* array_get_next(array_t* array) {
 static inline void* array_insert(array_t* array,unsigned int index,unsigned int count) {
     if((array->next+count)*array->item_size>array->size) {
 	int increment=count*array->item_size;
-	array->pointer=qemu_realloc(array->pointer,array->size+increment);
+	array->pointer=g_realloc(array->pointer,array->size+increment);
 	if(!array->pointer)
             return NULL;
 	array->size+=increment;
@@ -159,7 +159,7 @@ static inline int array_roll(array_t* array,int index_to,int index_from,int coun
     is=array->item_size;
     from=array->pointer+index_from*is;
     to=array->pointer+index_to*is;
-    buf=qemu_malloc(is*count);
+    buf=g_malloc(is*count);
     memcpy(buf,from,is*count);
 
     if(index_to<index_from)
@@ -169,7 +169,7 @@ static inline int array_roll(array_t* array,int index_to,int index_from,int coun
 
     memcpy(to,buf,is*count);
 
-    free(buf);
+    g_free(buf);
 
     return 0;
 }
@@ -200,7 +200,7 @@ static int array_index(array_t* array, void* pointer)
 }
 
 /* These structures are used to fake a disk and the VFAT filesystem.
- * For this reason we need to use __attribute__((packed)). */
+ * For this reason we need to use QEMU_PACKED. */
 
 typedef struct bootsector_t {
     uint8_t jump[3];
@@ -224,7 +224,7 @@ typedef struct bootsector_t {
 	    uint8_t signature;
 	    uint32_t id;
 	    uint8_t volume_label[11];
-	} __attribute__((packed)) fat16;
+	} QEMU_PACKED fat16;
 	struct {
 	    uint32_t sectors_per_fat;
 	    uint16_t flags;
@@ -233,12 +233,12 @@ typedef struct bootsector_t {
 	    uint16_t info_sector;
 	    uint16_t backup_boot_sector;
 	    uint16_t ignored;
-	} __attribute__((packed)) fat32;
+	} QEMU_PACKED fat32;
     } u;
     uint8_t fat_type[8];
     uint8_t ignored[0x1c0];
     uint8_t magic[2];
-} __attribute__((packed)) bootsector_t;
+} QEMU_PACKED bootsector_t;
 
 typedef struct {
     uint8_t head;
@@ -253,7 +253,7 @@ typedef struct partition_t {
     mbr_chs_t end_CHS;
     uint32_t start_sector_long;
     uint32_t length_sector_long;
-} __attribute__((packed)) partition_t;
+} QEMU_PACKED partition_t;
 
 typedef struct mbr_t {
     uint8_t ignored[0x1b8];
@@ -261,7 +261,7 @@ typedef struct mbr_t {
     uint8_t ignored2[2];
     partition_t partition[4];
     uint8_t magic[2];
-} __attribute__((packed)) mbr_t;
+} QEMU_PACKED mbr_t;
 
 typedef struct direntry_t {
     uint8_t name[8];
@@ -276,7 +276,7 @@ typedef struct direntry_t {
     uint16_t mdate;
     uint16_t begin;
     uint32_t size;
-} __attribute__((packed)) direntry_t;
+} QEMU_PACKED direntry_t;
 
 /* this structure are used to transparently access the files */
 
@@ -318,6 +318,7 @@ static void print_mapping(const struct mapping_t* mapping);
 /* here begins the real VVFAT driver */
 
 typedef struct BDRVVVFATState {
+    CoMutex lock;
     BlockDriverState* bs; /* pointer to parent */
     unsigned int first_sectors_number; /* 1 for a single partition, 0x40 for a disk with partition table */
     unsigned char first_sectors[0x40*0x200];
@@ -350,6 +351,8 @@ typedef struct BDRVVVFATState {
     array_t commits;
     const char* path;
     int downcase_short_names;
+
+    Error *migration_blocker;
 } BDRVVVFATState;
 
 /* take the sector position spos and convert it to Cylinder/Head/Sector position
@@ -728,11 +731,11 @@ static int read_directory(BDRVVVFATState* s, int mapping_index)
 	if(first_cluster == 0 && (is_dotdot || is_dot))
 	    continue;
 
-	buffer=(char*)qemu_malloc(length);
+	buffer=(char*)g_malloc(length);
 	snprintf(buffer,length,"%s/%s",dirname,entry->d_name);
 
 	if(stat(buffer,&st)<0) {
-	    free(buffer);
+            g_free(buffer);
             continue;
 	}
 
@@ -755,7 +758,7 @@ static int read_directory(BDRVVVFATState* s, int mapping_index)
 	    direntry->begin=0; /* do that later */
         if (st.st_size > 0x7fffffff) {
 	    fprintf(stderr, "File %s is larger than 2GB\n", buffer);
-	    free(buffer);
+            g_free(buffer);
             closedir(dir);
 	    return -2;
         }
@@ -799,6 +802,7 @@ static int read_directory(BDRVVVFATState* s, int mapping_index)
 	/* root directory */
 	int cur = s->directory.next;
 	array_ensure_allocated(&(s->directory), ROOT_ENTRIES - 1);
+	s->directory.next = ROOT_ENTRIES;
 	memset(array_get(&(s->directory), cur), 0,
 		(ROOT_ENTRIES - cur) * sizeof(direntry_t));
     }
@@ -825,20 +829,6 @@ static inline off_t cluster2sector(BDRVVVFATState* s, uint32_t cluster_num)
     return s->faked_sectors + s->sectors_per_cluster * cluster_num;
 }
 
-static inline uint32_t sector_offset_in_cluster(BDRVVVFATState* s,off_t sector_num)
-{
-    return (sector_num-s->first_sectors_number-2*s->sectors_per_fat)%s->sectors_per_cluster;
-}
-
-#ifdef DBG
-static direntry_t* get_direntry_for_mapping(BDRVVVFATState* s,mapping_t* mapping)
-{
-    if(mapping->mode==MODE_UNDEFINED)
-	return 0;
-    return (direntry_t*)(s->directory.pointer+sizeof(direntry_t)*mapping->dir_index);
-}
-#endif
-
 static int init_directories(BDRVVVFATState* s,
 	const char* dirname)
 {
@@ -850,7 +840,7 @@ static int init_directories(BDRVVVFATState* s,
     memset(&(s->first_sectors[0]),0,0x40*0x200);
 
     s->cluster_size=s->sectors_per_cluster*0x200;
-    s->cluster_buffer=qemu_malloc(s->cluster_size);
+    s->cluster_buffer=g_malloc(s->cluster_size);
 
     /*
      * The formula: sc = spf+1+spf*spc*(512*8/fat_type),
@@ -884,7 +874,7 @@ static int init_directories(BDRVVVFATState* s,
     mapping->dir_index = 0;
     mapping->info.dir.parent_mapping_index = -1;
     mapping->first_mapping_index = -1;
-    mapping->path = qemu_strdup(dirname);
+    mapping->path = g_strdup(dirname);
     i = strlen(mapping->path);
     if (i > 0 && mapping->path[i - 1] == '/')
 	mapping->path[i - 1] = '\0';
@@ -929,11 +919,8 @@ static int init_directories(BDRVVVFATState* s,
 	cluster = mapping->end;
 
 	if(cluster > s->cluster_count) {
-	    fprintf(stderr,"Directory does not fit in FAT%d (capacity %s)\n",
-		    s->fat_type,
-		    s->fat_type == 12 ? s->sector_count == 2880 ? "1.44 MB"
-								: "2.88 MB"
-				      : "504MB");
+	    fprintf(stderr,"Directory does not fit in FAT%d (capacity %.2f MB)\n",
+		    s->fat_type, s->sector_count / 2000.0);
 	    return -EINVAL;
 	}
 
@@ -967,7 +954,7 @@ static int init_directories(BDRVVVFATState* s,
     bootsector->number_of_fats=0x2; /* number of FATs */
     bootsector->root_entries=cpu_to_le16(s->sectors_of_root_directory*0x10);
     bootsector->total_sectors16=s->sector_count>0xffff?0:cpu_to_le16(s->sector_count);
-    bootsector->media_type=(s->fat_type!=12?0xf8:s->sector_count==5760?0xf9:0xf8); /* media descriptor */
+    bootsector->media_type=(s->first_sectors_number>1?0xf8:0xf0); /* media descriptor (f8=hd, f0=3.5 fd)*/
     s->fat.pointer[0] = bootsector->media_type;
     bootsector->sectors_per_fat=cpu_to_le16(s->sectors_per_fat);
     bootsector->sectors_per_track=cpu_to_le16(s->bs->secs);
@@ -976,7 +963,7 @@ static int init_directories(BDRVVVFATState* s,
     bootsector->total_sectors=cpu_to_le32(s->sector_count>0xffff?s->sector_count:0);
 
     /* LATER TODO: if FAT32, this is wrong */
-    bootsector->u.fat16.drive_number=s->fat_type==12?0:0x80; /* assume this is hda (TODO) */
+    bootsector->u.fat16.drive_number=s->first_sectors_number==1?0:0x80; /* fda=0, hda=0x80 */
     bootsector->u.fat16.current_head=0;
     bootsector->u.fat16.signature=0x29;
     bootsector->u.fat16.id=cpu_to_le32(0xfabe1afd);
@@ -995,10 +982,15 @@ static BDRVVVFATState *vvv = NULL;
 static int enable_write_target(BDRVVVFATState *s);
 static int is_consistent(BDRVVVFATState *s);
 
+static void vvfat_rebind(BlockDriverState *bs)
+{
+    BDRVVVFATState *s = bs->opaque;
+    s->bs = bs;
+}
+
 static int vvfat_open(BlockDriverState *bs, const char* dirname, int flags)
 {
     BDRVVVFATState *s = bs->opaque;
-    int floppy = 0;
     int i;
 
 #ifdef DEBUG
@@ -1012,11 +1004,8 @@ DLOG(if (stderr == NULL) {
 
     s->bs = bs;
 
-    s->fat_type=16;
     /* LATER TODO: if FAT32, adjust */
     s->sectors_per_cluster=0x10;
-    /* 504MB disk*/
-    bs->cyls=1024; bs->heads=16; bs->secs=63;
 
     s->current_cluster=0xffffffff;
 
@@ -1031,16 +1020,6 @@ DLOG(if (stderr == NULL) {
     if (!strstart(dirname, "fat:", NULL))
 	return -1;
 
-    if (strstr(dirname, ":floppy:")) {
-	floppy = 1;
-	s->fat_type = 12;
-	s->first_sectors_number = 1;
-	s->sectors_per_cluster=2;
-	bs->cyls = 80; bs->heads = 2; bs->secs = 36;
-    }
-
-    s->sector_count=bs->cyls*bs->heads*bs->secs;
-
     if (strstr(dirname, ":32:")) {
 	fprintf(stderr, "Big fat greek warning: FAT32 has not been tested. You are welcome to do so!\n");
 	s->fat_type = 32;
@@ -1048,8 +1027,30 @@ DLOG(if (stderr == NULL) {
 	s->fat_type = 16;
     } else if (strstr(dirname, ":12:")) {
 	s->fat_type = 12;
-	s->sector_count=2880;
     }
+
+    if (strstr(dirname, ":floppy:")) {
+	/* 1.44MB or 2.88MB floppy.  2.88MB can be FAT12 (default) or FAT16. */
+	if (!s->fat_type) {
+	    s->fat_type = 12;
+	    bs->secs = 36;
+	    s->sectors_per_cluster=2;
+	} else {
+	    bs->secs=(s->fat_type == 12 ? 18 : 36);
+	    s->sectors_per_cluster=1;
+	}
+	s->first_sectors_number = 1;
+	bs->cyls=80; bs->heads=2;
+    } else {
+	/* 32MB or 504MB disk*/
+	if (!s->fat_type) {
+	    s->fat_type = 16;
+	}
+	bs->cyls=(s->fat_type == 12 ? 64 : 1024);
+	bs->heads=16; bs->secs=63;
+    }
+
+    s->sector_count=bs->cyls*bs->heads*bs->secs-(s->first_sectors_number-1);
 
     if (strstr(dirname, ":rw:")) {
 	if (enable_write_target(s))
@@ -1074,12 +1075,22 @@ DLOG(if (stderr == NULL) {
 
     if(s->first_sectors_number==0x40)
 	init_mbr(s);
-
-    /* for some reason or other, MS-DOS does not like to know about CHS... */
-    if (floppy)
+    else {
+        /* MS-DOS does not like to know about CHS (?). */
 	bs->heads = bs->cyls = bs->secs = 0;
+    }
 
     //    assert(is_consistent(s));
+    qemu_co_mutex_init(&s->lock);
+
+    /* Disable migration when vvfat is used rw */
+    if (s->qcow) {
+        error_set(&s->migration_blocker,
+                  QERR_BLOCK_FORMAT_FEATURE_NOT_SUPPORTED,
+                  "vvfat (rw)", bs->device_name, "live migration");
+        migrate_add_blocker(s->migration_blocker);
+    }
+
     return 0;
 }
 
@@ -1136,25 +1147,6 @@ static inline mapping_t* find_mapping_for_cluster(BDRVVVFATState* s,int cluster_
         return NULL;
     assert(mapping->begin<=cluster_num && mapping->end>cluster_num);
     return mapping;
-}
-
-/*
- * This function simply compares path == mapping->path. Since the mappings
- * are sorted by cluster, this is expensive: O(n).
- */
-static inline mapping_t* find_mapping_for_path(BDRVVVFATState* s,
-	const char* path)
-{
-    int i;
-
-    for (i = 0; i < s->mapping.next; i++) {
-	mapping_t* mapping = array_get(&(s->mapping), i);
-	if (mapping->first_mapping_index < 0 &&
-		!strcmp(path, mapping->path))
-	    return mapping;
-    }
-
-    return NULL;
 }
 
 static int open_file(BDRVVVFATState* s,mapping_t* mapping)
@@ -1223,23 +1215,6 @@ read_cluster_directory:
 }
 
 #ifdef DEBUG
-static void hexdump(const void* address, uint32_t len)
-{
-    const unsigned char* p = address;
-    int i, j;
-
-    for (i = 0; i < len; i += 16) {
-	for (j = 0; j < 16 && i + j < len; j++)
-	    fprintf(stderr, "%02x ", p[i + j]);
-	for (; j < 16; j++)
-	    fprintf(stderr, "   ");
-	fprintf(stderr, " ");
-	for (j = 0; j < 16 && i + j < len; j++)
-	    fprintf(stderr, "%c", (p[i + j] < ' ' || p[i + j] > 0x7f) ? '.' : p[i + j]);
-	fprintf(stderr, "\n");
-    }
-}
-
 static void print_direntry(const direntry_t* direntry)
 {
     int j = 0;
@@ -1293,19 +1268,19 @@ static int vvfat_read(BlockDriverState *bs, int64_t sector_num,
     int i;
 
     for(i=0;i<nb_sectors;i++,sector_num++) {
-	if (sector_num >= s->sector_count)
+	if (sector_num >= bs->total_sectors)
 	   return -1;
 	if (s->qcow) {
 	    int n;
-	    if (s->qcow->drv->bdrv_is_allocated(s->qcow,
-			sector_num, nb_sectors-i, &n)) {
+            if (bdrv_is_allocated(s->qcow, sector_num, nb_sectors-i, &n)) {
 DLOG(fprintf(stderr, "sectors %d+%d allocated\n", (int)sector_num, n));
-		if (s->qcow->drv->bdrv_read(s->qcow, sector_num, buf+i*0x200, n))
-		    return -1;
-		i += n - 1;
-		sector_num += n - 1;
-		continue;
-	    }
+                if (bdrv_read(s->qcow, sector_num, buf + i*0x200, n)) {
+                    return -1;
+                }
+                i += n - 1;
+                sector_num += n - 1;
+                continue;
+            }
 DLOG(fprintf(stderr, "sector %d not allocated\n", (int)sector_num));
 	}
 	if(sector_num<s->faked_sectors) {
@@ -1319,7 +1294,7 @@ DLOG(fprintf(stderr, "sector %d not allocated\n", (int)sector_num));
 	    uint32_t sector=sector_num-s->faked_sectors,
 	    sector_offset_in_cluster=(sector%s->sectors_per_cluster),
 	    cluster_num=sector/s->sectors_per_cluster;
-	    if(read_cluster(s, cluster_num) != 0) {
+	    if(cluster_num > s->cluster_count || read_cluster(s, cluster_num) != 0) {
 		/* LATER TODO: strict: return -1; */
 		memset(buf+i*0x200,0,0x200);
 		continue;
@@ -1328,6 +1303,17 @@ DLOG(fprintf(stderr, "sector %d not allocated\n", (int)sector_num));
 	}
     }
     return 0;
+}
+
+static coroutine_fn int vvfat_co_read(BlockDriverState *bs, int64_t sector_num,
+                                      uint8_t *buf, int nb_sectors)
+{
+    int ret;
+    BDRVVVFATState *s = bs->opaque;
+    qemu_co_mutex_lock(&s->lock);
+    ret = vvfat_read(bs, sector_num, buf, nb_sectors);
+    qemu_co_mutex_unlock(&s->lock);
+    return ret;
 }
 
 /* LATER TODO: statify all functions */
@@ -1375,7 +1361,7 @@ DLOG(fprintf(stderr, "clear_commits (%d commits)\n", s->commits.next));
 	assert(commit->path || commit->action == ACTION_WRITEOUT);
 	if (commit->action != ACTION_WRITEOUT) {
 	    assert(commit->path);
-	    free(commit->path);
+            g_free(commit->path);
 	} else
 	    assert(commit->path == NULL);
     }
@@ -1548,7 +1534,7 @@ static inline int cluster_was_modified(BDRVVVFATState* s, uint32_t cluster_num)
 	return 0;
 
     for (i = 0; !was_modified && i < s->sectors_per_cluster; i++)
-	was_modified = s->qcow->drv->bdrv_is_allocated(s->qcow,
+	was_modified = bdrv_is_allocated(s->qcow,
 		cluster2sector(s, cluster_num) + i, 1, &dummy);
 
     return was_modified;
@@ -1638,10 +1624,10 @@ static uint32_t get_cluster_count_for_direntry(BDRVVVFATState* s,
 
 	    /* rename */
 	    if (strcmp(basename, basename2))
-		schedule_rename(s, cluster_num, qemu_strdup(path));
+		schedule_rename(s, cluster_num, g_strdup(path));
 	} else if (is_file(direntry))
 	    /* new file */
-	    schedule_new_file(s, qemu_strdup(path), cluster_num);
+	    schedule_new_file(s, g_strdup(path), cluster_num);
 	else {
             abort();
 	    return 0;
@@ -1697,16 +1683,16 @@ static uint32_t get_cluster_count_for_direntry(BDRVVVFATState* s,
 		int64_t offset = cluster2sector(s, cluster_num);
 
 		vvfat_close_current_file(s);
-		for (i = 0; i < s->sectors_per_cluster; i++)
-		    if (!s->qcow->drv->bdrv_is_allocated(s->qcow,
-				offset + i, 1, &dummy)) {
-			if (vvfat_read(s->bs,
-				    offset, s->cluster_buffer, 1))
-			    return -1;
-			if (s->qcow->drv->bdrv_write(s->qcow,
-				    offset, s->cluster_buffer, 1))
-			    return -2;
-		    }
+                for (i = 0; i < s->sectors_per_cluster; i++) {
+                    if (!bdrv_is_allocated(s->qcow, offset + i, 1, &dummy)) {
+                        if (vvfat_read(s->bs, offset, s->cluster_buffer, 1)) {
+                            return -1;
+                        }
+                        if (bdrv_write(s->qcow, offset, s->cluster_buffer, 1)) {
+                            return -2;
+                        }
+                    }
+                }
 	    }
 	}
 
@@ -1735,13 +1721,13 @@ static int check_directory_consistency(BDRVVVFATState *s,
 	int cluster_num, const char* path)
 {
     int ret = 0;
-    unsigned char* cluster = qemu_malloc(s->cluster_size);
+    unsigned char* cluster = g_malloc(s->cluster_size);
     direntry_t* direntries = (direntry_t*)cluster;
     mapping_t* mapping = find_mapping_for_cluster(s, cluster_num);
 
     long_file_name lfn;
     int path_len = strlen(path);
-    char path2[PATH_MAX];
+    char path2[PATH_MAX + 1];
 
     assert(path_len < PATH_MAX); /* len was tested before! */
     pstrcpy(path2, sizeof(path2), path);
@@ -1758,10 +1744,10 @@ static int check_directory_consistency(BDRVVVFATState *s,
 	mapping->mode &= ~MODE_DELETED;
 
 	if (strcmp(basename, basename2))
-	    schedule_rename(s, cluster_num, qemu_strdup(path));
+	    schedule_rename(s, cluster_num, g_strdup(path));
     } else
 	/* new directory */
-	schedule_mkdir(s, cluster_num, qemu_strdup(path));
+	schedule_mkdir(s, cluster_num, g_strdup(path));
 
     lfn_init(&lfn);
     do {
@@ -1782,14 +1768,14 @@ DLOG(fprintf(stderr, "read cluster %d (sector %d)\n", (int)cluster_num, (int)clu
 	if (subret) {
 	    fprintf(stderr, "Error fetching direntries\n");
 	fail:
-	    free(cluster);
+            g_free(cluster);
 	    return 0;
 	}
 
 	for (i = 0; i < 0x10 * s->sectors_per_cluster; i++) {
 	    int cluster_count = 0;
 
-DLOG(fprintf(stderr, "check direntry %d: \n", i); print_direntry(direntries + i));
+DLOG(fprintf(stderr, "check direntry %d:\n", i); print_direntry(direntries + i));
 	    if (is_volume_label(direntries + i) || is_dot(direntries + i) ||
 		    is_free(direntries + i))
 		continue;
@@ -1850,7 +1836,7 @@ DLOG(fprintf(stderr, "check direntry %d: \n", i); print_direntry(direntries + i)
 	cluster_num = modified_fat_get(s, cluster_num);
     } while(!fat_eof(s, cluster_num));
 
-    free(cluster);
+    g_free(cluster);
     return ret;
 }
 
@@ -1876,7 +1862,7 @@ DLOG(checkpoint());
      */
     if (s->fat2 == NULL) {
 	int size = 0x200 * s->sectors_per_fat;
-	s->fat2 = qemu_malloc(size);
+	s->fat2 = g_malloc(size);
 	memcpy(s->fat2, s->fat.pointer, size);
     }
     check = vvfat_read(s->bs,
@@ -1995,8 +1981,9 @@ static int remove_mapping(BDRVVVFATState* s, int mapping_index)
     mapping_t* first_mapping = array_get(&(s->mapping), 0);
 
     /* free mapping */
-    if (mapping->first_mapping_index < 0)
-	free(mapping->path);
+    if (mapping->first_mapping_index < 0) {
+        g_free(mapping->path);
+    }
 
     /* remove from s->mapping */
     array_remove(&(s->mapping), mapping_index);
@@ -2218,7 +2205,7 @@ static int commit_one_file(BDRVVVFATState* s,
     uint32_t first_cluster = c;
     mapping_t* mapping = find_mapping_for_cluster(s, c);
     uint32_t size = filesize_of_direntry(direntry);
-    char* cluster = qemu_malloc(s->cluster_size);
+    char* cluster = g_malloc(s->cluster_size);
     uint32_t i;
     int fd = 0;
 
@@ -2232,11 +2219,16 @@ static int commit_one_file(BDRVVVFATState* s,
     if (fd < 0) {
 	fprintf(stderr, "Could not open %s... (%s, %d)\n", mapping->path,
 		strerror(errno), errno);
+        g_free(cluster);
 	return fd;
     }
-    if (offset > 0)
-	if (lseek(fd, offset, SEEK_SET) != offset)
-	    return -3;
+    if (offset > 0) {
+        if (lseek(fd, offset, SEEK_SET) != offset) {
+            close(fd);
+            g_free(cluster);
+            return -3;
+        }
+    }
 
     while (offset < size) {
 	uint32_t c1;
@@ -2252,11 +2244,17 @@ static int commit_one_file(BDRVVVFATState* s,
 	ret = vvfat_read(s->bs, cluster2sector(s, c),
 	    (uint8_t*)cluster, (rest_size + 0x1ff) / 0x200);
 
-	if (ret < 0)
-	    return ret;
+        if (ret < 0) {
+            close(fd);
+            g_free(cluster);
+            return ret;
+        }
 
-	if (write(fd, cluster, rest_size) < 0)
-	    return -2;
+        if (write(fd, cluster, rest_size) < 0) {
+            close(fd);
+            g_free(cluster);
+            return -2;
+        }
 
 	offset += rest_size;
 	c = c1;
@@ -2265,9 +2263,11 @@ static int commit_one_file(BDRVVVFATState* s,
     if (ftruncate(fd, size)) {
         perror("ftruncate()");
         close(fd);
+        g_free(cluster);
         return -4;
     }
     close(fd);
+    g_free(cluster);
 
     return commit_mappings(s, first_cluster, dir_index);
 }
@@ -2383,7 +2383,7 @@ static int handle_renames_and_mkdirs(BDRVVVFATState* s)
 			    mapping_t* m = find_mapping_for_cluster(s,
 				    begin_of_direntry(d));
 			    int l = strlen(m->path);
-			    char* new_path = qemu_malloc(l + diff + 1);
+			    char* new_path = g_malloc(l + diff + 1);
 
 			    assert(!strncmp(m->path, mapping->path, l2));
 
@@ -2399,7 +2399,7 @@ static int handle_renames_and_mkdirs(BDRVVVFATState* s)
 		}
 	    }
 
-	    free(old_path);
+            g_free(old_path);
 	    array_remove(&(s->commits), i);
 	    continue;
 	} else if (commit->action == ACTION_MKDIR) {
@@ -2640,7 +2640,9 @@ static int do_commit(BDRVVVFATState* s)
 	return ret;
     }
 
-    s->qcow->drv->bdrv_make_empty(s->qcow);
+    if (s->qcow->drv->bdrv_make_empty) {
+        s->qcow->drv->bdrv_make_empty(s->qcow);
+    }
 
     memset(s->used_clusters, 0, sector2cluster(s, s->sector_count));
 
@@ -2735,7 +2737,7 @@ DLOG(checkpoint());
      * Use qcow backend. Commit later.
      */
 DLOG(fprintf(stderr, "Write to qcow backend: %d + %d\n", (int)sector_num, nb_sectors));
-    ret = s->qcow->drv->bdrv_write(s->qcow, sector_num, buf, nb_sectors);
+    ret = bdrv_write(s->qcow, sector_num, buf, nb_sectors);
     if (ret < 0) {
 	fprintf(stderr, "Error writing to qcow backend\n");
 	return ret;
@@ -2754,7 +2756,18 @@ DLOG(checkpoint());
     return 0;
 }
 
-static int vvfat_is_allocated(BlockDriverState *bs,
+static coroutine_fn int vvfat_co_write(BlockDriverState *bs, int64_t sector_num,
+                                       const uint8_t *buf, int nb_sectors)
+{
+    int ret;
+    BDRVVVFATState *s = bs->opaque;
+    qemu_co_mutex_lock(&s->lock);
+    ret = vvfat_write(bs, sector_num, buf, nb_sectors);
+    qemu_co_mutex_unlock(&s->lock);
+    return ret;
+}
+
+static int coroutine_fn vvfat_co_is_allocated(BlockDriverState *bs,
 	int64_t sector_num, int nb_sectors, int* n)
 {
     BDRVVVFATState* s = bs->opaque;
@@ -2775,7 +2788,7 @@ static int write_target_commit(BlockDriverState *bs, int64_t sector_num,
 static void write_target_close(BlockDriverState *bs) {
     BDRVVVFATState* s = *((BDRVVVFATState**) bs->opaque);
     bdrv_delete(s->qcow);
-    free(s->qcow_filename);
+    g_free(s->qcow_filename);
 }
 
 static BlockDriver vvfat_write_target = {
@@ -2794,8 +2807,13 @@ static int enable_write_target(BDRVVVFATState *s)
 
     array_init(&(s->commits), sizeof(commit_t));
 
-    s->qcow_filename = qemu_malloc(1024);
-    get_tmp_filename(s->qcow_filename, 1024);
+    s->qcow_filename = g_malloc(1024);
+    ret = get_tmp_filename(s->qcow_filename, 1024);
+    if (ret < 0) {
+        g_free(s->qcow_filename);
+        s->qcow_filename = NULL;
+        return ret;
+    }
 
     bdrv_qcow = bdrv_find_format("qcow");
     options = parse_option_parameters("", bdrv_qcow->create_options, NULL);
@@ -2822,7 +2840,7 @@ static int enable_write_target(BDRVVVFATState *s)
 
     s->bs->backing_hd = calloc(sizeof(BlockDriverState), 1);
     s->bs->backing_hd->drv = &vvfat_write_target;
-    s->bs->backing_hd->opaque = qemu_malloc(sizeof(void*));
+    s->bs->backing_hd->opaque = g_malloc(sizeof(void*));
     *(void**)s->bs->backing_hd->opaque = s;
 
     return 0;
@@ -2836,18 +2854,23 @@ static void vvfat_close(BlockDriverState *bs)
     array_free(&(s->fat));
     array_free(&(s->directory));
     array_free(&(s->mapping));
-    if(s->cluster_buffer)
-        free(s->cluster_buffer);
+    g_free(s->cluster_buffer);
+
+    if (s->qcow) {
+        migrate_del_blocker(s->migration_blocker);
+        error_free(s->migration_blocker);
+    }
 }
 
 static BlockDriver bdrv_vvfat = {
     .format_name	= "vvfat",
     .instance_size	= sizeof(BDRVVVFATState),
     .bdrv_file_open	= vvfat_open,
-    .bdrv_read		= vvfat_read,
-    .bdrv_write		= vvfat_write,
+    .bdrv_rebind	= vvfat_rebind,
+    .bdrv_read          = vvfat_co_read,
+    .bdrv_write         = vvfat_co_write,
     .bdrv_close		= vvfat_close,
-    .bdrv_is_allocated	= vvfat_is_allocated,
+    .bdrv_co_is_allocated = vvfat_co_is_allocated,
     .protocol_name	= "fat",
 };
 
@@ -2878,11 +2901,5 @@ static void checkpoint(void) {
     direntry = array_get(&(vvv->directory), mapping->dir_index);
     assert(!memcmp(direntry->name, "USB     H  ", 11) || direntry->name[0]==0);
 #endif
-    return;
-    /* avoid compiler warnings: */
-    hexdump(NULL, 100);
-    remove_mapping(vvv, 0);
-    print_mapping(NULL);
-    print_direntry(NULL);
 }
 #endif

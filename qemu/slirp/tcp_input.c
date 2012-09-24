@@ -231,7 +231,7 @@ tcp_input(struct mbuf *m, int iphlen, struct socket *inso)
     Slirp *slirp;
 
 	DEBUG_CALL("tcp_input");
-	DEBUG_ARGS((dfd," m = %8lx  iphlen = %2d  inso = %lx\n",
+	DEBUG_ARGS((dfd, " m = %8lx  iphlen = %2d  inso = %lx\n",
 		    (long )m, iphlen, (long )inso ));
 
 	/*
@@ -580,7 +580,7 @@ findso:
 
 	  if((tcp_fconnect(so) == -1) && (errno != EINPROGRESS) && (errno != EWOULDBLOCK)) {
 	    u_char code=ICMP_UNREACH_NET;
-	    DEBUG_MISC((dfd," tcp fconnect errno = %d-%s\n",
+	    DEBUG_MISC((dfd, " tcp fconnect errno = %d-%s\n",
 			errno,strerror(errno)));
 	    if(errno == ECONNREFUSED) {
 	      /* ACK the SYN, send RST to refuse the connection */
@@ -610,6 +610,7 @@ findso:
 	    so->so_ti = ti;
 	    tp->t_timer[TCPT_KEEP] = TCPTV_KEEP_INIT;
 	    tp->t_state = TCPS_SYN_RECEIVED;
+	    tcp_template(tp);
 	  }
 	  return;
 
@@ -910,7 +911,7 @@ trimthenstep6:
 
 		if (SEQ_LEQ(ti->ti_ack, tp->snd_una)) {
 			if (ti->ti_len == 0 && tiwin == tp->snd_wnd) {
-			  DEBUG_MISC((dfd," dup ack  m = %lx  so = %lx \n",
+			  DEBUG_MISC((dfd, " dup ack  m = %lx  so = %lx\n",
 				      (long )m, (long )so));
 				/*
 				 * If we have outstanding data (other than
@@ -1156,6 +1157,16 @@ step6:
 dodata:
 
 	/*
+	 * If this is a small packet, then ACK now - with Nagel
+	 *      congestion avoidance sender won't send more until
+	 *      he gets an ACK.
+	 */
+	if (ti->ti_len && (unsigned)ti->ti_len <= 5 &&
+	    ((struct tcpiphdr_2 *)ti)->first_char == (char)27) {
+		tp->t_flags |= TF_ACKNOW;
+	}
+
+	/*
 	 * Process the segment text, merging it into the TCP sequencing queue,
 	 * and arranging for acknowledgment of receipt if necessary.
 	 * This process logically involves adjusting tp->rcv_wnd as data
@@ -1234,18 +1245,6 @@ dodata:
 	}
 
 	/*
-	 * If this is a small packet, then ACK now - with Nagel
-	 *      congestion avoidance sender won't send more until
-	 *      he gets an ACK.
-	 *
-	 * See above.
-	 */
-	if (ti->ti_len && (unsigned)ti->ti_len <= 5 &&
-	    ((struct tcpiphdr_2 *)ti)->first_char == (char)27) {
-		tp->t_flags |= TF_ACKNOW;
-	}
-
-	/*
 	 * Return any desired output.
 	 */
 	if (needoutput || (tp->t_flags & TF_ACKNOW)) {
@@ -1293,7 +1292,7 @@ tcp_dooptions(struct tcpcb *tp, u_char *cp, int cnt, struct tcpiphdr *ti)
 	int opt, optlen;
 
 	DEBUG_CALL("tcp_dooptions");
-	DEBUG_ARGS((dfd," tp = %lx  cnt=%i \n", (long )tp, cnt));
+	DEBUG_ARGS((dfd, " tp = %lx  cnt=%i\n", (long)tp, cnt));
 
 	for (; cnt > 0; cnt -= optlen, cp += optlen) {
 		opt = cp[0];

@@ -23,7 +23,7 @@
  */
 
 #include <stdio.h>
-#include "hw.h"
+#include "sysbus.h"
 #include "net.h"
 #include "etraxfs.h"
 
@@ -319,16 +319,23 @@ static void mdio_cycle(struct qemu_mdio *bus)
 
 struct fs_eth
 {
+	SysBusDevice busdev;
+	MemoryRegion mmio;
 	NICState *nic;
 	NICConf conf;
-	int ethregs;
 
 	/* Two addrs in the filter.  */
 	uint8_t macaddr[2][6];
 	uint32_t regs[FS_ETH_MAX_REGS];
 
-	struct etraxfs_dma_client *dma_out;
-	struct etraxfs_dma_client *dma_in;
+	union {
+		void *vdma_out;
+		struct etraxfs_dma_client *dma_out;
+	};
+	union {
+		void *vdma_in;
+		struct etraxfs_dma_client *dma_in;
+	};
 
 	/* MDIO bus.  */
 	struct qemu_mdio mdio_bus;
@@ -366,7 +373,8 @@ static void eth_validate_duplex(struct fs_eth *eth)
 	}
 }
 
-static uint32_t eth_readl (void *opaque, target_phys_addr_t addr)
+static uint64_t
+eth_read(void *opaque, target_phys_addr_t addr, unsigned int size)
 {
 	struct fs_eth *eth = opaque;
 	uint32_t r = 0;
@@ -410,9 +418,11 @@ static void eth_update_ma(struct fs_eth *eth, int ma)
 }
 
 static void
-eth_writel (void *opaque, target_phys_addr_t addr, uint32_t value)
+eth_write(void *opaque, target_phys_addr_t addr,
+          uint64_t val64, unsigned int size)
 {
 	struct fs_eth *eth = opaque;
+	uint32_t value = val64;
 
 	addr >>= 2;
 	switch (addr)
@@ -530,7 +540,7 @@ static ssize_t eth_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
         return size;
 }
 
-static int eth_tx_push(void *opaque, unsigned char *buf, int len)
+static int eth_tx_push(void *opaque, unsigned char *buf, int len, bool eop)
 {
 	struct fs_eth *eth = opaque;
 
@@ -546,24 +556,26 @@ static void eth_set_link(VLANClientState *nc)
 	eth->phy.link = !nc->link_down;
 }
 
-static CPUReadMemoryFunc * const eth_read[] = {
-	NULL, NULL,
-	&eth_readl,
-};
-
-static CPUWriteMemoryFunc * const eth_write[] = {
-	NULL, NULL,
-	&eth_writel,
+static const MemoryRegionOps eth_ops = {
+	.read = eth_read,
+	.write = eth_write,
+	.endianness = DEVICE_LITTLE_ENDIAN,
+	.valid = {
+		.min_access_size = 4,
+		.max_access_size = 4
+	}
 };
 
 static void eth_cleanup(VLANClientState *nc)
 {
 	struct fs_eth *eth = DO_UPCAST(NICState, nc, nc)->opaque;
 
-        cpu_unregister_io_memory(eth->ethregs);
-
-        qemu_free(eth->dma_out);
-        qemu_free(eth);
+	/* Disconnect the client.  */
+	eth->dma_out->client.push = NULL;
+	eth->dma_out->client.opaque = NULL;
+	eth->dma_in->client.opaque = NULL;
+	eth->dma_in->client.pull = NULL;
+        g_free(eth);
 }
 
 static NetClientInfo net_etraxfs_info = {
@@ -575,39 +587,59 @@ static NetClientInfo net_etraxfs_info = {
 	.link_status_changed = eth_set_link,
 };
 
-void *etraxfs_eth_init(NICInfo *nd, target_phys_addr_t base, int phyaddr)
+static int fs_eth_init(SysBusDevice *dev)
 {
-	struct etraxfs_dma_client *dma = NULL;	
-	struct fs_eth *eth = NULL;
+	struct fs_eth *s = FROM_SYSBUS(typeof(*s), dev);
 
-	qemu_check_nic_model(nd, "fseth");
+	if (!s->dma_out || !s->dma_in) {
+		hw_error("Unconnected ETRAX-FS Ethernet MAC.\n");
+	}
 
-	dma = qemu_mallocz(sizeof *dma * 2);
-	eth = qemu_mallocz(sizeof *eth);
+	s->dma_out->client.push = eth_tx_push;
+	s->dma_out->client.opaque = s;
+	s->dma_in->client.opaque = s;
+	s->dma_in->client.pull = NULL;
 
-	dma[0].client.push = eth_tx_push;
-	dma[0].client.opaque = eth;
-	dma[1].client.opaque = eth;
-	dma[1].client.pull = NULL;
+	memory_region_init_io(&s->mmio, &eth_ops, s, "etraxfs-eth", 0x5c);
+	sysbus_init_mmio(dev, &s->mmio);
 
-	eth->dma_out = dma;
-	eth->dma_in = dma + 1;
+	qemu_macaddr_default_if_unset(&s->conf.macaddr);
+	s->nic = qemu_new_nic(&net_etraxfs_info, &s->conf,
+			      object_get_typename(OBJECT(s)), dev->qdev.id, s);
+	qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
-	/* Connect the phy.  */
-	eth->phyaddr = phyaddr & 0x1f;
-	tdk_init(&eth->phy);
-	mdio_attach(&eth->mdio_bus, &eth->phy, eth->phyaddr);
-
-	eth->ethregs = cpu_register_io_memory(eth_read, eth_write, eth,
-                                              DEVICE_NATIVE_ENDIAN);
-	cpu_register_physical_memory (base, 0x5c, eth->ethregs);
-
-	eth->conf.macaddr = nd->macaddr;
-	eth->conf.vlan = nd->vlan;
-	eth->conf.peer = nd->netdev;
-
-	eth->nic = qemu_new_nic(&net_etraxfs_info, &eth->conf,
-				nd->model, nd->name, eth);
-
-	return dma;
+	tdk_init(&s->phy);
+	mdio_attach(&s->mdio_bus, &s->phy, s->phyaddr);
+	return 0;
 }
+
+static Property etraxfs_eth_properties[] = {
+    DEFINE_PROP_UINT32("phyaddr", struct fs_eth, phyaddr, 1),
+    DEFINE_PROP_PTR("dma_out", struct fs_eth, vdma_out),
+    DEFINE_PROP_PTR("dma_in", struct fs_eth, vdma_in),
+    DEFINE_NIC_PROPERTIES(struct fs_eth, conf),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
+static void etraxfs_eth_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = fs_eth_init;
+    dc->props = etraxfs_eth_properties;
+}
+
+static TypeInfo etraxfs_eth_info = {
+    .name          = "etraxfs-eth",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(struct fs_eth),
+    .class_init    = etraxfs_eth_class_init,
+};
+
+static void etraxfs_eth_register_types(void)
+{
+    type_register_static(&etraxfs_eth_info);
+}
+
+type_init(etraxfs_eth_register_types)

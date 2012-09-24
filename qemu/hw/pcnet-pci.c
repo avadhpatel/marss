@@ -31,6 +31,7 @@
 #include "net.h"
 #include "loader.h"
 #include "qemu-timer.h"
+#include "dma.h"
 
 #include "pcnet.h"
 
@@ -46,6 +47,7 @@
 typedef struct {
     PCIDevice pci_dev;
     PCNetState state;
+    MemoryRegion io_bar;
 } PCIPCNetState;
 
 static void pcnet_aprom_writeb(void *opaque, uint32_t addr, uint32_t val)
@@ -54,9 +56,9 @@ static void pcnet_aprom_writeb(void *opaque, uint32_t addr, uint32_t val)
 #ifdef PCNET_DEBUG
     printf("pcnet_aprom_writeb addr=0x%08x val=0x%02x\n", addr, val);
 #endif
-    /* Check APROMWE bit to enable write access */
-    if (pcnet_bcr_readw(s,2) & 0x100)
+    if (BCR_APROMWE(s)) {
         s->prom[addr & 15] = val;
+    }
 }
 
 static uint32_t pcnet_aprom_readb(void *opaque, uint32_t addr)
@@ -69,24 +71,64 @@ static uint32_t pcnet_aprom_readb(void *opaque, uint32_t addr)
     return val;
 }
 
-static void pcnet_ioport_map(PCIDevice *pci_dev, int region_num,
-                             pcibus_t addr, pcibus_t size, int type)
+static uint64_t pcnet_ioport_read(void *opaque, target_phys_addr_t addr,
+                                  unsigned size)
 {
-    PCNetState *d = &DO_UPCAST(PCIPCNetState, pci_dev, pci_dev)->state;
+    PCNetState *d = opaque;
 
-#ifdef PCNET_DEBUG_IO
-    printf("pcnet_ioport_map addr=0x%04"FMT_PCIBUS" size=0x%04"FMT_PCIBUS"\n",
-           addr, size);
-#endif
-
-    register_ioport_write(addr, 16, 1, pcnet_aprom_writeb, d);
-    register_ioport_read(addr, 16, 1, pcnet_aprom_readb, d);
-
-    register_ioport_write(addr + 0x10, 0x10, 2, pcnet_ioport_writew, d);
-    register_ioport_read(addr + 0x10, 0x10, 2, pcnet_ioport_readw, d);
-    register_ioport_write(addr + 0x10, 0x10, 4, pcnet_ioport_writel, d);
-    register_ioport_read(addr + 0x10, 0x10, 4, pcnet_ioport_readl, d);
+    if (addr < 0x10) {
+        if (!BCR_DWIO(d) && size == 1) {
+            return pcnet_aprom_readb(d, addr);
+        } else if (!BCR_DWIO(d) && (addr & 1) == 0 && size == 2) {
+            return pcnet_aprom_readb(d, addr) |
+                   (pcnet_aprom_readb(d, addr + 1) << 8);
+        } else if (BCR_DWIO(d) && (addr & 3) == 0 && size == 4) {
+            return pcnet_aprom_readb(d, addr) |
+                   (pcnet_aprom_readb(d, addr + 1) << 8) |
+                   (pcnet_aprom_readb(d, addr + 2) << 16) |
+                   (pcnet_aprom_readb(d, addr + 3) << 24);
+        }
+    } else {
+        if (size == 2) {
+            return pcnet_ioport_readw(d, addr);
+        } else if (size == 4) {
+            return pcnet_ioport_readl(d, addr);
+        }
+    }
+    return ((uint64_t)1 << (size * 8)) - 1;
 }
+
+static void pcnet_ioport_write(void *opaque, target_phys_addr_t addr,
+                               uint64_t data, unsigned size)
+{
+    PCNetState *d = opaque;
+
+    if (addr < 0x10) {
+        if (!BCR_DWIO(d) && size == 1) {
+            pcnet_aprom_writeb(d, addr, data);
+        } else if (!BCR_DWIO(d) && (addr & 1) == 0 && size == 2) {
+            pcnet_aprom_writeb(d, addr, data & 0xff);
+            pcnet_aprom_writeb(d, addr + 1, data >> 8);
+        } else if (BCR_DWIO(d) && (addr & 3) == 0 && size == 4) {
+            pcnet_aprom_writeb(d, addr, data & 0xff);
+            pcnet_aprom_writeb(d, addr + 1, (data >> 8) & 0xff);
+            pcnet_aprom_writeb(d, addr + 2, (data >> 16) & 0xff);
+            pcnet_aprom_writeb(d, addr + 3, data >> 24);
+        }
+    } else {
+        if (size == 2) {
+            pcnet_ioport_writew(d, addr, data);
+        } else if (size == 4) {
+            pcnet_ioport_writel(d, addr, data);
+        }
+    }
+}
+
+static const MemoryRegionOps pcnet_io_ops = {
+    .read = pcnet_ioport_read,
+    .write = pcnet_ioport_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
 
 static void pcnet_mmio_writeb(void *opaque, target_phys_addr_t addr, uint32_t val)
 {
@@ -202,28 +244,24 @@ static const VMStateDescription vmstate_pci_pcnet = {
 
 /* PCI interface */
 
-static CPUWriteMemoryFunc * const pcnet_mmio_write[] = {
-    &pcnet_mmio_writeb,
-    &pcnet_mmio_writew,
-    &pcnet_mmio_writel
-};
-
-static CPUReadMemoryFunc * const pcnet_mmio_read[] = {
-    &pcnet_mmio_readb,
-    &pcnet_mmio_readw,
-    &pcnet_mmio_readl
+static const MemoryRegionOps pcnet_mmio_ops = {
+    .old_mmio = {
+        .read = { pcnet_mmio_readb, pcnet_mmio_readw, pcnet_mmio_readl },
+        .write = { pcnet_mmio_writeb, pcnet_mmio_writew, pcnet_mmio_writel },
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
 static void pci_physical_memory_write(void *dma_opaque, target_phys_addr_t addr,
                                       uint8_t *buf, int len, int do_bswap)
 {
-    cpu_physical_memory_write(addr, buf, len);
+    pci_dma_write(dma_opaque, addr, buf, len);
 }
 
 static void pci_physical_memory_read(void *dma_opaque, target_phys_addr_t addr,
                                      uint8_t *buf, int len, int do_bswap)
 {
-    cpu_physical_memory_read(addr, buf, len);
+    pci_dma_read(dma_opaque, addr, buf, len);
 }
 
 static void pci_pcnet_cleanup(VLANClientState *nc)
@@ -237,7 +275,8 @@ static int pci_pcnet_uninit(PCIDevice *dev)
 {
     PCIPCNetState *d = DO_UPCAST(PCIPCNetState, pci_dev, dev);
 
-    cpu_unregister_io_memory(d->state.mmio_index);
+    memory_region_destroy(&d->state.mmio);
+    memory_region_destroy(&d->io_bar);
     qemu_del_timer(d->state.poll_timer);
     qemu_free_timer(d->state.poll_timer);
     qemu_del_vlan_client(&d->state.nic->nc);
@@ -249,6 +288,7 @@ static NetClientInfo net_pci_pcnet_info = {
     .size = sizeof(NICState),
     .can_receive = pcnet_can_receive,
     .receive = pcnet_receive,
+    .link_status_changed = pcnet_set_link_status,
     .cleanup = pci_pcnet_cleanup,
 };
 
@@ -271,31 +311,24 @@ static int pci_pcnet_init(PCIDevice *pci_dev)
     pci_set_word(pci_conf + PCI_SUBSYSTEM_VENDOR_ID, 0x0);
     pci_set_word(pci_conf + PCI_SUBSYSTEM_ID, 0x0);
 
-    pci_conf[PCI_INTERRUPT_PIN] = 1; // interrupt pin 0
+    pci_conf[PCI_INTERRUPT_PIN] = 1; /* interrupt pin A */
     pci_conf[PCI_MIN_GNT] = 0x06;
     pci_conf[PCI_MAX_LAT] = 0xff;
 
     /* Handler for memory-mapped I/O */
-    s->mmio_index =
-      cpu_register_io_memory(pcnet_mmio_read, pcnet_mmio_write, &d->state,
-                             DEVICE_NATIVE_ENDIAN);
+    memory_region_init_io(&d->state.mmio, &pcnet_mmio_ops, s, "pcnet-mmio",
+                          PCNET_PNPMMIO_SIZE);
 
-    pci_register_bar(pci_dev, 0, PCNET_IOPORT_SIZE,
-                           PCI_BASE_ADDRESS_SPACE_IO, pcnet_ioport_map);
+    memory_region_init_io(&d->io_bar, &pcnet_io_ops, s, "pcnet-io",
+                          PCNET_IOPORT_SIZE);
+    pci_register_bar(pci_dev, 0, PCI_BASE_ADDRESS_SPACE_IO, &d->io_bar);
 
-    pci_register_bar_simple(pci_dev, 1, PCNET_PNPMMIO_SIZE, 0, s->mmio_index);
+    pci_register_bar(pci_dev, 1, 0, &s->mmio);
 
     s->irq = pci_dev->irq[0];
     s->phys_mem_read = pci_physical_memory_read;
     s->phys_mem_write = pci_physical_memory_write;
-
-    if (!pci_dev->qdev.hotplugged) {
-        static int loaded = 0;
-        if (!loaded) {
-            rom_add_option("pxe-pcnet.rom", -1);
-            loaded = 1;
-        }
-    }
+    s->dma_opaque = pci_dev;
 
     return pcnet_common_init(&pci_dev->qdev, s, &net_pci_pcnet_info);
 }
@@ -307,26 +340,38 @@ static void pci_reset(DeviceState *dev)
     pcnet_h_reset(&d->state);
 }
 
-static PCIDeviceInfo pcnet_info = {
-    .qdev.name  = "pcnet",
-    .qdev.size  = sizeof(PCIPCNetState),
-    .qdev.reset = pci_reset,
-    .qdev.vmsd  = &vmstate_pci_pcnet,
-    .init       = pci_pcnet_init,
-    .exit       = pci_pcnet_uninit,
-    .vendor_id  = PCI_VENDOR_ID_AMD,
-    .device_id  = PCI_DEVICE_ID_AMD_LANCE,
-    .revision   = 0x10,
-    .class_id   = PCI_CLASS_NETWORK_ETHERNET,
-    .qdev.props = (Property[]) {
-        DEFINE_NIC_PROPERTIES(PCIPCNetState, state.conf),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+static Property pcnet_properties[] = {
+    DEFINE_NIC_PROPERTIES(PCIPCNetState, state.conf),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void pci_pcnet_register_devices(void)
+static void pcnet_class_init(ObjectClass *klass, void *data)
 {
-    pci_qdev_register(&pcnet_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->init = pci_pcnet_init;
+    k->exit = pci_pcnet_uninit;
+    k->romfile = "pxe-pcnet.rom",
+    k->vendor_id = PCI_VENDOR_ID_AMD;
+    k->device_id = PCI_DEVICE_ID_AMD_LANCE;
+    k->revision = 0x10;
+    k->class_id = PCI_CLASS_NETWORK_ETHERNET;
+    dc->reset = pci_reset;
+    dc->vmsd = &vmstate_pci_pcnet;
+    dc->props = pcnet_properties;
 }
 
-device_init(pci_pcnet_register_devices)
+static TypeInfo pcnet_info = {
+    .name          = "pcnet",
+    .parent        = TYPE_PCI_DEVICE,
+    .instance_size = sizeof(PCIPCNetState),
+    .class_init    = pcnet_class_init,
+};
+
+static void pci_pcnet_register_types(void)
+{
+    type_register_static(&pcnet_info);
+}
+
+type_init(pci_pcnet_register_types)

@@ -6,6 +6,8 @@
  * This work is licensed under the terms of the GNU GPL, version 2.  See
  * the COPYING file in the top-level directory.
  *
+ * Contributions after 2012-01-13 are licensed under the terms of the
+ * GNU GPL, version 2 or (at your option) any later version.
  */
 #include "qemu-common.h"
 #include "console.h"
@@ -145,7 +147,7 @@ static void convert_generic(QemuPfConv *conv, void *dst, void *src, uint32_t cnt
 {
     if (conv->conv_cnt < cnt) {
         conv->conv_cnt = cnt;
-        conv->conv_buf = qemu_realloc(conv->conv_buf, sizeof(QemuPixel) * conv->conv_cnt);
+        conv->conv_buf = g_realloc(conv->conv_buf, sizeof(QemuPixel) * conv->conv_cnt);
     }
     conv->conv_from(&conv->src, conv->conv_buf, src, cnt);
     conv->conv_to(&conv->dst, dst, conv->conv_buf, cnt);
@@ -156,7 +158,7 @@ static void convert_generic(QemuPfConv *conv, void *dst, void *src, uint32_t cnt
 
 QemuPfConv *qemu_pf_conv_get(PixelFormat *dst, PixelFormat *src)
 {
-    QemuPfConv *conv = qemu_mallocz(sizeof(QemuPfConv));
+    QemuPfConv *conv = g_malloc0(sizeof(QemuPfConv));
 
     conv->src = *src;
     conv->dst = *dst;
@@ -195,7 +197,7 @@ QemuPfConv *qemu_pf_conv_get(PixelFormat *dst, PixelFormat *src)
     return conv;
 
 err:
-    qemu_free(conv);
+    g_free(conv);
     return NULL;
 }
 
@@ -207,7 +209,7 @@ void qemu_pf_conv_run(QemuPfConv *conv, void *dst, void *src, uint32_t cnt)
 void qemu_pf_conv_put(QemuPfConv *conv)
 {
     if (conv) {
-        qemu_free(conv->conv_buf);
-        qemu_free(conv);
+        g_free(conv->conv_buf);
+        g_free(conv);
     }
 }

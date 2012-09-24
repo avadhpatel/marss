@@ -15,7 +15,15 @@ MAKEFLAGS += -rR
 QEMU_DGFLAGS += -MMD -MP -MT $@ -MF $(*D)/$(*F).d
 
 %.o: %.c
-	$(call quiet-command,$(CC) $(QEMU_CFLAGS) $(QEMU_INCLUDES) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  CC    $(TARGET_DIR)$@")
+	$(call quiet-command,$(CC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  CC    $(TARGET_DIR)$@")
+
+ifeq ($(LIBTOOL),)
+%.lo: %.c
+	@echo "missing libtool. please install and rerun configure"; exit 1
+else
+%.lo: %.c
+	$(call quiet-command,$(LIBTOOL) --mode=compile --quiet --tag=CC $(CC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  lt CC $@")
+endif
 
 ifeq ($(LIBTOOL),)
 %.lo: %.c
@@ -26,12 +34,12 @@ else
 endif
 
 %.o: %.S
-	$(call quiet-command,$(CC) $(QEMU_CFLAGS) $(QEMU_INCLUDES) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  AS    $(TARGET_DIR)$@")
+	$(call quiet-command,$(CC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  AS    $(TARGET_DIR)$@")
 
 %.o: %.m
-	$(call quiet-command,$(CC) $(QEMU_CFLAGS) $(QEMU_INCLUDES) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  OBJC  $(TARGET_DIR)$@")
+	$(call quiet-command,$(CC) $(QEMU_INCLUDES) $(QEMU_CFLAGS) $(QEMU_DGFLAGS) $(CFLAGS) -c -o $@ $<,"  OBJC  $(TARGET_DIR)$@")
 
-LINK = $(call quiet-command,$(CC) $(QEMU_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(1) $(LIBS),"  LINK  $(TARGET_DIR)$@")
+LINK = $(call quiet-command,$(CC) $(QEMU_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(sort $(1)) $(LIBS),"  LINK  $(TARGET_DIR)$@")
 
 %$(EXESUF): %.o
 	$(call LINK,$^)
@@ -47,7 +55,7 @@ quiet-command = $(if $(V),$1,$(if $(2),@echo $2 && $1, @$1))
 cc-option = $(if $(shell $(CC) $1 $2 -S -o /dev/null -xc /dev/null \
               >/dev/null 2>&1 && echo OK), $2, $3)
 
-VPATH_SUFFIXES = %.c %.h %.S %.m %.mak %.texi
+VPATH_SUFFIXES = %.c %.h %.S %.m %.mak %.texi %.sh
 set-vpath = $(if $1,$(foreach PATTERN,$(VPATH_SUFFIXES),$(eval vpath $(PATTERN) $1)))
 
 # find-in-path
@@ -58,6 +66,9 @@ set-vpath = $(if $1,$(foreach PATTERN,$(VPATH_SUFFIXES),$(eval vpath $(PATTERN) 
 find-in-path = $(if $(find-string /, $1), \
         $(wildcard $1), \
         $(wildcard $(patsubst %, %/$1, $(subst :, ,$(PATH)))))
+
+# Generate files with tracetool
+TRACETOOL=$(PYTHON) $(SRC_PATH)/scripts/tracetool.py
 
 # Generate timestamp files for .h include files
 

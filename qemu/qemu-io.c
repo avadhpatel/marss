@@ -15,8 +15,10 @@
 #include <libgen.h>
 
 #include "qemu-common.h"
+#include "main-loop.h"
 #include "block_int.h"
 #include "cmd.h"
+#include "trace/control.h"
 
 #define VERSION	"0.0.1"
 
@@ -130,7 +132,7 @@ static void print_report(const char *op, struct timeval *t, int64_t offset,
 static void *
 create_iovec(QEMUIOVector *qiov, char **argv, int nr_iov, int pattern)
 {
-    size_t *sizes = calloc(nr_iov, sizeof(size_t));
+    size_t *sizes = g_new0(size_t, nr_iov);
     size_t count = 0;
     void *buf = NULL;
     void *p;
@@ -172,7 +174,7 @@ create_iovec(QEMUIOVector *qiov, char **argv, int nr_iov, int pattern)
     }
 
 fail:
-    free(sizes);
+    g_free(sizes);
     return buf;
 }
 
@@ -218,6 +220,51 @@ static int do_pwrite(char *buf, int64_t offset, int count, int *total)
     return 1;
 }
 
+typedef struct {
+    int64_t offset;
+    int count;
+    int *total;
+    int ret;
+    bool done;
+} CoWriteZeroes;
+
+static void coroutine_fn co_write_zeroes_entry(void *opaque)
+{
+    CoWriteZeroes *data = opaque;
+
+    data->ret = bdrv_co_write_zeroes(bs, data->offset / BDRV_SECTOR_SIZE,
+                                     data->count / BDRV_SECTOR_SIZE);
+    data->done = true;
+    if (data->ret < 0) {
+        *data->total = data->ret;
+        return;
+    }
+
+    *data->total = data->count;
+}
+
+static int do_co_write_zeroes(int64_t offset, int count, int *total)
+{
+    Coroutine *co;
+    CoWriteZeroes data = {
+        .offset = offset,
+        .count  = count,
+        .total  = total,
+        .done   = false,
+    };
+
+    co = qemu_coroutine_create(co_write_zeroes_entry);
+    qemu_coroutine_enter(co, &data);
+    while (!data.done) {
+        qemu_aio_wait();
+    }
+    if (data.ret < 0) {
+        return data.ret;
+    } else {
+        return 1;
+    }
+}
+
 static int do_load_vmstate(char *buf, int64_t offset, int count, int *total)
 {
     *total = bdrv_load_vmstate(bs, (uint8_t *)buf, offset, count);
@@ -244,16 +291,12 @@ static void aio_rw_done(void *opaque, int ret)
 
 static int do_aio_readv(QEMUIOVector *qiov, int64_t offset, int *total)
 {
-    BlockDriverAIOCB *acb;
     int async_ret = NOT_DONE;
 
-    acb = bdrv_aio_readv(bs, offset >> 9, qiov, qiov->size >> 9,
-                         aio_rw_done, &async_ret);
-    if (!acb) {
-        return -EIO;
-    }
+    bdrv_aio_readv(bs, offset >> 9, qiov, qiov->size >> 9,
+                   aio_rw_done, &async_ret);
     while (async_ret == NOT_DONE) {
-        qemu_aio_wait();
+        main_loop_wait(false);
     }
 
     *total = qiov->size;
@@ -262,17 +305,12 @@ static int do_aio_readv(QEMUIOVector *qiov, int64_t offset, int *total)
 
 static int do_aio_writev(QEMUIOVector *qiov, int64_t offset, int *total)
 {
-    BlockDriverAIOCB *acb;
     int async_ret = NOT_DONE;
 
-    acb = bdrv_aio_writev(bs, offset >> 9, qiov, qiov->size >> 9,
-                          aio_rw_done, &async_ret);
-    if (!acb) {
-        return -EIO;
-    }
-
+    bdrv_aio_writev(bs, offset >> 9, qiov, qiov->size >> 9,
+                    aio_rw_done, &async_ret);
     while (async_ret == NOT_DONE) {
-        qemu_aio_wait();
+        main_loop_wait(false);
     }
 
     *total = qiov->size;
@@ -315,7 +353,7 @@ static int do_aio_multiwrite(BlockRequest* reqs, int num_reqs, int *total)
     }
 
     while (async_ret.num_done < num_reqs) {
-        qemu_aio_wait();
+        main_loop_wait(false);
     }
 
     return async_ret.error < 0 ? async_ret.error : 1;
@@ -445,7 +483,7 @@ static int read_f(int argc, char **argv)
     }
 
     if ((pattern_count < 0) || (pattern_count + pattern_offset > count))  {
-        printf("pattern verfication range exceeds end of read data\n");
+        printf("pattern verification range exceeds end of read data\n");
         return 0;
     }
 
@@ -480,14 +518,14 @@ static int read_f(int argc, char **argv)
     }
 
     if (Pflag) {
-        void *cmp_buf = malloc(pattern_count);
+        void *cmp_buf = g_malloc(pattern_count);
         memset(cmp_buf, pattern, pattern_count);
         if (memcmp(buf + pattern_offset, cmp_buf, pattern_count)) {
             printf("Pattern verification failed at offset %"
                    PRId64 ", %d bytes\n",
                    offset + pattern_offset, pattern_count);
         }
-        free(cmp_buf);
+        g_free(cmp_buf);
     }
 
     if (qflag) {
@@ -596,6 +634,9 @@ static int readv_f(int argc, char **argv)
 
     nr_iov = argc - optind;
     buf = create_iovec(&qiov, &argv[optind], nr_iov, 0xab);
+    if (buf == NULL) {
+        return 0;
+    }
 
     gettimeofday(&t1, NULL);
     cnt = do_aio_readv(&qiov, offset, &total);
@@ -607,13 +648,13 @@ static int readv_f(int argc, char **argv)
     }
 
     if (Pflag) {
-        void *cmp_buf = malloc(qiov.size);
+        void *cmp_buf = g_malloc(qiov.size);
         memset(cmp_buf, pattern, qiov.size);
         if (memcmp(buf, cmp_buf, qiov.size)) {
             printf("Pattern verification failed at offset %"
                    PRId64 ", %zd bytes\n", offset, qiov.size);
         }
-        free(cmp_buf);
+        g_free(cmp_buf);
     }
 
     if (qflag) {
@@ -649,6 +690,7 @@ static void write_help(void)
 " -P, -- use different pattern to fill file\n"
 " -C, -- report statistics in a machine parsable format\n"
 " -q, -- quiet mode, do not show I/O statistics\n"
+" -z, -- write zeroes using bdrv_co_write_zeroes\n"
 "\n");
 }
 
@@ -660,7 +702,7 @@ static const cmdinfo_t write_cmd = {
     .cfunc      = write_f,
     .argmin     = 2,
     .argmax     = -1,
-    .args       = "[-abCpq] [-P pattern ] off len",
+    .args       = "[-bCpqz] [-P pattern ] off len",
     .oneline    = "writes a number of bytes at a specified offset",
     .help       = write_help,
 };
@@ -668,16 +710,16 @@ static const cmdinfo_t write_cmd = {
 static int write_f(int argc, char **argv)
 {
     struct timeval t1, t2;
-    int Cflag = 0, pflag = 0, qflag = 0, bflag = 0;
+    int Cflag = 0, pflag = 0, qflag = 0, bflag = 0, Pflag = 0, zflag = 0;
     int c, cnt;
-    char *buf;
+    char *buf = NULL;
     int64_t offset;
     int count;
     /* Some compilers get confused and warn if this is not initialized.  */
     int total = 0;
     int pattern = 0xcd;
 
-    while ((c = getopt(argc, argv, "bCpP:q")) != EOF) {
+    while ((c = getopt(argc, argv, "bCpP:qz")) != EOF) {
         switch (c) {
         case 'b':
             bflag = 1;
@@ -689,6 +731,7 @@ static int write_f(int argc, char **argv)
             pflag = 1;
             break;
         case 'P':
+            Pflag = 1;
             pattern = parse_pattern(optarg);
             if (pattern < 0) {
                 return 0;
@@ -696,6 +739,9 @@ static int write_f(int argc, char **argv)
             break;
         case 'q':
             qflag = 1;
+            break;
+        case 'z':
+            zflag = 1;
             break;
         default:
             return command_usage(&write_cmd);
@@ -706,8 +752,13 @@ static int write_f(int argc, char **argv)
         return command_usage(&write_cmd);
     }
 
-    if (bflag && pflag) {
-        printf("-b and -p cannot be specified at the same time\n");
+    if (bflag + pflag + zflag > 1) {
+        printf("-b, -p, or -z cannot be specified at the same time\n");
+        return 0;
+    }
+
+    if (zflag && Pflag) {
+        printf("-z and -P cannot be specified at the same time\n");
         return 0;
     }
 
@@ -738,13 +789,17 @@ static int write_f(int argc, char **argv)
         }
     }
 
-    buf = qemu_io_alloc(count, pattern);
+    if (!zflag) {
+        buf = qemu_io_alloc(count, pattern);
+    }
 
     gettimeofday(&t1, NULL);
     if (pflag) {
         cnt = do_pwrite(buf, offset, count, &total);
     } else if (bflag) {
         cnt = do_save_vmstate(buf, offset, count, &total);
+    } else if (zflag) {
+        cnt = do_co_write_zeroes(offset, count, &total);
     } else {
         cnt = do_write(buf, offset, count, &total);
     }
@@ -764,7 +819,9 @@ static int write_f(int argc, char **argv)
     print_report("wrote", &t2, offset, count, total, cnt, Cflag);
 
 out:
-    qemu_io_free(buf);
+    if (!zflag) {
+        qemu_io_free(buf);
+    }
 
     return 0;
 }
@@ -850,6 +907,9 @@ static int writev_f(int argc, char **argv)
 
     nr_iov = argc - optind;
     buf = create_iovec(&qiov, &argv[optind], nr_iov, pattern);
+    if (buf == NULL) {
+        return 0;
+    }
 
     gettimeofday(&t1, NULL);
     cnt = do_aio_writev(&qiov, offset, &total);
@@ -880,7 +940,7 @@ static void multiwrite_help(void)
 " in a batch of requests that may be merged by qemu\n"
 "\n"
 " Example:\n"
-" 'multiwrite 512 1k 1k ; 4k 1k' \n"
+" 'multiwrite 512 1k 1k ; 4k 1k'\n"
 "  writes 2 kB at 512 bytes and 1 kB at 4 kB into the open file\n"
 "\n"
 " Writes into a segment of the currently open file, using a buffer\n"
@@ -950,25 +1010,25 @@ static int multiwrite_f(int argc, char **argv)
         }
     }
 
-    reqs = qemu_malloc(nr_reqs * sizeof(*reqs));
-    buf = qemu_malloc(nr_reqs * sizeof(*buf));
-    qiovs = qemu_malloc(nr_reqs * sizeof(*qiovs));
+    reqs = g_malloc0(nr_reqs * sizeof(*reqs));
+    buf = g_malloc0(nr_reqs * sizeof(*buf));
+    qiovs = g_malloc(nr_reqs * sizeof(*qiovs));
 
-    for (i = 0; i < nr_reqs; i++) {
+    for (i = 0; i < nr_reqs && optind < argc; i++) {
         int j;
 
         /* Read the offset of the request */
         offset = cvtnum(argv[optind]);
         if (offset < 0) {
             printf("non-numeric offset argument -- %s\n", argv[optind]);
-            return 0;
+            goto out;
         }
         optind++;
 
         if (offset & 0x1ff) {
             printf("offset %lld is not sector aligned\n",
                    (long long)offset);
-            return 0;
+            goto out;
         }
 
         if (i == 0) {
@@ -985,16 +1045,22 @@ static int multiwrite_f(int argc, char **argv)
         nr_iov = j - optind;
 
         /* Build request */
+        buf[i] = create_iovec(&qiovs[i], &argv[optind], nr_iov, pattern);
+        if (buf[i] == NULL) {
+            goto out;
+        }
+
         reqs[i].qiov = &qiovs[i];
-        buf[i] = create_iovec(reqs[i].qiov, &argv[optind], nr_iov, pattern);
         reqs[i].sector = offset >> 9;
         reqs[i].nb_sectors = reqs[i].qiov->size >> 9;
 
         optind = j + 1;
 
-        offset += reqs[i].qiov->size;
         pattern++;
     }
+
+    /* If there were empty requests at the end, ignore them */
+    nr_reqs = i;
 
     gettimeofday(&t1, NULL);
     cnt = do_aio_multiwrite(reqs, nr_reqs, &total);
@@ -1015,11 +1081,13 @@ static int multiwrite_f(int argc, char **argv)
 out:
     for (i = 0; i < nr_reqs; i++) {
         qemu_io_free(buf[i]);
-        qemu_iovec_destroy(&qiovs[i]);
+        if (reqs[i].qiov != NULL) {
+            qemu_iovec_destroy(&qiovs[i]);
+        }
     }
-    qemu_free(buf);
-    qemu_free(reqs);
-    qemu_free(qiovs);
+    g_free(buf);
+    g_free(reqs);
+    g_free(qiovs);
     return 0;
 }
 
@@ -1058,7 +1126,7 @@ static void aio_write_done(void *opaque, int ret)
                  ctx->qiov.size, 1, ctx->Cflag);
 out:
     qemu_io_free(ctx->buf);
-    free(ctx);
+    g_free(ctx);
 }
 
 static void aio_read_done(void *opaque, int ret)
@@ -1074,14 +1142,14 @@ static void aio_read_done(void *opaque, int ret)
     }
 
     if (ctx->Pflag) {
-        void *cmp_buf = malloc(ctx->qiov.size);
+        void *cmp_buf = g_malloc(ctx->qiov.size);
 
         memset(cmp_buf, ctx->pattern, ctx->qiov.size);
         if (memcmp(ctx->buf, cmp_buf, ctx->qiov.size)) {
             printf("Pattern verification failed at offset %"
                    PRId64 ", %zd bytes\n", ctx->offset, ctx->qiov.size);
         }
-        free(cmp_buf);
+        g_free(cmp_buf);
     }
 
     if (ctx->qflag) {
@@ -1098,7 +1166,7 @@ static void aio_read_done(void *opaque, int ret)
                  ctx->qiov.size, 1, ctx->Cflag);
 out:
     qemu_io_free(ctx->buf);
-    free(ctx);
+    g_free(ctx);
 }
 
 static void aio_read_help(void)
@@ -1113,7 +1181,7 @@ static void aio_read_help(void)
 " Reads a segment of the currently open file, optionally dumping it to the\n"
 " standard output stream (with -v option) for subsequent inspection.\n"
 " The read is performed asynchronously and the aio_flush command must be\n"
-" used to ensure all outstanding aio requests have been completed\n"
+" used to ensure all outstanding aio requests have been completed.\n"
 " -C, -- report statistics in a machine parsable format\n"
 " -P, -- use a pattern to verify read data\n"
 " -v, -- dump buffer to standard output\n"
@@ -1136,8 +1204,7 @@ static const cmdinfo_t aio_read_cmd = {
 static int aio_read_f(int argc, char **argv)
 {
     int nr_iov, c;
-    struct aio_ctx *ctx = calloc(1, sizeof(struct aio_ctx));
-    BlockDriverAIOCB *acb;
+    struct aio_ctx *ctx = g_new0(struct aio_ctx, 1);
 
     while ((c = getopt(argc, argv, "CP:qv")) != EOF) {
         switch (c) {
@@ -1148,7 +1215,7 @@ static int aio_read_f(int argc, char **argv)
             ctx->Pflag = 1;
             ctx->pattern = parse_pattern(optarg);
             if (ctx->pattern < 0) {
-                free(ctx);
+                g_free(ctx);
                 return 0;
             }
             break;
@@ -1159,20 +1226,20 @@ static int aio_read_f(int argc, char **argv)
             ctx->vflag = 1;
             break;
         default:
-            free(ctx);
+            g_free(ctx);
             return command_usage(&aio_read_cmd);
         }
     }
 
     if (optind > argc - 2) {
-        free(ctx);
+        g_free(ctx);
         return command_usage(&aio_read_cmd);
     }
 
     ctx->offset = cvtnum(argv[optind]);
     if (ctx->offset < 0) {
         printf("non-numeric length argument -- %s\n", argv[optind]);
-        free(ctx);
+        g_free(ctx);
         return 0;
     }
     optind++;
@@ -1180,22 +1247,20 @@ static int aio_read_f(int argc, char **argv)
     if (ctx->offset & 0x1ff) {
         printf("offset %" PRId64 " is not sector aligned\n",
                ctx->offset);
-        free(ctx);
+        g_free(ctx);
         return 0;
     }
 
     nr_iov = argc - optind;
     ctx->buf = create_iovec(&ctx->qiov, &argv[optind], nr_iov, 0xab);
-
-    gettimeofday(&ctx->t1, NULL);
-    acb = bdrv_aio_readv(bs, ctx->offset >> 9, &ctx->qiov,
-                         ctx->qiov.size >> 9, aio_read_done, ctx);
-    if (!acb) {
-        free(ctx->buf);
-        free(ctx);
-        return -EIO;
+    if (ctx->buf == NULL) {
+        g_free(ctx);
+        return 0;
     }
 
+    gettimeofday(&ctx->t1, NULL);
+    bdrv_aio_readv(bs, ctx->offset >> 9, &ctx->qiov,
+                   ctx->qiov.size >> 9, aio_read_done, ctx);
     return 0;
 }
 
@@ -1212,7 +1277,7 @@ static void aio_write_help(void)
 " Writes into a segment of the currently open file, using a buffer\n"
 " filled with a set pattern (0xcdcdcdcd).\n"
 " The write is performed asynchronously and the aio_flush command must be\n"
-" used to ensure all outstanding aio requests have been completed\n"
+" used to ensure all outstanding aio requests have been completed.\n"
 " -P, -- use different pattern to fill file\n"
 " -C, -- report statistics in a machine parsable format\n"
 " -q, -- quiet mode, do not show I/O statistics\n"
@@ -1235,8 +1300,7 @@ static int aio_write_f(int argc, char **argv)
 {
     int nr_iov, c;
     int pattern = 0xcd;
-    struct aio_ctx *ctx = calloc(1, sizeof(struct aio_ctx));
-    BlockDriverAIOCB *acb;
+    struct aio_ctx *ctx = g_new0(struct aio_ctx, 1);
 
     while ((c = getopt(argc, argv, "CqP:")) != EOF) {
         switch (c) {
@@ -1249,24 +1313,25 @@ static int aio_write_f(int argc, char **argv)
         case 'P':
             pattern = parse_pattern(optarg);
             if (pattern < 0) {
+                g_free(ctx);
                 return 0;
             }
             break;
         default:
-            free(ctx);
+            g_free(ctx);
             return command_usage(&aio_write_cmd);
         }
     }
 
     if (optind > argc - 2) {
-        free(ctx);
+        g_free(ctx);
         return command_usage(&aio_write_cmd);
     }
 
     ctx->offset = cvtnum(argv[optind]);
     if (ctx->offset < 0) {
         printf("non-numeric length argument -- %s\n", argv[optind]);
-        free(ctx);
+        g_free(ctx);
         return 0;
     }
     optind++;
@@ -1274,22 +1339,20 @@ static int aio_write_f(int argc, char **argv)
     if (ctx->offset & 0x1ff) {
         printf("offset %" PRId64 " is not sector aligned\n",
                ctx->offset);
-        free(ctx);
+        g_free(ctx);
         return 0;
     }
 
     nr_iov = argc - optind;
     ctx->buf = create_iovec(&ctx->qiov, &argv[optind], nr_iov, pattern);
-
-    gettimeofday(&ctx->t1, NULL);
-    acb = bdrv_aio_writev(bs, ctx->offset >> 9, &ctx->qiov,
-                          ctx->qiov.size >> 9, aio_write_done, ctx);
-    if (!acb) {
-        free(ctx->buf);
-        free(ctx);
-        return -EIO;
+    if (ctx->buf == NULL) {
+        g_free(ctx);
+        return 0;
     }
 
+    gettimeofday(&ctx->t1, NULL);
+    bdrv_aio_writev(bs, ctx->offset >> 9, &ctx->qiov,
+                    ctx->qiov.size >> 9, aio_write_done, ctx);
     return 0;
 }
 
@@ -1497,7 +1560,7 @@ out:
 
 static int alloc_f(int argc, char **argv)
 {
-    int64_t offset;
+    int64_t offset, sector_num;
     int nb_sectors, remaining;
     char s1[64];
     int num, sum_alloc;
@@ -1518,11 +1581,17 @@ static int alloc_f(int argc, char **argv)
 
     remaining = nb_sectors;
     sum_alloc = 0;
+    sector_num = offset >> 9;
     while (remaining) {
-        ret = bdrv_is_allocated(bs, offset >> 9, nb_sectors, &num);
+        ret = bdrv_is_allocated(bs, sector_num, remaining, &num);
+        sector_num += num;
         remaining -= num;
         if (ret) {
             sum_alloc += num;
+        }
+        if (num == 0) {
+            nb_sectors -= remaining;
+            remaining = 0;
         }
     }
 
@@ -1582,7 +1651,7 @@ static const cmdinfo_t map_cmd = {
 
 static int close_f(int argc, char **argv)
 {
-    bdrv_close(bs);
+    bdrv_delete(bs);
     bs = NULL;
     return 0;
 }
@@ -1611,6 +1680,7 @@ static int openfile(char *name, int flags, int growable)
 
         if (bdrv_open(bs, name, flags, NULL) < 0) {
             fprintf(stderr, "%s: can't open device %s\n", progname, name);
+            bdrv_delete(bs);
             bs = NULL;
             return 1;
         }
@@ -1721,6 +1791,8 @@ static void usage(const char *name)
 "  -g, --growable       allow file to grow (only applies to protocols)\n"
 "  -m, --misalign       misalign allocations for O_DIRECT\n"
 "  -k, --native-aio     use kernel AIO implementation (on Linux only)\n"
+"  -t, --cache=MODE     use the given cache mode for the image\n"
+"  -T, --trace FILE     enable trace events listed in the given file\n"
 "  -h, --help           display this help and exit\n"
 "  -V, --version        output version information and exit\n"
 "\n",
@@ -1732,7 +1804,7 @@ int main(int argc, char **argv)
 {
     int readonly = 0;
     int growable = 0;
-    const char *sopt = "hVc:rsnmgk";
+    const char *sopt = "hVc:rsnmgkt:T:";
     const struct option lopt[] = {
         { "help", 0, NULL, 'h' },
         { "version", 0, NULL, 'V' },
@@ -1744,6 +1816,8 @@ int main(int argc, char **argv)
         { "misalign", 0, NULL, 'm' },
         { "growable", 0, NULL, 'g' },
         { "native-aio", 0, NULL, 'k' },
+        { "cache", 1, NULL, 't' },
+        { "trace", 1, NULL, 'T' },
         { NULL, 0, NULL, 0 }
     };
     int c;
@@ -1775,6 +1849,17 @@ int main(int argc, char **argv)
         case 'k':
             flags |= BDRV_O_NATIVE_AIO;
             break;
+        case 't':
+            if (bdrv_parse_cache_flags(optarg, &flags) < 0) {
+                error_report("Invalid cache option: %s", optarg);
+                exit(1);
+            }
+            break;
+        case 'T':
+            if (!trace_backend_init(optarg, NULL)) {
+                exit(1); /* error message will have been printed */
+            }
+            break;
         case 'V':
             printf("%s version %s\n", progname, VERSION);
             exit(0);
@@ -1793,6 +1878,8 @@ int main(int argc, char **argv)
     }
 
     bdrv_init();
+
+    qemu_init_main_loop();
 
     /* initialize commands */
     quit_init();
@@ -1829,12 +1916,12 @@ int main(int argc, char **argv)
     command_loop();
 
     /*
-     * Make sure all outstanding requests get flushed the program exits.
+     * Make sure all outstanding requests complete before the program exits.
      */
-    qemu_aio_flush();
+    bdrv_drain_all();
 
     if (bs) {
-        bdrv_close(bs);
+        bdrv_delete(bs);
     }
     return 0;
 }

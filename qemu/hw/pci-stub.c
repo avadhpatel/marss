@@ -1,5 +1,5 @@
 /*
- * PCI stubs for plathome that doesn't support pci bus.
+ * PCI stubs for platforms that don't support pci bus.
  *
  * Copyright (c) 2010 Isaku Yamahata <yamahata at valinux co jp>
  *                    VA Linux Systems Japan K.K.
@@ -21,23 +21,20 @@
 #include "sysemu.h"
 #include "monitor.h"
 #include "pci.h"
+#include "qmp-commands.h"
+
+PciInfoList *qmp_query_pci(Error **errp)
+{
+    error_set(errp, QERR_UNSUPPORTED);
+    return NULL;
+}
 
 static void pci_error_message(Monitor *mon)
 {
     monitor_printf(mon, "PCI devices not supported\n");
 }
 
-void do_pci_info(Monitor *mon, QObject **ret_data)
-{
-    pci_error_message(mon);
-}
-
-void do_pci_info_print(Monitor *mon, const QObject *data)
-{
-    pci_error_message(mon);
-}
-
-int do_pcie_aer_inejct_error(Monitor *mon,
+int do_pcie_aer_inject_error(Monitor *mon,
                              const QDict *qdict, QObject **ret_data)
 {
     pci_error_message(mon);

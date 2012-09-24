@@ -29,7 +29,7 @@ static void qed_read_table_cb(void *opaque, int ret)
 {
     QEDReadTableCB *read_table_cb = opaque;
     QEDTable *table = read_table_cb->table;
-    int noffsets = read_table_cb->iov.iov_len / sizeof(uint64_t);
+    int noffsets = read_table_cb->qiov.size / sizeof(uint64_t);
     int i;
 
     /* Handle I/O error */
@@ -54,7 +54,6 @@ static void qed_read_table(BDRVQEDState *s, uint64_t offset, QEDTable *table,
     QEDReadTableCB *read_table_cb = gencb_alloc(sizeof(*read_table_cb),
                                                 cb, opaque);
     QEMUIOVector *qiov = &read_table_cb->qiov;
-    BlockDriverAIOCB *aiocb;
 
     trace_qed_read_table(s, offset, table);
 
@@ -64,12 +63,9 @@ static void qed_read_table(BDRVQEDState *s, uint64_t offset, QEDTable *table,
     read_table_cb->iov.iov_len = s->header.cluster_size * s->header.table_size,
 
     qemu_iovec_init_external(qiov, &read_table_cb->iov, 1);
-    aiocb = bdrv_aio_readv(s->bs->file, offset / BDRV_SECTOR_SIZE, qiov,
-                           read_table_cb->iov.iov_len / BDRV_SECTOR_SIZE,
-                           qed_read_table_cb, read_table_cb);
-    if (!aiocb) {
-        qed_read_table_cb(read_table_cb, -EIO);
-    }
+    bdrv_aio_readv(s->bs->file, offset / BDRV_SECTOR_SIZE, qiov,
+                   qiov->size / BDRV_SECTOR_SIZE,
+                   qed_read_table_cb, read_table_cb);
 }
 
 typedef struct {
@@ -127,7 +123,6 @@ static void qed_write_table(BDRVQEDState *s, uint64_t offset, QEDTable *table,
                             BlockDriverCompletionFunc *cb, void *opaque)
 {
     QEDWriteTableCB *write_table_cb;
-    BlockDriverAIOCB *aiocb;
     unsigned int sector_mask = BDRV_SECTOR_SIZE / sizeof(uint64_t) - 1;
     unsigned int start, end, i;
     size_t len_bytes;
@@ -158,13 +153,10 @@ static void qed_write_table(BDRVQEDState *s, uint64_t offset, QEDTable *table,
     /* Adjust for offset into table */
     offset += start * sizeof(uint64_t);
 
-    aiocb = bdrv_aio_writev(s->bs->file, offset / BDRV_SECTOR_SIZE,
-                            &write_table_cb->qiov,
-                            write_table_cb->iov.iov_len / BDRV_SECTOR_SIZE,
-                            qed_write_table_cb, write_table_cb);
-    if (!aiocb) {
-        qed_write_table_cb(write_table_cb, -EIO);
-    }
+    bdrv_aio_writev(s->bs->file, offset / BDRV_SECTOR_SIZE,
+                    &write_table_cb->qiov,
+                    write_table_cb->qiov.size / BDRV_SECTOR_SIZE,
+                    qed_write_table_cb, write_table_cb);
 }
 
 /**
@@ -179,15 +171,11 @@ int qed_read_l1_table_sync(BDRVQEDState *s)
 {
     int ret = -EINPROGRESS;
 
-    async_context_push();
-
     qed_read_table(s, s->header.l1_table_offset,
                    s->l1_table, qed_sync_cb, &ret);
     while (ret == -EINPROGRESS) {
         qemu_aio_wait();
     }
-
-    async_context_pop();
 
     return ret;
 }
@@ -205,14 +193,10 @@ int qed_write_l1_table_sync(BDRVQEDState *s, unsigned int index,
 {
     int ret = -EINPROGRESS;
 
-    async_context_push();
-
     qed_write_l1_table(s, index, n, qed_sync_cb, &ret);
     while (ret == -EINPROGRESS) {
         qemu_aio_wait();
     }
-
-    async_context_pop();
 
     return ret;
 }
@@ -230,21 +214,21 @@ static void qed_read_l2_table_cb(void *opaque, int ret)
     QEDRequest *request = read_l2_table_cb->request;
     BDRVQEDState *s = read_l2_table_cb->s;
     CachedL2Table *l2_table = request->l2_table;
+    uint64_t l2_offset = read_l2_table_cb->l2_offset;
 
     if (ret) {
         /* can't trust loaded L2 table anymore */
         qed_unref_l2_cache_entry(l2_table);
         request->l2_table = NULL;
     } else {
-        l2_table->offset = read_l2_table_cb->l2_offset;
+        l2_table->offset = l2_offset;
 
         qed_commit_l2_cache_entry(&s->l2_cache, l2_table);
 
         /* This is guaranteed to succeed because we just committed the entry
          * to the cache.
          */
-        request->l2_table = qed_find_l2_cache_entry(&s->l2_cache,
-                                                    l2_table->offset);
+        request->l2_table = qed_find_l2_cache_entry(&s->l2_cache, l2_offset);
         assert(request->l2_table != NULL);
     }
 
@@ -282,14 +266,11 @@ int qed_read_l2_table_sync(BDRVQEDState *s, QEDRequest *request, uint64_t offset
 {
     int ret = -EINPROGRESS;
 
-    async_context_push();
-
     qed_read_l2_table(s, request, offset, qed_sync_cb, &ret);
     while (ret == -EINPROGRESS) {
         qemu_aio_wait();
     }
 
-    async_context_pop();
     return ret;
 }
 
@@ -307,13 +288,10 @@ int qed_write_l2_table_sync(BDRVQEDState *s, QEDRequest *request,
 {
     int ret = -EINPROGRESS;
 
-    async_context_push();
-
     qed_write_l2_table(s, request, index, n, flush, qed_sync_cb, &ret);
     while (ret == -EINPROGRESS) {
         qemu_aio_wait();
     }
 
-    async_context_pop();
     return ret;
 }

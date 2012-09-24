@@ -69,7 +69,7 @@ typedef struct {
     NICState *nic;
     NICConf conf;
     qemu_irq irq;
-    int mmio_index;
+    MemoryRegion mmio;
 } stellaris_enet_state;
 
 static void stellaris_enet_update(stellaris_enet_state *s)
@@ -130,7 +130,8 @@ static int stellaris_enet_can_receive(VLANClientState *nc)
     return (s->np < 31);
 }
 
-static uint32_t stellaris_enet_read(void *opaque, target_phys_addr_t offset)
+static uint64_t stellaris_enet_read(void *opaque, target_phys_addr_t offset,
+                                    unsigned size)
 {
     stellaris_enet_state *s = (stellaris_enet_state *)opaque;
     uint32_t val;
@@ -198,7 +199,7 @@ static uint32_t stellaris_enet_read(void *opaque, target_phys_addr_t offset)
 }
 
 static void stellaris_enet_write(void *opaque, target_phys_addr_t offset,
-                        uint32_t value)
+                                 uint64_t value, unsigned size)
 {
     stellaris_enet_state *s = (stellaris_enet_state *)opaque;
 
@@ -303,17 +304,12 @@ static void stellaris_enet_write(void *opaque, target_phys_addr_t offset,
     }
 }
 
-static CPUReadMemoryFunc * const stellaris_enet_readfn[] = {
-   stellaris_enet_read,
-   stellaris_enet_read,
-   stellaris_enet_read
+static const MemoryRegionOps stellaris_enet_ops = {
+    .read = stellaris_enet_read,
+    .write = stellaris_enet_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-static CPUWriteMemoryFunc * const stellaris_enet_writefn[] = {
-   stellaris_enet_write,
-   stellaris_enet_write,
-   stellaris_enet_write
-};
 static void stellaris_enet_reset(stellaris_enet_state *s)
 {
     s->mdv = 0x80;
@@ -391,9 +387,9 @@ static void stellaris_enet_cleanup(VLANClientState *nc)
 
     unregister_savevm(&s->busdev.qdev, "stellaris_enet", s);
 
-    cpu_unregister_io_memory(s->mmio_index);
+    memory_region_destroy(&s->mmio);
 
-    qemu_free(s);
+    g_free(s);
 }
 
 static NetClientInfo net_stellaris_enet_info = {
@@ -408,15 +404,14 @@ static int stellaris_enet_init(SysBusDevice *dev)
 {
     stellaris_enet_state *s = FROM_SYSBUS(stellaris_enet_state, dev);
 
-    s->mmio_index = cpu_register_io_memory(stellaris_enet_readfn,
-                                           stellaris_enet_writefn, s,
-                                           DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, 0x1000, s->mmio_index);
+    memory_region_init_io(&s->mmio, &stellaris_enet_ops, s, "stellaris_enet",
+                          0x1000);
+    sysbus_init_mmio(dev, &s->mmio);
     sysbus_init_irq(dev, &s->irq);
     qemu_macaddr_default_if_unset(&s->conf.macaddr);
 
     s->nic = qemu_new_nic(&net_stellaris_enet_info, &s->conf,
-                          dev->qdev.info->name, dev->qdev.id, s);
+                          object_get_typename(OBJECT(dev)), dev->qdev.id, s);
     qemu_format_nic_info_str(&s->nic->nc, s->conf.macaddr.a);
 
     stellaris_enet_reset(s);
@@ -425,19 +420,30 @@ static int stellaris_enet_init(SysBusDevice *dev)
     return 0;
 }
 
-static SysBusDeviceInfo stellaris_enet_info = {
-    .init = stellaris_enet_init,
-    .qdev.name  = "stellaris_enet",
-    .qdev.size  = sizeof(stellaris_enet_state),
-    .qdev.props = (Property[]) {
-        DEFINE_NIC_PROPERTIES(stellaris_enet_state, conf),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+static Property stellaris_enet_properties[] = {
+    DEFINE_NIC_PROPERTIES(stellaris_enet_state, conf),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void stellaris_enet_register_devices(void)
+static void stellaris_enet_class_init(ObjectClass *klass, void *data)
 {
-    sysbus_register_withprop(&stellaris_enet_info);
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+
+    k->init = stellaris_enet_init;
+    dc->props = stellaris_enet_properties;
 }
 
-device_init(stellaris_enet_register_devices)
+static TypeInfo stellaris_enet_info = {
+    .name          = "stellaris_enet",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(stellaris_enet_state),
+    .class_init    = stellaris_enet_class_init,
+};
+
+static void stellaris_enet_register_types(void)
+{
+    type_register_static(&stellaris_enet_info);
+}
+
+type_init(stellaris_enet_register_types)

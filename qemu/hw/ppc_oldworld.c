@@ -26,6 +26,7 @@
 #include "hw.h"
 #include "ppc.h"
 #include "ppc_mac.h"
+#include "adb.h"
 #include "mac_dbdma.h"
 #include "nvram.h"
 #include "pc.h"
@@ -33,7 +34,6 @@
 #include "net.h"
 #include "isa.h"
 #include "pci.h"
-#include "usb-ohci.h"
 #include "boards.h"
 #include "fw_cfg.h"
 #include "escc.h"
@@ -43,6 +43,7 @@
 #include "kvm.h"
 #include "kvm_ppc.h"
 #include "blockdev.h"
+#include "exec-memory.h"
 
 #define MAX_IDE_BUS 2
 #define CFG_ADDR 0xf0000510
@@ -64,6 +65,13 @@ static target_phys_addr_t round_page(target_phys_addr_t addr)
     return (addr + TARGET_PAGE_SIZE - 1) & TARGET_PAGE_MASK;
 }
 
+static void ppc_heathrow_reset(void *opaque)
+{
+    CPUPPCState *env = opaque;
+
+    cpu_state_reset(env);
+}
+
 static void ppc_heathrow_init (ram_addr_t ram_size,
                                const char *boot_device,
                                const char *kernel_filename,
@@ -71,18 +79,20 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
                                const char *initrd_filename,
                                const char *cpu_model)
 {
-    CPUState *env = NULL;
+    MemoryRegion *sysmem = get_system_memory();
+    CPUPPCState *env = NULL;
     char *filename;
     qemu_irq *pic, **heathrow_irqs;
     int linux_boot, i;
-    ram_addr_t ram_offset, bios_offset;
+    MemoryRegion *ram = g_new(MemoryRegion, 1);
+    MemoryRegion *bios = g_new(MemoryRegion, 1);
     uint32_t kernel_base, initrd_base, cmdline_base = 0;
     int32_t kernel_size, initrd_size;
     PCIBus *pci_bus;
     MacIONVRAMState *nvr;
     int bios_size;
-    int pic_mem_index, nvram_mem_index, dbdma_mem_index, cuda_mem_index;
-    int escc_mem_index, ide_mem_index[2];
+    MemoryRegion *pic_mem, *dbdma_mem, *cuda_mem;
+    MemoryRegion *escc_mem, *escc_bar = g_new(MemoryRegion, 1), *ide_mem[2];
     uint16_t ppc_boot_device;
     DriveInfo *hd[MAX_IDE_BUS * MAX_IDE_DEVS];
     void *fw_cfg;
@@ -101,7 +111,7 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
         }
         /* Set time-base frequency to 16.6 Mhz */
         cpu_ppc_tb_init(env,  16600000UL);
-        qemu_register_reset((QEMUResetHandler*)&cpu_reset, env);
+        qemu_register_reset(ppc_heathrow_reset, env);
     }
 
     /* allocate RAM */
@@ -112,21 +122,24 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
         exit(1);
     }
 
-    ram_offset = qemu_ram_alloc(NULL, "ppc_heathrow.ram", ram_size);
-    cpu_register_physical_memory(0, ram_size, ram_offset);
+    memory_region_init_ram(ram, "ppc_heathrow.ram", ram_size);
+    vmstate_register_ram_global(ram);
+    memory_region_add_subregion(sysmem, 0, ram);
 
     /* allocate and load BIOS */
-    bios_offset = qemu_ram_alloc(NULL, "ppc_heathrow.bios", BIOS_SIZE);
+    memory_region_init_ram(bios, "ppc_heathrow.bios", BIOS_SIZE);
+    vmstate_register_ram_global(bios);
     if (bios_name == NULL)
         bios_name = PROM_FILENAME;
     filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
-    cpu_register_physical_memory(PROM_ADDR, BIOS_SIZE, bios_offset | IO_MEM_ROM);
+    memory_region_set_readonly(bios, true);
+    memory_region_add_subregion(sysmem, PROM_ADDR, bios);
 
     /* Load OpenBIOS (ELF) */
     if (filename) {
         bios_size = load_elf(filename, 0, NULL, NULL, NULL, NULL,
                              1, ELF_MACHINE, 0);
-        qemu_free(filename);
+        g_free(filename);
     } else {
         bios_size = -1;
     }
@@ -206,15 +219,13 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
         }
     }
 
-    isa_mem_base = 0x80000000;
-
     /* Register 2 MB of ISA IO space */
     isa_mmio_init(0xfe000000, 0x00200000);
 
     /* XXX: we register only 1 output pin for heathrow PIC */
-    heathrow_irqs = qemu_mallocz(smp_cpus * sizeof(qemu_irq *));
+    heathrow_irqs = g_malloc0(smp_cpus * sizeof(qemu_irq *));
     heathrow_irqs[0] =
-        qemu_mallocz(smp_cpus * sizeof(qemu_irq) * 1);
+        g_malloc0(smp_cpus * sizeof(qemu_irq) * 1);
     /* Connect the heathrow PIC outputs to the 6xx bus */
     for (i = 0; i < smp_cpus; i++) {
         switch (PPC_INPUT(env)) {
@@ -232,12 +243,16 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
     if (PPC_INPUT(env) != PPC_FLAGS_INPUT_6xx) {
         hw_error("Only 6xx bus is supported on heathrow machine\n");
     }
-    pic = heathrow_pic_init(&pic_mem_index, 1, heathrow_irqs);
-    pci_bus = pci_grackle_init(0xfec00000, pic);
+    pic = heathrow_pic_init(&pic_mem, 1, heathrow_irqs);
+    pci_bus = pci_grackle_init(0xfec00000, pic,
+                               get_system_memory(),
+                               get_system_io());
     pci_vga_init(pci_bus);
 
-    escc_mem_index = escc_init(0x80013000, pic[0x0f], pic[0x10], serial_hds[0],
+    escc_mem = escc_init(0, pic[0x0f], pic[0x10], serial_hds[0],
                                serial_hds[1], ESCC_CLOCK, 4);
+    memory_region_init_alias(escc_bar, "escc-bar",
+                             escc_mem, 0, memory_region_size(escc_mem));
 
     for(i = 0; i < nb_nics; i++)
         pci_nic_init_nofail(&nd_table[i], "ne2k_pci", NULL);
@@ -246,9 +261,9 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
     ide_drive_get(hd, MAX_IDE_BUS);
 
     /* First IDE channel is a MAC IDE on the MacIO bus */
-    dbdma = DBDMA_init(&dbdma_mem_index);
-    ide_mem_index[0] = -1;
-    ide_mem_index[1] = pmac_ide_init(hd, pic[0x0D], dbdma, 0x16, pic[0x02]);
+    dbdma = DBDMA_init(&dbdma_mem);
+    ide_mem[0] = NULL;
+    ide_mem[1] = pmac_ide_init(hd, pic[0x0D], dbdma, 0x16, pic[0x02]);
 
     /* Second IDE channel is a CMD646 on the PCI bus */
     hd[0] = hd[MAX_IDE_DEVS];
@@ -257,20 +272,19 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
     pci_cmd646_ide_init(pci_bus, hd, 0);
 
     /* cuda also initialize ADB */
-    cuda_init(&cuda_mem_index, pic[0x12]);
+    cuda_init(&cuda_mem, pic[0x12]);
 
     adb_kbd_init(&adb_bus);
     adb_mouse_init(&adb_bus);
 
-    nvr = macio_nvram_init(&nvram_mem_index, 0x2000, 4);
+    nvr = macio_nvram_init(0x2000, 4);
     pmac_format_nvram_partition(nvr, 0x2000);
 
-    macio_init(pci_bus, PCI_DEVICE_ID_APPLE_343S1201, 1, pic_mem_index,
-               dbdma_mem_index, cuda_mem_index, nvr, 2, ide_mem_index,
-               escc_mem_index);
+    macio_init(pci_bus, PCI_DEVICE_ID_APPLE_343S1201, 1, pic_mem,
+               dbdma_mem, cuda_mem, nvr, 2, ide_mem, escc_bar);
 
     if (usb_enabled) {
-        usb_ohci_init_pci(pci_bus, -1);
+        pci_create_simple(pci_bus, -1, "pci-ohci");
     }
 
     if (graphic_depth != 15 && graphic_depth != 32 && graphic_depth != 8)
@@ -304,7 +318,7 @@ static void ppc_heathrow_init (ram_addr_t ram_size,
         uint8_t *hypercall;
 
         fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_TBFREQ, kvmppc_get_tbfreq());
-        hypercall = qemu_malloc(16);
+        hypercall = g_malloc(16);
         kvmppc_get_hypercall(env, hypercall, 16);
         fw_cfg_add_bytes(fw_cfg, FW_CFG_PPC_KVM_HC, hypercall, 16);
         fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_KVM_PID, getpid());
