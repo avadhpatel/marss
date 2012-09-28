@@ -126,6 +126,7 @@ void TsxMESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
 			/* we dont' change anything in this case */
 			queueEntry->sendTo = queueEntry->sender;
 			tsx_cont->wait_interconnect_cb(queueEntry);
+            break;
 		default:
 			memdebug("Invalid line state: " << oldState);
 			assert(0);

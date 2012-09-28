@@ -243,6 +243,9 @@ CPUControllerQueueEntry* CPUController::find_dependency(
 {
 	W64 requestLineAddr = get_line_address(request);
 
+    if (request->get_type() == MEMORY_OP_TSX)
+        return NULL;
+
 	CPUControllerQueueEntry* queueEntry;
 	foreach_list_mutable(pendingRequests_.list(), queueEntry, entry_t,
 			prev_t) {
@@ -356,7 +359,10 @@ bool CPUController::cache_access_cb(void *arg)
 
 	if(!success) {
 		marss_add_event(&cacheAccess_, 1, queueEntry);
-	}
+	} else if (queueEntry->request->get_type() == MEMORY_OP_TSX) {
+        queueEntry->request->decRefCounter();
+		pendingRequests_.free(queueEntry);
+    }
 
 	return true;
 }

@@ -327,6 +327,10 @@ const light_assist_func_t light_assistid_to_func[L_ASSIST_COUNT] = {
     l_assist_pause,
     l_assist_popcnt,
 	l_assist_x87_fist,
+	l_assist_xbegin,
+	l_assist_xend,
+	l_assist_xabort,
+	l_assist_xtest,
 };
 
 const char* light_assist_names[L_ASSIST_COUNT] = {
@@ -339,6 +343,10 @@ const char* light_assist_names[L_ASSIST_COUNT] = {
 	"l_pause",
     "l_popcnt",
 	"l_x87_fist",
+	"l_xbegin",
+	"l_xend",
+	"l_xabort",
+	"l_xtest",
 };
 
 int light_assist_index(light_assist_func_t assist) {

@@ -184,6 +184,10 @@ namespace CoherentCache {
 			void disable_tsx() {
 				in_tsx_ = false;
 				reset_cache_states_bit(TM_READ|TM_WRITE);
+
+                if (complete_signal_)
+                    marss_add_event(complete_signal_, 20, NULL);
+
 				abort_signal_ = NULL;
 				complete_signal_ = NULL;
 			}

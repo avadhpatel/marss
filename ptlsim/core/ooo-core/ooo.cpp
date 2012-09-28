@@ -228,8 +228,8 @@ void ThreadContext::init() {
     sig_name.reset();
     sig_name << threadid << "-tsx-abort";
 
-    core_tsx_commit_signal.set_name(sig_name.buf);
-    core_tsx_commit_signal.connect(signal_mem_ptr(*this,
+    core_tsx_abort_signal.set_name(sig_name.buf);
+    core_tsx_abort_signal.connect(signal_mem_ptr(*this,
                 &ThreadContext::core_tsx_abort));
 }
 

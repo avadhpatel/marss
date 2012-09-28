@@ -437,12 +437,10 @@ enum {
 	L_ASSIST_PAUSE,
     L_ASSIST_POPCNT,
 	L_ASSIST_X87_FIST,
-#ifdef INTEL_TSX
     L_ASSIST_XBEGIN,
     L_ASSIST_XEND,
     L_ASSIST_XABORT,
     L_ASSIST_XTEST,
-#endif
 	L_ASSIST_COUNT
 };
 
@@ -585,12 +583,10 @@ L_ASSIST_FN(l_assist_ioport_out);
 L_ASSIST_FN(l_assist_pause);
 L_ASSIST_FN(l_assist_popcnt);
 L_ASSIST_FN(l_assist_x87_fist);
-#ifdef INTEL_TSX
 L_ASSIST_FN(l_assist_xbegin);
 L_ASSIST_FN(l_assist_xend);
 L_ASSIST_FN(l_assist_xabort);
 L_ASSIST_FN(l_assist_xtest);
-#endif
 
 //
 // Global functions

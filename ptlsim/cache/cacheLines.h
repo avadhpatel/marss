@@ -263,7 +263,7 @@ namespace Memory {
                 default:
                     memdebug("Unknown type of memory request: " <<
                             request->get_type() << endl);
-                    assert(0);
+                   // assert(0);
             };
             return rc;
         }

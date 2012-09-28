@@ -75,7 +75,7 @@ bool ThreadContext::probeitlb(Waddr icache_addr) {
         itlb_walk_level = ctx.page_table_level_count();
         itlb_miss_init_cycle = sim_cycle;
         thread_stats.dcache.itlb.misses++;
-   
+
         return false;
     }
 
@@ -410,7 +410,7 @@ void ThreadContext::external_to_core_state() {
 void ThreadContext::redispatch_deadlock_recovery() {
     if (logable(6)) core.dump_state(ptl_logfile);
 
-    thread_stats.dispatch.redispatch.deadlock_flushes++; 
+    thread_stats.dispatch.redispatch.deadlock_flushes++;
     // don't want to reset the counter for no commit in this case
     W64 previous_last_commit_at_cycle = last_commit_at_cycle;
     if (logable(3)) ptl_logfile << " redispatch_deadlock_recovery, flush_pipeline.",endl;
@@ -1253,7 +1253,7 @@ int ReorderBufferEntry::select_cluster() {
 
     ThreadContext& thread = getthread();
     thread.thread_stats.dispatch.cluster[cluster]++;
-    
+
 
     return cluster;
 }
@@ -2265,6 +2265,9 @@ bool ThreadContext::core_tsx_commit(void *arg) {
 		for( int i =0; i < tsxMemoryBuffer.getSetCount(); i++) {
 			TsxMemoryContent *tsx_content_array = &tsxMemoryBuffer.sets[i].data[0];
 			for( int j =0; j < tsxMemoryBuffer.getWayCount(); j++) {
+                if (tsx_content_array[j].virtaddr == 0)
+                    continue;
+
 				ctx.storemask_virt(tsx_content_array[j].virtaddr,
 						tsx_content_array[j].data,
 						tsx_content_array[j].bytemask,
@@ -2278,7 +2281,7 @@ bool ThreadContext::core_tsx_commit(void *arg) {
 	foreach (i, NUM_SIM_CORES)
 		contextof(i).running = 1;
 
-	return return_value;
+	return true;
 }
 
 
