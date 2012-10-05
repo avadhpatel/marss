@@ -101,6 +101,10 @@ class MemoryController : public Controller
 			return pendingRequests_.isFull();
 		}
 
+		bool is_empty() const {
+			return (pendingRequests_.count() == 0);
+		}
+
 		void print_map(ostream& os)
 		{
 			os << "Memory Controller: ", get_name(), endl;

@@ -52,7 +52,6 @@ static const int NUMBER_OF_CORES_PER_L2 = 1;
 
 #endif
 
-#define INTEL_TSX
 #define TSX_MAX_NESTING 10
 
 // #define SINGLE_CORE_MEM_CONFIG

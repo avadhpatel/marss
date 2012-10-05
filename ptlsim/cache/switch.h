@@ -170,6 +170,14 @@ namespace SwitchInterconnect {
                     os << controllers[i]->controller->get_name(), endl;
                 }
             }
+
+            bool is_empty() const {
+                foreach (i, controllers.count()) {
+                    if (controllers[i]->queue.count() > 0)
+                        return false;
+                }
+                return true;
+            }
     };
 
     static inline ostream& operator <<(ostream& os, const Switch &sw)

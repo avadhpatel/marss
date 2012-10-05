@@ -72,6 +72,7 @@ class Interconnect
 		virtual int get_delay()=0;
 		virtual void annul_request(MemoryRequest* request) = 0;
 		virtual void dump_configuration(YAML::Emitter &out) const = 0;
+		virtual bool is_empty() const = 0;
 
 		Signal* get_controller_request_signal() {
 			return &controller_request_;

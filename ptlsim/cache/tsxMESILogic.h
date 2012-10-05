@@ -168,33 +168,33 @@ namespace CoherentCache {
 			W64 abort_reason_;
 			Signal *abort_signal_;
 			Signal *complete_signal_;
+			Signal tsx_end;
 
         public:
 			TsxCache(W8 coreid, const char *name,
 					MemoryHierarchy *hierarchy, CacheType type);
 
             bool handle_upper_interconnect(Message &message);
+            bool tsx_end_cb(void *arg);
 
 			void enable_tsx() {
 				in_tsx_ = true;
 			}
+
             bool check_tsx_invalidated(){
 				return check_cache_states_bit(TM_WRITE, TSX_MESI_INVALID);
             }
+
 			void disable_tsx() {
 				in_tsx_ = false;
 				reset_cache_states_bit(TM_READ|TM_WRITE);
-
-                if (complete_signal_)
-                    marss_add_event(complete_signal_, 20, NULL);
-
-				abort_signal_ = NULL;
-				complete_signal_ = NULL;
+				marss_add_event(&tsx_end, 1, NULL);
 			}
 
 			void abort_tsx(W8 reason) {
 				tsx_abort_ = 1;
 				abort_reason_ = (W64)reason;
+				memdebug("TSX Abort in " << get_name() << endl);
 
 				if (abort_signal_) {
 					abort_signal_->emit((void*)abort_reason_);

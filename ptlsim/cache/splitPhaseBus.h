@@ -196,6 +196,15 @@ class BusInterconnect : public Interconnect
 		bool broadcast_completed_cb(void *arg);
 		bool data_broadcast_cb(void *arg);
 		bool data_broadcast_completed_cb(void *arg);
+
+		bool is_empty() const {
+			foreach (i, controllers.count()) {
+				if (controllers[i]->queue.count() > 0 ||
+						controllers[i]->dataQueue.count() > 0)
+					return false;
+			}
+			return true;
+		}
 };
 
 static inline ostream& operator <<(ostream& os,

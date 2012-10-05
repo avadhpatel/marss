@@ -272,6 +272,10 @@ namespace Memory {
                     return false;
                 }
 
+                bool is_empty() const {
+                    return (pendingRequests_.count() == 0);
+                }
+
                 void annul_request(MemoryRequest *request);
 				void dump_configuration(YAML::Emitter &out) const;
 

@@ -174,8 +174,8 @@ void TsxMESILogic::handle_local_hit_in_tsx(CacheQueueEntry *queueEntry)
 					kernel_req);
 			tsx_cont->cache_miss_cb(queueEntry);
 			break;
-		case TSX_MESI_EXCLUSIVE:
 		case TSX_MESI_SHARED:
+		case TSX_MESI_EXCLUSIVE:
 		case TSX_MESI_MODIFIED:
 			if(type == MEMORY_OP_WRITE) {
 				queueEntry->line->state |= TM_WRITE;
@@ -610,6 +610,11 @@ TsxCache::TsxCache(W8 coreid, const char *name,
 	, abort_signal_(NULL)
 	, complete_signal_(NULL)
 {
+    stringbuf sig_name;
+    sig_name << "tsx-end-" << name;
+
+    tsx_end.set_name(sig_name.buf);
+    tsx_end.connect(signal_mem_ptr(*this, &TsxCache::tsx_end_cb));
 }
 
 bool TsxCache::handle_upper_interconnect(Message &message){
@@ -620,10 +625,12 @@ bool TsxCache::handle_upper_interconnect(Message &message){
 	switch (message.request->get_owner_rip()) {
 		case 0x1: // xbegin
 			abort_signal_ = message.request->get_coreSignal();
+			memdebug("TSX Enabled in " << get_name() << endl);
 			enable_tsx();
 			break;
 		case 0x2: // xend
 			complete_signal_ = message.request->get_coreSignal();
+			memdebug("TSX End in " << get_name() << endl);
 			disable_tsx();
 			break;
 		case 0x3: // xabort
@@ -635,6 +642,22 @@ bool TsxCache::handle_upper_interconnect(Message &message){
 	}
 
 	return true;
+}
+
+bool TsxCache::tsx_end_cb(void *arg)
+{
+    // If we still have any entry in pending queue then retry later
+    if (memoryHierarchy_->all_empty()) {
+        if (complete_signal_)
+            marss_add_event(complete_signal_, 0, NULL);
+
+        complete_signal_ = NULL;
+        abort_signal_ = NULL;
+    } else {
+        marss_add_event(&tsx_end, 1, NULL);
+    }
+
+    return true;
 }
 
 /* MESI Controller Builder */

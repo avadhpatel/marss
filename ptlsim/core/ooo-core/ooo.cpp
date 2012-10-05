@@ -226,11 +226,20 @@ void ThreadContext::init() {
                 &ThreadContext::core_tsx_commit));
 
     sig_name.reset();
+    sig_name << threadid << "-tsx-commit-end";
+
+    core_tsx_commit_end_signal.set_name(sig_name.buf);
+    core_tsx_commit_end_signal.connect(signal_mem_ptr(*this,
+                &ThreadContext::core_tsx_commit_end));
+
+    sig_name.reset();
     sig_name << threadid << "-tsx-abort";
 
     core_tsx_abort_signal.set_name(sig_name.buf);
     core_tsx_abort_signal.connect(signal_mem_ptr(*this,
                 &ThreadContext::core_tsx_abort));
+
+    core_tsx_write_count = 0;
 }
 
 
@@ -499,6 +508,8 @@ bool OooCore::runcycle(void* none) {
     // to the interrupt handler.
     //
 
+    bool all_not_running = true;
+
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
         bool current_interrupts_pending = thread->ctx.check_events();
@@ -510,6 +521,13 @@ bool OooCore::runcycle(void* none) {
         } else {
             thread->thread_stats.set_default_stats(user_stats);
         }
+        all_not_running &= !thread->ctx.running;
+    }
+
+    if (all_not_running) {
+        foreach(i, threadcount)
+            threads[i]->last_commit_at_cycle = sim_cycle;
+        return false;
     }
 
     // Each core's thread-shared stats counter will be added to

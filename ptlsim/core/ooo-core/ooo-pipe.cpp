@@ -2114,7 +2114,8 @@ int ReorderBufferEntry::commit() {
 		    if(thread.ctx.tsx_mode > 0) {
 			    TsxMemoryContent* tsx_content = thread.tsxMemoryBuffer.select(lsq->virtaddr) ;
 			    tsx_content->data = lsq->data;
-			    tsx_content->virtaddr = lsq->virtaddr ;
+			    tsx_content->virtaddr = lsq->virtaddr;
+				tsx_content->physaddr = lsq->physaddr;
 			    tsx_content->bytemask = lsq->bytemask;
 			    tsx_content->sizeshift = uop.size;
 		    } else {
@@ -2284,13 +2285,20 @@ bool ThreadContext::core_tsx_commit(void *arg) {
 	return true;
 }
 
+bool ThreadContext::core_tsx_commit_end(void *arg) {
+
+    core_tsx_write_count--;
+    return true;
+}
 
 bool ThreadContext::core_tsx_abort(void *arg) {
 	W64 rb;
 	W64 ra;
+	bool old_runstate;
 
 	light_assist_func_t assist_func = l_assist_xabort;
 	Context& ctx = getthread().ctx;
+	old_runstate = ctx.running;
 
 	W16 new_flags = 0;
 	rb = (W64)(arg);
@@ -2302,10 +2310,7 @@ bool ThreadContext::core_tsx_abort(void *arg) {
 
 	thread_stats.lassists[L_ASSIST_XABORT]++;
 	flush_pipeline();
-
-	// start all all cpus
-	foreach (i, NUM_SIM_CORES)
-		contextof(i).running = 1;
+	ctx.running = old_runstate;
 
 	return true;
 }

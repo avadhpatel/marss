@@ -912,12 +912,14 @@ namespace OOO_CORE_MODEL {
 
     struct TsxMemoryContent {
 	    Waddr virtaddr;
+		Waddr physaddr;
 	    W64 data;
 	    byte bytemask;
 	    int sizeshift;
 
 	    void reset() {
 		    virtaddr = 0;
+			physaddr = 0;
 		    data = 0;
 		    bytemask = 0;
 		    sizeshift = 0;
@@ -1066,10 +1068,13 @@ namespace OOO_CORE_MODEL {
 
 		//TSX
         Signal core_tsx_commit_signal;
+        Signal core_tsx_commit_end_signal;
         Signal core_tsx_abort_signal;
 
         bool core_tsx_commit(void *arg);
+        bool core_tsx_commit_end(void *arg);
         bool core_tsx_abort(void *arg);
+        int core_tsx_write_count;
 
 	AssociativeArray<W64, TsxMemoryContent ,4096, 4, 250> tsxMemoryBuffer; //linesize , way count and set count numbers are for temporary
     };

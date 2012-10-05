@@ -171,6 +171,10 @@ class CPUController : public Controller
 			return pendingRequests_.isFull();
 		}
 
+		bool is_empty() const {
+			return (pendingRequests_.count() == 0);
+		}
+
 		void print_map(ostream& os)
 		{
 			os << "CPU-Controller: " << get_name()<< endl;

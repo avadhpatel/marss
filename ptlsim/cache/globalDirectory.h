@@ -215,6 +215,10 @@ class DirectoryController : public Controller {
         DirectoryEntry* get_directory_entry(MemoryRequest *req,
                 bool must_present=0);
         DirectoryEntry* get_dummy_entry(DirectoryEntry *entry, W64 old_tag);
+
+		bool is_empty() const {
+			return (pendingRequests_->count() == 0);
+		}
 };
 
 static inline ostream& operator << (ostream &os, const

@@ -252,6 +252,20 @@ namespace Memory {
     bool probe_lock(W64 lockaddr, W8 ctx_id);
     void invalidate_lock(W64 lockaddr, W8 ctx_id);
 
+    bool all_empty() {
+        foreach (i, allControllers_.count()) {
+            if (!allControllers_[i]->is_empty())
+                return false;
+        }
+
+        foreach (i, allInterconnects_.count()) {
+            if (!allInterconnects_[i]->is_empty())
+                return false;
+        }
+
+        return true;
+    }
+
   private:
 
     // machine

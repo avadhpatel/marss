@@ -1158,7 +1158,6 @@ struct Context: public CPUX86State {
 	  virt_addr_mask = (use64 ? 0xffffffffffffffffULL : 0x00000000ffffffffULL);
   }
 
-#ifdef INTEL_TSX
   Context* tsx_backup_ctx;
   int tsx_mode;  /* Indicate if CPU is in TSX mode and its recursive depth */
   W64 tsx_abort_addr;
@@ -1179,7 +1178,6 @@ struct Context: public CPUX86State {
   {
       bzero(tsx_backup_ctx, sizeof(Context));
   }
-#endif
 
 };
 

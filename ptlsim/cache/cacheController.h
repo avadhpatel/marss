@@ -245,6 +245,10 @@ class CacheController : public Controller
 			return false;
 		}
 
+		bool is_empty() const {
+			return (pendingRequests_.count() == 0);
+		}
+
 		void print_map(ostream& os)
 		{
 			os << "Cache-Controller: " << get_name() << endl;

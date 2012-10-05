@@ -71,6 +71,10 @@ class P2PInterconnect : public Interconnect
 		}
 
 		void dump_configuration(YAML::Emitter &out) const;
+
+		bool is_empty() const {
+			return true;
+		}
 };
 
 static inline ostream& operator << (ostream& os, const P2PInterconnect&

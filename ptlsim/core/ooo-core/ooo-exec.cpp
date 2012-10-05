@@ -1595,8 +1595,27 @@ bool ReorderBufferEntry::issueast_tsx(IssueState& state, W64 assistid, W64 ra,
 			}
 		case L_ASSIST_XEND:
 			{
-				if (ctx.tsx_mode == 0)
+				if (ctx.tsx_mode == 0 || ctx.running == 0)
 					return true;
+
+				// Issue all the memory writes to cache
+				for( int i =0; i < th.tsxMemoryBuffer.getSetCount(); i++) {
+					TsxMemoryContent *tsx_content_array = &th.tsxMemoryBuffer.sets[i].data[0];
+					for( int j =0; j < th.tsxMemoryBuffer.getWayCount(); j++) {
+						if (tsx_content_array[j].virtaddr == 0)
+							continue;
+
+						Memory::MemoryRequest *request = core.memoryHierarchy->
+							get_free_request(core.coreid);
+						request->init(core.coreid, threadid,
+								tsx_content_array[j].physaddr << 3,
+								0, sim_cycle, false, 0x11223344, 0,
+								Memory::MEMORY_OP_WRITE);
+						request->set_coreSignal(&th.core_tsx_commit_end_signal);
+						assert(core.memoryHierarchy->access_cache(request));
+						th.core_tsx_write_count++;
+					}
+				}
 
 				Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
 				assert(request != NULL);
@@ -2063,6 +2082,20 @@ bool OooCore::dcache_wakeup(void *arg) {
     assert(inrange(idx, 0, ROB_SIZE-1));
     ReorderBufferEntry& rob = thread->ROB[idx];
     if(logable(6)) ptl_logfile << " dcache_wakeup ", rob, " request ", *request, endl;
+
+    if (thread->ctx.running == 0) {
+        // Remove request's weakup signal so it's marked as 'attempted' request
+        // and in future we wont increment its ref counter.
+        if (request->get_coreSignal()) {
+            request->set_coreSignal(NULL);
+            request->incRefCounter();
+        }
+        marss_add_event(&dcache_signal, 1, arg);
+        return true;
+    } else if (request->get_coreSignal() == NULL) {
+        request->decRefCounter();
+    }
+
     if(rob.lsq && request->get_owner_uuid() == rob.uop.uuid &&
             rob.lsq->physaddr == (physaddr >> 3) &&
             rob.current_state_list == &thread->rob_cache_miss_list){
@@ -2080,13 +2113,13 @@ bool OooCore::dcache_wakeup(void *arg) {
             int sizeshift = rob.uop.size;
             bool signext = (rob.uop.opcode == OP_ldx);
             W64 data;
-	    TsxMemoryContent *tsx_content;
+            TsxMemoryContent *tsx_content;
 
-	    if ((getthread().ctx.tsx_mode == 1) && ((tsx_content = getthread().tsxMemoryBuffer.probe(rob.lsq->virtaddr)) != NULL)){
-		    data = tsx_content->data;
-	    } else {
-		    data = thread->ctx.loadvirt(rob.lsq->virtaddr, sizeshift);
-	    }
+            if ((getthread().ctx.tsx_mode > 0) && ((tsx_content = getthread().tsxMemoryBuffer.probe(rob.lsq->virtaddr)) != NULL)){
+                data = tsx_content->data;
+            } else {
+                data = thread->ctx.loadvirt(rob.lsq->virtaddr, sizeshift);
+            }
 
             if unlikely (config.checker_enabled && !thread->ctx.kernel_mode) {
                 foreach(i, checker_stores_count) {

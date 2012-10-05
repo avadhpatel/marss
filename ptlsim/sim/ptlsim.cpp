@@ -905,13 +905,12 @@ CPUX86State* ptl_create_new_context() {
 
 	// Create a new CPU context and add it to contexts array
 	Context* ctx = new Context();
+	ctx->running = 1;
 	ptl_contexts[ctx_counter] = ctx;
 	ctx_counter++;
 
-#ifdef INTEL_TSX
     ctx->tsx_backup_ctx = new Context();
     bzero(ctx->tsx_backup_ctx, sizeof(Context));
-#endif
 
     if (config.simpoint_file.set()) {
         init_simpoints();
@@ -1330,7 +1329,6 @@ extern "C" uint8_t ptl_simulate() {
 	foreach(ctx_no, contextcount) {
 		Context& ctx = contextof(ctx_no);
 		ctx.setup_ptlsim_switch();
-		ctx.running = 1;
 	}
 
 	ptl_logfile << flush;
@@ -1453,9 +1451,6 @@ extern "C" void update_progress() {
 		  const char* runstate_name = runstate_names[ctx.running];
 
 		  sb << " (", runstate_name, ":",ctx.running, ")";
-		  if(!sim_cycle){
-			  ctx.running = 1;
-		  }
 		  continue;
       }
       sb << ' ', hexstring(contextof(i).get_cs_eip(), 64);
