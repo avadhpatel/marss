@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import sys, os
 try:
     import yaml
 except (ImportError, NotImplementedError):
@@ -13,7 +14,6 @@ try:
 except ImportError:
   from yaml import Loader, Dumper
 
-import sys, os
 import shutil
 
 import xml.etree.ElementTree as ET
@@ -257,18 +257,26 @@ duplicates!" + normal
           iq_fp_reads + iq_fp_writes)
 
       # Regfile reads/writes
+      iinsn_src = tDict["issue"]["opclass"]
+      ifp_insn = 0 
+
+      imul_insn = iinsn_src['mul']
+      for key in ['fpu', 'fp-div-sqrt', 'fp-cmp', 'fp-perm', 'fp-cvt-i2f',
+                  'fp-cvt-f2i', 'fp-cvt-f2f']:
+        ifp_insn += iinsn_src[key]
+      iint_insn = sum(iinsn_src.itervalues()) - ifp_insn  - imul_insn
       self.updateStat(ith_core, "int_regfile_reads", tDict["reg_reads"])
       self.updateStat(ith_core, "float_regfile_reads", tDict["fp_reg_reads"])
       self.updateStat(ith_core, "int_regfile_writes", tDict["reg_writes"])
       self.updateStat(ith_core, "float_regfile_writes", tDict["fp_reg_writes"])
       self.updateStat(ith_core, "context_switches", tDict["ctx_switches"])
-      self.updateStat(ith_core, "function_calls", "") # TODO?
-      self.updateStat(ith_core, "ialu_accesses", "300000")
-      self.updateStat(ith_core, "fpu_accesses", "100000")
-      self.updateStat(ith_core, "mul_accesses", "200000")
-      self.updateStat(ith_core, "cdb_alu_accesses", "300000")
-      self.updateStat(ith_core, "cdb_mul_accesses", "200000")
-      self.updateStat(ith_core, "cdb_fpu_accesses", "100000")
+      self.updateStat(ith_core, "function_calls", "") 
+      self.updateStat(ith_core, "ialu_accesses", iint_insn)
+      self.updateStat(ith_core, "fpu_accesses", ifp_insn)
+      self.updateStat(ith_core, "mul_accesses", imul_insn)
+      self.updateStat(ith_core, "cdb_alu_accesses", iint_insn)
+      self.updateStat(ith_core, "cdb_mul_accesses", imul_insn)
+      self.updateStat(ith_core, "cdb_fpu_accesses", ifp_insn)
 
       # XXX: McPAT's XML chastises me to not change these, so for now I don't.
       self.updateStat(ith_core, "IFU_duty_cycle", "1")
