@@ -54,6 +54,7 @@ namespace CoherentCache {
         MI, MM, MO, ME, MS,
         EI, EM, EO, EE, ES,
         SI, SM, SO, SE, SS,
+        OI, OM, OO, OE, OS,
         NUM_MOESI_STATE_TRANS,
     };
 
@@ -62,6 +63,7 @@ namespace CoherentCache {
         {MI, MM, MO, ME, MS},
         {EI, EM, EO, EE, ES},
         {SI, SM, SO, SE, SS},
+        {OI, OM, OO, OE, OS},
     };
 
     static const char* MOESIStateNames[NUM_MOESI_STATES] = {
