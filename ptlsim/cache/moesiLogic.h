@@ -52,18 +52,18 @@ namespace CoherentCache {
     enum MOESITransations {
         II=0, IM, IO, IE, IS,
         MI, MM, MO, ME, MS,
+        OI, OM, OO, OE, OS,
         EI, EM, EO, EE, ES,
         SI, SM, SO, SE, SS,
-        OI, OM, OO, OE, OS,
         NUM_MOESI_STATE_TRANS,
     };
 
     static int MOESITransTable[NUM_MOESI_STATES][NUM_MOESI_STATES] = {
         {II, IM, IO, IE, IS},
         {MI, MM, MO, ME, MS},
+        {OI, OM, OO, OE, OS},
         {EI, EM, EO, EE, ES},
         {SI, SM, SO, SE, SS},
-        {OI, OM, OO, OE, OS},
     };
 
     static const char* MOESIStateNames[NUM_MOESI_STATES] = {
