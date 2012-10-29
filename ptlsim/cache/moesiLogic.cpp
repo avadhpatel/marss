@@ -489,9 +489,9 @@ struct MOESICacheControllerBuilder : public ControllerBuilder
             MemoryHierarchy& mem, const char *name) {
         CacheController *cont = new CacheController(coreid, name, &mem, (Memory::CacheType)(type));
 
-        MOESILogic *mesi = new MOESILogic(cont, cont->get_stats(), &mem);
+        MOESILogic *moesi = new MOESILogic(cont, cont->get_stats(), &mem);
 
-        cont->set_coherence_logic(mesi);
+        cont->set_coherence_logic(moesi);
 
         bool is_private = false;
         if (!mem.get_machine().get_option(name, "private", is_private)) {
