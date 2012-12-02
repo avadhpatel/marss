@@ -526,7 +526,7 @@ void BaseMachine::run_cores_thread(int start_id, int end_id)
 			if (logable(4))
 				ptl_logfile << "Per-Cycle-Signal : " <<
 					coremodel.per_cycle_signals[i]->get_name() << endl;
-			exiting |= coremodel.per_cycle_signals[i]->emit(NULL);
+			exiting |= mysignals[i]->emit(NULL);
         }
 
         /* Check exit request and set global exit request if true */
