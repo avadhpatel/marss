@@ -62,6 +62,7 @@ void MOESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
 
     switch (oldState) {
         case MOESI_INVALID:
+            N_STAT_UPDATE(miss_state, [oldState]++, k_req);
             controller->cache_miss_cb(queueEntry);
             break;
 
@@ -90,6 +91,7 @@ void MOESILogic::handle_local_hit(CacheQueueEntry *queueEntry)
                      * cache miss so lower cache can handle this
                      * request properly. */
                     *state = MOESI_INVALID;
+                    N_STAT_UPDATE(miss_state, [oldState]++, k_req);
                     controller->cache_miss_cb(queueEntry);
                 }
             }
