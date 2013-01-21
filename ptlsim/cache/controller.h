@@ -92,8 +92,7 @@ class Controller
 
 		Controller(W8 coreid, const char *name,
 				MemoryHierarchy *memoryHierarchy)
-			: handle_request_("handle_request")
-			, handle_interconnect_("handle_interconnect")
+			: handle_interconnect_("handle_interconnect")
 			, memoryHierarchy_(memoryHierarchy)
 			, idx(coreid)
 		{
@@ -114,7 +113,7 @@ class Controller
 		virtual bool handle_request_cb(void* arg)=0;
 		virtual bool handle_interconnect_cb(void* arg)=0;
 		virtual int access_fast_path(Interconnect *interconnect,
-				MemoryRequest *request)=0;
+				MemoryRequest *request) { return -1; };
         virtual void register_interconnect(Interconnect* interconnect,
                 int conn_type)=0;
 		virtual void print_map(ostream& os)=0;
