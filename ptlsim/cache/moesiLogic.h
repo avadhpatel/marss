@@ -52,6 +52,7 @@ namespace CoherentCache {
     enum MOESITransations {
         II=0, IM, IO, IE, IS,
         MI, MM, MO, ME, MS,
+        OI, OM, OO, OE, OS,
         EI, EM, EO, EE, ES,
         SI, SM, SO, SE, SS,
         NUM_MOESI_STATE_TRANS,
@@ -60,6 +61,7 @@ namespace CoherentCache {
     static int MOESITransTable[NUM_MOESI_STATES][NUM_MOESI_STATES] = {
         {II, IM, IO, IE, IS},
         {MI, MM, MO, ME, MS},
+        {OI, OM, OO, OE, OS},
         {EI, EM, EO, EE, ES},
         {SI, SM, SO, SE, SS},
     };

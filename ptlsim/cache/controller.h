@@ -82,7 +82,6 @@ class Controller
 {
 	private:
         stringbuf name_;
-		Signal handle_request_;
 		Signal handle_interconnect_;
 		bool isPrivate_;
 
@@ -99,8 +98,6 @@ class Controller
 			name_ << name;
 			isPrivate_ = false;
 
-			handle_request_.connect(signal_mem_ptr \
-					(*this, &Controller::handle_request_cb));
 			handle_interconnect_.connect(signal_mem_ptr \
 					(*this, &Controller::handle_interconnect_cb));
 		}
@@ -110,7 +107,6 @@ class Controller
             memoryHierarchy_ = NULL;
         }
 
-		virtual bool handle_request_cb(void* arg)=0;
 		virtual bool handle_interconnect_cb(void* arg)=0;
 		virtual int access_fast_path(Interconnect *interconnect,
 				MemoryRequest *request) { return -1; };
@@ -131,10 +127,6 @@ class Controller
 
 		Signal* get_interconnect_signal() {
 			return &handle_interconnect_;
-		}
-
-		Signal* get_handle_request_signal() {
-			return &handle_request_;
 		}
 
 		char* get_name() const {

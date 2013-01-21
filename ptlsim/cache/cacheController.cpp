@@ -108,7 +108,6 @@ CacheController::CacheController(W8 coreid, const char *name,
 
 CacheController::~CacheController()
 {
-    delete &new_stats;
 }
 
 CacheQueueEntry* CacheController::find_dependency(MemoryRequest *request)
@@ -157,12 +156,6 @@ void CacheController::print(ostream& os) const
 	if(pendingRequests_.count() > 0)
 		os << "Queue : " << pendingRequests_ << endl;
 	os << "---End Cache-Controller : " << get_name() << endl;
-}
-
-bool CacheController::handle_request_cb(void *arg)
-{
-	assert(0);
-	return false;
 }
 
 bool CacheController::handle_interconnect_cb(void *arg)
