@@ -148,6 +148,13 @@ void P2PInterconnect::print_map(ostream &os)
 		os << "\t\tcontroller-2: ", controllers_[1]->get_name(), endl;
 }
 
+bool P2PInterconnect::send_request(Controller *sender,
+		MemoryRequest *request, bool hasData)
+{
+	assert(0);
+	return false;
+}
+
 /**
  * @brief Dump P2P Configuration in YAML Format
  *
