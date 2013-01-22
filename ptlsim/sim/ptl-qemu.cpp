@@ -247,7 +247,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                 }
                 vm_log.buf[size] = '\0';
 
-                ptl_logfile << "[VM] " << vm_log;
+                ptl_logfile << "[VM @" << sim_cycle << "] " << vm_log;
                 break;
             }
         default :
@@ -345,7 +345,10 @@ void ptl_config_from_file(const char *filename) {
     for (;;) {
 
         line.reset();
-        cmd_file.getline(line.buf, line.length);
+
+		std::string temp;
+		std::getline(cmd_file, temp);
+		line << temp.c_str();
 
         if (!cmd_file)
             break;
