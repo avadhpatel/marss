@@ -667,6 +667,9 @@ namespace OOO_CORE_MODEL {
 
     ostream& operator <<(ostream& os, const PhysicalRegisterOperandInfo& opinfo);
 
+    /**
+     * Physical Register File
+     */
 
     struct PhysicalRegister: public selfqueuelink {
         ReorderBufferEntry* rob;
@@ -1270,6 +1273,7 @@ namespace OOO_CORE_MODEL {
 		/* Cache Signals and Callbacks */
         Signal dcache_signal;
         Signal icache_signal;
+		Signal run_cycle;
 
         bool dcache_wakeup(void *arg);
         bool icache_wakeup(void *arg);

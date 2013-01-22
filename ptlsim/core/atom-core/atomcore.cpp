@@ -2971,6 +2971,12 @@ AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
 
     threads = (AtomThread**)qemu_mallocz(threadcount*sizeof(AtomThread*));
 
+	stringbuf sg_name;
+	sg_name << name << "-run-cycle";
+	run_cycle.set_name(sg_name.buf);
+	run_cycle.connect(signal_mem_ptr(*this, &AtomCore::runcycle));
+	marss_register_per_cycle_event(&run_cycle);
+
     foreach(i, threadcount) {
         Context& ctx = machine.get_next_context();
 
@@ -3098,7 +3104,7 @@ void AtomCore::clear_forward(W8 reg)
  *
  * @return true if exit to qemu is requested
  */
-bool AtomCore::runcycle()
+bool AtomCore::runcycle(void* none)
 {
     bool exit_requested = false;
 
