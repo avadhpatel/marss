@@ -2019,6 +2019,26 @@ int ReorderBufferEntry::commit() {
         bool thread0_stuck_in_spinlock = rip_is_in_spinlock(core.thread[0]->ctx.commitarf[REG_rip]);
         bool thread1_stuck_in_spinlock = rip_is_in_spinlock(core.thread[1]->ctx.commitarf[REG_rip]);
 
+       if unlikely (inside_spinlock_now)
+            thread.consecutive_commits_inside_spinlock++;
+        else thread.consecutive_commits_inside_spinlock = 0;
+
+        if (thread.consecutive_commits_inside_spinlock >= 512) {
+            ptl_logfile << "WARNING: at cycle ", sim_cycle, ": vcpu ", thread.ctx.vcpuid, " potentially deadlocked inside spinlock (commit rip ", (void*)ctx.commitarf[REG_rip],
+                        ", count ", thread.consecutive_commits_inside_spinlock, ", int mask ", sshinfo.vcpu_info[thread.ctx.vcpuid].evtchn_upcall_mask, endl, flush;
+            ptl_logfile << "Thread 0 rip ", (void*)core.thread[0]->ctx.commitarf[REG_rip], endl;
+            ptl_logfile << "Thread 1 rip ", (void*)core.thread[1]->ctx.commitarf[REG_rip], endl;
+
+            thread.consecutive_commits_inside_spinlock = 0;
+
+            if (thread0_stuck_in_spinlock && thread1_stuck_in_spinlock) {
+                ptl_logfile << "Both threads stuck in spinlock", endl;
+                //core.machine.dump_state(ptl_logfile); // This is implied by assert().
+                assert(false);
+            }
+        }
+    }
+#endif
      /*
       * For debugging purposes, check the list of address ranges specified
       * with the -deadlock-debug-range 0xAA-0xBB,0xCC-0xDD,... option. If

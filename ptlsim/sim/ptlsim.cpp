@@ -843,10 +843,10 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
     char *config_str = (char*)qemu_mallocz(strlen(config_str_) + 1);
     pstrcpy(config_str, strlen(config_str_)+1, config_str_);
 
-    if(!ptl_machine_configured) {
+/*    if(!ptl_machine_configured) {
         configparser.setup();
         config.reset();
-    }
+    }*/
 
     // Setup the configuration
     ptl_reconfigure(config_str);

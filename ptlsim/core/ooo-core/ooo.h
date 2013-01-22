@@ -599,7 +599,9 @@ namespace OOO_CORE_MODEL {
         return rob.print(os);
     }
 
-
+    /*
+     * Load/Store Queue
+     */
 #define LSQ_SIZE (LDQ_SIZE + STQ_SIZE)
 
     /* Define this to allow speculative issue of loads before unresolved stores */
@@ -1105,7 +1107,7 @@ namespace OOO_CORE_MODEL {
         /* This is only used for stats collection. By default if core is
          * collecting stats that is common across threads then its collected
          * into Stats that Thread-0 is using.
-         * */
+		 */
         ThreadContext& getthread() { return *threads[0]; }
 
         PTLsimStats *stats_;
@@ -1255,7 +1257,7 @@ namespace OOO_CORE_MODEL {
         void set_unaligned_hint(const RIPVirtPhysBase& rvp, bool value);
 
 		/* Pipeline Stages */
-        bool runcycle();
+        bool runcycle(void*);
         void flush_pipeline();
         bool fetch();
         void rename();

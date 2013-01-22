@@ -122,7 +122,6 @@ namespace OOO_CORE_MODEL {
     static const int RC = 2;
     static const int RS = 3; /* (for stores only) */
 
-
     /*
      * Uop to functional unit mappings
      */
@@ -136,11 +135,9 @@ namespace OOO_CORE_MODEL {
     const int LOADLAT = OOO_LOADLAT;
     const int ALULAT = OOO_ALULAT;
 
-
     /*
      * Global limits
      */
-
 
     const int MAX_ISSUE_WIDTH = OOO_ISSUE_WIDTH;
 
@@ -181,7 +178,6 @@ namespace OOO_CORE_MODEL {
     const int PHYS_REG_FILE_COUNT = 4;
 #endif
 
-
     /*
      * Load and Store Queues
      */
@@ -189,14 +185,12 @@ namespace OOO_CORE_MODEL {
     const int LDQ_SIZE = OOO_LOAD_Q_SIZE;
     const int STQ_SIZE = OOO_STORE_Q_SIZE;
 
-
     /*
      * Fetch
      */
 
     const int FETCH_QUEUE_SIZE = OOO_FETCH_Q_SIZE;
     const int FETCH_WIDTH = OOO_FETCH_WIDTH;
-
 
     /*
      * Frontend (Rename and Decode)
@@ -212,13 +206,11 @@ namespace OOO_CORE_MODEL {
 
     const int DISPATCH_WIDTH = OOO_DISPATCH_WIDTH;
 
-
     /*
      * Writeback
      */
 
     const int WRITEBACK_WIDTH = OOO_WRITEBACK_WIDTH;
-
 
     /*
      * Commit

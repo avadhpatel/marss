@@ -526,7 +526,7 @@ int ThreadContext::get_priority() const {
  *
  * @return true if the core should stop simulating after this cycle
  */
-bool OooCore::runcycle() {
+bool OooCore::runcycle(void* none) {
     bool exiting = 0;
 
      /*
