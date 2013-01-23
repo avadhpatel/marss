@@ -65,20 +65,6 @@ env.Append(CPPFLAGS = "-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 \
         -D_LARGEFILE_SOURCE")
 env.Append(LIBS = "m")
 
-#config_bld = "%s/scripts/create_config < $SOURCE > $TARGET" % env['source_path']
-#env['BUILDERS']['CONFIG_CR'] = Builder(action = Action(config_bld,
-#    cmdstr="$CREATECOMSTR"))
-
-#######################
-# config-host.h
-#config_host_h = env.CONFIG_CR('config-host.h', 'config-host.mak')
-
-#######################
-# config-target.h
-#config_target_name = '%s/config-target.h' % target_build_path
-#config_target_mak_name = '%s/config-target.mak' % target_build_path
-#config_target_h = env.CONFIG_CR(config_target_name, config_target_mak_name)
-
 #######################
 # QObject
 q_object_files = "qint.c qstring.c qdict.c qlist.c qfloat.c qbool.c"
