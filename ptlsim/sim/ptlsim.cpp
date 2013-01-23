@@ -41,8 +41,8 @@
 //
 // Global variables
 //
-PTLsimConfig config;
-ConfigurationParser<PTLsimConfig> configparser;
+extern ConfigurationParser<PTLsimConfig> config;
+
 PTLsimMachine ptl_machine;
 
 ofstream ptl_logfile;
@@ -148,7 +148,8 @@ struct SimStats : public Statable
 } simstats;
 
 
-void PTLsimConfig::reset() {
+template <>
+void ConfigurationParser<PTLsimConfig>::reset() {
   help=0;
   run = 0;
   stop = 0;
@@ -174,6 +175,7 @@ void PTLsimConfig::reset() {
   verify_cache = 0;
   stats_filename.reset();
   yaml_stats_filename="";
+  stats_format = "yaml";
   snapshot_cycles = infinity;
   snapshot_now.reset();
   time_stats_logfile = "";
@@ -269,6 +271,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
   section("Statistics Database");
   add(stats_filename,               "stats",                "Statistics data store hierarchy root");
   add(yaml_stats_filename,          "yamlstats",                "Statistics data stores in YAML format");
+  add(stats_format,					"stats-format",          "Statistics output format, default is YAML");
   add(snapshot_cycles,              "snapshot-cycles",      "Take statistical snapshot and reset every <snapshot> cycles");
   add(snapshot_now,                 "snapshot-now",         "Take statistical snapshot immediately, using specified name");
   add(time_stats_logfile,           "time-stats-logfile",   "File to write time-series statistics (new)");
@@ -311,10 +314,7 @@ void ConfigurationParser<PTLsimConfig>::setup() {
  add(verify_cache,               "verify-cache",                   "run simulation with storing actual data in cache");
 
   section("Core Configuration");
-  stringbuf* m_names = new stringbuf();
-  *m_names << "Available Machine: ";
-  MachineBuilder::get_all_machine_names(*m_names);
-  add(machine_config, "machine", m_names->buf);
+  add(machine_config, "machine", "Name of machine configuration to simulate");
 
  ///
  /// following are for the new memory hierarchy implementation:
@@ -350,8 +350,8 @@ void ConfigurationParser<PTLsimConfig>::setup() {
 
 #ifndef CONFIG_ONLY
 
-ostream& operator <<(ostream& os, const PTLsimConfig& config) {
-  return configparser.print(os, config);
+ostream& operator <<(ostream& os, const PTLsimConfig& c) {
+  return config.print(os, c);
 }
 
 static void print_banner(ostream& os) {
@@ -390,15 +390,15 @@ static void collect_common_sysinfo() {
   simstats.run.timestamp = time;
   sb.reset(); sb << hostinfo.nodename, ".", hostinfo.domainname;
   simstats.run.hostname = sb;
-  W64 hz = get_core_freq_hz();
+  W64 hz = get_native_core_freq_hz();
   simstats.run.native_hz = hz;
 }
 
 void print_usage() {
-  cerr << "Syntax: simulate <arguments...>", endl;
+  cerr << "Syntax: simconfig <arguments...>", endl;
   cerr << "In the monitor mode give the above command with options given below", endl, endl;
 
-  configparser.printusage(cerr, config);
+  config.printusage(cerr, config);
 }
 
 stringbuf current_stats_filename;
@@ -472,6 +472,21 @@ void dump_yaml_stats()
     yaml_stats_file.flush();
 }
 
+/**
+ * @brief Save stats in flat plain text format
+ */
+void dump_text_stats()
+{
+	if (!config.yaml_stats_filename)
+		return;
+
+	(StatsBuilder::get()).dump(user_stats, yaml_stats_file, "user.");
+	(StatsBuilder::get()).dump(kernel_stats, yaml_stats_file, "kernel.");
+	(StatsBuilder::get()).dump(global_stats, yaml_stats_file, "total.");
+
+	yaml_stats_file.flush();
+}
+
 static void flush_stats()
 {
     if(config.screenshot_file.set()) {
@@ -485,7 +500,14 @@ static void flush_stats()
     // Call this function to setup tags and other info
     setup_sim_stats();
 
-    dump_yaml_stats();
+	if (config.stats_format == "text") {
+		dump_text_stats();
+	} else {
+		if (config.stats_format != "yaml")
+			ptl_logfile << "Unknown Stats format: " << config.stats_format <<
+				" dumping in default YAML format." << endl;
+		dump_yaml_stats();
+	}
 
     if(config.enable_mongo)
         write_mongo_stats();
@@ -517,6 +539,10 @@ static void kill_simulation()
     }
 
     shutdown_decode();
+
+	PTLsimMachine* machine = PTLsimMachine::getmachine(config.core_name.buf);
+	if (machine)
+		machine->shutdown();
 
     ptl_logfile.flush();
     ptl_logfile.close();
@@ -634,7 +660,7 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
   }
 
   if (config.core_freq_hz == 0) {
-      config.core_freq_hz = get_core_freq_hz();
+      config.core_freq_hz = get_native_core_freq_hz();
   }
 
   return true;
@@ -788,8 +814,13 @@ void ptl_reconfigure(const char* config_str) {
     strcpy(argv, config_str);
     argv[strlen(config_str)] = '\0';
 
-	configparser.parse(config, argv);
+	config.parse(config, argv);
 	handle_config_change(config);
+
+	BaseMachine* machine = (BaseMachine*)(PTLsimMachine::getmachine(
+				config.core_name));
+	machine->config_changed();
+
 	ptl_logfile << "Configuration changed: ", config, endl;
 
     if (config.sync_interval && sem_id == -1) {
@@ -812,17 +843,17 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
     char *config_str = (char*)qemu_mallocz(strlen(config_str_) + 1);
     pstrcpy(config_str, strlen(config_str_)+1, config_str_);
 
-    if(!ptl_machine_configured) {
+/*    if(!ptl_machine_configured) {
         configparser.setup();
         config.reset();
-    }
+    }*/
 
     // Setup the configuration
     ptl_reconfigure(config_str);
 
     // After reconfigure reset the machine's initalized variable
     if (config.help){
-        configparser.printusage(cerr, config);
+        config.printusage(cerr, config);
         config.help=0;
     }
 
@@ -1128,7 +1159,7 @@ static void set_run_stats()
 {
     static W64 seconds = 0;
     W64 tsc_at_end = rdtsc();
-    seconds += W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
+    seconds += W64(ticks_to_native_seconds(tsc_at_end - tsc_at_start));
     W64 cycles_per_sec = W64(double(sim_cycle) / double(seconds));
     W64 commits_per_sec = W64(
             double(total_insns_committed) / double(seconds));
@@ -1261,7 +1292,7 @@ extern "C" uint8_t ptl_simulate() {
 		dump_machine_configuration(machine);
 
 		/* Update stats every half second: */
-		ticks_per_update = seconds_to_ticks(0.2);
+		ticks_per_update = seconds_to_native_ticks(0.2);
 		last_printed_status_at_ticks = 0;
 		last_printed_status_at_insn = 0;
 		last_printed_status_at_cycle = 0;
@@ -1357,7 +1388,7 @@ extern "C" uint8_t ptl_simulate() {
 	W64 tsc_at_end = rdtsc();
 	curr_ptl_machine = NULL;
 
-	W64 seconds = W64(ticks_to_seconds(tsc_at_end - tsc_at_start));
+	W64 seconds = W64(ticks_to_native_seconds(tsc_at_end - tsc_at_start));
 	stringbuf sb;
 	sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_insns_committed, " instructions and ",
 	   seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_insns_committed) / double(sim_cycle), ")", endl;
@@ -1405,7 +1436,7 @@ extern "C" void update_progress() {
   W64s delta = (ticks - last_printed_status_at_ticks);
   if unlikely (delta < 0) delta = 0;
   if unlikely (delta >= (W64s)ticks_per_update) {
-    double seconds = ticks_to_seconds(delta);
+    double seconds = ticks_to_native_seconds(delta);
     double cycles_per_sec = (sim_cycle - last_printed_status_at_cycle) / seconds;
     double insns_per_sec = (total_insns_committed - last_printed_status_at_insn) / seconds;
 

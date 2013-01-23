@@ -19,13 +19,13 @@ struct ConfigurationOption {
   const char* description;
   int type;
   int fieldsize;
-  Waddr offset;
+  void *offset;
 
   ConfigurationOption* next;
 
   ConfigurationOption() { }
 
-  ConfigurationOption(const char* name, const char* description, int type, Waddr offset, int fieldsize = 0) {
+  ConfigurationOption(const char* name, const char* description, int type, void *offset, int fieldsize = 0) {
     this->name = name;
     this->description = description;
     this->type = type;
@@ -50,14 +50,14 @@ struct ConfigurationParserBase {
   ConfigurationOption* lastoption;
 
   void addentry(void* baseptr, void* field, int type, const char* name, const char* description) {
-    Waddr offset = ((Waddr)field) - ((Waddr)baseptr);
+    void *offset = field;
     ConfigurationOption* option = new ConfigurationOption(name, description, type, offset);
     if (lastoption) lastoption->next = option;
     if (!options) options = option;
     lastoption = option;
   }
 
-  ConfigurationParserBase() { options = NULL; lastoption = NULL; }
+  ConfigurationParserBase() { }
 
   int parse(void* baseptr, int argc, char* argv[]);
   int parse(void* baseptr, char* argstr);
@@ -69,7 +69,7 @@ template <typename T>
 struct ConfigurationParser: public T {
   ConfigurationParserBase options;
 
-  ConfigurationParser() { }
+  ConfigurationParser() { reset(); }
 
   void add(W64& field, const char* name, const char* description) {
     options.addentry(this, &field, OPTION_TYPE_W64, name, description);
@@ -84,7 +84,7 @@ struct ConfigurationParser: public T {
   }
 
   void add(stringbuf& field, const char* name, const char* description) {
-    options.addentry(this, field, OPTION_TYPE_STRING, name, description);
+    options.addentry(this, &field, OPTION_TYPE_STRING, name, description);
   }
 
   void section(const char* name) {
@@ -109,10 +109,25 @@ struct ConfigurationParser: public T {
 
   // Provided by user:
   void setup();
+  void reset();
 };
 
 void expand_command_list(dynarray<char*>& list, int argc, char** argv, int depth = 0);
 void expand_command_list(dynarray<char*>& list, char* args, int depth = 0);
 void free_command_list(dynarray<char*>& list);
+
+/* APIs for Plugin Modules to add runtime simulation configuration parameters */
+
+extern "C" {
+void marss_add_config_section(const char* name);
+
+void marss_add_config_W64(W64& field, const char* name, const char* description);
+
+void marss_add_config_bool(bool& field, const char* name, const char* description);
+
+void marss_add_config_double(double& field, const char* name, const char* description);
+
+void marss_add_config_str(stringbuf& field, const char* name, const char* description);
+}
 
 #endif // _CONFIG_H_

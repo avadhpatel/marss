@@ -165,7 +165,7 @@ ostream& Statable::dump_summary(ostream &os, Stats *stats, const char* pfx) cons
     return os;
 }
 
-ostream& Statable::dump(ostream &os, Stats *stats)
+ostream& Statable::dump(ostream &os, Stats *stats, const char* pfx)
 {
     if(dump_disabled) return os;
 
@@ -173,12 +173,12 @@ ostream& Statable::dump(ostream &os, Stats *stats)
 
     // First print all the leafs
     foreach(i, leafs.count()) {
-        leafs[i]->dump(os, stats);
+        leafs[i]->dump(os, stats, pfx);
     }
 
     // Now print all the child nodes
     foreach(i, childNodes.count()) {
-        childNodes[i]->dump(os, stats);
+        childNodes[i]->dump(os, stats, pfx);
     }
 
     return os;
@@ -421,13 +421,13 @@ ostream& StatsBuilder::dump_summary(ostream& os) const
     return os;
 }
 
-ostream& StatsBuilder::dump(Stats *stats, ostream &os) const
+ostream& StatsBuilder::dump(Stats *stats, ostream &os, const char* pfx) const
 {
     // First set the stats as default stats in each node
     rootNode->set_default_stats(stats);
 
     // Now print the stats into ostream
-    rootNode->dump(os, stats);
+    rootNode->dump(os, stats, pfx);
 
     return os;
 }

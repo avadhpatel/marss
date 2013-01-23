@@ -87,7 +87,7 @@ bool Switch::controller_request_cb(void *arg)
     ADD_HISTORY_ADD(queueEntry->request);
 
     if (!cq->queue_in_use) {
-        memoryHierarchy_->add_event(&send, 1, cq);
+        marss_add_event(&send, 1, cq);
         cq->queue_in_use = 1;
     }
 
@@ -108,14 +108,14 @@ bool Switch::send_cb(void *arg)
     ControllerQueue *dest_cq = get_queue(queueEntry->dest);
 
     if (queueEntry->annuled || dest_cq->recv_busy) {
-        memoryHierarchy_->add_event(&send, 2, cq);
+        marss_add_event(&send, 2, cq);
         return true;
     }
 
     /* Set destination as busy and signal send_complete */
     queueEntry->in_use = 1;
     dest_cq->recv_busy = 1;
-    memoryHierarchy_->add_event(&send_complete, latency_, cq);
+    marss_add_event(&send_complete, latency_, cq);
 
     return true;
 }
@@ -132,7 +132,7 @@ bool Switch::send_complete_cb(void *arg)
 
     if (queueEntry->annuled) {
         /* Try to send new packet arrived in queue */
-        memoryHierarchy_->add_event(&send, latency_, cq);
+        marss_add_event(&send, latency_, cq);
         return true;
     }
 
@@ -161,7 +161,7 @@ bool Switch::send_complete_cb(void *arg)
 	}
 
 	dest_cq->recv_busy = 0;
-	memoryHierarchy_->add_event(&send, 1, cq);
+	marss_add_event(&send, 1, cq);
 	return true;
 }
 

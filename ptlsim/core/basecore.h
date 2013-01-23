@@ -24,7 +24,7 @@ namespace Core {
         virtual ~BaseCore() {}
 
         virtual void reset() = 0;
-        virtual bool runcycle() = 0;
+        //virtual bool runcycle() = 0;
         virtual void check_ctx_changes() = 0;
         virtual void flush_tlb(Context& ctx) = 0;
         virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr) = 0;
