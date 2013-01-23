@@ -45,6 +45,9 @@ class P2PInterconnect : public Interconnect
 	private:
 		Controller *controllers_[2];
 
+		bool send_request(Controller *sender, MemoryRequest *request,
+				bool hasData);
+
 		/**
 		 * @brief Get the controller connected to other end
 		 *

@@ -270,6 +270,12 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
     icache_signal.connect(signal_mem_ptr(*this,
                 &OooCore::icache_wakeup));
 
+	sig_name.reset();
+	sig_name << core_name << "-run-cycle";
+	run_cycle.set_name(sig_name.buf);
+	run_cycle.connect(signal_mem_ptr(*this, &OooCore::runcycle));
+	marss_register_per_cycle_event(&run_cycle);
+
     threads = (ThreadContext**)malloc(sizeof(ThreadContext*) * threadcount);
 
     /* Setup Threads */
@@ -520,7 +526,7 @@ int ThreadContext::get_priority() const {
  *
  * @return true if the core should stop simulating after this cycle
  */
-bool OooCore::runcycle() {
+bool OooCore::runcycle(void* none) {
     bool exiting = 0;
 
      /*
@@ -999,6 +1005,9 @@ StateList& ReorderBufferEntry::get_ready_to_issue_list() {
         thread.rob_ready_to_issue_list[cluster];
 }
 
+/**
+ * Reorder Buffer
+ */
 stringbuf& ReorderBufferEntry::get_operand_info(stringbuf& sb, int operand) const {
     PhysicalRegister& physreg = *operands[operand];
     ReorderBufferEntry& sourcerob = *physreg.rob;
@@ -1084,6 +1093,7 @@ void ThreadContext::print_rob(ostream& os) {
         ReorderBufferEntry& rob = ROB[i];
         rob.print(os);
         os << endl;
+        // os << "  " << rob, endl;
     }
 }
 
@@ -1155,6 +1165,7 @@ void OooCore::dump_state(ostream& os) {
     print_list_of_state_lists<ReorderBufferEntry>(os, rob_states, "ROB entry states");
     os << "Issue Queues:", endl;
     foreach_issueq(print(os));
+    // caches.print(os);
 
     os << "Unaligned predictor:", endl;
     os << "  ", unaligned_predictor.popcount(), " unaligned bits out of ", UNALIGNED_PREDICTOR_SIZE, " bits", endl;

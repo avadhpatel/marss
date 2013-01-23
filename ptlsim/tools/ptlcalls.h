@@ -425,7 +425,7 @@ static inline W64 ptlcall_core_dump(const char* dump, const W64 size,
 static inline void ptlcall_log(const char* log)
 {
 	int length = strlen(log);
-	ptlcall_write(PTLCALL_LOG, (W64)log, length, 0, 0, 0, 0);
+	ptlcall(PTLCALL_LOG, (W64)log, length, 0, 0, 0, 0);
 }
 
 #endif // PTLCALLS_USERSPACE

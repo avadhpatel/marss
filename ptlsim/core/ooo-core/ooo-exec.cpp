@@ -478,6 +478,9 @@ int ReorderBufferEntry::issue() {
     PhysicalRegister& rb = *operands[RB];
     PhysicalRegister& rc = *operands[RC];
 
+    // FIXME : Failsafe operation. Sometimes an entry is issed even though its
+    // operands are not yet ready, so in this case simply replay the issue
+    //
     if(!ra.ready() || !rb.ready() || (load_store_second_phase && !rc.ready())) {
         if(logable(0)) ptl_logfile << "Invalid Issue..\n";
         replay();
@@ -632,6 +635,7 @@ int ReorderBufferEntry::issue() {
     }
 
     bool mispredicted = (physreg->data != uop.riptaken);
+    //  bool mispredicted = (physreg->valid()) ? (physreg->data != uop.riptaken) : false;
 
 
      /*
@@ -1111,6 +1115,7 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
                   * without any problem.
                   */
                 sfra = NULL;
+                // sfra = &stbuf;
                 break;
             }
         } else {
@@ -2110,6 +2115,7 @@ void ThreadContext::tlbwalk() {
     ReorderBufferEntry* rob;
     foreach_list_mutable(rob_tlb_miss_list, rob, entry, nextentry) {
         rob->tlbwalk();
+        // logfuncwith(rob->tlbwalk(), 6);
     }
 }
 
@@ -2535,6 +2541,13 @@ void ReorderBufferEntry::release() {
         if(logable(99)) ptl_logfile << " free_shared_entry() from release()",endl;
         issueq_operation_on_cluster(core, cluster, free_shared_entry());
     }
+    /* svn 225
+       if unlikely (core.threadcount > 1) {
+       if (thread.issueq_count > core.reserved_iq_entries) {
+       issueq_operation_on_cluster(core, cluster, free_shared_entry());
+       }
+       }
+       */
     thread.issueq_count[cluster]--;
     assert(thread.issueq_count[cluster] >=0);
 #else
@@ -2543,6 +2556,13 @@ void ReorderBufferEntry::release() {
         if(logable(99)) ptl_logfile << " free_shared_entry() from release()",endl;
         issueq_operation_on_cluster(core, cluster, free_shared_entry());
     }
+    /* svn 225
+       if unlikely (core.threadcount > 1) {
+       if (thread.issueq_count > core.reserved_iq_entries) {
+       issueq_operation_on_cluster(core, cluster, free_shared_entry());
+       }
+       }
+       */
     thread.issueq_count--;
     assert(thread.issueq_count >=0);
 #endif
@@ -2689,6 +2709,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 
     int somidx = index();
 
+
     while (!ROB[somidx].uop.som) somidx = add_index_modulo(somidx, -1, ROB_SIZE);
     int eomidx = index();
     while (!ROB[eomidx].uop.eom) eomidx = add_index_modulo(eomidx, +1, ROB_SIZE);
@@ -2715,6 +2736,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
     idx = endidx;
     for (;;) {
         ReorderBufferEntry& annulrob = ROB[idx];
+        //    issueq_operation_on_cluster(core, annulrob.cluster, annuluop(annulrob.get_tag()));
         bool rc;
         issueq_operation_on_cluster_with_result(core, annulrob.cluster, rc, annuluop(annulrob.get_tag()));
         if (rc) {
@@ -2773,6 +2795,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
 
     foreach (i, TRANSREG_COUNT) { specrrt[i]->addspecref(i, thread.threadid); }
 
+    // if (logable(6)) ptl_logfile << "Restored SpecRRT from CommitRRT; walking forward from:", endl, core.specrrt, endl;
     idx = ROB.head;
     for (idx = ROB.head; idx != startidx; idx = add_index_modulo(idx, +1, ROB_SIZE)) {
         ReorderBufferEntry& rob = ROB[idx];
