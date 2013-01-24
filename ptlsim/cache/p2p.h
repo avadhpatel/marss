@@ -32,6 +32,14 @@
 
 namespace Memory {
 
+/**
+ * @brief Point-to-Point un-buffered Interconnect class
+ *
+ * This interconnect model is very simple un-buffered model that connects two
+ * controllers.  Think of this interconnect as set of wires that connect two
+ * caches directly.  This model doesn't have any buffers and currently its
+ * latency is set to 0 cycle.
+ */
 class P2PInterconnect : public Interconnect
 {
 	private:
@@ -40,6 +48,13 @@ class P2PInterconnect : public Interconnect
 		bool send_request(Controller *sender, MemoryRequest *request,
 				bool hasData);
 
+		/**
+		 * @brief Get the controller connected to other end
+		 *
+		 * @param controller Controller sending the message
+		 *
+		 * @return Controller connected to other end of wires
+		 */
 		Controller* get_other_controller(Controller *controller) {
 			if(controller == controllers_[0])
 				return controllers_[1];
@@ -63,6 +78,14 @@ class P2PInterconnect : public Interconnect
 			os << "--P2P Interconnect: ", get_name(), endl;
 		}
 
+		/**
+		 * @brief Return delay of this interconnect
+		 *
+		 * @return 1 cycle delay
+		 *
+		 * This delay gives a hint to controller that it should wait minimum
+		 * these amount of cycles before retry when interconnect is busy.
+		 */
 		int get_delay() {
 			return 1;
 		}
