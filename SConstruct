@@ -30,7 +30,7 @@ if sys.version_info < (2, 5):
     sys.exit(-1)
 
 
-SetOption('num_jobs', num_cpus * 2)
+SetOption('num_jobs', num_cpus + 1)
 print("running with -j%s" % GetOption('num_jobs'))
 
 # Our build order is as following:
