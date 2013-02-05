@@ -18,6 +18,7 @@ BaseCore::BaseCore(BaseMachine& machine, const char* name)
     : Statable(name, &machine)
       , machine(machine)
 {
+    coreid = machine.get_next_coreid();
 }
 
 void BaseCore::update_memory_hierarchy_ptr() {

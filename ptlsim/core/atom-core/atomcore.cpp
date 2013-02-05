@@ -899,7 +899,7 @@ W8 AtomOp::execute_load(TransOp& uop, int idx)
     }
 
     bool cache_available = thread->core.memoryHierarchy->is_cache_available(
-            thread->core.coreid, thread->threadid, false);
+            thread->core.get_coreid(), thread->threadid, false);
 
     if(!cache_available) {
         return ISSUE_FAIL;
@@ -1089,7 +1089,7 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
     }
 
     bool cache_available = thread->core.memoryHierarchy->is_cache_available(
-            thread->core.coreid, thread->threadid, true);
+            thread->core.get_coreid(), thread->threadid, true);
 
     if(!cache_available) {
         return ISSUE_FAIL;
@@ -1718,13 +1718,15 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
 
     // Setup the signals
     stringbuf sig_name;
-    sig_name << "Core" << core.coreid << "-Th" << threadid << "-dcache-wakeup";
+    sig_name << "Core" << core.get_coreid() << "-Th" <<
+        threadid << "-dcache-wakeup";
     dcache_signal.set_name(sig_name.buf);
     dcache_signal.connect(signal_mem_ptr(*this,
             &AtomThread::dcache_wakeup));
 
     sig_name.reset();
-    sig_name << "Core" << core.coreid << "-Th" << threadid << "-icache-wakeup";
+    sig_name << "Core" << core.get_coreid() << "-Th" <<
+        threadid << "-icache-wakeup";
     icache_signal.set_name(sig_name.buf);
     icache_signal.connect(signal_mem_ptr(*this,
             &AtomThread::icache_wakeup));
@@ -1801,7 +1803,7 @@ void AtomThread::reset()
     op_waiting_to_writeback_list.reset();
     op_ready_to_writeback_list.reset();
 
-    branchpred.init(core.coreid, threadid);
+    branchpred.init(core.get_coreid(), threadid);
     branches_in_flight = 0;
 
     foreach(i, NUM_ATOM_OPS_PER_THREAD) {
@@ -1924,7 +1926,7 @@ bool AtomThread::fetch_from_icache()
 
         // test if icache is available:
         bool cache_available = core.memoryHierarchy->
-            is_cache_available(core.coreid, threadid, true);
+            is_cache_available(core.get_coreid(), threadid, true);
 
         if(!cache_available){
             return false;
@@ -1934,10 +1936,10 @@ bool AtomThread::fetch_from_icache()
         assert(!waiting_for_icache_miss);
 
         Memory::MemoryRequest *request = core.memoryHierarchy->
-            get_free_request(core.coreid);
+            get_free_request(core.get_coreid());
         assert(request != NULL);
 
-        request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
+        request->init(core.get_coreid(), threadid, physaddr, 0, sim_cycle,
                 true, fetchrip.rip, 0, Memory::MEMORY_OP_READ);
         request->set_coreSignal(&icache_signal);
 
@@ -2057,17 +2059,17 @@ itlb_walk_finish:
     }
 
     if(!core.memoryHierarchy->is_cache_available(
-                core.coreid, threadid, true)) {
+                core.get_coreid(), threadid, true)) {
         // Cache queue is full.. so simply skip this iteration
         itlb_walk_level = 0;
         return;
     }
 
     Memory::MemoryRequest *request = core.memoryHierarchy->
-        get_free_request(core.coreid);
+        get_free_request(core.get_coreid());
     assert(request != NULL);
 
-    request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
+    request->init(core.get_coreid(), threadid, pteaddr, 0, sim_cycle,
             true, fetchrip.rip, 0, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&icache_signal);
 
@@ -2110,7 +2112,7 @@ dtlb_walk_finish:
     }
 
     if(!core.memoryHierarchy->is_cache_available(
-                core.coreid, threadid, false)) {
+                core.get_coreid(), threadid, false)) {
         // Cache queue is full.. so simply skip this iteration
         // dtlb_walk_level = 0;
         ATOMTHLOG1("Cache is full, will request dtlb miss later");
@@ -2121,10 +2123,10 @@ dtlb_walk_finish:
     }
 
     Memory::MemoryRequest *request = core.memoryHierarchy->
-        get_free_request(core.coreid);
+        get_free_request(core.get_coreid());
     assert(request != NULL);
 
-    request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
+    request->init(core.get_coreid(), threadid, pteaddr, 0, sim_cycle,
             false, 0, 0, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&dcache_signal);
 
@@ -2350,10 +2352,11 @@ void AtomThread::redirect_fetch(W64 rip)
 bool AtomThread::access_dcache(Waddr addr, W64 rip, W8 type, W64 uuid)
 {
     assert(rip);
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+    Memory::MemoryRequest *request = core.memoryHierarchy->
+        get_free_request(core.get_coreid());
     assert(request);
 
-    request->init(core.coreid, threadid, addr, 0,
+    request->init(core.get_coreid(), threadid, addr, 0,
             sim_cycle, false, rip, uuid, (Memory::OP_TYPE)type);
     request->set_coreSignal(&dcache_signal);
 
@@ -2967,8 +2970,6 @@ AtomCore::AtomCore(BaseMachine& machine, int num_threads, const char* name)
     }
     threadcount = th_count;
 
-    coreid = machine.get_next_coreid();
-
     threads = (AtomThread**)qemu_mallocz(threadcount*sizeof(AtomThread*));
 
 	stringbuf sg_name;
@@ -3328,14 +3329,9 @@ void AtomCore::check_ctx_changes()
     }
 }
 
-W8 AtomCore::get_coreid()
-{
-    return coreid;
-}
-
 ostream& AtomCore::print(ostream& os) const
 {
-    os << "Atom-Core: ", int(coreid), endl;
+    os << "Atom-Core: ", int(get_coreid()), endl;
 
     os << " Fetch Queue:\n";
     foreach_forward(fetchq, i) {
