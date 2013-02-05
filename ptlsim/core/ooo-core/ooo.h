@@ -1056,7 +1056,6 @@ namespace OOO_CORE_MODEL {
     // checkpointed core
     //
     struct OooCore: public BaseCore {
-        W8 coreid;
         OooCore& getcore() { return *this; }
 
         /* This is only used for stats collection. By default if core is
@@ -1177,10 +1176,10 @@ namespace OOO_CORE_MODEL {
             //
             // Physical register files
             //
-            physregfiles[0]("int", coreid, 0, PHYS_REG_FILE_SIZE, this);
-            physregfiles[1]("fp", coreid, 1, PHYS_REG_FILE_SIZE, this);
-            physregfiles[2]("st", coreid, 2, STQ_SIZE * threadcount, this);
-            physregfiles[3]("br", coreid, 3, MAX_BRANCHES_IN_FLIGHT * threadcount, this);
+            physregfiles[0]("int", get_coreid(), 0, PHYS_REG_FILE_SIZE, this);
+            physregfiles[1]("fp", get_coreid(), 1, PHYS_REG_FILE_SIZE, this);
+            physregfiles[2]("st", get_coreid(), 2, STQ_SIZE * threadcount, this);
+            physregfiles[3]("br", get_coreid(), 3, MAX_BRANCHES_IN_FLIGHT * threadcount, this);
         }
 
         //
@@ -1248,8 +1247,6 @@ namespace OOO_CORE_MODEL {
         void update_stats();
 
         void check_ctx_changes();
-
-        W8 get_coreid() { return coreid; }
 
 		void dump_configuration(YAML::Emitter &out) const;
     };

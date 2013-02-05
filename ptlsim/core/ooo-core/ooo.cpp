@@ -215,7 +215,7 @@ void ThreadContext::init() {
     setupTLB();
 
     reset();
-    coreid = core.coreid;
+    coreid = core.get_coreid();
 }
 
 
@@ -224,8 +224,6 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
 : BaseCore(machine_, name)
     , core_stats("core", this)
 {
-    coreid = machine.get_next_coreid();
-
     if(!machine_.get_option(name, "threads", threadcount)) {
         threadcount = 1;
     }
@@ -237,9 +235,9 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
     // Rename the stats
     stringbuf core_name;
     if(name) {
-        core_name << name << "_" << coreid;
+        core_name << name << "_" << get_coreid();
     } else {
-        core_name << "core_" << coreid;
+        core_name << "core_" << get_coreid();
     }
 
     update_name(core_name.buf);
@@ -286,7 +284,7 @@ void OooCore::reset() {
 
     setzero(robs_on_fu);
 
-    foreach_issueq(reset(coreid, this));
+    foreach_issueq(reset(get_coreid(), this));
 
 #ifndef MULTI_IQ
     int reserved_iq_entries_per_thread = (int)sqrt(
@@ -1077,7 +1075,7 @@ void ThreadContext::dump_smt_state(ostream& os) {
 }
 
 void OooCore::dump_state(ostream& os) {
-    os << "dump_state for core[",coreid,"]: SMT common structures:", endl;
+    os << "dump_state for core[",get_coreid(),"]: SMT common structures:", endl;
 
     print_list_of_state_lists<PhysicalRegister>(os, physreg_states, "Physical register states");
     foreach (i, PHYS_REG_FILE_COUNT) {
