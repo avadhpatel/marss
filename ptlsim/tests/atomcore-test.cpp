@@ -264,7 +264,7 @@ namespace {
         foreach(i, base_machine->cores.count()) {
             AtomCore* core = (AtomCore*)base_machine->cores[i];
 
-            ASSERT_EQ(core->coreid, i);
+            ASSERT_EQ(core->get_coreid(), i);
             ASSERT_EQ(core->threadcount, 1);
 
             // Test Fetch-Queue

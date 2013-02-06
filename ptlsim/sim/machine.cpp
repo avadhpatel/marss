@@ -289,22 +289,6 @@ int BaseMachine::run(PTLsimConfig& config)
     return exiting;
 }
 
-void BaseMachine::flush_tlb(Context& ctx)
-{
-    foreach(i, cores.count()) {
-        BaseCore* core = cores[i];
-        core->flush_tlb(ctx);
-    }
-}
-
-void BaseMachine::flush_tlb_virt(Context& ctx, Waddr virtaddr)
-{
-    foreach(i, cores.count()) {
-        BaseCore* core = cores[i];
-        core->flush_tlb_virt(ctx, virtaddr);
-    }
-}
-
 void BaseMachine::dump_state(ostream& os)
 {
     foreach(i, cores.count()) {
@@ -315,20 +299,11 @@ void BaseMachine::dump_state(ostream& os)
     memoryHierarchyPtr->dump_info(os);
 }
 
-void BaseMachine::flush_all_pipelines()
-{
-    // TODO
-}
-
 void BaseMachine::update_stats()
 {
     global_stats->reset();
     *global_stats += *user_stats;
     *global_stats += *kernel_stats;
-
-    foreach(i, cores.count()) {
-        cores[i]->update_stats();
-    }
 }
 
 Context& BaseMachine::get_next_context()

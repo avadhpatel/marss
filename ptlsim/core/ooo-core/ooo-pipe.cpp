@@ -128,16 +128,16 @@ itlb_walk_finish:
         return;
     }
 
-    if(!core.memoryHierarchy->is_cache_available(core.coreid, threadid, true)){
+    if(!core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, true)){
         /* Cache queue is full.. so simply skip this iteration */
         itlb_walk_level = 0;
         return;
     }
 
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
     assert(request != NULL);
 
-    request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
+    request->init(core.get_coreid(), threadid, pteaddr, 0, sim_cycle,
             true, 0, 0, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&core.icache_signal);
 
@@ -227,9 +227,9 @@ void OooCore::flush_pipeline() {
  */
 
 void ThreadContext::flush_pipeline() {
-    if (logable(3)) ptl_logfile << " core[", core.coreid,"] TH[", threadid, "] flush_pipeline()",endl;
+    if (logable(3)) ptl_logfile << " core[", core.get_coreid(),"] TH[", threadid, "] flush_pipeline()",endl;
 
-    core.machine.memoryHierarchyPtr->flush(core.coreid);
+    core.machine.memoryHierarchyPtr->flush(core.get_coreid());
 
     annul_fetchq();
 
@@ -273,19 +273,19 @@ void ThreadContext::flush_pipeline() {
 
     ROB.reset();
     foreach (i, ROB_SIZE) {
-        ROB[i].coreid = core.coreid;
+        ROB[i].coreid = core.get_coreid();
         ROB[i].core = &core;
         ROB[i].threadid = threadid;
         ROB[i].changestate(rob_free_list);
     }
     LSQ.reset();
     foreach (i, LSQ_SIZE) {
-        LSQ[i].coreid = core.coreid;
+        LSQ[i].coreid = core.get_coreid();
         LSQ[i].core = &core;
     }
     loads_in_flight = 0;
     stores_in_flight = 0;
-    foreach_issueq(reset(core.coreid, threadid, &core));
+    foreach_issueq(reset(core.get_coreid(), threadid, &core));
 
     dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES;
     last_commit_at_cycle = sim_cycle;
@@ -593,9 +593,9 @@ bool ThreadContext::fetch() {
         if ((!current_basic_block->invalidblock) && (req_icache_block != current_icache_block)) {
 
             // test if icache is available:
-            bool cache_available = core.memoryHierarchy->is_cache_available(core.coreid, threadid, true/* icache */);
+            bool cache_available = core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, true/* icache */);
             if(!cache_available){
-                msdebug << " icache can not read core:", core.coreid, " threadid ", threadid, endl;
+                msdebug << " icache can not read core:", core.get_coreid(), " threadid ", threadid, endl;
                 thread_stats.fetch.stop.icache_stalled++;
                 break;
             }
@@ -603,10 +603,10 @@ bool ThreadContext::fetch() {
             bool hit;
             assert(!waiting_for_icache_fill);
 
-            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
             assert(request != NULL);
 
-            request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
+            request->init(core.get_coreid(), threadid, physaddr, 0, sim_cycle,
                     true, 0, 0, Memory::MEMORY_OP_READ);
             request->set_coreSignal(&core.icache_signal);
 
@@ -1898,8 +1898,8 @@ int ReorderBufferEntry::commit() {
     bool br = isbranch(uop.opcode);
 
     /* check if we can access dcache for store */
-    if(st && !core.memoryHierarchy->is_cache_available(core.coreid, threadid, false/* icache */)){
-        msdebug << " dcache can not write. core:", core.coreid, " threadid ", threadid, endl;
+    if(st && !core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, false/* icache */)){
+        msdebug << " dcache can not write. core:", core.get_coreid(), " threadid ", threadid, endl;
         thread.thread_stats.commit.result.dcache_stall++;
         return COMMIT_RESULT_NONE;
     }
@@ -2198,10 +2198,10 @@ int ReorderBufferEntry::commit() {
               */
             assert(lsq->physaddr);
 
-            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
             assert(request != NULL);
 
-            request->init(core.coreid, threadid, lsq->physaddr << 3, 0,
+            request->init(core.get_coreid(), threadid, lsq->physaddr << 3, 0,
                     sim_cycle, false, uop.rip.rip, uop.uuid,
                     Memory::MEMORY_OP_WRITE);
             request->set_coreSignal(&core.dcache_signal);

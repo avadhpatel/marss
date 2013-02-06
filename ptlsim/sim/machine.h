@@ -63,9 +63,6 @@ struct BaseMachine: public PTLsimMachine {
     virtual W8 get_num_cores();
     virtual void dump_state(ostream& os);
     virtual void update_stats();
-    virtual void flush_tlb(Context& ctx);
-    virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr);
-    void flush_all_pipelines();
     virtual void reset();
 	virtual void dump_configuration(ostream& os) const;
 	virtual void shutdown();
