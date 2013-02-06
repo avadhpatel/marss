@@ -27,13 +27,9 @@ namespace Core {
         virtual ~BaseCore() {}
 
         virtual void reset() = 0;
-        //virtual bool runcycle() = 0;
         virtual void check_ctx_changes() = 0;
-        virtual void flush_tlb(Context& ctx) = 0;
-        virtual void flush_tlb_virt(Context& ctx, Waddr virtaddr) = 0;
         virtual void dump_state(ostream& os) = 0;
         virtual void update_stats() = 0;
-        virtual void flush_pipeline() = 0;
 		    virtual void dump_configuration(YAML::Emitter &out) const = 0;
 
         void update_memory_hierarchy_ptr();

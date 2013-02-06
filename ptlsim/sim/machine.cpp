@@ -289,22 +289,6 @@ int BaseMachine::run(PTLsimConfig& config)
     return exiting;
 }
 
-void BaseMachine::flush_tlb(Context& ctx)
-{
-    foreach(i, cores.count()) {
-        BaseCore* core = cores[i];
-        core->flush_tlb(ctx);
-    }
-}
-
-void BaseMachine::flush_tlb_virt(Context& ctx, Waddr virtaddr)
-{
-    foreach(i, cores.count()) {
-        BaseCore* core = cores[i];
-        core->flush_tlb_virt(ctx, virtaddr);
-    }
-}
-
 void BaseMachine::dump_state(ostream& os)
 {
     foreach(i, cores.count()) {
