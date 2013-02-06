@@ -29,7 +29,6 @@ namespace Core {
         virtual void reset() = 0;
         virtual void check_ctx_changes() = 0;
         virtual void dump_state(ostream& os) = 0;
-        virtual void update_stats() = 0;
 		    virtual void dump_configuration(YAML::Emitter &out) const = 0;
 
         void update_memory_hierarchy_ptr();
