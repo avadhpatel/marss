@@ -388,7 +388,7 @@ MESICacheLineState MESILogic::get_new_state(
                     assert(0);
             } else {
                 if(type == MEMORY_OP_READ)
-                    newState = MESI_EXCLUSIVE;
+                    newState = MESI_SHARED;
                 else if(type == MEMORY_OP_WRITE)
                     newState = MESI_MODIFIED;
                 else if(type == MEMORY_OP_EVICT) {
