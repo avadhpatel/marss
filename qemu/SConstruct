@@ -42,7 +42,7 @@ if int(debug):
         if float(GCC_MAJOR_MINOR_VERSION) >= 4.8:
             env.Append(CCFLAGS = '-Og')
         else:
-            env.Append(CCFLAGS = '-O')
+            env.Append(CCFLAGS = '-O0')
 else:
     env.Append(CCFLAGS = '-O3 -march=native')
 
