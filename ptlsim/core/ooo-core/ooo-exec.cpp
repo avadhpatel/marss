@@ -1639,9 +1639,9 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     // }
 
     /* test if CPUController can accept new request: */
-    bool cache_available = core.memoryHierarchy->is_cache_available(core.coreid, threadid, false/* icache */);
+    bool cache_available = core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, false/* icache */);
     if(!cache_available){
-        msdebug << " dcache can not read core:", core.coreid, " threadid ", threadid, endl;
+        msdebug << " dcache can not read core:", core.get_coreid(), " threadid ", threadid, endl;
         replay();
         thread.thread_stats.dcache.load.issue.replay.dcache_stall++;
         load_store_second_phase = 1;
@@ -1753,10 +1753,10 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         state.sfr_bytemask = 0;
     }
 
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
     assert(request != NULL);
 
-    request->init(core.coreid, threadid, state.physaddr << 3, idx, sim_cycle,
+    request->init(core.get_coreid(), threadid, state.physaddr << 3, idx, sim_cycle,
             false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&core.dcache_signal);
 
@@ -2056,14 +2056,14 @@ rob_cont:
         goto rob_cont;
     }
 
-    if(!core.memoryHierarchy->is_cache_available(core.coreid, threadid, false)){
+    if(!core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, false)){
         /* Cache queue is full.. so simply skip this iteration */
         return;
     }
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
     assert(request != NULL);
 
-    request->init(core.coreid, threadid, pteaddr, idx, sim_cycle,
+    request->init(core.get_coreid(), threadid, pteaddr, idx, sim_cycle,
             false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&core.dcache_signal);
 
@@ -2809,7 +2809,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
             /* annul any cache requests for this entry */
 
             bool is_store = isclass(annulrob.uop.opcode, OPCLASS_STORE);
-            core.memoryHierarchy->annul_request(core.coreid,
+            core.memoryHierarchy->annul_request(core.get_coreid(),
                     threadid,
                     annulrob.idx/*robid*/,
                     annulrob.lsq->physaddr << 3,

@@ -30,21 +30,21 @@
 #define ATOMLOG2(...) if(logable(ATOM_BASE_LL+1)) { ptl_logfile << __VA_ARGS__ ; }
 #define ATOMLOG3(...) if(logable(ATOM_BASE_LL+4)) { ptl_logfile << __VA_ARGS__ ; }
 
-#define ATOMCORELOG(...) ATOMLOG1("Core:", coreid, " ", __VA_ARGS__, endl)
-#define ATOMTHLOG1(...) ATOMLOG1("Core:", core.coreid, \
+#define ATOMCORELOG(...) ATOMLOG1("Core:", get_coreid(), " ", __VA_ARGS__, endl)
+#define ATOMTHLOG1(...) ATOMLOG1("Core:", core.get_coreid(), \
         " Th:", threadid, " ", __VA_ARGS__, endl)
-#define ATOMTHLOG2(...) ATOMLOG2("Core:", core.coreid, \
+#define ATOMTHLOG2(...) ATOMLOG2("Core:", core.get_coreid(), \
         " Th:", threadid, " ", __VA_ARGS__, endl)
-#define ATOMTHLOG3(...) ATOMLOG3("Core:", core.coreid, \
+#define ATOMTHLOG3(...) ATOMLOG3("Core:", core.get_coreid(), \
         " Th:", threadid, " ", __VA_ARGS__, endl)
 
-#define ATOMOPLOG1(...) ATOMLOG1("Core:", thread->core.coreid, \
+#define ATOMOPLOG1(...) ATOMLOG1("Core:", thread->core.get_coreid(), \
         " Th:", thread->threadid, " AtomOp:0x", hexstring(rip,48), \
         " [", uuid, "] ", __VA_ARGS__, endl)
-#define ATOMOPLOG2(...) ATOMLOG2("Core:", thread->core.coreid, \
+#define ATOMOPLOG2(...) ATOMLOG2("Core:", thread->core.get_coreid(), \
         " Th:", thread->threadid, " AtomOp:0x", hexstring(rip,48), \
         " [", uuid, "] ", __VA_ARGS__, endl)
-#define ATOMOPLOG3(...) ATOMLOG3("Core:", thread->core.coreid, \
+#define ATOMOPLOG3(...) ATOMLOG3("Core:", thread->core.get_coreid(), \
         " Th:", thread->threadid, " AtomOp:0x", hexstring(rip,48), \
         " [", uuid, "] ", __VA_ARGS__, endl)
 
@@ -1025,7 +1025,7 @@ namespace ATOM_CORE_MODEL {
         void dump_state(ostream& os);
         void update_stats();
         void flush_pipeline();
-        W8   get_coreid();
+        //W8   get_coreid();
 		void dump_configuration(YAML::Emitter &out) const;
 
         // Pipeline related functions
@@ -1051,7 +1051,7 @@ namespace ATOM_CORE_MODEL {
 
         ostream& print(ostream& os) const;
 
-        W8   coreid;
+        //W8   coreid;
         W8   threadcount;
         bool in_thread_switch;
 
