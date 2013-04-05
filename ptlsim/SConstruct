@@ -4,6 +4,7 @@ import os
 import platform
 import subprocess
 import config_helper
+import re
 
 # List of subdirectories where we have source code
 dirs = ['cache', 'core', 'lib', 'sim', 'stats', 'tools', 'x86']
@@ -29,13 +30,22 @@ env['CPPPATH'].append("%s/%s" % (qemu_dir, "x86_64-softmmu"))
 optimization_defs = '-fno-trapping-math -fstack-protector -fno-exceptions '
 optimization_defs += '-fno-rtti -funroll-loops -fstrict-aliasing '
 
+GCC_VERSION = subprocess.Popen([env['CC'], '-dumpversion'],
+				stdout=subprocess.PIPE).communicate()[0].strip()
+GCC_MAJOR_MINOR_VERSION = re.match(r'\d*\.\d+',GCC_VERSION).group() #e.g. returns 4.2 for 4.2.2
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
-    env.Append(CCFLAGS = '-g')
 
     # If debugging level is 1 then do optimize
     if int(debug) == 1:
-        env.Append(CCFLAGS = '-O')
+    	env.Append(CCFLAGS = '-g')
+    elif int(debug) == 2: #For more detailed debugging information
+		env.Append(CCFLAGS = '-ggdb3')
+		env.Append(CCFLAGS = '-g3')
+		if float(GCC_MAJOR_MINOR_VERSION) >= 4.8:
+			env.Append(CCFLAGS = '-Og')
+		else: #Possibly slow
+			env.Append(CCFLAGS = '-O0')
 
     # Enable tests
     env.Append(CCFLAGS = '-DENABLE_TESTS')
@@ -46,8 +56,7 @@ if int(debug):
     env['tests'] = True
 
 else:
-    env.Append(CCFLAGS = '-g3')
-    env.Append(CCFLAGS = '-O3 -march=native -mtune=native')
+    env.Append(CCFLAGS = '-O3 -march=native')
     env.Append(CCFLAGS = '-DDISABLE_ASSERT')
     env.Append(CCFLAGS = '-DDISABLE_LOGGING')
     env.Append(CCFLAGS = optimization_defs)

@@ -511,8 +511,6 @@ bool BaseMachine::get_option(const char* name, const char* opt_name,
     return false;
 }
 
-/*BaseMachine coremodel("base");*/
-
 /* Machine Builder */
 MachineBuilder::MachineBuilder(const char* name, machine_gen gen)
 {

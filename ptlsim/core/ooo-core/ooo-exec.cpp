@@ -34,7 +34,6 @@
 using namespace OOO_CORE_MODEL;
 using namespace Memory;
 
-
 /*
  * Issue Queue
  */
@@ -445,7 +444,6 @@ int ReorderBufferEntry::issue() {
 
         thread.thread_stats.issue.result.no_fu++;
 
-
         /*
          * When this (very rarely) happens, stop issuing uops to this cluster
          * and try again with the problem uop on the next cycle. In practice
@@ -487,13 +485,11 @@ int ReorderBufferEntry::issue() {
         return ISSUE_NEEDS_REPLAY;
     }
 
-
      /*
       * Check if any other resources are missing that we didn't
       * know about earlier, and replay like we did above if
       * needed. This is our last chance to do so.
       */
-
 
     thread.thread_stats.issue.uops++;
 
@@ -622,7 +618,6 @@ int ReorderBufferEntry::issue() {
 
     }
 
-
      /*
       * Memory fences proceed directly to commit. Once they hit
       * the head of the ROB, they get recirculated back to the
@@ -636,7 +631,6 @@ int ReorderBufferEntry::issue() {
 
     bool mispredicted = (physreg->data != uop.riptaken);
     //  bool mispredicted = (physreg->valid()) ? (physreg->data != uop.riptaken) : false;
-
 
      /*
       * Release the issue queue entry, since we are beyond the point of no return:
@@ -664,7 +658,6 @@ int ReorderBufferEntry::issue() {
                 thread.thread_stats.branchpred.cond[MISPRED] += cond;
                 W64 realrip = physreg->data;
 
-
                 /*
                  *  Correct the branch directions and cond code field.
                  *  This is required since the branch may again be
@@ -679,7 +672,6 @@ int ReorderBufferEntry::issue() {
                 if likely (isclass(uop.opcode, OPCLASS_COND_BRANCH)) {
                     assert(realrip == uop.ripseq);
                     uop.cond = invert_cond(uop.cond);
-
 
                     /*
                      * We need to be careful here: we already looked up the synthop for this
@@ -696,7 +688,6 @@ int ReorderBufferEntry::issue() {
                     assert(realrip == uop.riptaken);
                 }
 
-
                  /*
                   * Early misprediction handling. Annul everything after the
                   * branch and restart fetching in the correct direction
@@ -704,7 +695,6 @@ int ReorderBufferEntry::issue() {
 
                 thread.annul_fetchq();
                 annul_after();
-
 
                 /*
                  * The fetch queue is reset and fetching is redirected to the
@@ -805,7 +795,6 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
                     hexstring(uop.rip.rip, 64), endl;
     }
 
-
      /*
       * x86-64 requires virtual addresses to be canonical: if bit 47 is set,
       * all upper 16 bits must be set. If this is not true, we need to signal
@@ -843,7 +832,6 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     virtpage = addr;
 
-
     /*
      * Notice that datavalid is not set until both the rc operand to
      * store is ready AND any inherited SFR data is ready to merge.
@@ -851,7 +839,6 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     state.addrvalid = 1;
     state.datavalid = 0;
-
 
     /*
      * Special case: if no part of the actual user load/store falls inside
@@ -870,14 +857,12 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
      * for high stores as described in this scenario.
      */
 
-
     exception = 0;
 
     int mmio = 0;
     Waddr physaddr = (annul) ? INVALID_PHYSADDR :
         ctx.check_and_translate(addr, uop.size, st, uop.internal, exception,
                 mmio, pfec);
-
 
     int op_size = (1 << sizeshift );
     int page_crossing = ((lowbits(origaddr, 12) + (op_size - 1)) >> 12);
@@ -994,7 +979,6 @@ bool ReorderBufferEntry::release_mem_lock(bool forced) {
             thread.ctx.cpu_index);
     assert(lock);
 
-
      /*
       * Just add to the release list; do not invalidate until the macro-op commits
       */
@@ -1075,7 +1059,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 
     state.physaddr = (annul) ? INVALID_PHYSADDR : (physaddr >> 3);
 
-
 /*
  *     The STQ is then searched for the most recent prior store S to same 64-bit block. If found, U's
  *     rs dependency is set to S by setting the ROB's rs field to point to the prior store's physreg
@@ -1143,7 +1126,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
         assert(sfra->rob->uop.uuid < uop.uuid);
     }
 
-
     /*
      * Always update deps in case redispatch is required
      * because of a future speculation failure: we must
@@ -1173,7 +1155,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
      *  store buffer merging in Pentium 4 and AMD K8.
      */
 
-
     if unlikely (!ready) {
         replay();
         load_store_second_phase = 1;
@@ -1188,7 +1169,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 
         return ISSUE_NEEDS_REPLAY;
     }
-
 
     /*
      * Load/Store Aliasing Prevention
@@ -1224,7 +1204,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
          /*
           * (see notes on Load Replay Conditions below)
           */
-
 
         int x = (ldbuf.physaddr - state.physaddr);
         if unlikely ((!ldbuf.store) & ldbuf.addrvalid & ldbuf.rob->issued &
@@ -1281,7 +1260,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
         }
     }
 
-
     /*
      * Cache coherent interlocking
      */
@@ -1317,7 +1295,6 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
             return ISSUE_NEEDS_REPLAY;
         }
 
-
          /*
           * st.rel unlocks the chunk ONLY at commit time. This is required since the
           * other threads knows nothing about remote store queues: unless the value is
@@ -1327,11 +1304,9 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
 
     }
 
-
    /*
     * At this point all operands are valid, so merge the data and mark the store as valid.
     */
-
 
     byte bytemask = 0;
 
@@ -1526,7 +1501,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
      *
      */
 
-
     int sfra_addr_diff;
     bool all_sfra_datavalid = true;
 
@@ -1597,7 +1571,6 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
                     " sfra-addrvalid: ", sfra->addrvalid,
                     " sfra-datavalid: ", sfra->datavalid, endl;
 
-
      /*
       * Always update deps in case redispatch is required
       * because of a future speculation failure: we must
@@ -1665,15 +1638,14 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     // }
 
     /* test if CPUController can accept new request: */
-    bool cache_available = core.memoryHierarchy->is_cache_available(core.coreid, threadid, false/* icache */);
+    bool cache_available = core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, false/* icache */);
     if(!cache_available){
-        msdebug << " dcache can not read core:", core.coreid, " threadid ", threadid, endl;
+        msdebug << " dcache can not read core:", core.get_coreid(), " threadid ", threadid, endl;
         replay();
         thread.thread_stats.dcache.load.issue.replay.dcache_stall++;
         load_store_second_phase = 1;
         return ISSUE_NEEDS_REPLAY;
     }
-
 
      /*
       * Cache coherent interlocking
@@ -1780,10 +1752,10 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
         state.sfr_bytemask = 0;
     }
 
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
     assert(request != NULL);
 
-    request->init(core.coreid, threadid, state.physaddr << 3, idx, sim_cycle,
+    request->init(core.get_coreid(), threadid, state.physaddr << 3, idx, sim_cycle,
             false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&core.dcache_signal);
 
@@ -2083,14 +2055,14 @@ rob_cont:
         goto rob_cont;
     }
 
-    if(!core.memoryHierarchy->is_cache_available(core.coreid, threadid, false)){
+    if(!core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, false)){
         /* Cache queue is full.. so simply skip this iteration */
         return;
     }
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
     assert(request != NULL);
 
-    request->init(core.coreid, threadid, pteaddr, idx, sim_cycle,
+    request->init(core.get_coreid(), threadid, pteaddr, idx, sim_cycle,
             false, uop.rip.rip, uop.uuid, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&core.dcache_signal);
 
@@ -2182,7 +2154,6 @@ int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
     thread.thread_stats.dcache.fence.lfence += (uop.extshift == MF_TYPE_LFENCE);
     thread.thread_stats.dcache.fence.sfence += (uop.extshift == MF_TYPE_SFENCE);
     thread.thread_stats.dcache.fence.mfence += (uop.extshift == (MF_TYPE_LFENCE|MF_TYPE_SFENCE));
-
 
      /*
       * The mf uop is issued but its "data" (for dependency purposes only)
@@ -2570,7 +2541,6 @@ void ReorderBufferEntry::release() {
     iqslot = -1;
 }
 
-
 /**
  * @brief 'Issue' ready uops to 'Execution' stage and based on issue width
  *
@@ -2622,7 +2592,6 @@ int OooCore::issue(int cluster) {
 
     return issuecount;
 }
-
 
 /*
  *
@@ -2708,7 +2677,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
      */
 
     int somidx = index();
-
 
     while (!ROB[somidx].uop.som) somidx = add_index_modulo(somidx, -1, ROB_SIZE);
     int eomidx = index();
@@ -2840,7 +2808,7 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
             /* annul any cache requests for this entry */
 
             bool is_store = isclass(annulrob.uop.opcode, OPCLASS_STORE);
-            core.memoryHierarchy->annul_request(core.coreid,
+            core.memoryHierarchy->annul_request(core.get_coreid(),
                     threadid,
                     annulrob.idx/*robid*/,
                     annulrob.lsq->physaddr << 3,

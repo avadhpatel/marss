@@ -358,16 +358,17 @@ static void print_banner(ostream& os) {
   utsname hostinfo;
   sys_uname(&hostinfo);
 
-  os << "//  ", endl;
-  os << "//  MARSS: Cycle Accurate Systems simulator for x86", endl;
-  os << "//  Copyright 1999-2007 Matt T. Yourst <yourst@yourst.com>", endl;
-  os << "//  Copyright 2009-2011 Avadh Patel <avadh4all@gmail.com>", endl;
-  os << "// ", endl;
-  os << "//  Git branch '", stringify(GITBRANCH), "' on date ", stringify(GITDATE)," (HEAD: ", stringify(GITCOMMIT), ")", endl;
-  os << "//  Built ", __DATE__, " ", __TIME__, " on ", stringify(BUILDHOST), " using gcc-",
-    stringify(__GNUC__), ".", stringify(__GNUC_MINOR__), endl;
-  os << "//  Running on ", hostinfo.nodename, ".", hostinfo.domainname, endl;
-  os << "//  ", endl;
+  os << "//  " << endl;
+  os << "//  MARSS: Cycle Accurate Systems simulator for x86" << endl;
+  os << "//  Copyright 1999-2007 Matt T. Yourst <yourst@yourst.com>" << endl;
+  os << "//  Copyright 2009-2011 Avadh Patel <avadh4all@gmail.com>" << endl;
+  os << "// " << endl;
+  os << "//  Git branch '" << stringify(GITBRANCH) << "' on date " << stringify(GITDATE) << " (HEAD: " << stringify(GITCOMMIT) << ")" << endl;
+  os << "//  Built " << __DATE__ << " " << __TIME__ << " on " << stringify(BUILDHOST) << " using gcc-" <<
+    stringify(__GNUC__) << "." << stringify(__GNUC_MINOR__) << endl;
+  os << "//  With " << stringify(NUM_SIM_CORES) << " simulated cores" << endl;
+  os << "//  Running on " << hostinfo.nodename << "." << hostinfo.domainname << endl;
+  os << "//  " << endl;
   os << endl;
   os << flush;
 }
@@ -395,8 +396,8 @@ static void collect_common_sysinfo() {
 }
 
 void print_usage() {
-  cerr << "Syntax: simconfig <arguments...>", endl;
-  cerr << "In the monitor mode give the above command with options given below", endl, endl;
+  cerr << "Syntax: simconfig <arguments...>" << endl;
+  cerr << "In the monitor mode give the above command with options given below" << endl << endl;
 
   config.printusage(cerr, config);
 }
@@ -412,7 +413,7 @@ void backup_and_reopen_logfile() {
   if (config.log_filename) {
     if (ptl_logfile) ptl_logfile.close();
     stringbuf oldname;
-    oldname << config.log_filename, ".backup";
+    oldname << config.log_filename << ".backup";
     sys_unlink(oldname);
     sys_rename(config.log_filename, oldname);
     ptl_logfile.open(config.log_filename);
@@ -423,7 +424,7 @@ void backup_and_reopen_yamlstats() {
   if (config.yaml_stats_filename) {
     if (yaml_stats_file) yaml_stats_file.close();
     stringbuf oldname;
-    oldname << config.yaml_stats_filename, ".backup";
+    oldname << config.yaml_stats_filename << ".backup";
     sys_unlink(oldname);
     sys_rename(config.yaml_stats_filename, oldname);
     yaml_stats_file.open(config.yaml_stats_filename);
@@ -441,8 +442,8 @@ extern byte _binary_ptlsim_build_ptlsim_dst_end;
 
 void capture_stats_snapshot(const char* name) {
   if (logable(100)|1) {
-    if (name) ptl_logfile << "Snapshot named ", name;
-    ptl_logfile << " at cycle ", sim_cycle, endl;
+    if (name) ptl_logfile << "Snapshot named " << name;
+    ptl_logfile << " at cycle " << sim_cycle << endl;
   }
 
   /* TODO: Support stats snapshot in new Stats module */
@@ -636,7 +637,7 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
     if (!config.quiet) {
       print_sysinfo(cerr);
       if (!(config.run | config.kill))
-        cerr << "Simulator is now waiting for a 'run' command.", endl, flush;
+        cerr << "Simulator is now waiting for a 'run' command." << endl << flush;
     }
     print_banner(ptl_logfile);
     print_sysinfo(ptl_logfile);
@@ -648,8 +649,8 @@ if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.st
 
   int total = config.run + config.stop + config.kill;
   if (total > 1) {
-    ptl_logfile << "Warning: only one action (from -run, -stop, -kill) can be specified at once", endl, flush;
-    cerr << "Warning: only one action (from -run, -stop, -kill) can be specified at once", endl, flush;
+    ptl_logfile << "Warning: only one action (from -run, -stop, -kill) can be specified at once" << endl << flush;
+    cerr << "Warning: only one action (from -run, -stop, -kill) can be specified at once" << endl << flush;
   }
 
   if(config.checker_enabled) {
@@ -821,7 +822,7 @@ void ptl_reconfigure(const char* config_str) {
 				config.core_name));
 	machine->config_changed();
 
-	ptl_logfile << "Configuration changed: ", config, endl;
+	ptl_logfile << "Configuration changed: " << config << endl;
 
     if (config.sync_interval && sem_id == -1) {
         sync_setup();
@@ -842,11 +843,6 @@ extern "C" void ptl_machine_configure(const char* config_str_) {
 
     char *config_str = (char*)qemu_mallocz(strlen(config_str_) + 1);
     pstrcpy(config_str, strlen(config_str_)+1, config_str_);
-
-/*    if(!ptl_machine_configured) {
-        configparser.setup();
-        config.reset();
-    }*/
 
     // Setup the configuration
     ptl_reconfigure(config_str);
@@ -950,12 +946,12 @@ void setup_checker(W8 contextid) {
       memcpy(checker_context, ptl_contexts[contextid], sizeof(Context));
 
       if(logable(10)) {
-	ptl_logfile << "Checker context setup\n", *checker_context, endl;
+	ptl_logfile << "Checker context setup\n" << *checker_context << endl;
       }
     }
 
     if(logable(10)) {
-      ptl_logfile << "No change to checker context ", checker_context->kernel_mode, endl;
+      ptl_logfile << "No change to checker context " << checker_context->kernel_mode << endl;
     }
 }
 
@@ -1043,11 +1039,11 @@ void compare_checker(W8 context_id, W64 flagmask) {
     //fail |= (flag1 != flag2);
 
     if(ret != 0 || ret1 != 0 || ret_x87 != 0 || fail) {
-        ptl_logfile << "Checker comparison failed [diff-chars: ", ret, "] ";
-        ptl_logfile << "[xmm:", ret1, "] [x87:", ret_x87,"] ";
-        ptl_logfile << "[flags:", fail, "]\n";
-        ptl_logfile << "CPU Context:\n", *ptl_contexts[context_id], endl;
-        ptl_logfile << "Checker Context:\n", *checker_context, endl, flush;
+        ptl_logfile << "Checker comparison failed [diff-chars: " << ret << "] ";
+        ptl_logfile << "[xmm:" << ret1 << "] [x87:" << ret_x87 << "] ";
+        ptl_logfile << "[flags:" << fail << "]\n";
+        ptl_logfile << "CPU Context:\n" << *ptl_contexts[context_id] << endl;
+        ptl_logfile << "Checker Context:\n" << *checker_context << endl << flush;
 
         cout << "\n*******************Failed checker***************\n";
         memset(checker_context, 0, sizeof(Context));
@@ -1102,10 +1098,10 @@ void write_mongo_stats() {
     opts.port = config.mongo_port;
 
     if(mongo_connect(conn, &opts)){
-        cerr << "Failed to connect to MongoDB server at ", opts.host,
-             ":", opts.port, " , **Skipping Mongo Datawrite**", endl;
-        ptl_logfile << "Failed to connect to MongoDB server at ", opts.host,
-             ":", opts.port, " , **Skipping Mongo Datawrite**", endl;
+        cerr << "Failed to connect to MongoDB server at " << opts.host <<
+             ":" << opts.port << " , **Skipping Mongo Datawrite**" << endl;
+        ptl_logfile << "Failed to connect to MongoDB server at " << opts.host <<
+             ":" << opts.port << " , **Skipping Mongo Datawrite**" << endl;
         config.enable_mongo = 0;
         return;
     }
@@ -1261,8 +1257,8 @@ extern "C" uint8_t ptl_simulate() {
 	}
 
 	if (!machine) {
-		ptl_logfile << "Cannot find core named '", machinename, "'", endl;
-		cerr << "Cannot find core named '", machinename, "'", endl;
+		ptl_logfile << "Cannot find core named '" << machinename << "'" << endl;
+		cerr << "Cannot find core named '" << machinename << "'" << endl;
 		return 0;
 	}
 
@@ -1272,9 +1268,9 @@ extern "C" uint8_t ptl_simulate() {
     }
 
 	if (!machine->initialized) {
-		ptl_logfile << "Initializing core '", machinename, "'", endl;
+		ptl_logfile << "Initializing core '" << machinename << "'" << endl;
 		if (!machine->init(config)) {
-			ptl_logfile << "Cannot initialize simulation machine; check the configuration!", endl;
+			ptl_logfile << "Cannot initialize simulation machine; check the configuration!" << endl;
             config.run = 0;
 			return 0;
 		}
@@ -1282,10 +1278,10 @@ extern "C" uint8_t ptl_simulate() {
 		machine->first_run = 1;
 
 		if(logable(1)) {
-			ptl_logfile << "Switching to simulation core '", machinename, "'...", endl, flush;
-			cerr <<  "Switching to simulation core '", machinename, "'...", endl, flush;
-			ptl_logfile << "Stopping after ", config.stop_at_insns, " commits", endl, flush;
-			cerr << "Stopping after ", config.stop_at_insns, " commits", endl, flush;
+			ptl_logfile << "Switching to simulation core '" << machinename << "'..." << endl << flush;
+			cerr <<  "Switching to simulation core '" << machinename << "'..." << endl << flush;
+			ptl_logfile << "Stopping after " << config.stop_at_insns << " commits" << endl << flush;
+			cerr << "Stopping after " << config.stop_at_insns << " commits" << endl << flush;
 		}
 
 		/* Dump Machine configuration */
@@ -1308,7 +1304,7 @@ extern "C" uint8_t ptl_simulate() {
 
             host = gethostbyname(config.mongo_server.buf);
             if(host == NULL) {
-                cerr << "MongoDB Server host ", config.mongo_server, " is unreachable.", endl;
+                cerr << "MongoDB Server host " << config.mongo_server << " is unreachable." << endl;
                 config.enable_mongo = 0;
             } else {
                 config.mongo_server = inet_ntoa(*((in_addr *)host->h_addr));
@@ -1317,8 +1313,8 @@ extern "C" uint8_t ptl_simulate() {
                 opts.port = config.mongo_port;
 
                 if (mongo_connect( conn , &opts )){
-                    cerr << "Failed to connect to MongoDB server at ", opts.host,
-                         ":", opts.port, " , **Disabling Mongo Support**", endl;
+                    cerr << "Failed to connect to MongoDB server at " << opts.host <<
+                         ":" << opts.port << " , **Disabling Mongo Support**" << endl;
                     config.enable_mongo = 0;
                 } else {
                     mongo_destroy(conn);
@@ -1353,9 +1349,9 @@ extern "C" uint8_t ptl_simulate() {
     if(logable(1)) {
 		ptl_logfile << "Starting simulation at rip: ";
 		foreach(i, contextcount) {
-			ptl_logfile  << "[cpu ", i, "]", (void*)(contextof(i).eip), " ";
+			ptl_logfile  << "[cpu " << i << "]" << (void*)(contextof(i).eip) << " ";
 		}
-        ptl_logfile << " sim_cycle: ", sim_cycle;
+        ptl_logfile << " sim_cycle: " << sim_cycle;
 		ptl_logfile << endl;
     }
 
@@ -1373,11 +1369,11 @@ extern "C" uint8_t ptl_simulate() {
 
 	if (!machine->stopped) {
         if(logable(1)) {
-			ptl_logfile << "Switching back to qemu rip: ", (void *)contextof(0).get_cs_eip(), " exception: ", contextof(0).exception_index,
-						" ex: ", contextof(0).exception, " running: ",
+			ptl_logfile << "Switching back to qemu rip: " << (void *)contextof(0).get_cs_eip() << " exception: " << contextof(0).exception_index <<
+						" ex: " << contextof(0).exception << " running: " <<
 						contextof(0).running;
-            ptl_logfile << " sim_cycle: ", sim_cycle;
-            ptl_logfile << endl, flush;
+            ptl_logfile << " sim_cycle: " << sim_cycle;
+            ptl_logfile << endl << flush;
         }
 
 		/* Tell QEMU that we will come back to simulate */
@@ -1390,11 +1386,12 @@ extern "C" uint8_t ptl_simulate() {
 
 	W64 seconds = W64(ticks_to_native_seconds(tsc_at_end - tsc_at_start));
 	stringbuf sb;
-	sb << endl, "Stopped after ", sim_cycle, " cycles, ", total_insns_committed, " instructions and ",
-	   seconds, " seconds of sim time (cycle/sec: ", W64(double(sim_cycle) / double(seconds)), " Hz, insns/sec: ", W64(double(total_insns_committed) / double(seconds)), ", insns/cyc: ",  double(total_insns_committed) / double(sim_cycle), ")", endl;
+	sb << endl << "Stopped after " << sim_cycle << " cycles, " << total_insns_committed << " instructions and " <<
+	   seconds << " seconds of sim time (cycle/sec: " << W64(double(sim_cycle) / double(seconds)) << " Hz, insns/sec: " << 
+       W64(double(total_insns_committed) / double(seconds)) << ", insns/cyc: " <<  double(total_insns_committed) / double(sim_cycle) << ")" << endl;
 
-	ptl_logfile << sb, flush;
-	cerr << sb, flush;
+	ptl_logfile << sb << flush;
+	cerr << sb << flush;
 
 	if (config.dumpcode_filename.set()) {
 		//    byte insnbuf[256];
@@ -1441,8 +1438,8 @@ extern "C" void update_progress() {
     double insns_per_sec = (total_insns_committed - last_printed_status_at_insn) / seconds;
 
     stringbuf sb;
-    sb << "Completed ", intstring(sim_cycle, 13), " cycles, ", intstring(total_insns_committed, 13), " commits: ",
-      intstring((W64)cycles_per_sec, 9), " Hz, ", intstring((W64)insns_per_sec, 9), " insns/sec";
+    sb << "Completed " << intstring(sim_cycle, 13) << " cycles, " << intstring(total_insns_committed, 13) << " commits: " <<
+      intstring((W64)cycles_per_sec, 9) << " Hz, " << intstring((W64)insns_per_sec, 9) << " insns/sec";
 
     sb << ": rip";
     foreach (i, contextcount) {
@@ -1452,20 +1449,20 @@ extern "C" void update_progress() {
 		  static const char* runstate_names[] = {"stopped", "running"};
 		  const char* runstate_name = runstate_names[ctx.running];
 
-		  sb << " (", runstate_name, ":",ctx.running, ")";
+		  sb << " (" << runstate_name << ":" << ctx.running << ")";
 		  if(!sim_cycle){
 			  ctx.running = 1;
 		  }
 		  continue;
       }
-      sb << ' ', hexstring(contextof(i).get_cs_eip(), 64);
+      sb << ' ' << hexstring(contextof(i).get_cs_eip(), 64);
     }
 
     //while (sb.size() < 160) sb << ' ';
 
     ptl_logfile << sb, endl;
     if (!config.quiet) {
-        cerr << "\r  ", sb;
+        cerr << "\r  " << sb;
     }
 
     last_printed_status_at_ticks = ticks;

@@ -67,7 +67,6 @@ bool OooCore::icache_wakeup(void *arg) {
     return true;
 }
 
-
 /**
  * @brief Probe the iTLB to check if the instruction's address is an itlb hit
  *
@@ -128,16 +127,16 @@ itlb_walk_finish:
         return;
     }
 
-    if(!core.memoryHierarchy->is_cache_available(core.coreid, threadid, true)){
+    if(!core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, true)){
         /* Cache queue is full.. so simply skip this iteration */
         itlb_walk_level = 0;
         return;
     }
 
-    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+    Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
     assert(request != NULL);
 
-    request->init(core.coreid, threadid, pteaddr, 0, sim_cycle,
+    request->init(core.get_coreid(), threadid, pteaddr, 0, sim_cycle,
             true, 0, 0, Memory::MEMORY_OP_READ);
     request->set_coreSignal(&core.icache_signal);
 
@@ -157,7 +156,6 @@ itlb_walk_finish:
         itlbwalk();
     }
 }
-
 
 /**
  * @brief Determine which physical register files can be written by a given type
@@ -205,7 +203,6 @@ void ThreadContext::annul_fetchq() {
     }
 }
 
-
 /**
  * @brief Flush entire pipeline immediately, reset all processor structures to
  * their initial state, and resume from the state saved in ctx.commitarf.
@@ -221,15 +218,15 @@ void OooCore::flush_pipeline() {
     /* Clear out everything global: */
     setzero(robs_on_fu);
 }
+
 /**
  * @brief Flush entire pipeline immediately, reset all processor structures to
  * their initial state, and resume from the state saved in ctx.commitarf.
  */
-
 void ThreadContext::flush_pipeline() {
-    if (logable(3)) ptl_logfile << " core[", core.coreid,"] TH[", threadid, "] flush_pipeline()",endl;
+    if (logable(3)) ptl_logfile << " core[", core.get_coreid(),"] TH[", threadid, "] flush_pipeline()",endl;
 
-    core.machine.memoryHierarchyPtr->flush(core.coreid);
+    core.machine.memoryHierarchyPtr->flush(core.get_coreid());
 
     annul_fetchq();
 
@@ -273,19 +270,19 @@ void ThreadContext::flush_pipeline() {
 
     ROB.reset();
     foreach (i, ROB_SIZE) {
-        ROB[i].coreid = core.coreid;
+        ROB[i].coreid = core.get_coreid();
         ROB[i].core = &core;
         ROB[i].threadid = threadid;
         ROB[i].changestate(rob_free_list);
     }
     LSQ.reset();
     foreach (i, LSQ_SIZE) {
-        LSQ[i].coreid = core.coreid;
+        LSQ[i].coreid = core.get_coreid();
         LSQ[i].core = &core;
     }
     loads_in_flight = 0;
     stores_in_flight = 0;
-    foreach_issueq(reset(core.coreid, threadid, &core));
+    foreach_issueq(reset(core.get_coreid(), threadid, &core));
 
     dispatch_deadlock_countdown = DISPATCH_DEADLOCK_COUNTDOWN_CYCLES;
     last_commit_at_cycle = sim_cycle;
@@ -321,6 +318,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
     current_basic_block_transop_index = 0;
     unaligned_ldst_buf.reset();
 }
+
 /**
  * @brief Process any pending self-modifying code invalidate requests. This must
  * be called on all cores *after* flushing all pipelines, to ensure no stale BBs
@@ -334,8 +332,6 @@ void ThreadContext::invalidate_smc() {
         smc_invalidate_pending = 0;
     }
 }
-
-
 
 /**
  * @brief Copy external archregs to physregs and reset all rename tables
@@ -388,7 +384,6 @@ void ThreadContext::external_to_core_state() {
 
     commitrrt[REG_flags]->flags = (W16)commitrrt[REG_flags]->data;
 
-
      /*
       * Internal translation registers are never used before
       * they are written for the first time:
@@ -409,7 +404,6 @@ void ThreadContext::external_to_core_state() {
         }
     }
 
-
      /*
       * Set renamable flags
       */
@@ -417,7 +411,6 @@ void ThreadContext::external_to_core_state() {
     commitrrt[REG_zf] = commitrrt[REG_flags];
     commitrrt[REG_cf] = commitrrt[REG_flags];
     commitrrt[REG_of] = commitrrt[REG_flags];
-
 
     /*
      * Copy commitrrt to specrrt and update refcounts
@@ -593,9 +586,9 @@ bool ThreadContext::fetch() {
         if ((!current_basic_block->invalidblock) && (req_icache_block != current_icache_block)) {
 
             // test if icache is available:
-            bool cache_available = core.memoryHierarchy->is_cache_available(core.coreid, threadid, true/* icache */);
+            bool cache_available = core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, true/* icache */);
             if(!cache_available){
-                msdebug << " icache can not read core:", core.coreid, " threadid ", threadid, endl;
+                msdebug << " icache can not read core:", core.get_coreid(), " threadid ", threadid, endl;
                 thread_stats.fetch.stop.icache_stalled++;
                 break;
             }
@@ -603,10 +596,10 @@ bool ThreadContext::fetch() {
             bool hit;
             assert(!waiting_for_icache_fill);
 
-            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
             assert(request != NULL);
 
-            request->init(core.coreid, threadid, physaddr, 0, sim_cycle,
+            request->init(core.get_coreid(), threadid, physaddr, 0, sim_cycle,
                     true, 0, 0, Memory::MEMORY_OP_READ);
             request->set_coreSignal(&core.icache_signal);
 
@@ -783,7 +776,6 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
         assert(current_basic_block);
     }
 
-
      /*
       * Acquire a reference to the new basic block being fetched.
       * This must be done right away so future allocations do not
@@ -801,8 +793,6 @@ BasicBlock* ThreadContext::fetch_or_translate_basic_block(const RIPVirtPhys& rvp
 
     return current_basic_block;
 }
-
-
 
 /**
  * @brief Allocate and Rename Stages
@@ -892,11 +882,9 @@ void ThreadContext::rename() {
 
 		thread_stats.rob_writes++;
 
-
          /*
           * Rename operands:
           */
-
 
         rob.operands[RA] = specrrt[transop.ra];
         rob.operands[RB] = specrrt[transop.rb];
@@ -919,7 +907,6 @@ void ThreadContext::rename() {
 				thread_stats.physreg_reads[rob.operands[i]->rfid]++;
         }
 
-
         /*
          *  Select a physical register file based on desired
          *  heuristics. We only consider a given register
@@ -932,7 +919,6 @@ void ThreadContext::rename() {
          *  register file ID selected by the heuristics.
          *
          */
-
 
          /*
           * Default heuristics from above: phys_reg_file is already
@@ -1190,7 +1176,6 @@ static inline int find_first_set_bit(W32 v) {
     return (v & (-v));
 }
 
-
 /**
  * @brief This function locates the source operands for a uop and prepares to
  * add the uop to its cluster's issue queue. If an operand is already ready at
@@ -1204,7 +1189,6 @@ bool ReorderBufferEntry::find_sources() {
 
     issueq_tag_t uopids[MAX_OPERANDS];
     issueq_tag_t preready[MAX_OPERANDS];
-
 
      /*
       * Add dependency on memory fence (if any) to help avoid unneeded replays
@@ -1238,7 +1222,6 @@ bool ReorderBufferEntry::find_sources() {
                     source_physreg.rfid, [source_physreg.state]++);
         }
     }
-
 
      /*
       * Stores are special: we can issue a store even if its rc operand (the value
@@ -1322,8 +1305,6 @@ int ReorderBufferEntry::select_cluster() {
     return cluster;
 }
 
-
-
 /**
  * @brief Dispatch any uops in the rob_ready_to_dispatch_list by locating their
  * source operands and adding entries to the issue queues.
@@ -1339,7 +1320,6 @@ int ThreadContext::dispatch() {
         /* All operands start out as valid, then get put on wait queues if they are not actually ready. */
 
         rob->cluster = rob->select_cluster();
-
 
         /*
          * An available cluster could not be found. This only happens
@@ -1363,6 +1343,7 @@ int ThreadContext::dispatch() {
             bool empty = false;
             issueq_operation_on_cluster_with_result(core, rob->cluster, empty, shared_empty());
             if (empty) {
+				/* no shared entries left, stop dispatch */
                 continue;
             } else {
                 /* one or more shared entries left, continue dispatch */
@@ -1424,7 +1405,6 @@ int ThreadContext::dispatch() {
 
     return core.dispatchcount;
 }
-
 
  /**
   * @brief Process any ROB entries that just finished producing a result,
@@ -1503,7 +1483,11 @@ int ThreadContext::writeback(int cluster) {
     foreach_list_mutable(rob_ready_to_writeback_list[cluster], rob, entry, nextentry) {
         if unlikely (core.writecount >= WRITEBACK_WIDTH) break;
 
-       #ifdef ENABLE_TRANSIENT_VALUE_TRACKING
+        /*
+         * Gather statistics
+         */
+
+#ifdef ENABLE_TRANSIENT_VALUE_TRACKING
         bool transient = 0;
 
         if likely (!isclass(rob->uop.opcode, OPCLASS_STORE|OPCLASS_BRANCH)) {
@@ -1520,7 +1504,6 @@ int ThreadContext::writeback(int cluster) {
         rob->transient = transient;
 #endif
 
-
          /*
           * Catch corner case where dependent uop was scheduled
           * while producer waited in ready_to_writeback state:
@@ -1530,12 +1513,10 @@ int ThreadContext::writeback(int cluster) {
 
         core.writecount++;
 
-
          /*
           * For simulation purposes, final value is already in rob->physreg,
           * so we don't need to actually write anything back here.
           */
-
 
         thread_stats.writeback.writebacks[rob->physreg->rfid]++;
         rob->physreg->writeback();
@@ -1618,7 +1599,6 @@ int ThreadContext::writeback(int cluster) {
  *  instructions actually committed
  */
 int ThreadContext::commit() {
-
 
      /*
       * Commit ROB entries *in program order*, stopping at the first ROB that is
@@ -1830,7 +1810,6 @@ int ReorderBufferEntry::commit() {
         if likely (subrob.uop.eom) break;
     }
 
-
      /*
       * Protect against the extremely rare case where only one x86
       * instruction is in flight and its EOM uop has not even made
@@ -1898,8 +1877,8 @@ int ReorderBufferEntry::commit() {
     bool br = isbranch(uop.opcode);
 
     /* check if we can access dcache for store */
-    if(st && !core.memoryHierarchy->is_cache_available(core.coreid, threadid, false/* icache */)){
-        msdebug << " dcache can not write. core:", core.coreid, " threadid ", threadid, endl;
+    if(st && !core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, false/* icache */)){
+        msdebug << " dcache can not write. core:", core.get_coreid(), " threadid ", threadid, endl;
         thread.thread_stats.commit.result.dcache_stall++;
         return COMMIT_RESULT_NONE;
     }
@@ -1933,7 +1912,6 @@ int ReorderBufferEntry::commit() {
      *
      */
     if unlikely (thread.ctx.smc_isdirty(uop.rip.mfnlo)) {
-
 
          /*
           * Invalidate the pages only after the pipeline is flushed: we may still
@@ -2086,11 +2064,9 @@ int ReorderBufferEntry::commit() {
         ptl_logfile << "ROB Commit RIP check Done...\n", flush;
     }
 
-
     /*
      * The commit of all uops in the x86 macro-op is guaranteed to happen after this point
      */
-
 
     if likely (archdest_can_commit[uop.rd]) {
         thread.commitrrt[uop.rd]->uncommitref(uop.rd, thread.threadid);
@@ -2198,10 +2174,10 @@ int ReorderBufferEntry::commit() {
               */
             assert(lsq->physaddr);
 
-            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.coreid);
+            Memory::MemoryRequest *request = core.memoryHierarchy->get_free_request(core.get_coreid());
             assert(request != NULL);
 
-            request->init(core.coreid, threadid, lsq->physaddr << 3, 0,
+            request->init(core.get_coreid(), threadid, lsq->physaddr << 3, 0,
                     sim_cycle, false, uop.rip.rip, uop.uuid,
                     Memory::MEMORY_OP_WRITE);
             request->set_coreSignal(&core.dcache_signal);
@@ -2225,7 +2201,6 @@ int ReorderBufferEntry::commit() {
         }
         reset_checker_stores();
     }
-
 
      /*
       * Free physical registers, load/store queue entries, etc.
@@ -2261,7 +2236,6 @@ int ReorderBufferEntry::commit() {
 
     physreg->changestate(PHYSREG_ARCH);
 
-
      /*
       * Unlock operand physregs since we no longer need to worry about speculation recovery
       * Technically this can be done after the issue queue entry is released, but we do it
@@ -2271,7 +2245,6 @@ int ReorderBufferEntry::commit() {
     foreach (i, MAX_OPERANDS) {
         operands[i]->unref(*this, thread.threadid);
     }
-
 
      /*
       * Update branch prediction

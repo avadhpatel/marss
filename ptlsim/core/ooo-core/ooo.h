@@ -88,7 +88,6 @@ namespace OOO_CORE_MODEL {
 
     extern const char* fu_names[FU_COUNT];
 
-
  /*
   * Opcodes and properties
   */
@@ -131,7 +130,6 @@ namespace OOO_CORE_MODEL {
         byte latency;  /* Latency in cycles, assuming ideal bypass */
         W16  fu;       /* Map of functional units on which this uop can issue */
     };
-
 
      /*
       * WARNING: This table MUST be kept in sync with the table
@@ -322,7 +320,6 @@ namespace OOO_CORE_MODEL {
 
     struct ReorderBufferEntry;
 
-
      /*
       * Issue queue based scheduler with broadcast
       */
@@ -424,7 +421,6 @@ namespace OOO_CORE_MODEL {
             ostream& print(ostream& os) const;
             void tally_broadcast_matches(tag_t sourceid, const bitvec<size>& mask, int operand);
 
-
              /*
               * Replay a uop that has already issued once.
               * The caller may add or reset dependencies here as needed.
@@ -434,7 +430,6 @@ namespace OOO_CORE_MODEL {
                 issued[slot] = 0;
                 return true;
             }
-
 
              /*
               * Remove an entry from the issue queue after it has completed,
@@ -468,7 +463,6 @@ namespace OOO_CORE_MODEL {
 
     template <typename T>
         static void print_list_of_state_lists(ostream& os, const ListOfStateLists& lol, const char* title);
-
 
      /*
       * Fetch Buffers
@@ -504,7 +498,6 @@ namespace OOO_CORE_MODEL {
     struct OooCore;
     struct PhysicalRegister;
     struct LoadStoreQueueEntry;
-
 
      /**
       * @brief Reorder Buffer (ROB) structure, used for tracking all uops in flight.
@@ -816,7 +809,6 @@ namespace OOO_CORE_MODEL {
         return physregs.print(os);
     }
 
-
     /**
      * @brief Register Rename Table
      */
@@ -886,7 +878,6 @@ namespace OOO_CORE_MODEL {
 #define InitClusteredROBList(name, description, flags) \
     name[0](description "-all", rob_states, flags);
 #endif
-
 
      /*
       * TLB class with one-hot semantics. 36 bit tags are required since
@@ -1101,7 +1092,6 @@ namespace OOO_CORE_MODEL {
 
 
     struct OooCore: public BaseCore {
-        W8 coreid;
         OooCore& getcore() { return *this; }
 
         /* This is only used for stats collection. By default if core is
@@ -1126,12 +1116,9 @@ namespace OOO_CORE_MODEL {
 
         byte round_robin_tid;
 
-
-
          /*
           * Issue Queues (one per cluster)
           */
-
 
 #define declare_issueq_templates template struct IssueQueue<ISSUE_QUEUE_SIZE>
 #ifdef MULTI_IQ
@@ -1142,7 +1129,6 @@ namespace OOO_CORE_MODEL {
 
         int reserved_iq_entries[4];  /* this is the total number of iq entries reserved per thread. */
          /* Instantiate any issueq sizes used above: */
-
 
 #define foreach_issueq(expr) { OooCore& core = getcore(); core.issueq_int0.expr; core.issueq_int1.expr; core.issueq_ld.expr; core.issueq_fp.expr; }
 
@@ -1225,10 +1211,10 @@ namespace OOO_CORE_MODEL {
 			/*
 			 * Physical register files
 			 */
-            physregfiles[0]("int", coreid, 0, PHYS_REG_FILE_SIZE, this);
-            physregfiles[1]("fp", coreid, 1, PHYS_REG_FILE_SIZE, this);
-            physregfiles[2]("st", coreid, 2, STQ_SIZE * threadcount, this);
-            physregfiles[3]("br", coreid, 3, MAX_BRANCHES_IN_FLIGHT * threadcount, this);
+            physregfiles[0]("int", get_coreid(), 0, PHYS_REG_FILE_SIZE, this);
+            physregfiles[1]("fp", get_coreid(), 1, PHYS_REG_FILE_SIZE, this);
+            physregfiles[2]("st", get_coreid(), 2, STQ_SIZE * threadcount, this);
+            physregfiles[3]("br", get_coreid(), 3, MAX_BRANCHES_IN_FLIGHT * threadcount, this);
         }
 
 		/*
@@ -1292,8 +1278,6 @@ namespace OOO_CORE_MODEL {
         void update_stats();
 
         void check_ctx_changes();
-
-        W8 get_coreid() { return coreid; }
 
 		void dump_configuration(YAML::Emitter &out) const;
     };

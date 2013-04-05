@@ -664,8 +664,8 @@ bool TraceDecoder::decode_fast() {
   }
 
  /*
- *     NOTE: Some forms of this are handled by the complex decoder:
- */
+  *     NOTE: Some forms of this are handled by the complex decoder:
+  */
 
   case 0xf6 ... 0xf7: {
     /* COMPLEX: handle mul and div in the complex decoder */

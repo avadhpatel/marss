@@ -6,6 +6,8 @@ Import('qemu_target')
 Import('ptlsim_lib')
 Import('plugins')
 Import('ptlsim_inc_dir')
+import subprocess
+import re
 env = qemu_env
 target = qemu_target
 
@@ -23,19 +25,26 @@ env['CPPPATH'].append(ptlsim_inc_dir)
 env.Append(CCFLAGS = "-MMD -MP -DNEED_CPU_H")
 env.Append(CCFLAGS = "-DMARSS_QEMU")
 
+GCC_VERSION = subprocess.Popen([env['CC'], '-dumpversion'],
+    stdout=subprocess.PIPE).communicate()[0].strip()
+GCC_MAJOR_MINOR_VERSION = re.match(r'\d*\.\d+',GCC_VERSION).group() #e.g. returns 4.2 for 4.2.2
+
 num_sim_cores = ARGUMENTS.get('c', 1)
 env.Append(CCFLAGS = '-DNUM_SIM_CORES=%d' % int(num_sim_cores))
 
 debug = ARGUMENTS.get('debug', 0)
 if int(debug):
-    env.Append(CCFLAGS = '-g')
-
-    # If debugging level is 1 then do optimize
     if int(debug) == 1:
-        env.Append(CCFLAGS = '-O')
+        env.Append(CCFLAGS = '-g')
+    elif int(debug) == 2:
+        env.Append(CCFLAGS = '-ggdb3')
+        env.Append(CCFLAGS = '-g3')
+        if float(GCC_MAJOR_MINOR_VERSION) >= 4.8:
+            env.Append(CCFLAGS = '-Og')
+        else:
+            env.Append(CCFLAGS = '-O0')
 else:
-    env.Append(CCFLAGS = '-g3')
-    env.Append(CCFLAGS = '-O3 -march=native -mtune=native')
+    env.Append(CCFLAGS = '-O3 -march=native')
 
 google_perftools = ARGUMENTS.get('gperf', None)
 if google_perftools != None:

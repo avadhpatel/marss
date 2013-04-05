@@ -26,7 +26,6 @@ bool TraceDecoder::decode_sse() {
        * 0x5xx   0x66  OPpd
        */
 
-
      /**
 	  * SSE Arithmetic 
 	  */

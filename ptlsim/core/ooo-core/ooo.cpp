@@ -78,7 +78,6 @@ namespace OOO_CORE_MODEL {
 
 };
 
-
 /*
  * @brief Initialize lookup tables used by the simulation
  */
@@ -226,17 +225,14 @@ void ThreadContext::init() {
     setupTLB();
 
     reset();
-    coreid = core.coreid;
+    coreid = core.get_coreid();
 }
-
 
 OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
         const char* name)
 : BaseCore(machine_, name)
     , core_stats("core", this)
 {
-    coreid = machine.get_next_coreid();
-
     if(!machine_.get_option(name, "threads", threadcount)) {
         threadcount = 1;
     }
@@ -248,9 +244,9 @@ OooCore::OooCore(BaseMachine& machine_, W8 num_threads,
     /* Rename the stats */
     stringbuf core_name;
     if(name) {
-        core_name << name << "_" << coreid;
+        core_name << name << "_" << get_coreid();
     } else {
-        core_name << "core_" << coreid;
+        core_name << "core_" << get_coreid();
     }
 
     update_name(core_name.buf);
@@ -300,7 +296,7 @@ void OooCore::reset() {
 
     setzero(robs_on_fu);
 
-    foreach_issueq(reset(coreid, this));
+    foreach_issueq(reset(get_coreid(), this));
 
 #ifndef MULTI_IQ
     int reserved_iq_entries_per_thread = (int)sqrt(
@@ -519,8 +515,6 @@ int ThreadContext::get_priority() const {
     return priority;
 }
 
-
-
 /**
  * @brief Execute one cycle of the entire core state machine
  *
@@ -535,7 +529,6 @@ bool OooCore::runcycle(void* none) {
       * x86 insn EOM uop to commit before redirecting
       * to the interrupt handler.
       */
-
 
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
@@ -555,7 +548,6 @@ bool OooCore::runcycle(void* none) {
       * the thread-0's counters for simplicity
       */
     set_default_stats(threads[0]->thread_stats.get_default_stats(), false);
-
 
     /*
      * Compute reserved issue queue entries to avoid starvation:
@@ -623,7 +615,6 @@ bool OooCore::runcycle(void* none) {
 
     fu_avail = bitmask(FU_COUNT);
 
-
     /*
      *  Backend and issue pipe stages run with round robin priority
      */
@@ -668,7 +659,6 @@ bool OooCore::runcycle(void* none) {
         }
     }
 
-
      /*
       * Clock the TLB miss page table walk state machine
       * This may use up load ports, so do it before other
@@ -681,7 +671,6 @@ bool OooCore::runcycle(void* none) {
         thread->tlbwalk();
     }
 
-
     /*
      * Issue whatever is ready
      */
@@ -691,7 +680,6 @@ bool OooCore::runcycle(void* none) {
     }
 
     for_each_cluster(i) { issue(i); }
-
 
     /*
      * Most of the frontend (except fetch!) also works with round robin priority
@@ -717,7 +705,6 @@ bool OooCore::runcycle(void* none) {
             thread->rename();
         }
     }
-
 
     /*
      *  Compute fetch priorities (default is ICOUNT algorithm)
@@ -747,7 +734,6 @@ bool OooCore::runcycle(void* none) {
         sort(priority_index, threadcount, SortPrecomputedIndexListComparator<int, false>(priority_value));
     }
 
-
     /*
      *  Fetch in thread priority order
      *
@@ -772,13 +758,11 @@ bool OooCore::runcycle(void* none) {
         }
     }
 
-
     /*
      * Always clock the issue queues: they're independent of all threads
      */
 
     foreach_issueq(clock());
-
 
     /*
      * Advance the round robin priority index
@@ -927,7 +911,6 @@ bool OooCore::runcycle(void* none) {
     return exiting;
 }
 
-
 /*
  * ReorderBufferEntry
  */
@@ -944,7 +927,6 @@ void ReorderBufferEntry::init(int idx) {
     current_state_list = NULL;
     reset();
 }
-
 
 /**
  * @brief Clean out various fields from the ROB entry that are expected to be
@@ -1155,7 +1137,7 @@ void ThreadContext::dump_smt_state(ostream& os) {
  * state
  */
 void OooCore::dump_state(ostream& os) {
-    os << "dump_state for core[",coreid,"]: SMT common structures:", endl;
+    os << "dump_state for core[",get_coreid(),"]: SMT common structures:", endl;
 
     print_list_of_state_lists<PhysicalRegister>(os, physreg_states, "Physical register states");
     foreach (i, PHYS_REG_FILE_COUNT) {
@@ -1416,7 +1398,6 @@ bool ThreadContext::handle_exception() {
         flush_pipeline();
         return true;
     }
-
 
     /*
      * Map PTL internal hardware exceptions to their x86 equivalents,
