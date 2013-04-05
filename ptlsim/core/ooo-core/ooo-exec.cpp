@@ -867,7 +867,6 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
         ctx.check_and_translate(addr, uop.size, st, uop.internal, exception,
                 mmio, pfec);
 
-
     int op_size = (1 << sizeshift );
     int page_crossing = ((lowbits(origaddr, 12) + (op_size - 1)) >> 12);
     if unlikely (page_crossing && !annul) {
@@ -2677,7 +2676,6 @@ W64 ReorderBufferEntry::annul(bool keep_misspec_uop, bool return_first_annulled_
      */
 
     int somidx = index();
-
 
     while (!ROB[somidx].uop.som) somidx = add_index_modulo(somidx, -1, ROB_SIZE);
     int eomidx = index();

@@ -367,7 +367,7 @@ static void print_banner(ostream& os) {
   os << "//  Git branch '" << stringify(GITBRANCH) << "' on date " << stringify(GITDATE) << " (HEAD: " << stringify(GITCOMMIT) << ")" << endl;
   os << "//  Built " << __DATE__ << " " << __TIME__ << " on " << stringify(BUILDHOST) << " using gcc-" <<
     stringify(__GNUC__) << "." << stringify(__GNUC_MINOR__) << endl;
-  os << "//  With " stringify(NUM_SIM_CORES) " simulated cores" << endl;
+  os << "//  With " << stringify(NUM_SIM_CORES) << " simulated cores" << endl;
   os << "//  Running on " << hostinfo.nodename << "." << hostinfo.domainname << endl;
   os << "//  " << endl;
   os << endl;
@@ -1283,6 +1283,7 @@ extern "C" uint8_t ptl_simulate() {
     cerr << "Cannot find core named '" << machinename << "'" << endl;
     return 0;
   }
+
 
   // If config.run_tests is enabled, then run testcases
   if(config.run_tests) {

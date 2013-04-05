@@ -218,10 +218,6 @@ void OooCore::flush_pipeline() {
     /* Clear out everything global: */
     setzero(robs_on_fu);
 }
-/**
- * @brief Flush entire pipeline immediately, reset all processor structures to
- * their initial state, and resume from the state saved in ctx.commitarf.
- */
 
 /**
  * @brief Flush entire pipeline immediately, reset all processor structures to
@@ -322,6 +318,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
     current_basic_block_transop_index = 0;
     unaligned_ldst_buf.reset();
 }
+
 /**
  * @brief Process any pending self-modifying code invalidate requests. This must
  * be called on all cores *after* flushing all pipelines, to ensure no stale BBs
