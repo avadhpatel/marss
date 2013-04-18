@@ -579,6 +579,12 @@ bool handle_config_change(PTLsimConfig& config) {
     current_yaml_stats_filename = config.yaml_stats_filename;
   }
 
+  /* There is a pending request to dump current stats to a file. */
+  if ((config.stats_filename.set() || config.yaml_stats_filename.set()) && config.dump_state_now) {
+	config.dump_state_now = 0;
+	flush_stats();
+  }
+
 if ((config.loglevel > 0) & (config.start_log_at_rip == INVALIDRIP) & (config.start_log_at_iteration == infinity)) {
     config.start_log_at_iteration = 0;
   }
