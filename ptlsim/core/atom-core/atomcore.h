@@ -994,6 +994,20 @@ namespace ATOM_CORE_MODEL {
 
         cache_access st_dcache, st_icache;
 
+		struct tlb_access : public Statable
+		{
+			StatObj<W64> hits;
+			StatObj<W64> misses;
+
+			tlb_access(const char* name, Statable *parent)
+				: Statable(name, parent)
+				, hits("hits", this)
+				, misses("misses", this)
+				{}
+		};
+
+		tlb_access st_itlb, st_dtlb;
+
         StatObj<W64> st_cycles;
 
         StatArray<W64, ASSIST_COUNT> assists;

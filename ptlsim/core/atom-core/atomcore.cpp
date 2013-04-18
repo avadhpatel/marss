@@ -1187,6 +1187,8 @@ W64 AtomOp::generate_address(TransOp& uop, bool is_st)
 
     /* Access TLB */
     tlb_hit = thread->core.dtlb.probe(virtaddr, thread->threadid);
+	if (tlb_hit)
+		thread->st_dtlb.hits++;
 
     /* If access is crossing page boundires, check next page */
     int page_crossing = ((lowbits(virtaddr, 12) + (op_size - 1)) >> 12);
@@ -1196,6 +1198,8 @@ W64 AtomOp::generate_address(TransOp& uop, bool is_st)
 
         /* Access TLB with next page address */
         tlb_hit2 = thread->core.dtlb.probe(virtaddr2, thread->threadid);
+		if (tlb_hit2)
+			thread->st_dtlb.hits++;
     }
 
     /* If there has been an exception, treat it as TLB miss. Store the
@@ -1214,6 +1218,7 @@ W64 AtomOp::generate_address(TransOp& uop, bool is_st)
     }
 
     /* Its a tlb-miss, initiate page-walk */
+	thread->st_dtlb.misses++;
     thread->dtlb_walk_level = thread->ctx.page_table_level_count();
     thread->dtlb_miss_addr = (exception) ? page_fault_addr :
         (!tlb_hit ? virtaddr : virtaddr2);
@@ -1705,6 +1710,8 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
       , st_branch_predictions(this)
       , st_dcache("dcache", this)
       , st_icache("icache", this)
+	  , st_itlb("itlb", this)
+	  , st_dtlb("dtlb", this)
       , st_cycles("cycles", this)
       , assists("assists", this, assist_names)
       , lassists("lassists", this, light_assist_names)
@@ -2023,10 +2030,12 @@ bool AtomThread::fetch_probe_itlb()
 {
     if(core.itlb.probe((Waddr)(fetchrip), threadid)) {
         // Its a TLB hit
+		st_itlb.hits++;
         return true;
     }
 
     // Its a ITLB miss - do TLB page walk
+	st_itlb.misses++;
     itlb_walk_level = ctx.page_table_level_count();
     itlb_walk();
     
