@@ -1186,6 +1186,7 @@ W64 AtomOp::generate_address(TransOp& uop, bool is_st)
     W64 physaddr = get_phys_address(uop, is_st, virtaddr);
 
     /* Access TLB */
+	thread->st_dtlb.accesses++;
     tlb_hit = thread->core.dtlb.probe(virtaddr, thread->threadid);
 	if (tlb_hit)
 		thread->st_dtlb.hits++;
@@ -1761,6 +1762,18 @@ AtomThread::AtomThread(AtomCore& core, W8 threadid, Context& ctx)
 
     st_commit.uipc.add_elem(&st_commit.uops);
     st_commit.uipc.add_elem(&st_cycles);
+
+	st_dcache.miss_ratio.add_elem(&st_dcache.misses);
+	st_dcache.miss_ratio.add_elem(&st_dcache.accesses);
+
+	st_icache.miss_ratio.add_elem(&st_icache.misses);
+	st_icache.miss_ratio.add_elem(&st_icache.accesses);
+
+	st_itlb.hit_ratio.add_elem(&st_itlb.hits);
+	st_itlb.hit_ratio.add_elem(&st_itlb.accesses);
+
+	st_dtlb.hit_ratio.add_elem(&st_dtlb.hits);
+	st_dtlb.hit_ratio.add_elem(&st_dtlb.accesses);
 }
 
 /**
@@ -2028,6 +2041,7 @@ bool AtomThread::fetch_check_current_bb()
  */
 bool AtomThread::fetch_probe_itlb()
 {
+	st_itlb.accesses++;
     if(core.itlb.probe((Waddr)(fetchrip), threadid)) {
         // Its a TLB hit
 		st_itlb.hits++;

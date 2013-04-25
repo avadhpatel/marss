@@ -984,11 +984,14 @@ namespace ATOM_CORE_MODEL {
         {
             StatObj<W64> accesses;
             StatObj<W64> misses;
+			
+			StatEquation<W64, double, StatObjFormulaDiv> miss_ratio;
 
             cache_access(const char* name, Statable *parent)
                 : Statable(name, parent)
                   , accesses("accesses", this)
                   , misses("misses", this)
+				  , miss_ratio("miss_ratio", this)
             {}
         };
 
@@ -996,13 +999,18 @@ namespace ATOM_CORE_MODEL {
 
 		struct tlb_access : public Statable
 		{
+			StatObj<W64> accesses;
 			StatObj<W64> hits;
 			StatObj<W64> misses;
 
+			StatEquation<W64, double, StatObjFormulaDiv> hit_ratio;
+
 			tlb_access(const char* name, Statable *parent)
 				: Statable(name, parent)
+				, accesses("accesses", this)
 				, hits("hits", this)
 				, misses("misses", this)
+				, hit_ratio("hit_ratio", this)
 				{}
 		};
 
