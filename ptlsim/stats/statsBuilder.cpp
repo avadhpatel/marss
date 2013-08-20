@@ -358,7 +358,8 @@ ostream& StatsBuilder::dump_header(ostream &os) const
 {
     if (rootNode->is_dump_periodic())
     {
-        os << "sim_cycle";
+        os << "sim_cycle,";
+        os << "time_ns";
         rootNode->dump_header(os);
         os << "\n";
     }
@@ -394,7 +395,8 @@ ostream& StatsBuilder::dump_periodic(ostream& os, W64 cycle) const
     sub_periodic_stats(*temp_stats, *temp2_stats);
 
     if(rootNode->is_dump_periodic()) {
-        os << cycle;
+        os << cycle << ",";
+        os << simcycles_to_ns(cycle);
         rootNode->dump_periodic(os, temp_stats);
         os << "\n";
     }
