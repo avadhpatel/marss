@@ -634,7 +634,8 @@ bool TsxCache::handle_upper_interconnect(Message &message){
 			disable_tsx();
 			break;
 		case 0x3: // xabort
-            assert(check_tsx_invalidated());
+			//assert(check_tsx_invalidated()); // commented this line, since the function does not seem to make sense
+			memdebug("TSX Abort in " << get_name() << endl);
 			disable_tsx();
 			break;
 		default:  // invalid

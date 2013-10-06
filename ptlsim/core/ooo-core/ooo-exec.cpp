@@ -459,6 +459,19 @@ int ReorderBufferEntry::issue() {
             issueprefetch(state, radata, rbdata, rcdata, uop.cachelevel);
         } else if unlikely (uop.opcode == OP_ast) {
             issueast(state, uop.riptaken, radata, rbdata, rcdata, ra.flags, rb.flags, rc.flags);
+            /* 
+             * FIX to allow explicit aborts to be executed correctly.
+             * Since the ReorderBufferEntry::issueast_tsx() flushes the ROB for the L_ASSIST_XABORT, 
+             * the ReorderBufferEntry::issue() cannot be continued after the method's return.
+             */
+            if(uop.riptaken == L_ASSIST_XABORT)
+            {
+                // The release of the entry and marking it as issued seems to be useful.
+                release();
+                this->issued = 1;
+
+                return 1;
+            }
         } else {
             if unlikely (br) {
                 state.brreg.riptaken = uop.riptaken;
