@@ -1090,10 +1090,12 @@ W64 l_assist_xtest(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
         W16 rbflags, W16 rcflags, W16& flags)
 {
     if (ctx.tsx_mode > 0) {
-        flags |= FLAG_ZF;
-    } else {
         flags &= ~(FLAG_ZF);
+    } else {
+        flags |= FLAG_ZF;
     }
+
+    // TODO: According to the specification, the CF, OF, SF, PF, and AF flags need to be cleared too.
 
     return ra;
 }
