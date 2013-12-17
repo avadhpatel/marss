@@ -300,11 +300,11 @@ else:
 env['CPPPATH'].append("%s/fpu" % env['source_path'])
 
 op_helper_obj = env.Object('%s/op_helper.c' % target_path, 
-        CCFLAGS = env['CCFLAGS'] + HELPER_CFLAGS)
+        CCFLAGS = env['CCFLAGS'] + [HELPER_CFLAGS])
 helper_obj = env.Object('%s/helper.c' % target_path,
-        CCFLAGS = env['CCFLAGS'] + HELPER_CFLAGS)
+        CCFLAGS = env['CCFLAGS'] + [HELPER_CFLAGS])
 cpu_exec_obj = env.Object('cpu-exec.c', 
-        CCFLAGS = env['CCFLAGS'] + HELPER_CFLAGS)
+        CCFLAGS = env['CCFLAGS'] + [HELPER_CFLAGS])
 
 cpu_emu_objs += " %s/op_helper.o %s/helper.o" % (target_path, target_path)
 cpu_emu_objs += " cpu-exec.o"
