@@ -42,10 +42,7 @@ if int(debug):
     elif int(debug) == 2: #For more detailed debugging information
 		env.Append(CCFLAGS = '-ggdb3')
 		env.Append(CCFLAGS = '-g3')
-		if float(GCC_MAJOR_MINOR_VERSION) >= 4.8:
-			env.Append(CCFLAGS = '-Og')
-		else: #Possibly slow
-			env.Append(CCFLAGS = '-O0')
+		env.Append(CCFLAGS = '-O0')
 
     # Enable tests
     env.Append(CCFLAGS = '-DENABLE_TESTS')
