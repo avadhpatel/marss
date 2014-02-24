@@ -51,8 +51,8 @@ struct PTLsimMachine : public Statable {
   bool first_run;
   Context* ret_qemu_env;
   PTLsimMachine() : Statable("machine") {
-      initialized = 0; stopped = 0;
-      handle_cpuid = NULL;
+    initialized = 0; stopped = 0;
+    handle_cpuid = NULL;
   }
 
   virtual bool init(PTLsimConfig& config);
@@ -71,14 +71,14 @@ struct PTLsimMachine : public Statable {
 
   stringbuf machine_name;
   int (*handle_cpuid)(uint32_t index, uint32_t count, uint32_t *eax,
-          uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
+      uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
 
   Context& contextof(W8 i) {
-	  return *ptl_contexts[i];
+    return *ptl_contexts[i];
   }
 
   virtual W8 get_num_cores() {
-      return NUMBER_OF_CORES;
+    return NUMBER_OF_CORES;
   }
 };
 
@@ -87,7 +87,7 @@ void setup_qemu_switch_except_ctx(const Context& const_ctx);
 void setup_ptlsim_switch_all_ctx(Context& const_ctx);
 
 inline Context& contextof(W8 i) {
-	return *ptl_contexts[i];
+  return *ptl_contexts[i];
 }
 
 /* Checker */
@@ -210,6 +210,8 @@ struct PTLsimConfig {
   bool log_user_only;
   stringbuf dump_config_filename;
 
+  bool logMemory;
+
   bool dump_state_now;
   bool abort_at_end;
 
@@ -303,11 +305,13 @@ extern bool logenable;
 #else
 #define logable(level) (unlikely (logenable && (config.loglevel >= level)))
 #define logfuncwith(func, new_loglevel) {\
-    int old_loglevel = config.loglevel; config.loglevel = new_loglevel; \
-    func ; \
-    config.loglevel = old_loglevel; \
-    }
+  int old_loglevel = config.loglevel; config.loglevel = new_loglevel; \
+  func ; \
+  config.loglevel = old_loglevel; \
+}
 #endif
+
+#define logMem config.logMemory
 
 void force_logging_enabled();
 
