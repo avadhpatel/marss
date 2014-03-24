@@ -1471,6 +1471,10 @@ handle_page_fault:
             ctx.exception_index= EXCEPTION_x86_fpu_not_avail; break;
         case EXCEPTION_FloatingPoint:
             ctx.exception_index= EXCEPTION_x86_fpu; break;
+        case EXCEPTION_DivideOverflow:
+            ctx.exception_index= EXCEPTION_x86_divide;
+            ctx.page_fault_addr = ctx.eip;
+            break;
         default:
             ptl_logfile << "Unsupported internal exception type ", exception_name(ctx.exception), endl, flush;
             assert(false);

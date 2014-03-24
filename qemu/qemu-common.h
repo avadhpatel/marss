@@ -13,6 +13,8 @@
 
 #define QEMU_BUILD_BUG_ON(x) typedef char __build_bug_on__##__LINE__[(x)?-1:1];
 
+#define BIT(n) (1 << (n))
+
 typedef struct QEMUTimer QEMUTimer;
 typedef struct QEMUFile QEMUFile;
 typedef struct QEMUBH QEMUBH;
