@@ -944,10 +944,10 @@ W64 l_assist_popcnt(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
     W64 sizeshift = rb;
     setup_qemu_switch_except_ctx(ctx);
     ctx.setup_qemu_switch();
-    helper_popcnt(ra,sizeshift);
+    W64 n =helper_popcnt(ra,sizeshift);
     setup_ptlsim_switch_all_ctx(ctx);
 
-    return 0;
+    return n;
 }
 
 bool assist_mmx_emms(Context& ctx) {
