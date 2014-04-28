@@ -1798,7 +1798,6 @@ void ReorderBufferEntry::issueast(IssueState& state, W64 assistid, W64 ra,
     if(assistid == L_ASSIST_PAUSE) {
         getthread().pause_counter = THREAD_PAUSE_CYCLES;
         getthread().thread_stats.cycles_in_pause += THREAD_PAUSE_CYCLES;
-        getthread().thread_stats.cycles_in_pause += THREAD_PAUSE_CYCLES;
     }
 
     /* Get the ast function ID from */
