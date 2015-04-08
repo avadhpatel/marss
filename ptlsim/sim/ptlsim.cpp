@@ -479,21 +479,6 @@ void dump_yaml_stats()
  */
 void dump_text_stats()
 {
-  if (!config.yaml_stats_filename)
-    return;
-
-  (StatsBuilder::get()).dump(user_stats, yaml_stats_file, "user.");
-  (StatsBuilder::get()).dump(kernel_stats, yaml_stats_file, "kernel.");
-  (StatsBuilder::get()).dump(global_stats, yaml_stats_file, "total.");
-
-  yaml_stats_file.flush();
-}
-
-/**
- * @brief Save stats in flat plain text format
- */
-void dump_text_stats()
-{
 	if (!config.yaml_stats_filename)
 		return;
 
