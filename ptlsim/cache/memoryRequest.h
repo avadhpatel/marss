@@ -152,7 +152,7 @@ namespace Memory {
       {
         os << "Memory Request: core[" << coreId_ << "] ";
         os << "thread[" << threadId_ << "] ";
-        os << "address[0x" << hexstring(physicalAddress_, 48) < "] ";
+        os << "address[0x" << hexstring(physicalAddress_, 48) << "] ";
         os << "robid[" << robId_ << "] ";
         os << "init-cycle[" << cycles_ << "] ";
         os << "ref-counter[" << refCounter_ << "] ";

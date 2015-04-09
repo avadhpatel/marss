@@ -186,7 +186,7 @@ namespace Memory {
           os << "\tconnected to: " << endl;
 
           foreach(i, controllers.count()) {
-            os << "\t\tcontroller[", i, "]: " <<
+            os << "\t\tcontroller[" << i << "]: " <<
                controllers[i]->controller->get_name() << endl;
           }
         }

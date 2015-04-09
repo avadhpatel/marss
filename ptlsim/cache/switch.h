@@ -155,7 +155,7 @@ namespace Memory {
           foreach (i, controllers.count()) {
             ControllerQueue *cq = controllers[i];
             os << "Controller " << cq->controller->get_name() << " ";
-            os << "busy: " << cq->recv_busy < " Queue:" << endl;
+            os << "busy: " << cq->recv_busy << " Queue:" << endl;
             os << cq->queue;
           }
           os << "--End-Switch-Interconnect\n";
