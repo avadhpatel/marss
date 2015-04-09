@@ -2016,15 +2016,7 @@ int ReorderBufferEntry::commit() {
             }
         }
     }
-            if (thread0_stuck_in_spinlock && thread1_stuck_in_spinlock) {
-                ptl_logfile << "Both threads stuck in spinlock", endl;
-                //core.machine.dump_state(ptl_logfile); // This is implied by assert().
-                assert(false);
-            }
-        }
-    }
 #endif
-     
     if (st) assert(lsq->addrvalid && lsq->datavalid);
 
     if (ld) physreg->data = lsq->data;

@@ -1269,7 +1269,6 @@ extern "C" uint8_t ptl_simulate() {
     return 0;
   }
 
-
   // If config.run_tests is enabled, then run testcases
   if(config.run_tests) {
     run_tests();
@@ -1353,7 +1352,6 @@ extern "C" uint8_t ptl_simulate() {
 
   if(machine->stopped != 0)
     machine->stopped = 0;
-
   if(logable(1)) {
     ptl_logfile << "Starting simulation at rip: ";
     foreach(i, contextcount) {
@@ -1396,7 +1394,8 @@ extern "C" uint8_t ptl_simulate() {
   stringbuf sb;
   sb << endl << "Stopped after " << sim_cycle << " cycles, " << total_insns_committed << " instructions and " <<
     seconds << " seconds of sim time (cycle/sec: " << W64(double(sim_cycle) / double(seconds)) << " Hz, insns/sec: " << 
-    W64(double(total_insns_committed) / double(seconds)) << ", insns/cyc: " <<  double(total_insns_committed) / double(sim_cycle) << ")" << endl;
+    W64(double(total_insns_committed) / double(seconds)) << ", insns/cyc: " <<  double(total_insns_committed) / double(sim_cycle) << ")" 
+    << "\t" << (double(sim_cycle) / double(get_native_core_freq_hz())) << " wall time in seconds" << endl;
 
   ptl_logfile << sb << flush;
   cerr << sb << flush;

@@ -735,7 +735,6 @@ int ReorderBufferEntry::issue() {
  * @deprecated Not used
  * Re check if the load or store will cause page fault or not
  */
-
 bool ReorderBufferEntry::recheck_page_fault() {
 
     if(uop.internal || (lsq->sfence | lsq->lfence))
@@ -2146,6 +2145,7 @@ LoadStoreQueueEntry* ReorderBufferEntry::find_nearest_memory_fence() {
  * This implementation closely models the Intel Pentium 4 technique described
  * in U.S. Patent 6651151, "MFENCE and LFENCE Microarchitectural Implementation
  * Method and System" (S. Palanca et al), filed 12 Jul 2002.
+ *
  */
 int ReorderBufferEntry::issuefence(LoadStoreQueueEntry& state) {
     ThreadContext& thread = getthread();
