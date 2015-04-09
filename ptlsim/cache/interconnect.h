@@ -32,62 +32,62 @@
 
 namespace Memory {
 
-enum {
+  enum {
     INTERCONN_TYPE_UPPER = 0,
     INTERCONN_TYPE_UPPER2,
     INTERCONN_TYPE_LOWER,
     INTERCONN_TYPE_I,
     INTERCONN_TYPE_D,
     INTERCONN_TYPE_DIRECTORY,
-};
+  };
 
-class Interconnect
-{
-	private:
-        stringbuf name_;
-		Signal controller_request_;
+  class Interconnect
+  {
+    private:
+      stringbuf name_;
+      Signal controller_request_;
 
-	public:
-		MemoryHierarchy *memoryHierarchy_;
-		Interconnect(const char *name, MemoryHierarchy *memoryHierarchy)
-			: controller_request_("Controller Request")
-			, memoryHierarchy_(memoryHierarchy)
-		{
-			name_ << name;
-			controller_request_.connect(signal_mem_ptr(*this,
-						&Interconnect::controller_request_cb));
-		}
+    public:
+      MemoryHierarchy *memoryHierarchy_;
+      Interconnect(const char *name, MemoryHierarchy *memoryHierarchy)
+        : controller_request_("Controller Request")
+          , memoryHierarchy_(memoryHierarchy)
+    {
+      name_ << name;
+      controller_request_.connect(signal_mem_ptr(*this,
+            &Interconnect::controller_request_cb));
+    }
 
-        virtual ~Interconnect()
-        {
-            memoryHierarchy_ = NULL;
-        }
+      virtual ~Interconnect()
+      {
+        memoryHierarchy_ = NULL;
+      }
 
-		virtual bool controller_request_cb(void *arg)=0;
-		virtual void register_controller(Controller *controller)=0;
-		virtual int access_fast_path(Controller *controller,
-				MemoryRequest *request)=0;
-		virtual void print_map(ostream& os)=0;
-		virtual void print(ostream& os) const = 0;
-		virtual int get_delay()=0;
-		virtual void annul_request(MemoryRequest* request) = 0;
-		virtual void dump_configuration(YAML::Emitter &out) const = 0;
+      virtual bool controller_request_cb(void *arg)=0;
+      virtual void register_controller(Controller *controller)=0;
+      virtual int access_fast_path(Controller *controller,
+          MemoryRequest *request)=0;
+      virtual void print_map(ostream& os)=0;
+      virtual void print(ostream& os) const = 0;
+      virtual int get_delay()=0;
+      virtual void annul_request(MemoryRequest* request) = 0;
+      virtual void dump_configuration(YAML::Emitter &out) const = 0;
 
-		Signal* get_controller_request_signal() {
-			return &controller_request_;
-		}
+      Signal* get_controller_request_signal() {
+        return &controller_request_;
+      }
 
-		char* get_name() const {
-			return name_.buf;
-		}
-};
+      char* get_name() const {
+        return name_.buf;
+      }
+  };
 
-static inline ostream& operator << (ostream& os, const Interconnect&
-		inter)
-{
-	inter.print(os);
-	return os;
-}
+  static inline ostream& operator << (ostream& os, const Interconnect&
+      inter)
+  {
+    inter.print(os);
+    return os;
+  }
 
 };
 

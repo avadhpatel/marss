@@ -46,13 +46,13 @@ using namespace Memory;
  * @param memoryHierarchy Pointer to global memory hierarchy
  */
 P2PInterconnect::P2PInterconnect(const char *name,
-		MemoryHierarchy *memoryHierarchy) :
-	Interconnect(name, memoryHierarchy)
+    MemoryHierarchy *memoryHierarchy) :
+  Interconnect(name, memoryHierarchy)
 {
-	controllers_[0] = NULL;
-	controllers_[1] = NULL;
+  controllers_[0] = NULL;
+  controllers_[1] = NULL;
 
-    memoryHierarchy->add_interconnect(this);
+  memoryHierarchy->add_interconnect(this);
 }
 
 /**
@@ -65,17 +65,17 @@ P2PInterconnect::P2PInterconnect(const char *name,
  */
 void P2PInterconnect::register_controller(Controller *controller)
 {
-	if(controllers_[0] == NULL) {
-		controllers_[0] = controller;
-		return;
-	} else if(controllers_[1] == NULL) {
-		controllers_[1] = controller;
-		return;
-	}
+  if(controllers_[0] == NULL) {
+    controllers_[0] = controller;
+    return;
+  } else if(controllers_[1] == NULL) {
+    controllers_[1] = controller;
+    return;
+  }
 
-	memdebug("Already two controllers register in P2P\n");
-    /* Already two controllers are registered */
-	assert(0);
+  memdebug("Already two controllers register in P2P\n");
+  /* Already two controllers are registered */
+  assert(0);
 }
 
 /**
@@ -87,28 +87,28 @@ void P2PInterconnect::register_controller(Controller *controller)
  */
 bool P2PInterconnect::controller_request_cb(void *arg)
 {
-    /*
-     * P2P is 0 latency interconnect so directly
-     * pass it to next controller
-     */
-	Message *msg = (Message*)arg;
+  /*
+   * P2P is 0 latency interconnect so directly
+   * pass it to next controller
+   */
+  Message *msg = (Message*)arg;
 
-	Controller *receiver = get_other_controller(
-			(Controller*)msg->sender);
+  Controller *receiver = get_other_controller(
+      (Controller*)msg->sender);
 
-	Message& message = *memoryHierarchy_->get_message();
-	message.sender = (void *)this;
-	message.request = msg->request;
-	message.hasData = msg->hasData;
-	message.arg = msg->arg;
+  Message& message = *memoryHierarchy_->get_message();
+  message.sender = (void *)this;
+  message.request = msg->request;
+  message.hasData = msg->hasData;
+  message.arg = msg->arg;
 
-	bool ret_val;
-	ret_val = receiver->get_interconnect_signal()->emit((void *)&message);
+  bool ret_val;
+  ret_val = receiver->get_interconnect_signal()->emit((void *)&message);
 
-    /* Free the message */
-	memoryHierarchy_->free_message(&message);
+  /* Free the message */
+  memoryHierarchy_->free_message(&message);
 
-	return ret_val;
+  return ret_val;
 
 }
 
@@ -121,10 +121,10 @@ bool P2PInterconnect::controller_request_cb(void *arg)
  * @return Access cycle delay for fast path access
  */
 int P2PInterconnect::access_fast_path(Controller *controller,
-		MemoryRequest *request)
+    MemoryRequest *request)
 {
-	Controller *receiver = get_other_controller(controller);
-	return receiver->access_fast_path(this, request);
+  Controller *receiver = get_other_controller(controller);
+  return receiver->access_fast_path(this, request);
 }
 
 /**
@@ -134,25 +134,25 @@ int P2PInterconnect::access_fast_path(Controller *controller,
  */
 void P2PInterconnect::print_map(ostream &os)
 {
-	os << "Interconnect: " , get_name(), endl;
-	os << "\tconntected to:", endl;
+  os << "Interconnect: " << get_name() << endl;
+  os << "\tconntected to:" << endl;
 
-	if(controllers_[0] == NULL)
-		os << "\t\tcontroller-1: None", endl;
-	else
-		os << "\t\tcontroller-1: ", controllers_[0]->get_name(), endl;
+  if(controllers_[0] == NULL)
+    os << "\t\tcontroller-1: None" << endl;
+  else
+    os << "\t\tcontroller-1: " << controllers_[0]->get_name() << endl;
 
-	if(controllers_[1] == NULL)
-		os << "\t\tcontroller-2: None", endl;
-	else
-		os << "\t\tcontroller-2: ", controllers_[1]->get_name(), endl;
+  if(controllers_[1] == NULL)
+    os << "\t\tcontroller-2: None" << endl;
+  else
+    os << "\t\tcontroller-2: " << controllers_[1]->get_name() << endl;
 }
 
 bool P2PInterconnect::send_request(Controller *sender,
-		MemoryRequest *request, bool hasData)
+    MemoryRequest *request, bool hasData)
 {
-	assert(0);
-	return false;
+  assert(0);
+  return false;
 }
 
 /**
@@ -162,13 +162,13 @@ bool P2PInterconnect::send_request(Controller *sender,
  */
 void P2PInterconnect::dump_configuration(YAML::Emitter &out) const
 {
-	out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
+  out << YAML::Key << get_name() << YAML::Value << YAML::BeginMap;
 
-	YAML_KEY_VAL(out, "type", "interconnect");
-	/* Currently we have 0 latency */
-	YAML_KEY_VAL(out, "latency", 0);
+  YAML_KEY_VAL(out, "type", "interconnect");
+  /* Currently we have 0 latency */
+  YAML_KEY_VAL(out, "latency", 0);
 
-	out << YAML::EndMap;
+  out << YAML::EndMap;
 }
 
 /**
@@ -179,15 +179,15 @@ void P2PInterconnect::dump_configuration(YAML::Emitter &out) const
  */
 struct P2PBuilder : public InterconnectBuilder
 {
-    P2PBuilder(const char* name) :
-        InterconnectBuilder(name)
-    { }
+  P2PBuilder(const char* name) :
+    InterconnectBuilder(name)
+  { }
 
-    Interconnect* get_new_interconnect(MemoryHierarchy& mem,
-            const char* name)
-    {
-        return new P2PInterconnect(name, &mem);
-    }
+  Interconnect* get_new_interconnect(MemoryHierarchy& mem,
+      const char* name)
+  {
+    return new P2PInterconnect(name, &mem);
+  }
 };
 
 P2PBuilder p2pBuilder("p2p");

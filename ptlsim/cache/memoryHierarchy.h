@@ -120,7 +120,7 @@ namespace Memory {
           os << "Signal:" << signal_->get_name() << " ";
         os << "Clock:" << clock_ << " ";
         os << "arg:" << arg_ ;
-        os << ">" << endl, flush;
+        os << ">" << endl << flush;
         return os;
       }
 

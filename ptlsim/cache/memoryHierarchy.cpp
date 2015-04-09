@@ -312,7 +312,7 @@ void MemoryHierarchy::add_event(Signal *signal, int delay, void *arg)
     assert(event->execute());
 
     eventQueue_.free(event);
-    /* memdebug("Queue after add: \n", eventQueue_); */
+    /* memdebug("Queue after add: \n" << eventQueue_); */
     return;
   }
 
