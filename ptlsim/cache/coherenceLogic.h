@@ -36,42 +36,41 @@
 
 namespace Memory {
 
-    class MemoryHierarchy;
+class MemoryHierarchy;
 
-    namespace CoherentCache {
+namespace CoherentCache {
 
-        class CacheController;
-        class CacheQueueEntry;
+class CacheController;
+class CacheQueueEntry;
 
-        class CoherenceLogic : public Statable
-        {
-            public:
-                CoherenceLogic(const char*name, CacheController* cont,
-                        Statable *parent, MemoryHierarchy* mem)
-                    : Statable(name, parent)
-                      , controller(cont)
-                      , memoryHierarchy(mem)
-            {}
+class CoherenceLogic : public Statable {
+    public:
+        CoherenceLogic(const char*name, CacheController* cont,
+                       Statable *parent, MemoryHierarchy* mem)
+            : Statable(name, parent)
+            , controller(cont)
+            , memoryHierarchy(mem) {
+        }
 
-                virtual void handle_local_hit(CacheQueueEntry *entry)      = 0;
-                virtual void handle_local_miss(CacheQueueEntry *entry)     = 0;
-                virtual void handle_interconn_hit(CacheQueueEntry *entry)  = 0;
-                virtual void handle_interconn_miss(CacheQueueEntry *entry) = 0;
-                virtual void handle_cache_insert(CacheQueueEntry *entry,
-                        W64 oldTag)                                        = 0;
-                virtual void handle_cache_evict(CacheQueueEntry *entry)    = 0;
-                virtual void complete_request(CacheQueueEntry *entry,
-                        Message &message)                                  = 0;
-                virtual bool is_line_valid(CacheLine *line)                = 0;
-                virtual void invalidate_line(CacheLine *line)              = 0;
-                virtual void handle_response(CacheQueueEntry *entry,
-                        Message &message) = 0;
-				virtual void dump_configuration(YAML::Emitter &out) const = 0;
+        virtual void handle_local_hit(CacheQueueEntry *entry)      = 0;
+        virtual void handle_local_miss(CacheQueueEntry *entry)     = 0;
+        virtual void handle_interconn_hit(CacheQueueEntry *entry)  = 0;
+        virtual void handle_interconn_miss(CacheQueueEntry *entry) = 0;
+        virtual void handle_cache_insert(CacheQueueEntry *entry,
+                                         W64 oldTag)                                        = 0;
+        virtual void handle_cache_evict(CacheQueueEntry *entry)    = 0;
+        virtual void complete_request(CacheQueueEntry *entry,
+                                      Message &message)                                  = 0;
+        virtual bool is_line_valid(CacheLine *line)                = 0;
+        virtual void invalidate_line(CacheLine *line)              = 0;
+        virtual void handle_response(CacheQueueEntry *entry,
+                                     Message &message) = 0;
+        virtual void dump_configuration(YAML::Emitter &out) const = 0;
 
-                CacheController* controller;
-                MemoryHierarchy* memoryHierarchy;
-        };
-    };
+        CacheController* controller;
+        MemoryHierarchy* memoryHierarchy;
+};
+};
 };
 
 #endif

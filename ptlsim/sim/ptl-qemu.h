@@ -168,7 +168,7 @@ void update_progress(void);
  *                 handled by PTLsim
  */
 int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
-		uint32_t *ecx, uint32_t *edx);
+              uint32_t *ecx, uint32_t *edx);
 
 /*
  * ptl_flush_bbcache
@@ -266,4 +266,4 @@ void ptl_qemu_initialized(void);
 }
 #endif
 
-#endif  // PTL_QEMU_H
+#endif  /* PTL_QEMU_H */

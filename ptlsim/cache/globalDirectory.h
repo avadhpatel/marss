@@ -33,11 +33,13 @@ using namespace Memory;
 struct DirectoryEntry {
     bitvec<NUM_SIM_CORES> present;
     bool dirty;
-    W64  tag;
-    W8   owner;
-	bool locked;
+    W64 tag;
+    W8 owner;
+    bool locked;
 
-    DirectoryEntry() { reset(); }
+    DirectoryEntry() {
+        reset();
+    }
     void reset();
     void init(W64 tag_);
 
@@ -48,8 +50,7 @@ struct DirectoryEntry {
     }
 };
 
-static inline ostream& operator <<(ostream &os, const DirectoryEntry &e)
-{
+static inline ostream& operator <<(ostream &os, const DirectoryEntry &e) {
     return e.print(os);
 }
 
@@ -71,10 +72,10 @@ class Directory {
         static Directory* dir;
 
         typedef AssociativeArray<W64, DirectoryEntry, DIR_SET,
-                DIR_WAY, DIR_LINE_SIZE> base_t;
+                                 DIR_WAY, DIR_LINE_SIZE> base_t;
         typedef FullyAssociativeArray<W64, DirectoryEntry, DIR_WAY,
-                NullAssociativeArrayStatisticsCollector<W64,
-                DirectoryEntry> > Set;
+                                      NullAssociativeArrayStatisticsCollector<W64,
+                                                                              DirectoryEntry> > Set;
 
         base_t* entries;
 
@@ -85,22 +86,23 @@ class Directory {
         DirectoryEntry *probe(MemoryRequest *req);
         int             invalidate(MemoryRequest *req);
 
-        W64 tag_of(W64 addr) { return base_t::tagof(addr); }
+        W64 tag_of(W64 addr) {
+            return base_t::tagof(addr);
+        }
 };
 
-struct DirContBufferEntry : public FixStateListObject
-{
+struct DirContBufferEntry : public FixStateListObject {
     MemoryRequest  *request;
     DirectoryEntry *entry;
     Controller     *cont;
     Controller     *responder;
     Signal         *wakeup_sig;
-    bool            annuled;
-    bool            free_on_success;
-    bool            shared;
-    bool            hasData;
-    int             depends;
-    int             origin;
+    bool annuled;
+    bool free_on_success;
+    bool shared;
+    bool hasData;
+    int depends;
+    int origin;
 
     void init() {
         request         = NULL;
@@ -138,8 +140,7 @@ struct DirContBufferEntry : public FixStateListObject
 };
 
 static inline ostream& operator << (ostream& os, const
-        DirContBufferEntry &entry)
-{
+                                    DirContBufferEntry &entry) {
     return entry.print(os);
 }
 
@@ -179,18 +180,18 @@ class DirectoryController : public Controller {
         static DirectoryController *dir_controllers[NUM_SIM_CORES];
     public:
         DirectoryController(W8 idx, const char *name,
-                MemoryHierarchy *memoryHierachy);
+                            MemoryHierarchy *memoryHierachy);
 
         static FixStateList<DirContBufferEntry, REQ_Q_SIZE> *pendingRequests_;
 
         bool handle_interconnect_cb(void *arg);
         void register_interconnect(Interconnect *interconnect,
-                int type);
+                                   int type);
         void print_map(ostream &os);
         void print(ostream &os) const;
         bool is_full(bool flag=false) const;
         void annul_request(MemoryRequest *request);
-		void dump_configuration(YAML::Emitter &out) const;
+        void dump_configuration(YAML::Emitter &out) const;
 
         bool handle_read_miss(Message *message);
         bool handle_write_miss(Message *message);
@@ -213,13 +214,12 @@ class DirectoryController : public Controller {
         void wakeup_dependent(DirContBufferEntry *queueEntry);
 
         DirectoryEntry* get_directory_entry(MemoryRequest *req,
-                bool must_present=0);
+                                            bool must_present=0);
         DirectoryEntry* get_dummy_entry(DirectoryEntry *entry, W64 old_tag);
 };
 
 static inline ostream& operator << (ostream &os, const
-        DirectoryController& dir)
-{
+                                    DirectoryController& dir) {
     dir.print(os);
     return os;
 }

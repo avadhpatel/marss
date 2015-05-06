@@ -37,117 +37,118 @@ namespace Memory {
 class Interconnect;
 
 struct Message : public FixStateListObject {
-	void *sender;
+    void *sender;
     void *origin;
     void *dest;
-	MemoryRequest *request;
-	bool hasData;
-	bool isShared;
-	void *arg;
+    MemoryRequest *request;
+    bool hasData;
+    bool isShared;
+    void *arg;
 
-	ostream& print(ostream& os) const {
-		if(sender == NULL) {
-			os << "Free Message\n";
-			return os;
-		}
-		os << "Message: sender[" , sender, "] ";
+    ostream& print(ostream& os) const {
+        if(sender == NULL) {
+            os << "Free Message\n";
+            return os;
+        }
+        os << "Message: sender[", sender, "] ";
         os << "origin[", origin, "] ";
         os << "dest[", dest, "] ";
-		os << "arg:[", arg, "] ";
-		os << "request[", *request, "] ";
-		os << "isShared[", isShared, "] ";
-		os << "hasData[", hasData, "]\n";
-		return os;
-	}
+        os << "arg:[", arg, "] ";
+        os << "request[", *request, "] ";
+        os << "isShared[", isShared, "] ";
+        os << "hasData[", hasData, "]\n";
+        return os;
+    }
 
-	void init() {
-		sender = NULL;
+    void init() {
+        sender = NULL;
         dest = NULL;
         origin = NULL;
-		request = NULL;
-		hasData = false;
-		arg = NULL;
+        request = NULL;
+        hasData = false;
+        arg = NULL;
         isShared = 0;
-	}
+    }
 };
 
-static inline ostream& operator <<(ostream& os, const Message& msg)
-{
-	return msg.print(os);
+static inline ostream& operator <<(ostream& os, const Message& msg) {
+    return msg.print(os);
 }
 
 class MemoryHierarchy;
 
-class Controller
-{
-	private:
+class Controller {
+    private:
         stringbuf name_;
-		Signal handle_interconnect_;
-		bool isPrivate_;
+        Signal handle_interconnect_;
+        bool isPrivate_;
 
-	public:
-		MemoryHierarchy *memoryHierarchy_;
-		W8 idx;
+    public:
+        MemoryHierarchy *memoryHierarchy_;
+        W8 idx;
 
-		Controller(W8 coreid, const char *name,
-				MemoryHierarchy *memoryHierarchy)
-			: handle_interconnect_("handle_interconnect")
-			, memoryHierarchy_(memoryHierarchy)
-			, idx(coreid)
-		{
-			name_ << name;
-			isPrivate_ = false;
+        Controller(W8 coreid, const char *name,
+                   MemoryHierarchy *memoryHierarchy)
+            : handle_interconnect_("handle_interconnect")
+            , memoryHierarchy_(memoryHierarchy)
+            , idx(coreid) {
+            name_ << name;
+            isPrivate_ = false;
 
-			handle_interconnect_.connect(signal_mem_ptr \
-					(*this, &Controller::handle_interconnect_cb));
-		}
+            handle_interconnect_.connect(signal_mem_ptr \
+                                             (*this, &Controller::handle_interconnect_cb));
+        }
 
-        virtual ~Controller()
-        {
+        virtual ~Controller() {
             memoryHierarchy_ = NULL;
         }
 
-		virtual bool handle_interconnect_cb(void* arg)=0;
-		virtual int access_fast_path(Interconnect *interconnect,
-				MemoryRequest *request) { return -1; };
+        virtual bool handle_interconnect_cb(void* arg)=0;
+        virtual int access_fast_path(Interconnect *interconnect,
+                                     MemoryRequest *request) {
+            return -1;
+        };
         virtual void register_interconnect(Interconnect* interconnect,
-                int conn_type)=0;
-		virtual void print_map(ostream& os)=0;
+                                           int conn_type)=0;
+        virtual void print_map(ostream& os)=0;
 
-		virtual void print(ostream& os) const =0;
-		virtual bool is_full(bool fromInterconnect = false) const = 0;
-		virtual void annul_request(MemoryRequest* request) = 0;
-		virtual void dump_configuration(YAML::Emitter &out) const = 0;
+        virtual void print(ostream& os) const =0;
+        virtual bool is_full(bool fromInterconnect = false) const = 0;
+        virtual void annul_request(MemoryRequest* request) = 0;
+        virtual void dump_configuration(YAML::Emitter &out) const = 0;
 
-		int flush() {
-			return 0;
-		}
+        int flush() {
+            return 0;
+        }
 
-		int get_no_pending_request(W8 coreid) { assert(0); return 0; }
+        int get_no_pending_request(W8 coreid) {
+            assert(0); return 0;
+        }
 
-		Signal* get_interconnect_signal() {
-			return &handle_interconnect_;
-		}
+        Signal* get_interconnect_signal() {
+            return &handle_interconnect_;
+        }
 
-		char* get_name() const {
-			return name_.buf;
-		}
+        char* get_name() const {
+            return name_.buf;
+        }
 
-		void set_private(bool flag) {
-			isPrivate_ = flag;
-		}
+        void set_private(bool flag) {
+            isPrivate_ = flag;
+        }
 
-		bool is_private() { return isPrivate_; }
+        bool is_private() {
+            return isPrivate_;
+        }
 
 };
 
 static inline ostream& operator <<(ostream& os, const Controller&
-		controller)
-{
-	controller.print(os);
-	return os;
+                                   controller) {
+    controller.print(os);
+    return os;
 }
 
 };
 
-#endif // CONTROLLER_H
+#endif /* CONTROLLER_H */

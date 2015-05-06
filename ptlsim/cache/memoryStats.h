@@ -32,45 +32,40 @@
 #include <statsBuilder.h>
 #include <cacheConstants.h>
 
-//#include <dcache.h>
+/* #include <dcache.h> */
 
 #define SETUP_STATS(type) \
-   userStats_ = &(per_core_cache_stats_ref_with_stats(user_stats, coreid).type); \
-   totalUserStats_ = &(user_stats.memory.total.type); \
-   kernelStats_ = &(per_core_cache_stats_ref_with_stats(kernel_stats, coreid).type); \
-   totalKernelStats_ = &(kernel_stats.memory.total.type);
+    userStats_ = &(per_core_cache_stats_ref_with_stats(user_stats, coreid).type); \
+    totalUserStats_ = &(user_stats.memory.total.type); \
+    kernelStats_ = &(per_core_cache_stats_ref_with_stats(kernel_stats, coreid).type); \
+    totalKernelStats_ = &(kernel_stats.memory.total.type);
 
 
 #define STAT_UPDATE(expr, mode) 0
 
 #define N_STAT_UPDATE(counter, expr, mode) { \
-    if(mode) { /* kernel mode */ \
-        counter(kernel_stats)expr; \
-    } else { \
-        counter(user_stats)expr; \
-    } \
+        if(mode) { /* kernel mode */ \
+            counter(kernel_stats) expr; \
+        } else { \
+            counter(user_stats) expr; \
+        } \
 }
 
 namespace Memory {
 
-struct BaseCacheStats : public Statable
-{
-    struct cpurequest : public Statable
-    {
-        struct count : public Statable
-        {
-            struct hit : public Statable
-            {
-                struct hit_sub : public Statable
-                {
+struct BaseCacheStats : public Statable {
+    struct cpurequest : public Statable {
+        struct count : public Statable {
+            struct hit : public Statable {
+                struct hit_sub : public Statable {
                     StatObj<W64> hit;
                     StatObj<W64> forward;
 
                     hit_sub(const char *name, Statable *parent)
                         : Statable(name, parent)
-                          , hit("hit", this)
-                          , forward("forward", this)
-                    {}
+                        , hit("hit", this)
+                        , forward("forward", this) {
+                    }
                 };
 
                 hit_sub read;
@@ -78,44 +73,41 @@ struct BaseCacheStats : public Statable
 
                 hit(Statable *parent)
                     : Statable("hit", parent)
-                      , read("read", this)
-                      , write("write", this)
-                {}
+                    , read("read", this)
+                    , write("write", this) {
+                }
             } hit;
 
-            struct miss : public Statable
-            {
+            struct miss : public Statable {
                 StatObj<W64> read;
                 StatObj<W64> write;
 
                 miss(Statable *parent)
                     : Statable("miss", parent)
-                      , read("read", this)
-                      , write("write", this)
-                {}
+                    , read("read", this)
+                    , write("write", this) {
+                }
             } miss;
 
             count(Statable *parent)
                 : Statable("count", parent)
-                  , hit(this)
-                  , miss(this)
-            {}
+                , hit(this)
+                , miss(this) {
+            }
         } count;
 
-        struct stall : public Statable
-        {
-            struct stall_sub : public Statable
-            {
+        struct stall : public Statable {
+            struct stall_sub : public Statable {
                 StatObj<W64> dependency;
                 StatObj<W64> cache_port;
                 StatObj<W64> buffer_full;
 
                 stall_sub(const char *name, Statable *parent)
                     : Statable(name, parent)
-                      , dependency("dependency", this)
-                      , cache_port("cache_port", this)
-                      , buffer_full("buffer_full", this)
-                {}
+                    , dependency("dependency", this)
+                    , cache_port("cache_port", this)
+                    , buffer_full("buffer_full", this) {
+                }
             };
 
             stall_sub read;
@@ -123,19 +115,19 @@ struct BaseCacheStats : public Statable
 
             stall(Statable *parent)
                 : Statable("stall", parent)
-                  , read("read", this)
-                  , write("write", this)
-            {}
+                , read("read", this)
+                , write("write", this) {
+            }
         } stall;
 
         StatObj<W64> redirects;
 
         cpurequest(Statable *parent)
             : Statable("cpurequest", parent)
-              , count(this)
-              , stall(this)
-              , redirects("redirects", this)
-        {}
+            , count(this)
+            , stall(this)
+            , redirects("redirects", this) {
+        }
     } cpurequest;
 
     StatObj<W64> annul;
@@ -143,22 +135,21 @@ struct BaseCacheStats : public Statable
 
     BaseCacheStats(const char *name, Statable *parent=NULL)
         : Statable(name, parent)
-          , cpurequest(this)
-          , annul("annul", this)
-          , queueFull("queueFull", this)
-    {}
+        , cpurequest(this)
+        , annul("annul", this)
+        , queueFull("queueFull", this) {
+    }
 };
 
-struct CPUControllerStats : public BaseCacheStats
-{
+struct CPUControllerStats : public BaseCacheStats {
     StatArray<W64, 200> icache_latency;
     StatArray<W64, 200> dcache_latency;
 
     CPUControllerStats(const char *name, Statable *parent)
         : BaseCacheStats(name, parent)
-          , icache_latency("icache_latency", this)
-          , dcache_latency("dcache_latency", this)
-    { }
+        , icache_latency("icache_latency", this)
+        , dcache_latency("dcache_latency", this) {
+    }
 };
 
 static const char* mesi_state_names[4] = {
@@ -171,29 +162,28 @@ struct MESIStats : public BaseCacheStats {
         StatArray<W64, 5> cpu;
         miss_state(const char *name, Statable *parent)
             : Statable(name, parent)
-              , cpu("cpu", this)
-        {}
+            , cpu("cpu", this) {
+        }
     } miss_state;
 
-    struct hit_state : public Statable{
+    struct hit_state : public Statable {
         StatArray<W64,4> snoop;
         StatArray<W64,4> cpu;
         hit_state (const char *name,Statable *parent)
-            :Statable(name, parent)
-             ,snoop("snoop",this, mesi_state_names)
-             ,cpu("cpu",this, mesi_state_names)
-        {
+            : Statable(name, parent)
+            ,snoop("snoop",this, mesi_state_names)
+            ,cpu("cpu",this, mesi_state_names) {
         }
     } hit_state;
 
     StatArray<W64,16> state_transition;
 
     MESIStats(const char *name, Statable *parent=NULL)
-        :BaseCacheStats(name, parent)
-         ,miss_state("miss_state",this)
-         ,hit_state("hit_state",this)
-         ,state_transition("state_transition",this)
-    {}
+        : BaseCacheStats(name, parent)
+        ,miss_state("miss_state",this)
+        ,hit_state("hit_state",this)
+        ,state_transition("state_transition",this) {
+    }
 };
 
 struct BusStats : public Statable {
@@ -207,8 +197,8 @@ struct BusStats : public Statable {
             : Statable("broadcast", parent)
             , read("read", this)
             , write("write", this)
-            , update("update", this)
-        {}
+            , update("update", this) {
+        }
     } broadcasts;
 
     struct broadcast_cycles : public Statable {
@@ -220,8 +210,8 @@ struct BusStats : public Statable {
             : Statable("broadcast_cycles", parent)
             , read("read", this)
             , write("write", this)
-            , update("update", this)
-        {}
+            , update("update", this) {
+        }
     } broadcast_cycles;
 
     StatObj<W64> addr_bus_cycles;
@@ -230,12 +220,12 @@ struct BusStats : public Statable {
 
     BusStats(const char* name, Statable *parent)
         : Statable(name, parent)
-          , broadcasts(this)
-          , broadcast_cycles(this)
-          , addr_bus_cycles("addr_bus_cycles", this)
-          , data_bus_cycles("data_bus_cycles", this)
-          , bus_not_ready("bus_not_ready", this)
-    {}
+        , broadcasts(this)
+        , broadcast_cycles(this)
+        , addr_bus_cycles("addr_bus_cycles", this)
+        , data_bus_cycles("data_bus_cycles", this)
+        , bus_not_ready("bus_not_ready", this) {
+    }
 };
 
 struct RAMStats : public Statable {
@@ -247,13 +237,13 @@ struct RAMStats : public Statable {
 
     RAMStats(const char* name, Statable *parent)
         : Statable(name, parent)
-          , bank_access("bank_access", this)
-          , bank_read("bank_read", this)
-          , bank_write("bank_write", this)
-          , bank_update("bank_update", this)
-    {}
+        , bank_access("bank_access", this)
+        , bank_read("bank_read", this)
+        , bank_write("bank_write", this)
+        , bank_update("bank_update", this) {
+    }
 };
 
 };
 
-#endif // MEMORY_STATS_H
+#endif /* MEMORY_STATS_H */

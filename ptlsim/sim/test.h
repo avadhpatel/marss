@@ -10,4 +10,4 @@
  */
 void run_tests();
 
-#endif // MARSS_TEST_H
+#endif /* MARSS_TEST_H */

@@ -40,78 +40,77 @@ namespace Memory {
 
 namespace CoherentCache {
 
-    enum MOESICacheLineState {
-        MOESI_INVALID = 0, // 0 has to be invalid as its default
-        MOESI_MODIFIED,
-        MOESI_OWNER,
-        MOESI_EXCLUSIVE,
-        MOESI_SHARED,
-        NUM_MOESI_STATES
-    };
+enum MOESICacheLineState {
+    MOESI_INVALID = 0,     /* 0 has to be invalid as its default */
+    MOESI_MODIFIED,
+    MOESI_OWNER,
+    MOESI_EXCLUSIVE,
+    MOESI_SHARED,
+    NUM_MOESI_STATES
+};
 
-    enum MOESITransations {
-        II=0, IM, IO, IE, IS,
-        MI, MM, MO, ME, MS,
-        OI, OM, OO, OE, OS,
-        EI, EM, EO, EE, ES,
-        SI, SM, SO, SE, SS,
-        NUM_MOESI_STATE_TRANS,
-    };
+enum MOESITransations {
+    II=0, IM, IO, IE, IS,
+    MI, MM, MO, ME, MS,
+    OI, OM, OO, OE, OS,
+    EI, EM, EO, EE, ES,
+    SI, SM, SO, SE, SS,
+    NUM_MOESI_STATE_TRANS,
+};
 
-    static int MOESITransTable[NUM_MOESI_STATES][NUM_MOESI_STATES] = {
-        {II, IM, IO, IE, IS},
-        {MI, MM, MO, ME, MS},
-        {OI, OM, OO, OE, OS},
-        {EI, EM, EO, EE, ES},
-        {SI, SM, SO, SE, SS},
-    };
+static int MOESITransTable[NUM_MOESI_STATES][NUM_MOESI_STATES] = {
+    {II, IM, IO, IE, IS},
+    {MI, MM, MO, ME, MS},
+    {OI, OM, OO, OE, OS},
+    {EI, EM, EO, EE, ES},
+    {SI, SM, SO, SE, SS},
+};
 
-    static const char* MOESIStateNames[NUM_MOESI_STATES] = {
-        "Invalid",
-        "Modified",
-        "Owner",
-        "Exclusive",
-        "Shared",
-    };
+static const char* MOESIStateNames[NUM_MOESI_STATES] = {
+    "Invalid",
+    "Modified",
+    "Owner",
+    "Exclusive",
+    "Shared",
+};
 
-    class MOESILogic : public CoherenceLogic
-    {
-        public:
-            MOESILogic(CacheController *cont, Statable *parent,
-                    MemoryHierarchy *mem_hierarchy)
-                : CoherenceLogic("moesi", cont, parent, mem_hierarchy)
-                  , state_transition("state_trans", this)
-                  , miss_state("miss_state", this, MOESIStateNames)
-                  , hit_state("hit_state", this, MOESIStateNames)
-            {}
+class MOESILogic : public CoherenceLogic {
+    public:
+        MOESILogic(CacheController *cont, Statable *parent,
+                   MemoryHierarchy *mem_hierarchy)
+            : CoherenceLogic("moesi", cont, parent, mem_hierarchy)
+            , state_transition("state_trans", this)
+            , miss_state("miss_state", this, MOESIStateNames)
+            , hit_state("hit_state", this, MOESIStateNames) {
+        }
 
-            void handle_local_hit(CacheQueueEntry *queueEntry);
-            void handle_local_miss(CacheQueueEntry *queueEntry);
-            void handle_interconn_hit(CacheQueueEntry *queueEntry);
-            void handle_interconn_miss(CacheQueueEntry *queueEntry);
-            void handle_cache_insert(CacheQueueEntry *queueEntry, W64 oldTag);
-            void handle_cache_evict(CacheQueueEntry *entry);
-            void complete_request(CacheQueueEntry *queueEntry,
-                    Message &message);
-            void handle_response(CacheQueueEntry *entry,
-                    Message &message);
-            bool is_line_valid(CacheLine *line);
-            void invalidate_line(CacheLine *line);
-			void dump_configuration(YAML::Emitter &out) const;
+        void handle_local_hit(CacheQueueEntry *queueEntry);
+        void handle_local_miss(CacheQueueEntry *queueEntry);
+        void handle_interconn_hit(CacheQueueEntry *queueEntry);
+        void handle_interconn_miss(CacheQueueEntry *queueEntry);
+        void handle_cache_insert(CacheQueueEntry *queueEntry, W64 oldTag);
+        void handle_cache_evict(CacheQueueEntry *entry);
+        void complete_request(CacheQueueEntry *queueEntry,
+                              Message &message);
+        void handle_response(CacheQueueEntry *entry,
+                             Message &message);
+        bool is_line_valid(CacheLine *line);
+        void invalidate_line(CacheLine *line);
+        void dump_configuration(YAML::Emitter &out) const;
 
-            void send_response(CacheQueueEntry *queueEntry,
-                    Interconnect *sendTo);
-            void send_to_cont(CacheQueueEntry *queueEntry,
-                    Interconnect *sendTo, Controller *dest);
-            void send_evict(CacheQueueEntry *queueEntry, W64 oldTag=-1,
-                    bool with_directory=0);
-            void send_update(CacheQueueEntry *queueEntry, W64 oldTag=-1);
+        void send_response(CacheQueueEntry *queueEntry,
+                           Interconnect *sendTo);
+        void send_to_cont(CacheQueueEntry *queueEntry,
+                          Interconnect *sendTo, Controller *dest);
+        void send_evict(CacheQueueEntry *queueEntry, W64 oldTag=-1,
+                        bool with_directory=0);
+        void send_update(CacheQueueEntry *queueEntry, W64 oldTag=-1);
 
-            /* Statistics */
-            StatArray<W64,NUM_MOESI_STATE_TRANS> state_transition;
-            StatArray<W64, NUM_MOESI_STATES> miss_state;
-            StatArray<W64, NUM_MOESI_STATES> hit_state;
-    };
+        /* Statistics */
+        StatArray<W64,NUM_MOESI_STATE_TRANS> state_transition;
+        StatArray<W64, NUM_MOESI_STATES> miss_state;
+        StatArray<W64, NUM_MOESI_STATES> hit_state;
+};
 
 };
 

@@ -110,8 +110,8 @@ typedef enum {
 /**
  * @param options can be NULL
  */
-mongo_conn_return mongo_connect( mongo_connection * conn , mongo_connection_options * options );
-mongo_conn_return mongo_connect_pair( mongo_connection * conn , mongo_connection_options * left, mongo_connection_options * right );
+mongo_conn_return mongo_connect( mongo_connection * conn, mongo_connection_options * options );
+mongo_conn_return mongo_connect_pair( mongo_connection * conn, mongo_connection_options * left, mongo_connection_options * right );
 mongo_conn_return mongo_reconnect( mongo_connection * conn ); /* you will need to reauthenticate after calling */
 bson_bool_t mongo_disconnect( mongo_connection * conn ); /* use this if you want to be able to reconnect */
 bson_bool_t mongo_destroy( mongo_connection * conn ); /* you must call this even if connection failed */
@@ -122,8 +122,8 @@ bson_bool_t mongo_destroy( mongo_connection * conn ); /* you must call this even
    CORE METHODS - insert update remove query getmore
    ------------------------------ */
 
-void mongo_insert( mongo_connection * conn , const char * ns , bson * data );
-void mongo_insert_batch( mongo_connection * conn , const char * ns , bson ** data , int num );
+void mongo_insert( mongo_connection * conn, const char * ns, bson * data );
+void mongo_insert_batch( mongo_connection * conn, const char * ns, bson ** data, int num );
 
 static const int MONGO_UPDATE_UPSERT = 0x1;
 static const int MONGO_UPDATE_MULTI = 0x2;
@@ -131,7 +131,7 @@ void mongo_update(mongo_connection* conn, const char* ns, const bson* cond, cons
 
 void mongo_remove(mongo_connection* conn, const char* ns, const bson* cond);
 
-mongo_cursor* mongo_find(mongo_connection* conn, const char* ns, bson* query, bson* fields ,int nToReturn ,int nToSkip, int options);
+mongo_cursor* mongo_find(mongo_connection* conn, const char* ns, bson* query, bson* fields,int nToReturn,int nToSkip, int options);
 bson_bool_t mongo_cursor_next(mongo_cursor* cursor);
 void mongo_cursor_destroy(mongo_cursor* cursor);
 
