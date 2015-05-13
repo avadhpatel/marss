@@ -12,35 +12,33 @@
 #include <map>
 #include <memory>
 
-namespace YAML
-{
-	class Scanner;
-	struct ParserState;
-	struct Token;
+namespace YAML {
+class Scanner;
+struct ParserState;
+struct Token;
 
-	class Parser: private noncopyable
-	{
-	public:
-		Parser();
-		Parser(std::istream& in);
-		~Parser();
+class Parser : private noncopyable {
+    public:
+        Parser();
+        Parser(std::istream& in);
+        ~Parser();
 
-		operator bool() const;
+        operator bool() const;
 
-		void Load(std::istream& in);
-		bool GetNextDocument(Node& document);
-		void PrintTokens(std::ostream& out);
+        void Load(std::istream& in);
+        bool GetNextDocument(Node& document);
+        void PrintTokens(std::ostream& out);
 
-	private:
-		void ParseDirectives();
-		void HandleDirective(const Token& token);
-		void HandleYamlDirective(const Token& token);
-		void HandleTagDirective(const Token& token);
+    private:
+        void ParseDirectives();
+        void HandleDirective(const Token& token);
+        void HandleYamlDirective(const Token& token);
+        void HandleTagDirective(const Token& token);
 
-	private:
-		std::auto_ptr<Scanner> m_pScanner;
-		std::auto_ptr<ParserState> m_pState;
-	};
+    private:
+        std::auto_ptr<Scanner> m_pScanner;
+        std::auto_ptr<ParserState> m_pState;
+};
 }
 
-#endif // PARSER_H_62B23520_7C8E_11DE_8A39_0800200C9A66
+#endif /* PARSER_H_62B23520_7C8E_11DE_8A39_0800200C9A66 */

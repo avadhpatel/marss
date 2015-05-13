@@ -25,18 +25,17 @@ namespace Memory {
 
   namespace SwitchInterconnect {
 
-    struct QueueEntry : public FixStateListObject
-    {
-      MemoryRequest *request;
-      Controller    *source;
-      Controller    *dest;
-      void          *m_arg;
-      bool           annuled;
-      bool           in_use;
-      bool           has_data;
-      bool           shared;
+struct QueueEntry : public FixStateListObject {
+    MemoryRequest *request;
+    Controller    *source;
+    Controller    *dest;
+    void          *m_arg;
+    bool annuled;
+    bool in_use;
+    bool has_data;
+    bool shared;
 
-      void init() {
+    void init() {
         request  = NULL;
         source   = NULL;
         dest     = NULL;
@@ -45,9 +44,9 @@ namespace Memory {
         in_use   = 0;
         has_data = 0;
         shared   = 0;
-      }
+    }
 
-      void setup(const Message &msg) {
+    void setup(const Message &msg) {
         source   = (Controller*)msg.sender;
         dest     = (Controller*)msg.dest;
         request  = msg.request;
@@ -55,77 +54,76 @@ namespace Memory {
         has_data = msg.hasData;
         shared   = msg.isShared;
         request->incRefCounter();
-      }
+    }
 
-      void fill(Message &msg) const {
+    void fill(Message &msg) const {
         msg.origin   = source;
         msg.dest     = dest;
         msg.request  = request;
         msg.arg      = m_arg;
         msg.hasData  = has_data;
         msg.isShared = shared;
-      }
+    }
 
-      ostream& print(ostream& os) const {
+    ostream& print(ostream& os) const {
         if (!request) {
-          os << "Free entry";
-          return os;
+            os << "Free entry";
+            return os;
         }
 
-        os << "request[" << *request << "] ";
-        os << "source[" << source->get_name() << "] ";
-        os << "dest[" << dest->get_name() << "] ";
-        os << "inuse[" << in_use << "] ";
-        os << "annuled[" << annuled << "]";
+        os << "request[", *request, "] ";
+        os << "source[", source->get_name(), "] ";
+        os << "dest[", dest->get_name(), "] ";
+        os << "inuse[", in_use, "] ";
+        os << "annuled[", annuled, "]";
         return os;
-      }
-    };
-
-    static inline ostream& operator <<(ostream& os, const QueueEntry
-        &entry) {
-      return entry.print(os);
     }
+};
 
-    static inline QueueEntry& operator <<(QueueEntry& entry, const
-        Message &msg) {
-      entry.setup(msg);
-      return entry;
-    }
+static inline ostream& operator <<(ostream& os, const QueueEntry
+                                   &entry) {
+    return entry.print(os);
+}
 
-    static inline Message& operator <<(Message& msg, const
-        QueueEntry& entry) {
-      entry.fill(msg);
-      return msg;
-    }
+static inline QueueEntry& operator <<(QueueEntry& entry, const
+                                      Message &msg) {
+    entry.setup(msg);
+    return entry;
+}
 
-    /**
-     * @brief Represent connection to each controller
-     *
-     * It contains an incoming queue and a flag that indicate
-     * if this controller can accept a packet or not.
-     */
-    struct ControllerQueue {
-      bool        recv_busy;
-      bool        queue_in_use;
-      Controller *controller;
-      FixStateList<QueueEntry, 16> queue;
+static inline Message& operator <<(Message& msg, const
+                                   QueueEntry& entry) {
+    entry.fill(msg);
+    return msg;
+}
 
-      ControllerQueue() {
+/**
+ * @brief Represent connection to each controller
+ *
+ * It contains an incoming queue and a flag that indicate
+ * if this controller can accept a packet or not.
+ */
+struct ControllerQueue {
+    bool recv_busy;
+    bool queue_in_use;
+    Controller *controller;
+    FixStateList<QueueEntry, 16> queue;
+
+    ControllerQueue() {
         recv_busy    = false;
         queue_in_use = false;
         controller   = NULL;
         queue.reset();
-      }
-    };
+    }
+};
 
-    /**
-     * @brief Create a Switch Interconnect between controllers
-     *
-     * It creates NxN switch with fixed per controller queue.
-     */
-    class Switch : public Interconnect
-    {
-      private:
+/**
+ * @brief Create a Switch Interconnect between controllers
+ *
+ * It creates NxN switch with fixed per controller queue.
+ */
+class Switch : public Interconnect {
+    private:
         dynarray<ControllerQueue*> controllers;
 
         Signal send;
@@ -133,16 +131,18 @@ namespace Memory {
 
         int latency_;
 
-      public:
+    public:
         Switch(const char *name, MemoryHierarchy *memoryHierarchy);
         ~Switch();
 
         bool controller_request_cb(void *arg);
         void register_controller(Controller *controller);
         int  access_fast_path(Controller *controller,
-            MemoryRequest *request);
+                              MemoryRequest *request);
         void annul_request(MemoryRequest *request);
-        int  get_delay() { return latency_; }
+        int  get_delay() {
+            return latency_;
+        }
         void dump_configuration(YAML::Emitter &out) const;
 
         ControllerQueue* get_queue(Controller *cont);
@@ -151,32 +151,31 @@ namespace Memory {
         bool send_complete_cb(void *arg);
 
         void print(ostream& os) const {
-          os << "--Switch-Interconnect: " << get_name() << endl;
-          foreach (i, controllers.count()) {
-            ControllerQueue *cq = controllers[i];
-            os << "Controller " << cq->controller->get_name() << " ";
-            os << "busy: " << cq->recv_busy << " Queue:" << endl;
-            os << cq->queue;
-          }
-          os << "--End-Switch-Interconnect\n";
+            os << "--Switch-Interconnect: ", get_name(), endl;
+            foreach (i, controllers.count()) {
+                ControllerQueue *cq = controllers[i];
+                os << "Controller ", cq->controller->get_name(), " ";
+                os << "busy: ", cq->recv_busy, " Queue:", endl;
+                os << cq->queue;
+            }
+            os << "--End-Switch-Interconnect\n";
         }
 
         void print_map(ostream& os) {
-          os << "Switch Interconnect: " << get_name() << endl;
-          os << "\tconnected to: " << endl;
+            os << "Switch Interconnect: ", get_name(), endl;
+            os << "\tconnected to: ", endl;
 
-          foreach (i, controllers.count()) {
-            os << "\t\tcontroller[" << i << "]: ";
-            os << controllers[i]->controller->get_name() << endl;
-          }
+            foreach (i, controllers.count()) {
+                os << "\t\tcontroller[", i, "]: ";
+                os << controllers[i]->controller->get_name(), endl;
+            }
         }
-    };
+};
 
-    static inline ostream& operator <<(ostream& os, const Switch &sw)
-    {
-      sw.print(os);
-      return os;
-    }
-  };
+static inline ostream& operator <<(ostream& os, const Switch &sw) {
+    sw.print(os);
+    return os;
+}
+};
 
 };
