@@ -40,17 +40,17 @@
 #include <statsBuilder.h>
 
 #define DEBUG_MEMORY
-//#define DEBUG_WITH_FILE_NAME
+/* #define DEBUG_WITH_FILE_NAME */
 #define ENABLE_CHECKS
 
 #ifdef DEBUG_MEMORY
 #ifdef DEBUG_WITH_FILE_NAME
 #define memdebug(...) if(logable(5) || logMem) { \
-  ptl_logfile << __FILE__, ":", __LINE__,":\t", \
-  __VA_ARGS__ ; ptl_logfile.flush(); }
+        ptl_logfile << __FILE__, ":", __LINE__,":\t", \
+            __VA_ARGS__; ptl_logfile.flush(); }
 #else
 #define memdebug(...) if(logable(5) || logMem) { \
-  ptl_logfile << __VA_ARGS__ ; } //ptl_logfile.flush();
+        ptl_logfile << __VA_ARGS__; } /* ptl_logfile.flush(); */
 #endif
 #else
 #define memdebug(...) (0)
@@ -73,223 +73,226 @@
 #endif
 
 #define GET_STRINGBUF_PTR(var_name, ...)  \
-  stringbuf *var_name = new stringbuf(); \
-*var_name << __VA_ARGS__; \
+    stringbuf *var_name = new stringbuf(); \
+    *var_name << __VA_ARGS__; \
 
 #define SET_SIGNAL_CB(name, name_postfix, signal, cb) \
-{ \
-  stringbuf *sg_n = new stringbuf(); \
-  *sg_n << name, name_postfix; \
-  signal.set_name(sg_n->buf); \
-  signal.connect(signal_mem_ptr(*this, cb)); \
-}
+    { \
+        stringbuf *sg_n = new stringbuf(); \
+        *sg_n << name, name_postfix; \
+        signal.set_name(sg_n->buf); \
+        signal.connect(signal_mem_ptr(*this, cb)); \
+    }
 
 namespace Memory {
 
-  class Event : public FixStateListObject
-  {
+class Event : public FixStateListObject {
     private:
-      Signal *signal_;
-      W64    clock_;
-      void   *arg_;
+        Signal *signal_;
+        W64 clock_;
+        void   *arg_;
 
     public:
-      void init() {
-        signal_ = NULL;
-        clock_ = -1;
-        arg_ = NULL;
-      }
+        void init() {
+            signal_ = NULL;
+            clock_ = -1;
+            arg_ = NULL;
+        }
 
-      void setup(Signal *signal, W64 clock, void *arg) {
-        signal_ = signal;
-        clock_ = clock;
-        arg_ = arg;
-      }
+        void setup(Signal *signal, W64 clock, void *arg) {
+            signal_ = signal;
+            clock_ = clock;
+            arg_ = arg;
+        }
 
-      bool execute() {
-        return signal_->emit(arg_);
-      }
+        bool execute() {
+            return signal_->emit(arg_);
+        }
 
-      W64 get_clock() {
-        return clock_;
-      }
+        W64 get_clock() {
+            return clock_;
+        }
 
-      ostream& print(ostream& os) const {
-        os << "Event< ";
-        if(signal_)
-          os << "Signal:" << signal_->get_name() << " ";
-        os << "Clock:" << clock_ << " ";
-        os << "arg:" << arg_ ;
-        os << ">" << endl << flush;
-        return os;
-      }
+        ostream& print(ostream& os) const {
+            os << "Event< ";
+            if(signal_)
+                os << "Signal:" << signal_->get_name() << " ";
+            os << "Clock:" << clock_ << " ";
+            os << "arg:" << arg_;
+            os << ">" << endl, flush;
+            return os;
+        }
 
-      bool operator ==(Event &event) {
-        if(clock_ == event.clock_)
-          return true;
-        return false;
-      }
+        bool operator ==(Event &event) {
+            if(clock_ == event.clock_)
+                return true;
+            return false;
+        }
 
-      bool operator >(Event &event) {
-        if(clock_ > event.clock_)
-          return true;
-        return false;
-      }
+        bool operator >(Event &event) {
+            if(clock_ > event.clock_)
+                return true;
+            return false;
+        }
 
-      bool operator <(Event &event) {
-        if(clock_ < event.clock_)
-          return true;
-        return false;
-      }
+        bool operator <(Event &event) {
+            if(clock_ < event.clock_)
+                return true;
+            return false;
+        }
 
-      bool operator >=(Event &event) {
-        if (clock_ >= event.clock_)
-          return true;
-        return false;
-      }
-  };
+        bool operator >=(Event &event) {
+            if (clock_ >= event.clock_)
+                return true;
+            return false;
+        }
+};
 
-  static inline ostream& operator <<(ostream& os, const Event& event) {
+static inline ostream& operator <<(ostream& os, const Event& event) {
     return event.print(os);
-  }
+}
 
-  struct MemoryInterlockEntry {
+struct MemoryInterlockEntry {
     W8 ctx_id;
 
-    void reset() {ctx_id = -1;}
+    void reset() {
+        ctx_id = -1;
+    }
 
     ostream& print(ostream& os, W64 physaddr) const {
-      os << "phys " << (void*)physaddr << ": vcpu " << (int)ctx_id;
-      return os;
+        os << "phys " << (void*)physaddr << ": vcpu " << (int)ctx_id;
+        return os;
     }
-  };
+};
 
-  struct MemoryInterlockBuffer: public LockableAssociativeArray<W64, MemoryInterlockEntry, 16, 4, 8> { };
+struct MemoryInterlockBuffer : public LockableAssociativeArray<W64, MemoryInterlockEntry, 16, 4, 8> { };
 
-  extern MemoryInterlockBuffer interlocks;
+extern MemoryInterlockBuffer interlocks;
 
-  //
-  // MemoryHierarchy provides interface with core
-  //
+/*  */
+/* MemoryHierarchy provides interface with core */
+/*  */
 
-  class MemoryHierarchy {
+class MemoryHierarchy {
     public:
-      MemoryHierarchy(BaseMachine& machine);
-      ~MemoryHierarchy(); // release memory for pool
+        MemoryHierarchy(BaseMachine& machine);
+        ~MemoryHierarchy(); /* release memory for pool */
 
-      // check L1 availability
-      bool is_cache_available(W8 coreid, W8 threadid, bool is_icache);
+        /* check L1 availability */
+        bool is_cache_available(W8 coreid, W8 threadid, bool is_icache);
 
-      // interface to memory hierarchy
-      bool access_cache(MemoryRequest *request);
+        /* interface to memory hierarchy */
+        bool access_cache(MemoryRequest *request);
 
-      // New Core wakeup function that uses Signal of MemoryRequest
-      // if Signal is not setup, it uses old wrapper functions
-      void core_wakeup(MemoryRequest *request) {
-        if(request->get_coreSignal()) {
-          request->get_coreSignal()->emit((void*)request);
-          return;
+        /* New Core wakeup function that uses Signal of MemoryRequest */
+        /* if Signal is not setup, it uses old wrapper functions */
+        void core_wakeup(MemoryRequest *request) {
+            if(request->get_coreSignal()) {
+                request->get_coreSignal()->emit((void*)request);
+                return;
+            }
         }
-      }
 
-      // to remove the requests if rob eviction has occured
-      void annul_request(W8 coreid,
-          W8 threadid,
-          int robid,
-          W64 physaddr,
-          bool is_icache,
-          bool is_write);
+        /* to remove the requests if rob eviction has occured */
+        void annul_request(W8 coreid,
+                           W8 threadid,
+                           int robid,
+                           W64 physaddr,
+                           bool is_icache,
+                           bool is_write);
 
-      void clock();
+        void clock();
 
-      void reset();
+        void reset();
 
-      // return the number of cycle used to flush the caches
-      int flush(uint8_t coreid);
+        /* return the number of cycle used to flush the caches */
+        int flush(uint8_t coreid);
 
-      // for debugging
-      void dump_info(ostream& os);
-      void print_map(ostream& os);
+        /* for debugging */
+        void dump_info(ostream& os);
+        void print_map(ostream& os);
 
-      // Add event into event queue
-      void add_event(Signal *signal, int delay, void *arg);
+        /* Add event into event queue */
+        void add_event(Signal *signal, int delay, void *arg);
 
-      MemoryRequest* get_free_request(int id) {
-        return requestPool_[id]->get_free_request();
-      }
+        MemoryRequest* get_free_request(int id) {
+            return requestPool_[id]->get_free_request();
+        }
 
-      void set_controller_full(Controller* controller, bool flag);
-      void set_interconnect_full(Interconnect* interconnect, bool flag);
-      bool is_controller_full(Controller* controller);
+        void set_controller_full(Controller* controller, bool flag);
+        void set_interconnect_full(Interconnect* interconnect, bool flag);
+        bool is_controller_full(Controller* controller);
 
-      Message* get_message();
-      void free_message(Message* msg);
+        Message* get_message();
+        void free_message(Message* msg);
 
-      int get_core_pending_offchip_miss(W8 coreid);
+        int get_core_pending_offchip_miss(W8 coreid);
 
-      BaseMachine& get_machine() { return machine_; }
+        BaseMachine& get_machine() {
+            return machine_;
+        }
 
-      void add_cpu_controller(Controller* cont) {
-        cpuControllers_.push(cont);
-      }
+        void add_cpu_controller(Controller* cont) {
+            cpuControllers_.push(cont);
+        }
 
-      void add_cache_mem_controller(Controller* cont) {
-        allControllers_.push(cont);
-      }
+        void add_cache_mem_controller(Controller* cont) {
+            allControllers_.push(cont);
+        }
 
-      void add_interconnect(Interconnect* conn) {
-        allInterconnects_.push(conn);
-      }
+        void add_interconnect(Interconnect* conn) {
+            allInterconnects_.push(conn);
+        }
 
-      void setup_full_flags() {
-        // Setup the full flags
-        cpuFullFlags_.resize(cpuControllers_.count(), false);
-        controllersFullFlags_.resize(allControllers_.count(), false);
-        interconnectsFullFlags_.resize(allInterconnects_.count(), false);
-      }
+        void setup_full_flags() {
+            /* Setup the full flags */
+            cpuFullFlags_.resize(cpuControllers_.count(), false);
+            controllersFullFlags_.resize(allControllers_.count(), false);
+            interconnectsFullFlags_.resize(allInterconnects_.count(), false);
+        }
 
-      bool grab_lock(W64 lockaddr, W8 ctx_id);
-      bool probe_lock(W64 lockaddr, W8 ctx_id);
-      void invalidate_lock(W64 lockaddr, W8 ctx_id);
+        bool grab_lock(W64 lockaddr, W8 ctx_id);
+        bool probe_lock(W64 lockaddr, W8 ctx_id);
+        void invalidate_lock(W64 lockaddr, W8 ctx_id);
 
     private:
 
-      // machine
-      BaseMachine &machine_;
+        /* machine */
+        BaseMachine &machine_;
 
-      // array of caches and memory
-      dynarray<Controller*> cpuControllers_;
-      dynarray<Controller*> allControllers_;
-      dynarray<Interconnect*> allInterconnects_;
-      Controller* memoryController_;
+        /* array of caches and memory */
+        dynarray<Controller*> cpuControllers_;
+        dynarray<Controller*> allControllers_;
+        dynarray<Interconnect*> allInterconnects_;
+        Controller* memoryController_;
 
-      // array to indicate if controller or interconnect buffers
-      // are full or not
-      dynarray<bool> cpuFullFlags_;
-      dynarray<bool> controllersFullFlags_;
-      dynarray<bool> interconnectsFullFlags_;
-      bool someStructIsFull_;
+        /* array to indicate if controller or interconnect buffers */
+        /* are full or not */
+        dynarray<bool> cpuFullFlags_;
+        dynarray<bool> controllersFullFlags_;
+        dynarray<bool> interconnectsFullFlags_;
+        bool someStructIsFull_;
 
-      // number of cores
-      int coreNo_;
+        /* number of cores */
+        int coreNo_;
 
-      // Request pool
-      dynarray<RequestPool*> requestPool_;
+        /* Request pool */
+        dynarray<RequestPool*> requestPool_;
 
-      // Message pool
-      FixStateList<Message, 128> messageQueue_;
+        /* Message pool */
+        FixStateList<Message, 128> messageQueue_;
 
-      // Event Queue
-      FixStateList<Event, 2048> eventQueue_;
+        /* Event Queue */
+        FixStateList<Event, 2048> eventQueue_;
 
-      void sort_event_queue(Event *event);
-      void sort_event_queue_tail(Event *event);
+        void sort_event_queue(Event *event);
+        void sort_event_queue_tail(Event *event);
 
-      // Temp Stats
-      Stats *stats;
-
-  };
+        /* Temp Stats */
+        Stats *stats;
 
 };
 
-#endif //_MEMORYSYSTEM_H_
+};
+
+#endif /* _MEMORYSYSTEM_H_ */

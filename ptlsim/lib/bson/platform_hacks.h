@@ -62,7 +62,7 @@ typedef long long int int64_t;
 
 MONGO_EXTERN_C_START
 
-MONGO_INLINE void bson_swap_endian64(void* outp, const void* inp){
+MONGO_INLINE void bson_swap_endian64(void* outp, const void* inp) {
     const char *in = (const char*)inp;
     char *out = (char*)outp;
 
@@ -76,7 +76,7 @@ MONGO_INLINE void bson_swap_endian64(void* outp, const void* inp){
     out[7] = in[0];
 
 }
-MONGO_INLINE void bson_swap_endian32(void* outp, const void* inp){
+MONGO_INLINE void bson_swap_endian32(void* outp, const void* inp) {
     const char *in = (const char*)inp;
     char *out = (char*)outp;
 
