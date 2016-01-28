@@ -118,6 +118,7 @@ struct DirContBufferEntry : public FixStateListObject {
         free_on_success = 0;
     }
 
+  ostream& print(ostream &os) const {
     os << "Request{" << *request << "}";
     os << "Cont[" << cont->get_name() << "] ";
     if (entry)

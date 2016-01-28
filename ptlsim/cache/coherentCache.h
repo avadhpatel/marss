@@ -314,7 +314,5 @@ class CacheController : public Controller {
 
 };
 
-};
-
 #endif /* COHERENT_CACHE_H */
 

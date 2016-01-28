@@ -120,13 +120,7 @@ struct BaseCacheStats : public Statable {
             }
         } stall;
 
-      struct stall : public Statable
-      {
-        struct stall_sub : public Statable
-        {
-          StatObj<W64> dependency;
-          StatObj<W64> cache_port;
-          StatObj<W64> buffer_full;
+        StatObj<W64> redirects;
 
         cpurequest(Statable *parent)
             : Statable("cpurequest", parent)

@@ -198,41 +198,6 @@ static inline ostream& operator <<(ostream& os,
     bus.print(os);
     return os;
 }
-
-        void print(ostream& os) const {
-          os << "--Bus-Interconnect: " << get_name() << endl;
-          foreach(i, controllers.count()) {
-            os << "Controller Queue: " << endl;
-            os << controllers[i]->queue;
-          }
-          os << "Pending Request: " << pendingRequests_ << endl;
-        }
-
-        void print_map(ostream& os)
-        {
-          os << "Bus Interconnect: " << get_name() << endl;
-          os << "\tconnected to: " << endl;
-
-          foreach(i, controllers.count()) {
-            os << "\t\tcontroller[" << i << "]: " <<
-               controllers[i]->controller->get_name() << endl;
-          }
-        }
-
-        // Signal callbacks
-        bool broadcast_cb(void *arg);
-        bool broadcast_completed_cb(void *arg);
-        bool data_broadcast_cb(void *arg);
-        bool data_broadcast_completed_cb(void *arg);
-    };
-
-    static inline ostream& operator <<(ostream& os,
-        const BusInterconnect& bus)
-    {
-      bus.print(os);
-      return os;
-    }
-
   };
 
 };

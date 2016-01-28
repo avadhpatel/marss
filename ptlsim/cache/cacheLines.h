@@ -127,8 +127,6 @@ class CacheLines : public CacheLinesBase,
         int get_size() const {
             return (SET_COUNT * WAY_COUNT * LINE_SIZE);
         }
-      }
-    }
 
         /**
          * @brief Get Number of Sets in Cache
@@ -170,14 +168,6 @@ template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
 static inline ostream& operator <<(ostream& os, const
                                    CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>&
                                    cacheLines) {
-    cacheLines.print(os);
-    return os;
-}
-
-template <int SET_COUNT, int WAY_COUNT, int LINE_SIZE, int LATENCY>
-static inline ostream& operator ,(ostream& os, const
-                                  CacheLines<SET_COUNT, WAY_COUNT, LINE_SIZE, LATENCY>&
-                                  cacheLines) {
     cacheLines.print(os);
     return os;
 }
