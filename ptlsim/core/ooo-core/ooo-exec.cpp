@@ -358,7 +358,7 @@ ostream& IssueQueue<size, operandcount>::print(ostream& os) const {
 }
 
 /* Instantiate all methods in the specific IssueQueue sizes we're using: */
-declare_issueq_templates;
+template struct IssueQueue<ISSUE_QUEUE_SIZE>;
 
 /**
  * @brief Merge two 64 bit values based on size
