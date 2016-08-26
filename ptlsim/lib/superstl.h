@@ -1380,11 +1380,11 @@ namespace superstl {
     void pop(T* obj) { remove_tail(); }
 
     T* head() const {
-      return (unlikely (empty())) ? NULL : next;
+      return (unlikely (empty())) ? NULL : this->next;
     }
 
     T* tail() const {
-      return (unlikely (empty())) ? NULL : tail;
+      return (unlikely (empty())) ? NULL : this->tail;
     }
 
     bool empty() const { return (next == this); }
@@ -2830,7 +2830,7 @@ namespace superstl {
       Iterator iter;
       iter.reset(this);
       KeyValuePair<K, T>* kvp;
-      while (kvp = iter.next()) {
+      while ((kvp = iter.next())) {
         os << "  ", kvp->key, " -> ", kvp->value, endl;
       }
       return os;
@@ -3050,7 +3050,7 @@ namespace superstl {
 
         T* next() {
           for (;;) {
-            if unlikely (i >= lengthof(chunk.data)) return NULL;
+            if unlikely (i >= lengthof(chunk->data)) return NULL;
             if unlikely (chunk->freemap[i]) { i++; continue; }
             return &chunk->data[i++];
           }
@@ -3061,7 +3061,7 @@ namespace superstl {
         Iterator iter(this);
         T* entry;
         int n = 0;
-        while (entry = iter.next()) {
+        while ((entry = iter.next())) {
           if unlikely (n >= limit) return n;
           a[n++] = *entry;
         }
@@ -3184,7 +3184,7 @@ namespace superstl {
       Iterator iter(this);
       T* entry;
       int n;
-      while (entry = iter.next()) {
+      while ((entry = iter.next())) {
         if unlikely (n >= limit) return n;
         a[n++] = *entry;
       }
@@ -3437,8 +3437,8 @@ namespace superstl {
       T* next() {
         for (;;) {
           if unlikely (slot >= lengthof(chunk->list)) return NULL;
-          T* entry = &list[slot++];
-          if unlikely (!bit(valid, slot)) continue;
+          T* entry = &T::list[slot++];
+          if unlikely (!bit(T::valid, slot)) continue;
           return entry;
         }
       }
