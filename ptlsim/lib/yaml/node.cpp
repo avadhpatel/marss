@@ -46,12 +46,16 @@ namespace YAML
 		m_tag.clear();
 	}
 	
-	std::auto_ptr<Node> Node::Clone() const
+	//std::auto_ptr<Node> Node::Clone() const
+	std::unique_ptr<Node> Node::Clone() const
 	{
 		if(m_alias)
 			throw std::runtime_error("yaml-cpp: Can't clone alias");  // TODO: what to do about aliases?
 		
-		return std::auto_ptr<Node> (new Node(m_mark, m_anchor, m_tag, m_pContent));
+		//return std::auto_ptr<Node> (new Node(m_mark, m_anchor, m_tag, m_pContent));
+		//return std::unique_ptr<Node> (new Node(m_mark, m_anchor, m_tag, m_pContent));
+    std::unique_ptr<Node> p (new Node(m_mark, m_anchor, m_tag, m_pContent));
+    return std::move(p);
 	}
 
 	void Node::Parse(Scanner *pScanner, ParserState& state)
