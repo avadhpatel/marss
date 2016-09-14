@@ -289,7 +289,7 @@ namespace YAML
 		if(InFlowContext())
 			return 0;
 		
-		std::auto_ptr<IndentMarker> pIndent(new IndentMarker(column, type));
+		std::unique_ptr<IndentMarker> pIndent(new IndentMarker(column, type));
 		IndentMarker& indent = *pIndent;
 		const IndentMarker& lastIndent = *m_indents.top();
 

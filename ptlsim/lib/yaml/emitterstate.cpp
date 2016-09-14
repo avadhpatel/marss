@@ -29,14 +29,11 @@ namespace YAML
 			_PopGroup();
 	}
 	
-	//std::auto_ptr <EmitterState::Group> EmitterState::_PopGroup()
 	std::unique_ptr <EmitterState::Group> EmitterState::_PopGroup()
 	{
 		if(m_groups.empty())
-			//return std::auto_ptr <Group> (0);
 			return std::unique_ptr <Group> (nullptr);
 		
-		//std::auto_ptr <Group> pGroup(m_groups.top());
 		std::unique_ptr <Group> pGroup(m_groups.top());
 		m_groups.pop();
 		return pGroup;
@@ -63,7 +60,7 @@ namespace YAML
 		unsigned lastIndent = (m_groups.empty() ? 0 : m_groups.top()->indent);
 		m_curIndent += lastIndent;
 		
-		std::auto_ptr <Group> pGroup(new Group(type));
+		std::unique_ptr <Group> pGroup(new Group(type));
 		
 		// transfer settings (which last until this group is done)
 		pGroup->modifiedSettings = m_modifiedSettings;
@@ -83,7 +80,6 @@ namespace YAML
 		
 		// get rid of the current group
 		{
-			//std::auto_ptr <Group> pFinishedGroup = _PopGroup();
 			std::unique_ptr <Group> pFinishedGroup = _PopGroup();
 			if(pFinishedGroup->type != type)
 				return SetError(ErrorMsg::UNMATCHED_GROUP_TAG);

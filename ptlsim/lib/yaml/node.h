@@ -31,7 +31,6 @@ namespace YAML
 		~Node();
 
 		void Clear();
-		//std::auto_ptr<Node> Clone() const;
 		std::unique_ptr<Node> Clone() const;
 		void Parse(Scanner *pScanner, ParserState& state);
 
