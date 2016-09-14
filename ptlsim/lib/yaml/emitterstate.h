@@ -178,7 +178,8 @@ namespace YAML
 			SettingChanges modifiedSettings;
 		};
 		
-		std::auto_ptr <Group> _PopGroup();
+		//std::auto_ptr <Group> _PopGroup();
+		std::unique_ptr <Group> _PopGroup();
 		
 		std::stack <Group *> m_groups;
 		unsigned m_curIndent;
