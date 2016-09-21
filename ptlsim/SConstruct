@@ -30,6 +30,9 @@ env['CPPPATH'].append("%s/%s" % (qemu_dir, "x86_64-softmmu"))
 optimization_defs = '-fno-trapping-math -fstack-protector -fno-exceptions '
 optimization_defs += '-fno-rtti -funroll-loops -fstrict-aliasing '
 
+env.Append(CCFLAGS = ' -fdiagnostics-color=always ')
+env.Append(CCFLAGS = ' -std=gnu++11 ')
+
 GCC_VERSION = subprocess.Popen([env['CC'], '-dumpversion'],
 				stdout=subprocess.PIPE).communicate()[0].strip()
 GCC_MAJOR_MINOR_VERSION = re.match(r'\d*\.\d+',GCC_VERSION).group() #e.g. returns 4.2 for 4.2.2
