@@ -1170,7 +1170,7 @@ struct LockableFullyAssociativeArray {
 
   int unlock(T tag) {
     int way = tags.probe(tag);
-    if (way < 0) return;
+    if (way < 0) return -1;
     unlock_way(way);
     if (tags.islocked(way)) stats::unlocked(data[way], tags[way], way);
     return way;
