@@ -38,8 +38,8 @@ namespace YAML
 		void HandleTagDirective(const Token& token);
 
 	private:
-		std::auto_ptr<Scanner> m_pScanner;
-		std::auto_ptr<ParserState> m_pState;
+		std::unique_ptr<Scanner> m_pScanner;
+		std::unique_ptr<ParserState> m_pState;
 	};
 }
 

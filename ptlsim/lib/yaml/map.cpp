@@ -14,9 +14,9 @@ namespace YAML
 	Map::Map(const node_map& data)
 	{
 		for(node_map::const_iterator it=data.begin();it!=data.end();++it) {
-			std::auto_ptr<Node> pKey = it->first->Clone();
-			std::auto_ptr<Node> pValue = it->second->Clone();
-			AddEntry(pKey, pValue);
+			std::unique_ptr<Node> pKey = std::move(it->first->Clone());
+			std::unique_ptr<Node> pValue = std::move(it->second->Clone());
+      AddEntry(std::move(pKey), std::move(pValue));
 		}
 	}
 
@@ -89,7 +89,7 @@ namespace YAML
 				break;
 			}
 
-			std::auto_ptr <Node> pKey(new Node), pValue(new Node);
+			std::unique_ptr <Node> pKey(new Node), pValue(new Node);
 			
 			// grab key (if non-null)
 			if(token.type == Token::KEY) {
@@ -103,7 +103,7 @@ namespace YAML
 				pValue->Parse(pScanner, state);
 			}
 
-			AddEntry(pKey, pValue);
+			//AddEntry(pKey, pValue);
 		}
 
 		state.PopCollectionType(ParserState::BLOCK_MAP);
@@ -126,7 +126,7 @@ namespace YAML
 				break;
 			}
 			
-			std::auto_ptr <Node> pKey(new Node), pValue(new Node);
+			std::unique_ptr <Node> pKey(new Node), pValue(new Node);
 
 			// grab key (if non-null)
 			if(token.type == Token::KEY) {
@@ -147,7 +147,7 @@ namespace YAML
 			else if(nextToken.type != Token::FLOW_MAP_END)
 				throw ParserException(nextToken.mark, ErrorMsg::END_OF_MAP_FLOW);
 
-			AddEntry(pKey, pValue);
+      AddEntry(std::move(pKey), std::move(pValue));
 		}
 
 		state.PopCollectionType(ParserState::FLOW_MAP);
@@ -158,7 +158,7 @@ namespace YAML
 	void Map::ParseCompact(Scanner *pScanner, ParserState& state)
 	{
 		state.PushCollectionType(ParserState::COMPACT_MAP);
-		std::auto_ptr <Node> pKey(new Node), pValue(new Node);
+		std::unique_ptr <Node> pKey(new Node), pValue(new Node);
 
 		// grab key
 		pScanner->pop();
@@ -170,7 +170,7 @@ namespace YAML
 			pValue->Parse(pScanner, state);
 		}
 			
-		AddEntry(pKey, pValue);
+    AddEntry(std::move(pKey), std::move(pValue));
 		state.PopCollectionType(ParserState::COMPACT_MAP);
 	}
 	
@@ -179,17 +179,17 @@ namespace YAML
 	void Map::ParseCompactWithNoKey(Scanner *pScanner, ParserState& state)
 	{
 		state.PushCollectionType(ParserState::COMPACT_MAP);
-		std::auto_ptr <Node> pKey(new Node), pValue(new Node);
+		std::unique_ptr <Node> pKey(new Node), pValue(new Node);
 
 		// grab value
 		pScanner->pop();
 		pValue->Parse(pScanner, state);
 
-		AddEntry(pKey, pValue);
+    AddEntry(std::move(pKey), std::move(pValue));
 		state.PopCollectionType(ParserState::COMPACT_MAP);
 	}
 	
-	void Map::AddEntry(std::auto_ptr<Node> pKey, std::auto_ptr<Node> pValue)
+	void Map::AddEntry(std::unique_ptr<Node> pKey, std::unique_ptr<Node> pValue)
 	{
 		node_map::const_iterator it = m_data.find(pKey.get());
 		if(it != m_data.end())
