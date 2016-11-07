@@ -2488,7 +2488,7 @@ namespace superstl {
   // Convenient list iterator
   //
 #define foreachlink(list, type, iter) \
-  for (type* iter = (type*)((list)->first); (iter != NULL); prefetch(iter->next), iter = (type*)(iter->next)) \
+  for (type* iter = (type*)((list)->first); (iter != NULL); iter = (type*)(iter->next)) \
 
   template <typename K, typename T>
   struct KeyValuePair {
@@ -2608,7 +2608,6 @@ namespace superstl {
 
           T* obj = LM::objof(link);
           link = link->next;
-          prefetch(link);
           return obj;
         }
       }
@@ -3086,7 +3085,6 @@ namespace superstl {
       Chunk* chunk = (Chunk*)head;
 
       while (chunk) {
-        prefetch(chunk->link.next);
         int index = chunk->add(entry);
         if likely (index >= 0) {
           hint.chunk = chunk;
@@ -3127,7 +3125,6 @@ namespace superstl {
 
       while (chunk) {
         Chunk* next = (Chunk*)chunk->link.next;
-        prefetch(next);
         delete chunk;
         chunk = next;
       }
@@ -3169,7 +3166,6 @@ namespace superstl {
             chunk = nextchunk;
             if unlikely (!chunk) return NULL;
             nextchunk = (Chunk*)chunk->link.next;
-            prefetch(nextchunk);
             i = 0;
           }
 
@@ -3302,7 +3298,6 @@ namespace superstl {
       Iterator(GenericChunkList<T>& chunk) { reset(chunk); }
 
       void reset(GenericChunkList<T>* chunk) {
-        if likely (chunk) prefetch(chunk->next);
         this->chunk = chunk;
         slot = 0;
       }

@@ -410,8 +410,6 @@ static inline T cmpxchg(T& mem, T newv, T cmpv) {
 
 static inline void cpu_pause() { asm volatile("pause" : : : "memory"); }
 
-static inline void prefetch(const void* x) { asm volatile("prefetcht0 (%0)" : : "r" (x)); }
-
 static inline void cpuid(int op, W32& eax, W32& ebx, W32& ecx, W32& edx) {
 	asm("cpuid" : "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx) : "0" (op));
 }

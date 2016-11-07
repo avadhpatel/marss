@@ -21,16 +21,16 @@
 #define foreach_list_mutable_linktype(L, obj, entry, nextentry, linktype) \
   linktype* entry; \
   linktype* nextentry; \
-  for (entry = (L).next, nextentry = entry->next, prefetch(entry->next), obj = (typeof(obj))entry; \
-    entry != &(L); entry = nextentry, nextentry = entry->next, prefetch(nextentry), obj = (typeof(obj))entry)
+  for (entry = (L).next, nextentry = entry->next, obj = (typeof(obj))entry; \
+    entry != &(L); entry = nextentry, nextentry = entry->next, obj = (typeof(obj))entry)
 
 #define foreach_list_mutable(L, obj, entry, nextentry) foreach_list_mutable_linktype(L, obj, entry, nextentry, selfqueuelink)
 
 #define foreach_list_mutable_linktype_backwards(L, obj, entry, preventry, linktype) \
   linktype* entry; \
   linktype* preventry; \
-  for (entry = (L).prev, preventry = entry->prev, prefetch(entry->prev), obj = (typeof(obj))entry; \
-    entry != &(L); entry = preventry, preventry = entry->prev, prefetch(preventry), obj = (typeof(obj))entry)
+  for (entry = (L).prev, preventry = entry->prev, obj = (typeof(obj))entry; \
+    entry != &(L); entry = preventry, preventry = entry->prev, obj = (typeof(obj))entry)
 
 #define foreach_list_mutable_backwards(L, obj, entry, preventry) foreach_list_mutable_linktype_backwards(L, obj, entry, preventry, selfqueuelink)
 
