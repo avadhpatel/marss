@@ -10,6 +10,10 @@
 #include <mmsystem.h>
 #endif
 
+#ifdef __FreeBSD__
+#include <osreldate.h>
+#endif
+
 /* timers */
 
 typedef struct QEMUClock QEMUClock;

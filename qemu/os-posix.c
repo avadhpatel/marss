@@ -27,11 +27,13 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/types.h>
+#include <sys/sysctl.h>
 #include <sys/wait.h>
 /*needed for MAP_POPULATE before including qemu-options.h */
 #include <sys/mman.h>
 #include <pwd.h>
 #include <libgen.h>
+
 
 /* Needed early for CONFIG_BSD etc. */
 #include "config-host.h"

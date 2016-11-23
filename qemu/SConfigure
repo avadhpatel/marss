@@ -560,10 +560,10 @@ usb = "linux"
 linux_user = True
 
 # Check target OS
-if conf.CheckCPUDefine("__linux__"):
+if conf.CheckCPUDefine("__linux__") or conf.CheckCPUDefine("__FreeBSD__"):
     env['targetos'] = "Linux"
 else:
-    print("ERROR: Unsupported target OS, use Linux")
+    print("ERROR: Unsupported target OS, use FreeBSD Linux")
     exit_with_error()
 
 CFLAGS = "%s -fno-strict-aliasing" % (env['CCFLAGS'])
