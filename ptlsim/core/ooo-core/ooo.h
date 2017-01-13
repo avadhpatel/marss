@@ -1128,7 +1128,6 @@ namespace OOO_CORE_MODEL {
           * Issue Queues (one per cluster)
           */
 
-#define declare_issueq_templates template struct IssueQueue<ISSUE_QUEUE_SIZE>
 #ifdef MULTI_IQ
         IssueQueue<ISSUE_QUEUE_SIZE> issueq_int0;
         IssueQueue<ISSUE_QUEUE_SIZE> issueq_int1;
