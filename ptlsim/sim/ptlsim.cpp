@@ -368,7 +368,7 @@ static void print_banner(ostream& os) {
   os << "//  Built " << __DATE__ << " " << __TIME__ << " on " << stringify(BUILDHOST) << " using gcc-" <<
     stringify(__GNUC__) << "." << stringify(__GNUC_MINOR__) << endl;
   os << "//  With " stringify(NUM_SIM_CORES) " simulated cores" << endl;
-  os << "//  Running on " << hostinfo.nodename << "." << hostinfo.domainname << endl;
+  os << "//  Running on " << hostinfo.nodename << "." << hostinfo.nodename << endl;
   os << "//  " << endl;
   os << endl;
   os << flush;
@@ -390,7 +390,7 @@ static void collect_common_sysinfo() {
 
   W64 time = sys_time(0);
   simstats.run.timestamp = time;
-  sb.reset(); sb << hostinfo.nodename, ".", hostinfo.domainname;
+  sb.reset(); sb << hostinfo.nodename, ".", hostinfo.nodename;
   simstats.run.hostname = sb;
   W64 hz = get_native_core_freq_hz();
   simstats.run.native_hz = hz;
@@ -1196,7 +1196,7 @@ static void setup_sim_stats()
 
   if(config.bench_name.size() > 0)
     base_tags << config.bench_name << ",";
-  base_tags << hostinfo.nodename << "." << hostinfo.domainname << ",";
+  base_tags << hostinfo.nodename << "." << hostinfo.nodename << ",";
   base_tags << date << ",";
 
   if(config.tags.size() > 0)

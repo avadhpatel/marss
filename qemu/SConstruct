@@ -22,7 +22,9 @@ env['CPPPATH'] = []
 env['CPPPATH'].append([".", "..", target_path, env['source_path']])
 env['CPPPATH'].append(target['dir'])
 env['CPPPATH'].append(ptlsim_inc_dir)
-env.Append(CCFLAGS = "-MMD -MP -DNEED_CPU_H")
+env.Append(CCFLAGS = "-MMD")
+env.Append(CCFLAGS = "-MP")
+env.Append(CCFLAGS = "-DNEED_CPU_H")
 env.Append(CCFLAGS = "-DMARSS_QEMU")
 
 GCC_VERSION = subprocess.Popen([env['CC'], '-dumpversion'],
@@ -41,7 +43,8 @@ if int(debug):
         env.Append(CCFLAGS = '-g3')
         env.Append(CCFLAGS = '-O0')
 else:
-    env.Append(CCFLAGS = '-O3 -march=native')
+    env.Append(CCFLAGS = '-O3')
+    env.Append(CCFLAGS = '-march=native')
 
 google_perftools = ARGUMENTS.get('gperf', None)
 if google_perftools != None:
@@ -63,9 +66,9 @@ if "g++" in env['CC'] :
 qemu_prog_name = "qemu-system-%s" % target['arch']
 
 # Set helper CFLAGS
-HELPER_CFLAGS = ""
+HELPER_CFLAGS = [""]
 if target['arch'] == "i386":
-    HELPER_CFLAGS += " -fomit-frame-pointer"
+    HELPER_CFLAGS += [" -fomit-frame-pointer"]
 
 env.Append(CPPFLAGS = "-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 \
         -D_LARGEFILE_SOURCE")

@@ -9,12 +9,8 @@ import config_helper
 # user can override this by specifying -j option at runtime
 
 num_cpus = 1
-# For python 2.6+
-try:
-    import multiprocessing
-    num_cpus = multiprocessing.cpu_count()
-except (ImportError,NotImplementedError):
-    pass
+import multiprocessing
+num_cpus = multiprocessing.cpu_count()
 
 try:
     res = int(os.sysconf('SC_NPROCESSORS_ONLN'))
@@ -105,7 +101,7 @@ base_env['ENV'] = os.environ
 # To specify your c++ compiler uncomment this line and
 # set the correct path to your c++ compiler
 base_env['CXX'] = "g++"
-base_env['CC'] = base_env['CXX']
+base_env['CC'] = "cc"
 
 base_env['config'] = config_helper.parse_config(config_file, debug=config_debug)
 
