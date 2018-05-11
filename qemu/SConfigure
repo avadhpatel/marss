@@ -1,8 +1,6 @@
 
 # Configure script for SCons
 
-import platform
-
 try:
     Import('qemu_env')
     env = qemu_env
@@ -12,6 +10,8 @@ except:
     env['LDFLAGS'] = ""
 
 from subprocess import call
+
+#env.Append(CCFLAGS = "-g")
 
 # Set default parameters
 prefix = "."
@@ -495,12 +495,8 @@ env['slirp']=True
 env['fmod_lib']=""
 env['fmod_inc']=""
 env['oss_lib']=""
-if platform.system() == 'Linux':
-  env['linux']=True
-else:
-  env['bsd']=True
-  env['linux']=False
-
+# bsd=False
+env['linux']=True
 # solaris=False
 env['profiler']=False
 # cocoa=False
@@ -562,6 +558,13 @@ audio_drv_list = "oss"
 audio_possible_drivers = "oss sdl esd pa fmod"
 usb = "linux"
 linux_user = True
+
+# Check target OS
+if conf.CheckCPUDefine("__linux__"):
+    env['targetos'] = "Linux"
+else:
+    print("ERROR: Unsupported target OS, use Linux")
+    exit_with_error()
 
 CFLAGS = "%s -fno-strict-aliasing" % (env['CCFLAGS'])
 CFLAGS += " -Wall -Wundef -Wendif-labels -Wwrite-strings -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls"
@@ -958,7 +961,6 @@ config_bld = "%s/scripts/create_config < %s > %s" % (env['source_path'],
         config_mak_name, config_host_name)
 call(config_bld, shell=True)
 
-CFLAGS = CFLAGS.split(" ")
 env.Append(CCFLAGS = CFLAGS)
 env.Append(LIBS = libs_softmmu)
 env.Append(LINKFLAGS = LDFLAGS.split())

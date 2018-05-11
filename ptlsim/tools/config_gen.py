@@ -346,7 +346,7 @@ def read_config(config_filename):
 
 def check_config(config, options):
     type_conf = config[options.type]
-    if options.type != "cache" and not options.name in type_conf:
+    if options.type != "cache" and not type_conf.has_key(options.name):
         _error("Invalid configuration name.")
 
 def get_requested_type_config(config, config_type):
@@ -362,7 +362,7 @@ def get_param_string(key, val):
 
 def write_params_file(config, options):
     obj_conf = config[options.type][options.name]
-    if "params" in obj_conf:
+    if obj_conf.has_key("params"):
         params = obj_conf["params"]
     else:
         params = {}
@@ -402,11 +402,11 @@ def get_cache_cfg(config, name):
 def write_core_logic(config, m_conf, of):
     of.write(machine_core_loop_start)
     for core in m_conf["cores"]:
-        assert core["type"] in config["core"], \
+        assert config["core"].has_key(core["type"]), \
                 "Can't find core configuration %s" % core["type"]
         core_cfg = config["core"][core["type"]]
 
-        if "options" in core:
+        if core.has_key("option"):
             for key,val in core["option"].items():
                 write_option_logic(machine_core_option_add, of,
                         core["name_prefix"], key, val)
@@ -417,7 +417,7 @@ def write_core_logic(config, m_conf, of):
 
 def write_cont_logic(config, m_conf, of, n1, n2):
     for cache in m_conf[n1]:
-        assert cache["type"] in config[n2], \
+        assert config[n2].has_key(cache["type"]), \
                 "Can't find cache configuration %s" % \
                 cache["type"]
         cache_cfg = config[n2][cache["type"]]
@@ -435,7 +435,7 @@ def write_cont_logic(config, m_conf, of, n1, n2):
                     int(cache["insts"]))
 
         # Check if there are any options to add
-        if "option" in cache:
+        if cache.has_key("option"):
             for key,val in cache["option"].items():
                 write_option_logic(machine_option_add_i, of, name_pfx,
                         key, val)
@@ -496,7 +496,7 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_connection_def % (base,
                     int_name))
 
-                if "option" in interconn:
+                if interconn.has_key("option"):
                     for key,val in interconn["option"].items():
                         write_option_logic(machine_option_add_i, of, int_name,
                                 key, val)
@@ -531,7 +531,7 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_connection_def % (base,
                     int_name))
 
-                if "options" in interconn:
+                if interconn.has_key("option"):
                     for key,val in interconn["option"].items():
                         write_option_logic(machine_option_add_i, of, int_name,
                                 key, val)
@@ -555,7 +555,7 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_connection_def % (base,
                     int_name))
 
-                if "option" in interconn:
+                if interconn.has_key("option"):
                     for key,val in interconn["option"].items():
                         write_option_logic(machine_option_add_i, of, int_name,
                                 key, val)
