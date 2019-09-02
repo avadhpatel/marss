@@ -236,10 +236,10 @@ struct FixedQueue: public array<T, SIZE> {
   }
 
   ostream& print(ostream& os) const {
-    os << "Queue<", SIZE, ">: head ", head, " to tail ", tail, " (", count, " entries):", endl;
+    os << "Queue<" << SIZE << ">: head " << head << " to tail " << tail << " (" << count << " entries):" << endl;
     foreach_forward((*this), i) {
       const T& entry = (*this)[i];
-      os << "  slot ", intstring(i, 3), ": ", entry, endl;
+      os << "  slot " << intstring(i, 3) << ": " << entry << endl;
     }
 
     return os;
@@ -275,10 +275,10 @@ struct Queue: public FixedQueue<T, SIZE> {
 
 template <class T, int size>
 ostream& operator <<(ostream& os, const Queue<T, size>& queue) {
-  os << "Queue<", size, "]: head ", queue.head, " to tail ", queue.tail, " (", queue.count, " entries):", endl;
+  os << "Queue<" << size << "]: head " << queue.head << " to tail " << queue.tail << " (" << queue.count << " entries):" << endl;
   foreach_forward(queue, i) {
     const T& entry = queue[i];
-    os << "  ", entry, endl;
+    os << "  " << entry << endl;
   }
   return os;
 }
@@ -335,9 +335,9 @@ struct HistoryBuffer: public array<T, size> {
 
 template <class T, int size>
 ostream& operator <<(ostream& os, HistoryBuffer<T, size>& history) {
-  os << "HistoryBuffer[", size, "]: current = ", history.current, ", prevoldest = ", history.prevoldest, endl;
+  os << "HistoryBuffer[" << size << "]: current = " << history.current << ", prevoldest = " << history.prevoldest << endl;
   for (int i = 0; i < size; i++) {
-    os << "  ", history[i], endl;
+    os << "  " << history[i] << endl;
   }
   return os;
 }
@@ -454,9 +454,9 @@ struct FullyAssociativeTags {
   int operator ()(T target) { return probe(target); }
 
   stringbuf& printway(stringbuf& os, int i) const {
-    os << "  way ", intstring(i, -2), ": ";
+    os << "  way " << intstring(i, -2) << ": ";
     if (tags[i] != INVALID) {
-      os << "tag 0x", hexstring(tags[i], sizeof(T)*8);
+      os << "tag 0x" << hexstring(tags[i], sizeof(T)*8);
       if (evictmap[i]) os << " (MRU)";
     } else {
       os << "<invalid>";
@@ -709,12 +709,12 @@ struct FullyAssociativeTagsNbitOneHot {
 
   ostream& printid(ostream& os, int slot) const {
     base_t tag = (*this)[slot];
-    os << intstring(slot, 3), ": ";
+    os << intstring(slot, 3) << ": ";
     os << hexstring(tag, 64);
     os << " ";
     foreach (i, slices) {
       const byte b = *(((byte*)(&tags[i])) + slot);
-      os << " ", hexstring(b, 8);
+      os << " " << hexstring(b, 8);
     }
     if (!valid[slot]) os << " <invalid>";
     return os;
@@ -887,9 +887,9 @@ struct AssociativeArray {
   }
 
   ostream& print(ostream& os) const {
-    os << "AssociativeArray<", setcount, " sets, ", waycount, " ways, ", linesize, "-byte lines>:", endl;
+    os << "AssociativeArray<" << setcount << " sets, " << waycount << " ways, " << linesize << "-byte lines>:" << endl;
     foreach (set, setcount) {
-      os << "  Set ", set, ":", endl;
+      os << "  Set " << set << ":" << endl;
       os << sets[set];
     }
     return os;
@@ -1016,9 +1016,9 @@ struct LockableFullyAssociativeTags {
   int operator ()(T target) { return probe(target); }
 
   stringbuf& printway(stringbuf& os, int i) const {
-    os << "  way ", intstring(i, -2), ": ";
+    os << "  way " << intstring(i, -2) << ": ";
     if (tags[i] != INVALID) {
-      os << "tag 0x", hexstring(tags[i], sizeof(T)*8);
+      os << "tag 0x" << hexstring(tags[i], sizeof(T)*8);
       if (evictmap[i]) os << " (MRU)";
       if (!unlockedmap[i]) os << " (locked)";
     } else {
@@ -1184,7 +1184,7 @@ struct LockableFullyAssociativeArray {
     foreach (i, ways) {
       stringbuf sb;
       tags.printway(sb, i);
-      os << padstring(sb, -40), " -> ";
+      os << padstring(sb, -40) << " -> ";
       data[i].print(os, tags.tags[i]);
       os << endl;
     }
@@ -1250,9 +1250,9 @@ struct LockableAssociativeArray {
   V* select_and_lock(T addr) { bool dummy; return select_and_lock(addr, dummy); }
 
   ostream& print(ostream& os) const {
-    os << "LockableAssociativeArray<", setcount, " sets, ", waycount, " ways, ", linesize, "-byte lines>:", endl;
+    os << "LockableAssociativeArray<" << setcount << " sets, " << waycount << " ways, " << linesize << "-byte lines>:" << endl;
     foreach (set, setcount) {
-      os << "  Set ", set, ":", endl;
+      os << "  Set " << set << ":" << endl;
       os << sets[set];
     }
     return os;
@@ -1443,9 +1443,9 @@ struct LockableCommitRollbackAssociativeArray {
   }
 
   ostream& print(ostream& os) const {
-    os << "LockableAssociativeArray<", setcount, " sets, ", waycount, " ways, ", linesize, "-byte lines>:", endl;
+    os << "LockableAssociativeArray<" << setcount << " sets, " << waycount << " ways, " << linesize << "-byte lines>:" << endl;
     foreach (set, setcount) {
-      os << "  Set ", set, ":", endl;
+      os << "  Set " << set << ":" << endl;
       os << sets[set];
     }
     return os;

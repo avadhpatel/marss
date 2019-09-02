@@ -201,7 +201,7 @@ void BaseMachine::dump_configuration(ostream& os) const
 int BaseMachine::run(PTLsimConfig& config)
 {
     if(logable(1))
-        ptl_logfile << "Starting base core toplevel loop", endl, flush;
+        ptl_logfile << "Starting base core toplevel loop" << endl << flush;
 
     // All VCPUs are running:
     stopped = 0;
@@ -210,9 +210,9 @@ int BaseMachine::run(PTLsimConfig& config)
             !config.log_user_only) {
 
         if unlikely (!logenable)
-            ptl_logfile << "Start logging at level ",
-                        config.loglevel, " in cycle ",
-                        iterations, endl, flush;
+            ptl_logfile << "Start logging at level " <<
+                        config.loglevel << " in cycle " <<
+                        iterations << endl << flush;
 
         logenable = 1;
     }
@@ -233,8 +233,8 @@ int BaseMachine::run(PTLsimConfig& config)
         if unlikely ((!logenable) &&
                 iterations >= config.start_log_at_iteration &&
                 !config.log_user_only) {
-            ptl_logfile << "Start logging at level ", config.loglevel,
-                        " in cycle ", iterations, endl, flush;
+            ptl_logfile << "Start logging at level " << config.loglevel <<
+                        " in cycle " << iterations << endl << flush;
             logenable = 1;
         }
 
@@ -270,7 +270,7 @@ int BaseMachine::run(PTLsimConfig& config)
 
         if unlikely (config.stop_at_insns <= total_insns_committed ||
                 config.stop_at_cycle <= sim_cycle) {
-            ptl_logfile << "Stopping simulation loop at specified limits (", sim_cycle, " cycles, ", total_insns_committed, " commits)", endl;
+            ptl_logfile << "Stopping simulation loop at specified limits (" << sim_cycle << " cycles, " << total_insns_committed << " commits)" << endl;
             exiting = 1;
             break;
         }
@@ -282,7 +282,10 @@ int BaseMachine::run(PTLsimConfig& config)
     }
 
     if(logable(1))
-        ptl_logfile << "Exiting out-of-order core at ", total_insns_committed, " commits, ", total_uops_committed, " uops and ", iterations, " iterations (cycles)", endl;
+    {
+        ptl_logfile << "Exiting out-of-order core at " << total_insns_committed << " commits, " << total_uops_committed <<
+           " uops and " << iterations << " iterations (cycles)" << endl;
+    }
 
     config.dump_state_now = 0;
 
@@ -311,7 +314,7 @@ void BaseMachine::dump_state(ostream& os)
         cores[i]->dump_state(os);
     }
 
-    os << " MemoryHierarchy:", endl;
+    os << " MemoryHierarchy:" << endl;
     memoryHierarchyPtr->dump_info(os);
 }
 

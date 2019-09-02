@@ -117,7 +117,7 @@
     void checkvalid();
 
     ostream& print(ostream& os) const{
-      os << " (", count, " entries):";
+      os << " (" << count << " entries):";
 
       selfqueuelink* obj;
       foreach_list_mutable(*this, obj, entry, nextentry) {
@@ -129,7 +129,7 @@
     }
 
     ostream& print(ostream& os, const W64& tag) const{
-      os << " tag: ", (void*)tag, " ";
+      os << " tag: " << (void*)tag << " ";
       print(os);
       return os;
     }
@@ -145,7 +145,7 @@ struct FixStateListObject : public selfqueuelink
 	bool free;
 
 	ostream& print(ostream& os) const {
-		os << "idx[", idx, "]";
+		os << "idx[" << idx << "]";
 		return os;
 	}
 };
@@ -225,9 +225,9 @@ struct FixStateList
 	}
 
 	void print_all(ostream& os) {
-		os << "used list: ", endl;
+		os << "used list: " << endl;
 		usedList_.print(os);
-		os << "free list: ", endl;
+		os << "free list: " << endl;
 		freeList_.print(os);
 	}
 

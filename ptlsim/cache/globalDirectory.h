@@ -122,16 +122,16 @@ struct DirContBufferEntry : public FixStateListObject
             return os;
         }
 
-        os << "Request{", *request, "}";
-        os << "Cont[", cont->get_name(), "] ";
+        os << "Request{" << *request << "}";
+        os << "Cont[" << cont->get_name() << "] ";
         if (entry)
-            os << "dirEntry[", *entry, "] ";
+            os << "dirEntry[" << *entry << "] ";
         else
             os << "dirEntry[None] ";
-        os << "depends[", depends, "] ";
-        os << "origin[", origin, "] ";
-        os << "free_on_success[", free_on_success, "] ";
-        os << "annuled[", annuled, "]";
+        os << "depends[" << depends << "] ";
+        os << "origin[" << origin << "] ";
+        os << "free_on_success[" << free_on_success << "] ";
+        os << "annuled[" << annuled << "]";
         os << endl;
         return os;
     }

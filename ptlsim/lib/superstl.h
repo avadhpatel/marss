@@ -262,7 +262,7 @@ namespace superstl {
   static inline ostream& operator <<(ostream& os, const W8s& v) {
 	  return os << (signed int)(v);
   }
-
+#if 0
   static inline ostream& operator ,(ostream& os, char* c) {
 	  return os << c;
   }
@@ -271,7 +271,7 @@ namespace superstl {
   static inline ostream& operator ,(ostream& os, const T& v) {
     return os << v;
   }
-
+#endif
 
 
 #define DeclareStringBufToStream(T) inline ostream& operator <<(ostream& os, const T& arg) { stringbuf sb; sb << arg; os << sb; return os; }
@@ -334,7 +334,7 @@ namespace superstl {
   DeclareStringBufToStream(hexstring);
 
   static inline ostream& operator ,(ostream& os, const byte* v) {
-	  return os << "0x", hexstring((unsigned long)(v), 64);
+	  return os << "0x" << hexstring((unsigned long)(v), 64);
   }
 
   struct bytestring {
@@ -801,9 +801,9 @@ namespace superstl {
 
   template <class T>
   static inline ostream& operator <<(ostream& os, const dynarray<T>& v) {
-    os << "Array of ", v.size(), " elements (", v.capacity(), " reserved): ", endl;
+    os << "Array of " << v.size() << " elements (" << v.capacity() << " reserved): " << endl;
     for (int i = 0; i < v.size(); i++) {
-      os << "  [", i, "]: ", v[i], endl;
+      os << "  [" << i << "]: " << v[i] << endl;
     }
     return os;
   }
@@ -915,7 +915,7 @@ namespace superstl {
   };
 
   static inline ostream& operator <<(ostream& os, const selflistlink& link) {
-    return os << "[prev ", link.prev, ", next ", link.next, "]";
+    return os << "[prev " << link.prev << ", next " << link.next << "]";
   }
 
   class selfqueuelink {

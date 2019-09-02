@@ -50,13 +50,13 @@ struct Message : public FixStateListObject {
 			os << "Free Message\n";
 			return os;
 		}
-		os << "Message: sender[" , sender, "] ";
-        os << "origin[", origin, "] ";
-        os << "dest[", dest, "] ";
-		os << "arg:[", arg, "] ";
-		os << "request[", *request, "] ";
-		os << "isShared[", isShared, "] ";
-		os << "hasData[", hasData, "]\n";
+		os << "Message: sender["  << sender << "] ";
+        os << "origin[" << origin << "] ";
+        os << "dest[" << dest << "] ";
+		os << "arg:[" << arg << "] ";
+		os << "request[" << *request << "] ";
+		os << "isShared[" << isShared << "] ";
+		os << "hasData[" << hasData << "]\n";
 		return os;
 	}
 

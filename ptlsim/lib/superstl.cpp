@@ -113,7 +113,7 @@ W64 get_native_core_freq_hz() {
   ifstream is("/proc/cpuinfo");
 
   if (!is.is_open()) {
-    cerr << "get_native_core_freq_hz(): warning: cannot open /proc/cpuinfo. Is this a Linux machine?", endl;
+    cerr << "get_native_core_freq_hz(): warning: cannot open /proc/cpuinfo. Is this a Linux machine?" << endl;
     core_freq_hz = hz;
     return hz;
   }
@@ -571,10 +571,10 @@ namespace superstl {
 
   ostream& operator <<(ostream& os, const CycleTimer& ct) {
     double seconds = ((double)ct.total / ct.gethz());
-    os << "CycleTimer ", padstring(ct.title, -16), " ", intstring(ct.total, 16), " cycles, ",
-      floatstring(seconds, 9, 3), " seconds, ",
-      floatstring((float)ct.total / (float)ct.iterations, 18, 1), " cycles/iter, ",
-      floatstring((float)ct.iterations / (float)seconds, 18, 1), " iters/second";
+    os << "CycleTimer " << padstring(ct.title, -16) << " " << intstring(ct.total, 16) << " cycles, " <<
+      floatstring(seconds, 9, 3) << " seconds, " <<
+      floatstring((float)ct.total / (float)ct.iterations, 18, 1) << " cycles/iter, " <<
+      floatstring((float)ct.iterations / (float)seconds, 18, 1) << " iters/second";
 
     return os;
   }

@@ -135,7 +135,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
 {
     Message *message = (Message*)arg;
 
-    memdebug("Bus received message: ", *message, endl);
+    memdebug("Bus received message: " << *message << endl);
 
     bool kernel = message->request->is_kernel();
 
@@ -147,7 +147,7 @@ bool BusInterconnect::controller_request_cb(void *arg)
     foreach_list_mutable(pendingRequests_.list(), pendingEntry,
             entry, nextentry) {
         if(pendingEntry->request == message->request) {
-            memdebug("Bus Response received for: ", *pendingEntry);
+            memdebug("Bus Response received for: " << *pendingEntry);
             int idx = -1;
             Controller *sender = (Controller*)message->sender;
             foreach(i, controllers.count()) {
@@ -346,7 +346,7 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
 		return true;
 	}
 
-    memdebug("Broadcasing entry: ", *queueEntry, endl);
+    memdebug("Broadcasing entry: " << *queueEntry << endl);
 
     /* now create an entry into pendingRequests_ */
     PendingQueueEntry *pendingEntry = NULL;
@@ -360,7 +360,7 @@ bool BusInterconnect::broadcast_completed_cb(void *arg)
         pendingEntry->set_num_controllers(controllers.count());
 
         ADD_HISTORY_ADD(pendingEntry->request);
-        memdebug("Created pending entry: ", *pendingEntry, endl);
+        memdebug("Created pending entry: " << *pendingEntry << endl);
     }
 
     Message& message = *memoryHierarchy_->get_message();

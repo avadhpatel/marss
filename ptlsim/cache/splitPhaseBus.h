@@ -59,8 +59,8 @@ struct BusQueueEntry : public FixStateListObject
 			os << "Free Bus Queue Entry";
 			return os;
 		}
-		os << "request{", *request, "} ";
-		os << "hasData[", hasData, "]";
+		os << "request{" << *request << "} ";
+		os << "hasData[" << hasData << "]";
 		return os;
 	}
 };
@@ -102,13 +102,13 @@ struct PendingQueueEntry : public FixStateListObject
 			os << "Free Bus Queue Entry";
 			return os;
 		}
-		os << "request{", *request, "} ";
-		os << "shared[", shared, "]";
-		os << "hasData[", hasData, "]";
-		os << "responseReceived[", responseReceived, "]";
-        os << "initCycle[", initCycle, "]";
+		os << "request{" << *request << "} ";
+		os << "shared[" << shared << "]";
+		os << "hasData[" << hasData << "]";
+		os << "responseReceived[" << responseReceived << "]";
+        os << "initCycle[" << initCycle << "]";
         if(controllerWithData) {
-            os << "controllerWithData[", controllerWithData->get_name(), "]";
+            os << "controllerWithData[" << controllerWithData->get_name() << "]";
         }
 		return os;
 	}
@@ -172,22 +172,22 @@ class BusInterconnect : public Interconnect
 		}
 
 		void print(ostream& os) const {
-			os << "--Bus-Interconnect: ", get_name(), endl;
+			os << "--Bus-Interconnect: " << get_name() << endl;
 			foreach(i, controllers.count()) {
-				os << "Controller Queue: ", endl;
+				os << "Controller Queue: " << endl;
 				os << controllers[i]->queue;
 			}
-			os << "Pending Request: ", pendingRequests_, endl;
+			os << "Pending Request: " << pendingRequests_ << endl;
 		}
 
 		void print_map(ostream& os)
 		{
-			os << "Bus Interconnect: ", get_name(), endl;
-			os << "\tconnected to: ", endl;
+			os << "Bus Interconnect: " << get_name() << endl;
+			os << "\tconnected to: " << endl;
 
 			foreach(i, controllers.count()) {
-				os << "\t\tcontroller[", i, "]: ",
-				   controllers[i]->controller->get_name(), endl;
+				os << "\t\tcontroller[" << i << "]: " <<
+				   controllers[i]->controller->get_name() << endl;
 			}
 		}
 

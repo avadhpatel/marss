@@ -394,38 +394,38 @@ stringbuf& operator <<(stringbuf& sb, const TransOpBase& op) {
   if (ld|st) {
     if (op.opcode == OP_mf) {
       static const char* mf_names[4] = {"none", "st", "ld", "all"};
-      sbname << '.', mf_names[op.extshift];
+      sbname << '.' << mf_names[op.extshift];
     }
     sbname << ((op.cond == LDST_ALIGN_LO) ? ".lo" : (op.cond == LDST_ALIGN_HI) ? ".hi" : "");
   } else if ((op.opcode == OP_mask) || (op.opcode == OP_maskb)) {
     sbname << ((op.cond == 0) ? "" : (op.cond == 1) ? ".z" : (op.cond == 2) ? ".x" : ".???");
   }
 
-  if ((ld|st) && (op.cachelevel > 0)) sbname << ".L", (char)('1' + op.cachelevel);
+  if ((ld|st) && (op.cachelevel > 0)) sbname << ".L" << (char)('1' + op.cachelevel);
   if ((ld|st) && (op.locked)) sbname << ((ld) ? ".acq" : ".rel");
   if (op.internal) sbname << ".p";
-  if (op.eom) sbname << ".", (op.any_flags_in_insn ? "+" : "-");
+  if (op.eom) sbname << "." << (op.any_flags_in_insn ? "+" : "-");
 
-  sb << padstring((char*)sbname, -12), " ", arch_reg_names[op.rd];
+  sb << padstring((char*)sbname, -12) << " " << arch_reg_names[op.rd];
   if ((op.rd < ARCHREG_COUNT) & (!op.final_arch_in_insn)) sb << ".t";
 
   sb << " = ";
   if (ld|st) sb << "[";
   sb << arch_reg_names[op.ra];
   if (op.rb == REG_imm) {
-    if (abs(op.rbimm) <= 32768) sb << ",", op.rbimm; else sb << ",", (void*)op.rbimm;
+    if (abs(op.rbimm) <= 32768) sb << "," << op.rbimm; else sb << "," << (void*)op.rbimm;
   } else {
-    sb << ",", arch_reg_names[op.rb];
+    sb << "," << arch_reg_names[op.rb];
   }
   if (ld|st) sb << "]";
   if ((op.opcode == OP_mask) | (op.opcode == OP_maskb)) {
     MaskControlInfo mci(op.rcimm);
     int sh = (op.opcode == OP_maskb) ? 3 : 0;
-    sb << ",[ms=", (mci.info.ms >> sh), " mc=", (mci.info.mc >> sh), " ds=", (mci.info.ds >> sh), "]";
+    sb << ",[ms=" << (mci.info.ms >> sh) << " mc=" << (mci.info.mc >> sh) << " ds=" << (mci.info.ds >> sh) << "]";
   } else {
-    if (op.rc != REG_zero) { if (op.rc == REG_imm) sb << ",", op.rcimm; else sb << ",", arch_reg_names[op.rc]; }
+    if (op.rc != REG_zero) { if (op.rc == REG_imm) sb << "," << op.rcimm; else sb << "," << arch_reg_names[op.rc]; }
   }
-  if ((op.opcode == OP_adda || op.opcode == OP_suba) && (op.extshift != 0)) sb << "*", (1 << op.extshift);
+  if ((op.opcode == OP_adda || op.opcode == OP_suba) && (op.extshift != 0)) sb << "*" << (1 << op.extshift);
 
   if (op.setflags) {
     sb << " ";
@@ -438,11 +438,11 @@ stringbuf& operator <<(stringbuf& sb, const TransOpBase& op) {
     if (!op.final_flags_in_insn) sb << "/temp";
   }
 
-  if (isbranch(op.opcode)) sb << " [taken ", (void*)(Waddr)op.riptaken, ", seq ", (void*)(Waddr)op.ripseq, "]";
+  if (isbranch(op.opcode)) sb << " [taken " << (void*)(Waddr)op.riptaken << ", seq " << (void*)(Waddr)op.ripseq << "]";
 
   if (op.som) { sb << " [som]"; }
   if (op.eom) { sb << " [eom]"; }
-  if (op.som|op.eom) { sb << " [", op.bytes, " bytes]"; }
+  if (op.som|op.eom) { sb << " [" << op.bytes << " bytes]"; }
 
   return sb;
 }
@@ -455,7 +455,7 @@ ostream& operator <<(ostream& os, const TransOpBase& op) {
 }
 
 ostream& RIPVirtPhysBase::print(ostream& os) const {
-  os << "[", (void*)(Waddr)rip;
+  os << "[" << (void*)(Waddr)rip;
   os << (use64 ? " ss64" : "");
   os << (kernel ? " krn" : "");
   os << (df ? " df" : "");
@@ -516,24 +516,25 @@ BasicBlock* BasicBlock::clone() {
 }
 
 ostream& operator <<(ostream& os, const BasicBlock& bb) {
-  os << "BasicBlock ", (void*)(Waddr)bb.rip, " of type ", branch_type_names[bb.brtype], ": ", bb.bytes, " bytes, ", bb.count, " transops (", bb.tagcount, "t ", bb.memcount, "m ", bb.storecount, "s";
+  os << "BasicBlock " << (void*)(Waddr)bb.rip << " of type " << branch_type_names[bb.brtype] << ": " <<
+     bb.bytes << " bytes, " << bb.count << " transops (" << bb.tagcount << "t " << bb.memcount << "m " << bb.storecount << "s";
   if (bb.repblock) os << " rep";
-  os << ", cpu_id[", bb.context_id, "]";
-  os << ", uses ", bitstring(bb.usedregs, 64, true), "), ";
-  os << bb.refcount, " refs, ", (void*)(Waddr)bb.rip_taken, " taken, ", (void*)(Waddr)bb.rip_not_taken, " not taken:", endl;
+  os << ", cpu_id[" << bb.context_id << "]";
+  os << ", uses " << bitstring(bb.usedregs, 64, true) << "), ";
+  os << bb.refcount << " refs, " << (void*)(Waddr)bb.rip_taken << " taken, " << (void*)(Waddr)bb.rip_not_taken << " not taken:" << endl;
   Waddr rip = bb.rip;
   int bytes_in_insn = 0;
 
   foreach (i, bb.count) {
     const TransOp& transop = bb.transops[i];
-    os << "  ", (void*)rip, ": ", transop;
+    os << "  " << (void*)rip << ": " << transop;
 
     os << endl;
 
     if (transop.som) bytes_in_insn = transop.bytes;
     if (transop.eom) rip += bytes_in_insn;
   }
-  os << "Basic block terminates with taken rip ", (void*)(Waddr)bb.rip_taken, ", not taken rip ", (void*)(Waddr)bb.rip_not_taken, endl;
+  os << "Basic block terminates with taken rip " << (void*)(Waddr)bb.rip_taken << ", not taken rip " << (void*)(Waddr)bb.rip_not_taken << endl;
   return os;
 }
 
@@ -564,14 +565,14 @@ stringbuf& nameof(stringbuf& sbname, const TransOp& uop) {
 
   if ((op != OP_maskb) & (op != OP_mask))
     sbname << (fp ? fptype_names[uop.size] : size_names[uop.size]);
-  else sbname << ".", mask_exttype[uop.cond];
+  else sbname << "." << mask_exttype[uop.cond];
 
   if (isclass(op, OPCLASS_USECOND))
-    sbname << ".", cond_code_names[uop.cond];
+    sbname << "." << cond_code_names[uop.cond];
 
   if (ld|st) {
     sbname << ((uop.cond == LDST_ALIGN_LO) ? ".low" : (uop.cond == LDST_ALIGN_HI) ? ".high" : "");
-    if (uop.cachelevel > 0) sbname << ".L", (char)('1' + uop.cachelevel);
+    if (uop.cachelevel > 0) sbname << ".L" << (char)('1' + uop.cachelevel);
   }
 
   if (uop.internal) sbname << ".p";
@@ -582,25 +583,26 @@ stringbuf& nameof(stringbuf& sbname, const TransOp& uop) {
 ostream& operator <<(ostream& os, const UserContext& arf) {
   static const int width = 4;
   foreach (i, ARCHREG_COUNT) {
-    os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(arf[i], 64), "  ";
+    os << "  " << padstring(arch_reg_names[i], -6) << " 0x" << hexstring(arf[i], 64) << "  ";
     if ((i % width) == (width-1)) os << endl;
   }
     return os;
 }
 
 ostream& operator <<(ostream& os, const IssueState& state) {
-  os << "  rd 0x", hexstring(state.reg.rddata, 64), " (", flagstring(state.reg.rdflags), "), sfrd ", state.st, " (exception ", exception_name(state.reg.rddata), ")", endl;
+  os << "  rd 0x" << hexstring(state.reg.rddata, 64) << " (" << flagstring(state.reg.rdflags) << "), sfrd " <<
+    state.st << " (exception " << exception_name(state.reg.rddata) << ")" << endl;
   return os;
 }
 
 stringbuf& operator <<(stringbuf& os, const SFR& sfr) {
   if (sfr.invalid) {
-    os << "< Invalid: fault 0x", hexstring(sfr.data, 8), " > ";
+    os << "< Invalid: fault 0x" << hexstring(sfr.data, 8) << " > ";
   } else {
-    os << bytemaskstring((const byte*)&sfr.data, sfr.bytemask, 8), " ";
+    os << bytemaskstring((const byte*)&sfr.data, sfr.bytemask, 8) << " ";
   }
 
-  os << "@ 0x", hexstring(sfr.physaddr << 3, 64), " for memid tag ", intstring(sfr.tag, 3);
+  os << "@ 0x" << hexstring(sfr.physaddr << 3, 64) << " for memid tag " << intstring(sfr.tag, 3);
   return os;
 }
 
@@ -613,9 +615,9 @@ stringbuf& print_value_and_flags(stringbuf& sb, W64 value, W16 flags) {
   if (flags & FLAG_OF) flagsb << 'o';
 
   if (flags & FLAG_INV)
-    sb << " < ", padstring(exception_name(LO32(value)), -14), " >";
-  else sb << " 0x", hexstring(value, 64);
-  sb << "|", padstring(flagsb, -5);
+    sb << " < " << padstring(exception_name(LO32(value)), -14) << " >";
+  else sb << " 0x" << hexstring(value, 64);
+  sb << "|" << padstring(flagsb, -5);
   return sb;
 }
 
@@ -632,8 +634,8 @@ ostream& operator <<(ostream& os, const PageFaultErrorCode& pfec) {
 }
 
 ostream& operator <<(ostream& os, const SegmentDescriptor& seg) {
-  os << "base ", hexstring(seg.getbase(), 32), ", limit ", hexstring(seg.getlimit(), 32),
-    ", ring ", seg.dpl;
+  os << "base " << hexstring(seg.getbase(), 32) << ", limit " << hexstring(seg.getlimit(), 32) <<
+    ", ring " << seg.dpl;
   os << ((seg.s) ? " sys" : " usr");
   os << ((seg.l) ? " 64bit" : "      ");
   os << ((seg.d) ? " 32bit" : " 16bit");
@@ -645,9 +647,9 @@ ostream& operator <<(ostream& os, const SegmentDescriptor& seg) {
 }
 
 ostream& operator <<(ostream& os, const SegmentDescriptorCache& seg) {
-  os << "0x", hexstring(seg.selector, 16), ": ";
+  os << "0x" << hexstring(seg.selector, 16) << ": ";
 
-  os << "base ", hexstring(seg.base, 64), ", limit ", hexstring(seg.limit, 64), ", ring ", seg.dpl, ":";
+  os << "base " << hexstring(seg.base, 64) << ", limit " << hexstring(seg.limit, 64) << ", ring " << seg.dpl << ":";
   os << ((seg.supervisor) ? " sys" : " usr");
   os << ((seg.use64) ? " 64bit" : "      ");
   os << ((seg.use32) ? " 32bit" : "      ");
@@ -694,80 +696,82 @@ ostream& operator <<(ostream& os, const CR4& cr4) {
 ostream& operator <<(ostream& os, const Context& ctx) {
   static const int arfwidth = 4;
 
-  os << "VCPU State:", endl;
-  os << "  Architectural Registers:", endl;
+  os << "VCPU State:" << endl;
+  os << "  Architectural Registers:" << endl;
   int i = 0;
   for(i=0; i < CPU_NB_REGS; i++) {
-	  os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.regs[i], 64);
+	  os << "  " << padstring(arch_reg_names[i], -6) << " 0x" << hexstring(ctx.regs[i], 64);
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
   for(; i < 48; i++) {
-      os << "  ", padstring(arch_reg_names[i], -6), " 0x", hexstring(ctx.get(i), 64);
+      os << "  " << padstring(arch_reg_names[i], -6) << " 0x" << hexstring(ctx.get(i), 64);
     if ((i % arfwidth) == (arfwidth-1)) os << endl;
   }
-  os << "  ", padstring(arch_reg_names[48], -6), " 0x", hexstring(ctx.reg_fptos, 64);
-  os << "  ", padstring(arch_reg_names[49], -6), " 0x", hexstring(ctx.fpus, 64);
-  os << "  ", padstring(arch_reg_names[50], -6), " 0x", hexstring(ctx.reg_fptag, 64);
-  os << "  ", padstring(arch_reg_names[51], -6), " 0x", hexstring(ctx.reg_fpstack, 64), endl;
-  os << "  ", padstring(arch_reg_names[52], -6), " 0x", hexstring(ctx.invalid_reg, 64);
-  os << "  ", padstring(arch_reg_names[53], -6), " 0x", hexstring(ctx.invalid_reg, 64);
-  os << "  ", padstring(arch_reg_names[54], -6), " 0x", hexstring(ctx.reg_trace, 64);
-  os << "  ", padstring(arch_reg_names[55], -6), " 0x", hexstring(ctx.reg_ctx, 64), endl;
-  os << "  ", padstring(arch_reg_names[56], -6), " 0x", hexstring(ctx.eip, 64);
-  os << "  ", padstring(arch_reg_names[57], -6), " 0x", hexstring(ctx.reg_flags, 64);
-  os << "  ", padstring(arch_reg_names[58], -6), " 0x", hexstring(ctx.invalid_reg, 64);
-  os << "  ", padstring(arch_reg_names[59], -6), " 0x", hexstring(ctx.reg_selfrip, 64), endl;
-  os << "  ", padstring(arch_reg_names[60], -6), " 0x", hexstring(ctx.reg_nextrip, 64);
-  os << "  ", padstring(arch_reg_names[61], -6), " 0x", hexstring(ctx.reg_ar1, 64);
-  os << "  ", padstring(arch_reg_names[62], -6), " 0x", hexstring(ctx.reg_ar2, 64);
-  os << "  ", padstring(arch_reg_names[63], -6), " 0x", hexstring(ctx.reg_zero, 64), endl;
+  os << "  " << padstring(arch_reg_names[48], -6) << " 0x" << hexstring(ctx.reg_fptos, 64);
+  os << "  " << padstring(arch_reg_names[49], -6) << " 0x" << hexstring(ctx.fpus, 64);
+  os << "  " << padstring(arch_reg_names[50], -6) << " 0x" << hexstring(ctx.reg_fptag, 64);
+  os << "  " << padstring(arch_reg_names[51], -6) << " 0x" << hexstring(ctx.reg_fpstack, 64) << endl;
+  os << "  " << padstring(arch_reg_names[52], -6) << " 0x" << hexstring(ctx.invalid_reg, 64);
+  os << "  " << padstring(arch_reg_names[53], -6) << " 0x" << hexstring(ctx.invalid_reg, 64);
+  os << "  " << padstring(arch_reg_names[54], -6) << " 0x" << hexstring(ctx.reg_trace, 64);
+  os << "  " << padstring(arch_reg_names[55], -6) << " 0x" << hexstring(ctx.reg_ctx, 64) << endl;
+  os << "  " << padstring(arch_reg_names[56], -6) << " 0x" << hexstring(ctx.eip, 64);
+  os << "  " << padstring(arch_reg_names[57], -6) << " 0x" << hexstring(ctx.reg_flags, 64);
+  os << "  " << padstring(arch_reg_names[58], -6) << " 0x" << hexstring(ctx.invalid_reg, 64);
+  os << "  " << padstring(arch_reg_names[59], -6) << " 0x" << hexstring(ctx.reg_selfrip, 64) << endl;
+  os << "  " << padstring(arch_reg_names[60], -6) << " 0x" << hexstring(ctx.reg_nextrip, 64);
+  os << "  " << padstring(arch_reg_names[61], -6) << " 0x" << hexstring(ctx.reg_ar1, 64);
+  os << "  " << padstring(arch_reg_names[62], -6) << " 0x" << hexstring(ctx.reg_ar2, 64);
+  os << "  " << padstring(arch_reg_names[63], -6) << " 0x" << hexstring(ctx.reg_zero, 64) << endl;
 
-  os << "  Flags:", endl;
-  os << "    Running?   ", ((ctx.running) ? "running" : "blocked"), endl;
-  if unlikely (ctx.dirty) os << "    Context is dirty: refresh any internal state cached by active core model", endl;
-  os << "    Mode:      ", ((ctx.kernel_mode) ? "kernel" : "user"), endl;
-  os << "    32/64:     ", ((ctx.use64) ? "64-bit x86-64" : "32-bit x86"), endl;
-  os << "    IntEFLAGS: ", hexstring(ctx.internal_eflags, 32), " (df ", ((ctx.internal_eflags & FLAG_DF) != 0), ")", endl;
-  os << "    hflags: ", hexstring(ctx.hflags, 32), " (QEMU internal flags)", endl;
-  os << "  Segment Registers:", endl;
-  os << "    cs ", ctx.segs[SEGID_CS], endl;
-  os << "    ss ", ctx.segs[SEGID_SS], endl;
-  os << "    ds ", ctx.segs[SEGID_DS], endl;
-  os << "    es ", ctx.segs[SEGID_ES], endl;
-  os << "    fs ", ctx.segs[SEGID_FS], endl;
-  os << "    gs ", ctx.segs[SEGID_GS], endl;
-  os << "  Segment Control Registers:", endl;
+  os << "  Flags:" << endl;
+  os << "    Running?   " << ((ctx.running) ? "running" : "blocked") << endl;
+  if unlikely (ctx.dirty) os << "    Context is dirty: refresh any internal state cached by active core model" << endl;
+  os << "    Mode:      " << ((ctx.kernel_mode) ? "kernel" : "user") << endl;
+  os << "    32/64:     " << ((ctx.use64) ? "64-bit x86-64" : "32-bit x86") << endl;
+  os << "    IntEFLAGS: " << hexstring(ctx.internal_eflags, 32) << " (df " << ((ctx.internal_eflags & FLAG_DF) != 0) << ")" << endl;
+  os << "    hflags: " << hexstring(ctx.hflags, 32) << " (QEMU internal flags)" << endl;
+  os << "  Segment Registers:" << endl;
+  os << "    cs " << ctx.segs[SEGID_CS] << endl;
+  os << "    ss " << ctx.segs[SEGID_SS] << endl;
+  os << "    ds " << ctx.segs[SEGID_DS] << endl;
+  os << "    es " << ctx.segs[SEGID_ES] << endl;
+  os << "    fs " << ctx.segs[SEGID_FS] << endl;
+  os << "    gs " << ctx.segs[SEGID_GS] << endl;
+  os << "  Segment Control Registers:" << endl;
 //  os << "    ldt ", hexstring(ctx.ldtvirt, 64), "  ld# ", hexstring(ctx.ldtsize, 64), "  gd# ", hexstring(ctx.gdtsize, 64), endl;
 //  os << "    gdt mfns"; foreach (i, 16) { os << " ", ctx.gdtpages[i]; } os << endl;
 //  os << "    fsB ", hexstring(ctx.fs_base, 64), "  gsB ", hexstring(ctx.gs_base_user, 64), "  gkB ", hexstring(ctx.gs_base_kernel, 64), endl;
-  os << "  Control Registers:", endl;
-  os << "    cr0 ", ctx.cr[0], endl;
-  os << "    cr2 ", hexstring(ctx.cr[2], 64), "  fault virtual address", endl;
-  os << "    cr3 ", hexstring(ctx.cr[3], 64), "  page table base (mfn ", (ctx.cr[3] >> 12), ")", endl;
-  os << "    cr4 ", ctx.cr[4], endl;
+  os << "  Control Registers:" << endl;
+  os << "    cr0 " << ctx.cr[0] << endl;
+  os << "    cr2 " << hexstring(ctx.cr[2], 64) << "  fault virtual address" << endl;
+  os << "    cr3 " << hexstring(ctx.cr[3], 64) << "  page table base (mfn " << (ctx.cr[3] >> 12) << ")" << endl;
+  os << "    cr4 " << ctx.cr[4] << endl;
 //  os << "    kss ", hexstring(ctx.kernel_ss, 64), "  ksp ", hexstring(ctx.kernel_sp, 64), "  vma ", hexstring(ctx.vm_assist, 64),endl;
 //  os << "    kPT ", intstring(ctx.kernel_ptbase_mfn, 16), endl;
 //  os << "    uPT ", intstring(ctx.user_ptbase_mfn, 16), endl;
-  os << "  Debug Registers:", endl;
-  os << "    dr0 ", hexstring(ctx.dr[0], 64), "  dr1 ", hexstring(ctx.dr[1], 64), "  dr2 ", hexstring(ctx.dr[2], 64),  "  dr3 ", hexstring(ctx.dr[3], 64), endl;
-  os << "    dr4 ", hexstring(ctx.dr[4], 64), "  dr5 ", hexstring(ctx.dr[5], 64), "  dr6 ", hexstring(ctx.dr[6], 64),  "  dr7 ", hexstring(ctx.dr[7], 64), endl;
-  os << "  Callbacks:", endl;
-  os << "  Exception and Event Control:", endl;
-  os << "    exception ", intstring(ctx.exception_index, 2), "  errorcode ", hexstring(ctx.error_code, 32),
+  os << "  Debug Registers:" << endl;
+  os << "    dr0 " << hexstring(ctx.dr[0], 64) << "  dr1 " << hexstring(ctx.dr[1], 64) << "  dr2 " << 
+    hexstring(ctx.dr[2], 64) <<  "  dr3 " << hexstring(ctx.dr[3], 64) << endl;
+  os << "    dr4 " << hexstring(ctx.dr[4], 64) << "  dr5 " << hexstring(ctx.dr[5], 64) << "  dr6 " << 
+    hexstring(ctx.dr[6], 64) <<  "  dr7 " << hexstring(ctx.dr[7], 64) << endl;
+  os << "  Callbacks:" << endl;
+  os << "  Exception and Event Control:" << endl;
+  os << "    exception " << intstring(ctx.exception_index, 2) << "  errorcode " << hexstring(ctx.error_code, 32) <<
     endl;
 
-  os << "  FPU:", endl;
-  os << "    FP Control Word: 0x", hexstring(ctx.fpuc, 32), endl;
-  os << "    MXCSR:           0x", hexstring(ctx.mxcsr, 32), endl;
+  os << "  FPU:" << endl;
+  os << "    FP Control Word: 0x" << hexstring(ctx.fpuc, 32) << endl;
+  os << "    MXCSR:           0x" << hexstring(ctx.mxcsr, 32) << endl;
 
   for (int i = 7; i >= 0; i--) {
     int stackid = (i - (ctx.fpstt >> 3)) & 0x7;
-    os << "    fp", i, "  st(", stackid, ")  ", (ctx.fptags[i] ? "Valid" : "Empty"),
-      "  0x", hexstring(ctx.fpregs[i].mmx.q, 64), " => ", *((double*)&(ctx.fpregs[i].d)), endl;
+    os << "    fp" << i << "  st(" << stackid << ")  " << (ctx.fptags[i] ? "Valid" : "Empty") <<
+      "  0x" << hexstring(ctx.fpregs[i].mmx.q, 64) << " => " << *((double*)&(ctx.fpregs[i].d)) << endl;
   }
 
-  os << "  Internal State:", endl;
-  os << "    Last internal exception: ", "0x", hexstring(ctx.exception, 64), " (", exception_name(ctx.exception), ")", endl;
+  os << "  Internal State:" << endl;
+  os << "    Last internal exception: " << "0x" << hexstring(ctx.exception, 64) << " (" << exception_name(ctx.exception) << ")" << endl;
 
   return os;
 }

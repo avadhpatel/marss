@@ -387,7 +387,8 @@ namespace OOO_CORE_MODEL {
                 return true;
             }
             bool free_shared_entry() {
-                if(logable(99)) ptl_logfile << "shared_free_entries: ", shared_free_entries, " size: ",  size, " reserved_entries: ",  reserved_entries, endl;
+                if(logable(99)) ptl_logfile << "shared_free_entries: " << shared_free_entries << " size: " <<  size 
+                    << " reserved_entries: " <<  reserved_entries << endl;
                 assert(shared_free_entries < size - reserved_entries);
                 shared_free_entries++;
                 return true;
@@ -914,9 +915,9 @@ namespace OOO_CORE_MODEL {
           W64 oldtag = 0;
           int way = base_t::select(tag, oldtag);
           if (logable(6)) {
-            ptl_logfile << "TLB insertion of virt page ", (void*)(Waddr)addr, " (virt addr ",
-                        (void*)(Waddr)(addr), ") into way ", way, ": ",
-                        ((oldtag != tag) ? "evicted old entry" : "already present"), endl;
+            ptl_logfile << "TLB insertion of virt page " << (void*)(Waddr)addr << " (virt addr " <<
+                        (void*)(Waddr)(addr) << ") into way " << way << ": " <<
+                        ((oldtag != tag) ? "evicted old entry" : "already present") << endl;
           }
           return (oldtag != tag);
         }

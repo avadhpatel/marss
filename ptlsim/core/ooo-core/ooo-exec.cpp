@@ -340,14 +340,14 @@ bool IssueQueue<size, operandcount>::remove(int slot) {
  */
 template <int size, int operandcount>
 ostream& IssueQueue<size, operandcount>::print(ostream& os) const {
-    os << "IssueQueue: count = ", count, ":", endl;
+    os << "IssueQueue: count = " << count << ":" << endl;
     foreach (i, size) {
         os << "  uop ";
         uopids.printid(os, i);
-        os << ": ",
-           ((valid[i]) ? 'V' : '-'), ' ',
-           ((issued[i]) ? 'I' : '-'), ' ',
-           ((allready[i]) ? 'R' : '-'), ' ';
+        os << ": " <<
+           ((valid[i]) ? 'V' : '-') << ' ' <<
+           ((issued[i]) ? 'I' : '-') << ' ' <<
+           ((allready[i]) ? 'R' : '-') << ' ';
         foreach (j, operandcount) {
             if (j) os << ' ';
             tags[j].printid(os, i);
@@ -546,8 +546,8 @@ int ReorderBufferEntry::issue() {
         state.reg.rdflags = FLAG_INV;
         state.reg.rddata = EXCEPTION_Propagate;
         if (logable(6)) {
-            ptl_logfile << "Invalid operands: ra[", ra, "] rb[",
-                        rb, "] rc[", rc, "] ", endl;
+            ptl_logfile << "Invalid operands: ra[" << ra << "] rb[" <<
+                        rb << "] rc[" << rc << "] " << endl;
         }
     } else {
         thread.thread_stats.issue.opclass[opclassof(uop.opcode)]++;
@@ -707,7 +707,7 @@ int ReorderBufferEntry::issue() {
                  */
 
                 if(logable(10))
-                    ptl_logfile << "Branch mispredicted: ", (void*)(realrip), " ", *this, endl;
+                    ptl_logfile << "Branch mispredicted: " << (void*)(realrip) << " " << *this << endl;
                 thread.reset_fetch_unit(realrip);
                 thread.thread_stats.issue.result.branch_mispredict++;
 
@@ -789,10 +789,10 @@ Waddr ReorderBufferEntry::addrgen(LoadStoreQueueEntry& state, Waddr& origaddr, W
 
     addr = (st) ? (ra + rb) : ((aligntype == LDST_ALIGN_NORMAL) ? (ra + rb) : ra);
     if(logable(10)) {
-        ptl_logfile << "ROB::addrgen: st:", st, " ra:", ra, " rb:", rb,
-                    " rc:", rc, " addr:", hexstring(addr, 64), endl;
-        ptl_logfile << " at uop: ", uop, " at rip: ",
-                    hexstring(uop.rip.rip, 64), endl;
+        ptl_logfile << "ROB::addrgen: st:" << st << " ra:" << ra << " rb:" << rb <<
+                    " rc:" << rc << " addr:" << hexstring(addr, 64) << endl;
+        ptl_logfile << " at uop: " << uop << " at rip: " <<
+                    hexstring(uop.rip.rip, 64) << endl;
     }
 
      /*
@@ -1285,10 +1285,10 @@ int ReorderBufferEntry::issuestore(LoadStoreQueueEntry& state, Waddr& origaddr, 
         if unlikely (!lock) {
 
             if(logable(8)) {
-                cerr << "Memory addr ", hexstring(physaddr, 64),
-                     " is locked by ", thread.ctx.cpu_index, endl;
-                ptl_logfile << "Memory addr ", hexstring(physaddr, 64),
-                            " is locked by ", thread.ctx.cpu_index, endl;
+                cerr << "Memory addr " << hexstring(physaddr, 64) <<
+                     " is locked by " << thread.ctx.cpu_index << endl;
+                ptl_logfile << "Memory addr " << hexstring(physaddr, 64) <<
+                            " is locked by " << thread.ctx.cpu_index << endl;
             }
 
             thread.thread_stats.dcache.store.issue.replay.interlocked++;
@@ -1566,11 +1566,11 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
 #endif
 
     if(sfra && logable(10))
-        ptl_logfile << " Load will be forwared from sfra\n",
-                    " load addr: ", hexstring(state.virtaddr, 64),
-                    " at rip: ", hexstring(uop.rip.rip, 64),
-                    " sfra-addrvalid: ", sfra->addrvalid,
-                    " sfra-datavalid: ", sfra->datavalid, endl;
+        ptl_logfile << " Load will be forwared from sfra\n" <<
+                    " load addr: " << hexstring(state.virtaddr, 64) <<
+                    " at rip: " << hexstring(uop.rip.rip, 64) <<
+                    " sfra-addrvalid: " << sfra->addrvalid <<
+                    " sfra-datavalid: " << sfra->datavalid << endl;
 
      /*
       * Always update deps in case redispatch is required
@@ -1641,7 +1641,7 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
     /* test if CPUController can accept new request: */
     bool cache_available = core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, false/* icache */);
     if(!cache_available){
-        msdebug << " dcache can not read core:", core.get_coreid(), " threadid ", threadid, endl;
+        msdebug << " dcache can not read core:" << core.get_coreid() << " threadid " << threadid << endl;
         replay();
         thread.thread_stats.dcache.load.issue.replay.dcache_stall++;
         load_store_second_phase = 1;
@@ -1740,9 +1740,9 @@ int ReorderBufferEntry::issueload(LoadStoreQueueEntry& state, Waddr& origaddr, W
             state.sfr_bytemask >>= addr_diff;
         }
         if(logable(10))
-            ptl_logfile << "Partial match of load/store rip: ", hexstring(uop.rip.rip, 64),
-                        " sfr_bytemask: ", sfra->bytemask, " sfr_data: ",
-                        sfra->data, endl;
+            ptl_logfile << "Partial match of load/store rip: " << hexstring(uop.rip.rip, 64) <<
+                        " sfr_bytemask: " << sfra->bytemask << " sfr_data: " <<
+                        sfra->data << endl;
          /*
           * Change the sfr_bytemask to 0xff to indicate the we have
           * matching SFR entry in LSQ
@@ -1896,7 +1896,7 @@ bool ReorderBufferEntry::probetlb(LoadStoreQueueEntry& state, Waddr& origaddr, W
     if unlikely (exception != 0 || !thread.dtlb.probe(origaddr, threadid)) {
 
         if(logable(6)) {
-            ptl_logfile << "dtlb miss origaddr: ", (void*)origaddr, endl;
+            ptl_logfile << "dtlb miss origaddr: " << (void*)origaddr << endl;
         }
 
         /* Set this ROB entry to do TLB page walk */
@@ -1986,8 +1986,8 @@ void ReorderBufferEntry::tlbwalk() {
     W64 virtaddr = virtpage;
 
     if(logable(6)) {
-        ptl_logfile << "cycle ", sim_cycle, " rob entry ", *this, " tlb_walk_level: ",
-                    tlb_walk_level, " virtaddr: ", (void*)virtaddr, endl;
+        ptl_logfile << "cycle " << sim_cycle << " rob entry " << *this << " tlb_walk_level: " <<
+                    tlb_walk_level << " virtaddr: " << (void*)virtaddr << endl;
     }
 
     if unlikely (!tlb_walk_level) {
@@ -1998,7 +1998,7 @@ rob_cont:
         thread.thread_stats.dcache.dtlb_latency[delay]++;
 
         if(logable(6)) {
-            ptl_logfile << "Finalizing dtlb miss rob ", *this, " virtaddr: ", (void*)origvirt, endl;
+            ptl_logfile << "Finalizing dtlb miss rob " << *this << " virtaddr: " << (void*)origvirt << endl;
         }
         PageFaultErrorCode pfec;
         bool st = isstore(uop.opcode);
@@ -2041,7 +2041,7 @@ rob_cont:
         thread.in_tlb_walk = 0;
 
         if(logable(10)) {
-            ptl_logfile << "tlb miss completed for rob ", *this, " now issuing cache access\n";
+            ptl_logfile << "tlb miss completed for rob " << *this << " now issuing cache access\n";
         }
 
         changestate(get_ready_to_issue_list());
@@ -2225,11 +2225,11 @@ bool OooCore::dcache_wakeup(void *arg) {
     ThreadContext* thread = threads[request->get_threadid()];
     assert(inrange(idx, 0, ROB_SIZE-1));
     ReorderBufferEntry& rob = thread->ROB[idx];
-    if(logable(6)) ptl_logfile << " dcache_wakeup ", rob, " request ", *request, endl;
+    if(logable(6)) ptl_logfile << " dcache_wakeup " << rob << " request " << *request << endl;
     if(rob.lsq && request->get_owner_uuid() == rob.uop.uuid &&
             rob.lsq->physaddr == (physaddr >> 3) &&
             rob.current_state_list == &thread->rob_cache_miss_list){
-        if(logable(6)) ptl_logfile << " rob ", rob, endl;
+        if(logable(6)) ptl_logfile << " rob " << rob << endl;
 
         /*
          * Because of QEMU's in-order execution and Simulator's
@@ -2251,8 +2251,8 @@ bool OooCore::dcache_wakeup(void *arg) {
                         data = checker_stores[i].data;
                     }
                     if(logable(10)) {
-                        ptl_logfile << "Checker virtaddr ", (void*)(checker_stores[i].virtaddr),
-                                    " data ", (void*)(checker_stores[i].data), endl;
+                        ptl_logfile << "Checker virtaddr " << (void*)(checker_stores[i].virtaddr) <<
+                                    " data " << (void*)(checker_stores[i].data) << endl;
                     }
                 }
             }
@@ -2307,11 +2307,11 @@ bool OooCore::dcache_wakeup(void *arg) {
                             data = mux64(sel, data, tmp_data);
 
                             if(logable(6)) {
-                                ptl_logfile << "Load ", *rob.lsq, " forward from store: ", stq, " tmp: ",
-                                            (void*)(tmp_data), " (", hexstring(tmp_bytemask, 8), ") ",
-                                            " data: ", (void*)(data), endl;
-                                ptl_logfile << " load_addr: ", (void*)(rob.lsq->virtaddr),
-                                            " st_addr: ", (void*)(stq.virtaddr), endl;
+                                ptl_logfile << "Load " << *rob.lsq << " forward from store: " << stq << " tmp: " <<
+                                            (void*)(tmp_data) << " (" << hexstring(tmp_bytemask, 8) << ") " <<
+                                            " data: " << (void*)(data) << endl;
+                                ptl_logfile << " load_addr: " << (void*)(rob.lsq->virtaddr) <<
+                                            " st_addr: " << (void*)(stq.virtaddr) << endl;
                             }
 
                         }
@@ -2326,14 +2326,14 @@ bool OooCore::dcache_wakeup(void *arg) {
         }
     }else{
         if(logable(5)) {
-            ptl_logfile << " ignor annulled request : request uuid ",
-                        request->get_owner_uuid(), " rob.uop.uuid ", rob.uop.uuid;
+            ptl_logfile << " ignor annulled request : request uuid " <<
+                        request->get_owner_uuid() << " rob.uop.uuid " << rob.uop.uuid;
             if(rob.lsq)
-                ptl_logfile << " lsq_physaddr ", (void*)(rob.lsq->physaddr << 3),
-                            " physaddr ", (void*)physaddr;
+                ptl_logfile << " lsq_physaddr " << (void*)(rob.lsq->physaddr << 3) <<
+                            " physaddr " << (void*)physaddr;
             else
                 ptl_logfile << " no lsq ";
-            ptl_logfile << " rob ", rob, endl;
+            ptl_logfile << " rob " << rob << endl;
         }
     }
 
@@ -2509,7 +2509,7 @@ void ReorderBufferEntry::release() {
 #ifdef MULTI_IQ
     int reserved_iq_entries_per_thread = core.reserved_iq_entries[cluster] / core.threadcount;
     if (thread.issueq_count[cluster] > reserved_iq_entries_per_thread) {
-        if(logable(99)) ptl_logfile << " free_shared_entry() from release()",endl;
+        if(logable(99)) ptl_logfile << " free_shared_entry() from release()" << endl;
         issueq_operation_on_cluster(core, cluster, free_shared_entry());
     }
     /* svn 225
@@ -2524,7 +2524,7 @@ void ReorderBufferEntry::release() {
 #else
     int reserved_iq_entries_per_thread = core.reserved_iq_entries / core.threadcount;
     if (thread.issueq_count > reserved_iq_entries_per_thread) {
-        if(logable(99)) ptl_logfile << " free_shared_entry() from release()",endl;
+        if(logable(99)) ptl_logfile << " free_shared_entry() from release()" << endl;
         issueq_operation_on_cluster(core, cluster, free_shared_entry());
     }
     /* svn 225

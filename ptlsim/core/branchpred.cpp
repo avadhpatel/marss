@@ -102,7 +102,7 @@ template <int SIZE>
 ostream& operator <<(ostream& os, ReturnAddressStack<SIZE>& ras);
 
 ostream& operator <<(ostream& os, const ReturnAddressStackEntry& e) {
-  os << "  ", intstring(e.idx, 4), ": uuid ", intstring(e.uuid, 16), ", rip ", (void*)(Waddr)e.rip, endl;
+  os << "  " << intstring(e.idx, 4) << ": uuid " << intstring(e.uuid, 16) << ", rip " << (void*)(Waddr)e.rip << endl;
   return os;
 }
 
@@ -125,10 +125,10 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
 
   void push(W64 uuid, W64 rip, ReturnAddressStackEntry& old) {
 #ifdef DEBUG_RAS
-    if (logable(5)) ptl_logfile << "ReturnAddressStack::push(uuid ", uuid, ", rip ", (void*)(Waddr)rip, "):", endl;
+    if (logable(5)) ptl_logfile << "ReturnAddressStack::push(uuid " << uuid << ", rip " << (void*)(Waddr)rip << "):" << endl;
 #endif
     if (base_t::full()) {
-      if (logable(5)) ptl_logfile << "  Return address stack overflow: removing oldest entry to make space", endl;
+      if (logable(5)) ptl_logfile << "  Return address stack overflow: removing oldest entry to make space" << endl;
       base_t::pophead();
     }
 
@@ -137,7 +137,7 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
 
     old = e;
 #ifdef DEBUG_RAS
-    if (logable(5)) ptl_logfile << "  Old entry: ", old, endl;
+    if (logable(5)) ptl_logfile << "  Old entry: " << old << endl;
 #endif
 
     e.uuid = uuid;
@@ -150,10 +150,10 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
 
   ReturnAddressStackEntry& pop(ReturnAddressStackEntry& old) {
 #ifdef DEBUG_RAS
-    if (logable(5)) ptl_logfile << "ReturnAddressStack::pop():", endl;
+    if (logable(5)) ptl_logfile << "ReturnAddressStack::pop():" << endl;
 #endif
     if (base_t::empty()) {
-      if (logable(5)) ptl_logfile << "  Return address stack underflow: returning entry with zero fields", endl;
+      if (logable(5)) ptl_logfile << "  Return address stack underflow: returning entry with zero fields" << endl;
       old.idx = -1;
       old.uuid = 0;
       old.rip = 0;
@@ -164,7 +164,7 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     assert(&e);
     old = e;
 #ifdef DEBUG_RAS
-    if (logable(5)) { ptl_logfile << "  Old entry: ", old, endl; ptl_logfile << *this; }
+    if (logable(5)) { ptl_logfile << "  Old entry: " << old << endl; ptl_logfile << *this; }
 #endif
 
 
@@ -173,15 +173,15 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
 
   W64 peek() {
 #ifdef DEBUG_RAS
-    if (logable(5)) ptl_logfile << "ReturnAddressStack::peek():", endl;
+    if (logable(5)) ptl_logfile << "ReturnAddressStack::peek():" << endl;
 #endif
     if (base_t::empty()) {
-      if (logable(5)) ptl_logfile << "  Return address stack is empty: returning bogus rip 0", endl;
+      if (logable(5)) ptl_logfile << "  Return address stack is empty: returning bogus rip 0" << endl;
       return 0;
     }
 
 #ifdef DEBUG_RAS
-    if (logable(5)) { ptl_logfile << "  Peeking entry ", (*base_t::peektail()); }
+    if (logable(5)) { ptl_logfile << "  Peeking entry " << (*base_t::peektail()); }
 #endif
 
     return base_t::peektail()->rip;
@@ -192,12 +192,13 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
   //
   void annulpush(const ReturnAddressStackEntry& old) {
 #ifdef DEBUG_RAS
-    if (logable(5)) ptl_logfile << "ReturnAddressStack::annulpush(old index ", old.idx, ", uuid ", old.uuid, ", rip ", (void*)(Waddr)old.rip, "):", endl;
+    if (logable(5)) ptl_logfile << "ReturnAddressStack::annulpush(old index " << old.idx << ", uuid " << old.uuid 
+        << ", rip " << (void*)(Waddr)old.rip << "):" << endl;
 #endif
 
     if (base_t::empty()) {
 #ifdef DEBUG_RAS
-      if (logable(5)) ptl_logfile << "  Cannot annul: return address stack is empty", endl;
+      if (logable(5)) ptl_logfile << "  Cannot annul: return address stack is empty" << endl;
 #endif
       return;
     }
@@ -209,7 +210,7 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
     ReturnAddressStackEntry dummy;
     pop(dummy);
 #ifdef DEBUG_RAS
-    if (logable(5)) ptl_logfile << "  Popped speculative push; e.index = ", e.index(), " vs tail ", base_t::tail, endl;
+    if (logable(5)) ptl_logfile << "  Popped speculative push; e.index = " << e.index() << " vs tail " << base_t::tail << endl;
     assert(e.index() == base_t::tail);
 #endif
 
@@ -220,19 +221,20 @@ struct ReturnAddressStack: public Queue<ReturnAddressStackEntry, SIZE> {
   //
   void annulpop(const ReturnAddressStackEntry& old) {
 #ifdef DEBUG_RAS
-    if (logable(5)) ptl_logfile << "ReturnAddressStack::annulpop(old index ", old.idx, ", uuid ", old.uuid, ", rip ", (void*)(Waddr)old.rip, "):", endl;
+    if (logable(5)) ptl_logfile << "ReturnAddressStack::annulpop(old index " << old.idx << ", uuid " << old.uuid << 
+        ", rip " << (void*)(Waddr)old.rip << "):" << endl;
 #endif
 
     if (base_t::full()) {
 #ifdef DEBUG_RAS
-      if (logable(5)) ptl_logfile << "  Cannot annul: stack is full", endl;
+      if (logable(5)) ptl_logfile << "  Cannot annul: stack is full" << endl;
 #endif
       return;
     }
     ReturnAddressStackEntry dummy;
 
 #ifdef DEBUG_RAS
-    if (logable(5)) ptl_logfile << "  Pushed speculative pop; old.index = ", old.index(), " vs tail ", base_t::tail, endl;
+    if (logable(5)) ptl_logfile << "  Pushed speculative pop; old.index = " << old.index() << " vs tail " << base_t::tail << endl;
     assert(old.index() == base_t::tail);
 #endif
     push(old.uuid, old.rip, dummy);
@@ -320,7 +322,7 @@ struct CombinedPredictor {
     //
     if unlikely (type & BRANCH_HINT_RET) {
 #ifdef DEBUG_RAS
-      if (logable(5)) ptl_logfile << "Peeking RAS for uuid ", update.uuid, ":", endl;
+      if (logable(5)) ptl_logfile << "Peeking RAS for uuid " << update.uuid << ":" << endl;
 #endif
       return ras.peek();
     }
@@ -419,7 +421,7 @@ struct CombinedPredictor {
   //
   void annulras(const PredictorUpdate& predinfo) {
 #ifdef DEBUG_RAS
-    if (logable(5)) ptl_logfile << "Update RAS for uuid ", predinfo.uuid, ":", endl;
+    if (logable(5)) ptl_logfile << "Update RAS for uuid " << predinfo.uuid << ":" << endl;
 #endif
     if (predinfo.ras_push)
       ras.annulpush(predinfo.ras_old);

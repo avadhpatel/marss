@@ -74,13 +74,13 @@ bool assist_sysret(Context& ctx) {
 }
 
 bool assist_hypercall(Context& ctx) {
-	cerr << "assist_hypercall is called, ", \
+	cerr << "assist_hypercall is called, " << \
 		 "this function should not be called in QEMU\n";
 	return false;
 }
 
 bool assist_ptlcall(Context& ctx) {
-	cerr << "Assist PTLcall from simulator..unsupported..", endl;
+	cerr << "Assist PTLcall from simulator..unsupported.." << endl;
 	return false;
 }
 
@@ -240,7 +240,7 @@ W64 l_assist_sti(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
     helper_sti();
     ctx.setup_ptlsim_switch();
 
-	if(logable(4)) ptl_logfile << "[cpu ", ctx.cpu_index, "]sti called rip ", (void*)ctx.eip, endl;
+	if(logable(4)) ptl_logfile << "[cpu " << ctx.cpu_index << "]sti called rip " << (void*)ctx.eip << endl;
 
 	return 0;
 }
@@ -263,7 +263,7 @@ W64 l_assist_cli(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
     helper_cli();
     ctx.setup_ptlsim_switch();
 
-	if(logable(4)) ptl_logfile << "[cpu ", ctx.cpu_index, "]cli called at rip ", (void*)ctx.eip, endl;
+	if(logable(4)) ptl_logfile << "[cpu " << ctx.cpu_index << "]cli called at rip " << (void*)ctx.eip << endl;
 
 	return 0;
 }
@@ -300,7 +300,7 @@ bool assist_ud2a(Context& ctx) {
 	// hardware so we use it to generate an assert(0) and
 	// print as detail as possible in logfile
 	ptl_logfile << "*****Got UD2A*****\n";
-	ptl_logfile << "Context:\n", ctx, endl;
+	ptl_logfile << "Context:\n" << ctx << endl;
 	assert(0);
 
 	return true;
@@ -310,8 +310,8 @@ bool assist_ljmp_prct(Context& ctx) {
 	W32 new_cs = ctx.reg_ar1;
 	W32 new_eip = ctx.reg_ar2;
 	W32 next_eip_addend = ctx.reg_nextrip - ctx.reg_selfrip;
-	ptl_logfile << "assit_ljmp_prct: csbase: ", ctx.reg_ar1,
-				" eip: ", ctx.reg_ar2, endl;
+	ptl_logfile << "assit_ljmp_prct: csbase: " << ctx.reg_ar1 <<
+				" eip: " << ctx.reg_ar2 << endl;
 	ASSIST_IN_QEMU(helper_ljmp_protected, new_cs, new_eip,
 			next_eip_addend);
 	ctx.cs_segment_updated();
@@ -321,8 +321,8 @@ bool assist_ljmp_prct(Context& ctx) {
 bool assist_ljmp(Context& ctx) {
 	W32 new_cs = ctx.reg_ar1;
 	W32 new_eip = ctx.reg_ar2;
-	ptl_logfile << "assit_ljmp: csbase: ", ctx.reg_ar1,
-				" eip: ", ctx.reg_ar2, endl;
+	ptl_logfile << "assit_ljmp: csbase: " << ctx.reg_ar1 <<
+				" eip: " << ctx.reg_ar2 << endl;
 	W32 selector = new_cs & 0xffff;
 	ctx.segs[R_CS].selector = selector;
 	W64 base = selector << 4;
@@ -547,9 +547,9 @@ W64 l_assist_pushf(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	flags = (W16)ra;
 
 	if(logable(4))
-		ptl_logfile << "[cpu ", ctx.cpu_index, "]push stable_flags: ", hexstring(stable_flags, 64),
-					" flags: ", hexstring(flags, 16), " at rip: ",
-				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
+		ptl_logfile << "[cpu " << ctx.cpu_index << "]push stable_flags: " << hexstring(stable_flags, 64) <<
+					" flags: " << hexstring(flags, 16) << " at rip: " <<
+				   (void*)ctx.eip << " cycle: " << sim_cycle << endl;
 
 	return stable_flags;
 }
@@ -768,9 +768,9 @@ struct IRETStackFrame {
 };
 
 static inline ostream& operator <<(ostream& os, const IRETStackFrame& iretctx) {
-  os << "cs:rip ", (void*)iretctx.cs, ":", (void*)iretctx.rip,
-    ", ss:rsp ", (void*)iretctx.ss, ":", (void*)iretctx.rsp,
-    ", rflags ", (void*)iretctx.rflags;
+  os << "cs:rip " << (void*)iretctx.cs << ":" << (void*)iretctx.rip <<
+    ", ss:rsp " << (void*)iretctx.ss << ":" << (void*)iretctx.rsp <<
+    ", rflags " << (void*)iretctx.rflags;
   return os;
 }
 
@@ -874,8 +874,8 @@ W64 l_assist_ioport_in(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	value = x86_merge(old_eax, value, sizeshift);
 
 	if(logable(4))
-		ptl_logfile << "ioport in value: ", hexstring(value, 64), " at rip: ",
-				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
+		ptl_logfile << "ioport in value: " << hexstring(value, 64) << " at rip: " <<
+				   (void*)ctx.eip << " cycle: " << sim_cycle << endl;
 
 	return value;
 }
@@ -925,8 +925,8 @@ W64 l_assist_ioport_out(Context& ctx, W64 ra, W64 rb, W64 rc, W16 raflags,
 	setup_ptlsim_switch_all_ctx(ctx);
 
 	if(logable(4))
-		ptl_logfile << "ioport out value: ", hexstring(value, 64), " at rip: ",
-				   (void*)ctx.eip, " cycle: ", sim_cycle, endl;
+		ptl_logfile << "ioport out value: " << hexstring(value, 64) << " at rip: " <<
+				   (void*)ctx.eip << " cycle: " << sim_cycle << endl;
 
 	return 0;
 }

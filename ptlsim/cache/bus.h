@@ -56,8 +56,8 @@ struct BusQueueEntry : public FixStateListObject
 			os << "Free Bus Queue Entry";
 			return os;
 		}
-		os << "request{", *request, "} ";
-		os << "hasData[", hasData, "]";
+		os << "request{" << *request << "} ";
+		os << "hasData[" << hasData << "]";
 		return os;
 	}
 };
@@ -107,9 +107,9 @@ class BusInterconnect : public Interconnect
 		}
 
 		void print(ostream& os) const {
-			os << "--Bus-Interconnect: ", get_name(), endl;
+			os << "--Bus-Interconnect: " << get_name() << endl;
 			foreach(i, controllers.count()) {
-				os << "Controller Queue: ", endl;
+				os << "Controller Queue: " << endl;
 				os << controllers[i]->queue;
 			}
 		}

@@ -1467,7 +1467,7 @@ extern "C" void update_progress() {
 
     //while (sb.size() < 160) sb << ' ';
 
-    ptl_logfile << sb, endl;
+    ptl_logfile << sb << endl;
     if (!config.quiet) {
       cerr << "\r  " << sb;
     }

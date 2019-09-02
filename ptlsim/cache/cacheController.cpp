@@ -163,7 +163,7 @@ bool CacheController::handle_interconnect_cb(void *arg)
 	Message *msg = (Message*)arg;
 	Interconnect *sender = (Interconnect*)msg->sender;
 
-	memdebug("Message received is: ", *msg);
+	memdebug("Message received is: " << *msg);
 
 	if(sender == upperInterconnect_ || sender == upperInterconnect2_) {
 

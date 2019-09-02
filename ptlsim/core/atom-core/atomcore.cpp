@@ -184,8 +184,8 @@ void AtomOp::reset()
 void AtomOp::change_state(StateList& new_state, bool place_at_head)
 {
     if likely (current_state_list) {
-        ATOMOPLOG2("state change from ", current_state_list->name,
-                " to ", new_state.name);
+        ATOMOPLOG2("state change from " << current_state_list->name <<
+                " to " << new_state.name);
 
         current_state_list->remove_to_list(&new_state, place_at_head, this);
         current_state_list = &new_state;
@@ -479,7 +479,7 @@ W8 AtomOp::issue(bool first_issue)
     /* Check if instruction is not first_issue and its not pipelined then
      * return
      */
-    if(!first_issue & is_nonpipe) {
+    if(!first_issue && is_nonpipe) {
         thread->st_issue.fail[ISSUE_FAIL_NON_PIPE]++;
         return ISSUE_FAIL;
     }
@@ -503,7 +503,7 @@ W8 AtomOp::issue(bool first_issue)
     saved_flags = thread->forwarded_flags;
 
     foreach(i, num_uops_used) {
-        ATOMOPLOG2("Rflag for execution: ", hexstring(thread->internal_flags,16));
+        ATOMOPLOG2("Rflag for execution: " << hexstring(thread->internal_flags,16));
         W8 result = execute_uop(i);
 
         if(result != ISSUE_OK && result != ISSUE_OK_BLOCK &&
@@ -640,9 +640,9 @@ W64 AtomOp::read_reg(W16 reg, W8 uop_idx)
 
     for(int i = uop_idx-1; i >= 0; i--) {
         if(dest_registers[i] == reg) {
-            ATOMOPLOG2("Reg ", arch_reg_names[reg],
-                    " is fwd from previous uop ", i,
-                    " value ", hexstring(dest_register_values[i], 64));
+            ATOMOPLOG2("Reg " << arch_reg_names[reg] <<
+                    " is fwd from previous uop " << i <<
+                    " value " << hexstring(dest_register_values[i], 64));
             return dest_register_values[i];
         }
     }
@@ -651,8 +651,8 @@ W64 AtomOp::read_reg(W16 reg, W8 uop_idx)
         /* Probe forwarding buffer for given register */
         ForwardEntry* buf = thread->core.forwardbuf.probe(reg);
         if(buf) {
-            ATOMOPLOG2("Reg ", arch_reg_names[reg],
-                    " is fwd from fwd buf, value ",
+            ATOMOPLOG2("Reg " << arch_reg_names[reg] <<
+                    " is fwd from fwd buf, value " <<
                     HEXDATA(buf->data));
             return buf->data;
         }
@@ -693,11 +693,11 @@ W8 AtomOp::execute_uop(W8 idx)
     bool ld = isload(uop.opcode);
     bool st = isstore(uop.opcode);
 
-    ATOMOPLOG2("Executing Uop ", uops[idx]);
-    ATOMOPLOG2("radata: ", (void*)radata, " rbdata: ", (void*)rbdata,
-            " rcdata: ", (void*)rcdata);
-    ATOMOPLOG2("af: ", hexstring(raflags, 8), " bf: ", hexstring(rbflags, 8),
-            " cf: ", hexstring(rcflags, 8));
+    ATOMOPLOG2("Executing Uop " << uops[idx]);
+    ATOMOPLOG2("radata: " << (void*)radata << " rbdata: " << (void*)rbdata <<
+            " rcdata: " << (void*)rcdata);
+    ATOMOPLOG2("af: " << hexstring(raflags, 8) << " bf: " << hexstring(rbflags, 8) <<
+            " cf: " << hexstring(rcflags, 8));
 
     if(ld) {
         issue_result = execute_load(uop, idx);
@@ -735,7 +735,7 @@ W8 AtomOp::execute_uop(W8 idx)
          * We allow this instruction to go to commit stage to properly handle
          * the exception.
          */
-        ATOMOPLOG3("Found exception in executing uop ", uop);
+        ATOMOPLOG3("Found exception in executing uop " << uop);
 
         if(isclass(uop.opcode, OPCLASS_CHECK) &&
                 (exception == EXCEPTION_SkipBlock)) {
@@ -767,8 +767,8 @@ W8 AtomOp::execute_uop(W8 idx)
         }
     }
 
-    ATOMOPLOG2("state rddata:0x", hexstring(state.reg.rddata, 64));
-    ATOMOPLOG2("rflags: ", hexstring(rflags[idx],16));
+    ATOMOPLOG2("state rddata:0x" << hexstring(state.reg.rddata, 64));
+    ATOMOPLOG2("rflags: " << hexstring(rflags[idx],16));
     dest_register_values[idx] = state.reg.rddata;
 
     /* If branch, check branch misprediction */
@@ -837,7 +837,7 @@ W8 AtomOp::execute_ast(TransOp& uop)
 
     stringbuf assist_name;
     assist_name = light_assist_name(assist_func);
-    ATOMOPLOG1("Executing assist func ", assist_name); 
+    ATOMOPLOG1("Executing assist func " << assist_name); 
 
     W16 flags = thread->internal_flags;
     W16 new_flags = flags;
@@ -849,7 +849,7 @@ W8 AtomOp::execute_ast(TransOp& uop)
 
     thread->lassists[assistid]++;
 
-    ATOMOPLOG2("Flags after ast: ", hexstring(new_flags, 16));
+    ATOMOPLOG2("Flags after ast: " << hexstring(new_flags, 16));
 
     return ISSUE_OK;
 }
@@ -915,17 +915,17 @@ W8 AtomOp::execute_load(TransOp& uop, int idx)
         foreach_forward(thread->storebuf, i) {
             StoreBufferEntry& buf = thread->storebuf[i];
 
-            ATOMOPLOG2("Storebuf head: ", thread->storebuf.head);
-            ATOMOPLOG2("St->LD fwd for internal load check buf addr:",
-                    hexstring(buf.virtaddr,48), " load:",
-                    hexstring(cache_virtaddr,48), " idx:",
+            ATOMOPLOG2("Storebuf head: " << thread->storebuf.head);
+            ATOMOPLOG2("St->LD fwd for internal load check buf addr:" <<
+                    hexstring(buf.virtaddr,48) << " load:" <<
+                    hexstring(cache_virtaddr,48) << " idx:" <<
                     buf.index());
             if(buf.virtaddr == cache_virtaddr) {
                 state.reg.rddata = buf.data;
             }
         }
 
-        ATOMOPLOG2("Storebuf count:", thread->storebuf.count);
+        ATOMOPLOG2("Storebuf count:" << thread->storebuf.count);
 
         return ISSUE_OK;
     }
@@ -976,8 +976,8 @@ W64 AtomOp::get_load_data(W64 addr, TransOp& uop)
         int addr_diff = buf.addr - addr;
         if(-1 <= (addr_diff >> 3) && (addr_diff >> 3) <= 1) {
 
-            ATOMOPLOG2("Forwarding st[0x", hexstring(buf.addr,48),
-                   "] ld[0x", hexstring(addr,48), "]");
+            ATOMOPLOG2("Forwarding st[0x" << hexstring(buf.addr,48) <<
+                   "] ld[0x" << hexstring(addr,48) << "]");
 
             W64 fwd_data = buf.data;
             W8  fwd_mask = buf.bytemask;
@@ -991,9 +991,9 @@ W64 AtomOp::get_load_data(W64 addr, TransOp& uop)
 
             if(fwd_mask == 0) { continue ; }
 
-            ATOMOPLOG2("\tMerging data st[0x", hexstring(fwd_data,64),
-                    "] ld[0x", hexstring(data,64), "] mask[",
-                    hexstring(fwd_mask,8), "]");
+            ATOMOPLOG2("\tMerging data st[0x" << hexstring(fwd_data,64) <<
+                    "] ld[0x" << hexstring(data,64) << "] mask[" <<
+                    hexstring(fwd_mask,8) << "]");
 
             W64 sel = expand_8bit_to_64bit_lut[fwd_mask];
             data = mux64(sel, data, fwd_data);
@@ -1005,8 +1005,8 @@ W64 AtomOp::get_load_data(W64 addr, TransOp& uop)
 
     data = extract_bytes((byte*)&data, uop.size, signextend);
 
-    ATOMOPLOG2("Load from ", hexstring(cache_virtaddr,64), " data ",
-            hexstring(data,64), " ", uop.size, " bytes");
+    ATOMOPLOG2("Load from " << hexstring(cache_virtaddr,64) << " data " <<
+            hexstring(data,64) << " " << uop.size << " bytes");
 
     return data;
 }
@@ -1097,7 +1097,7 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
 
     /* For internal store, store data and save to dest_reg */
     if(uop.internal) {
-        ATOMOPLOG2("Storebuf count:", thread->storebuf.head);
+        ATOMOPLOG2("Storebuf count:" << thread->storebuf.head);
         StoreBufferEntry* buf = thread->get_storebuf_entry();
         buf->data = state.reg.rddata;
         buf->addr = -1;
@@ -1107,11 +1107,11 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
         buf->op = this;
 
         stores[idx] = buf;
-        ATOMOPLOG2("Store buf entry setup [", buf->index(), "] data[0x",
-                hexstring(buf->data,64), "] addr[",
-                hexstring(buf->virtaddr,64), "]");
+        ATOMOPLOG2("Store buf entry setup [" << buf->index() << "] data[0x" <<
+                hexstring(buf->data,64) << "] addr[" <<
+                hexstring(buf->virtaddr,64) << "]");
 
-        ATOMOPLOG2("Storebuf count:", thread->storebuf.head);
+        ATOMOPLOG2("Storebuf count:" << thread->storebuf.head);
         return ISSUE_OK;
     }
 
@@ -1138,8 +1138,8 @@ W8 AtomOp::execute_store(TransOp& uop, W8 idx)
 
     stores[idx] = buf;
 
-    ATOMOPLOG2("Store buf entry setup [", buf->index_, "] data[0x",
-            hexstring(buf->data,64), "]");
+    ATOMOPLOG2("Store buf entry setup [" << buf->index_ << "] data[0x" <<
+            hexstring(buf->data,64) << "]");
 
     return ISSUE_OK;
 }
@@ -1226,7 +1226,7 @@ W64 AtomOp::generate_address(TransOp& uop, bool is_st)
     thread->dtlb_miss_op = this;
     thread->dtlb_walk();
 
-    ATOMOPLOG2("Set DTLB miss addr ", hexstring(thread->dtlb_miss_addr, 48));
+    ATOMOPLOG2("Set DTLB miss addr " << hexstring(thread->dtlb_miss_addr, 48));
 
     return -1;
 }
@@ -1291,7 +1291,7 @@ W64 AtomOp::get_phys_address(TransOp& uop, bool is_st, Waddr virtaddr)
         }
         page_fault_addr = virtaddr;
 
-        ATOMOPLOG1("Exception ", exception_names[exception], " addr: ",
+        ATOMOPLOG1("Exception " << exception_names[exception] << " addr: " <<
                 hexstring(page_fault_addr, 48));
     }
 
@@ -1319,8 +1319,8 @@ void AtomOp::dtlb_walk_completed()
             had_exception = 0;
         } else {
 
-            ATOMOPLOG1("DTLB has exception at rip ", hexstring(rip,48),
-                    " address: ", hexstring(page_fault_addr, 48));
+            ATOMOPLOG1("DTLB has exception at rip " << hexstring(rip,48) <<
+                    " address: " << hexstring(page_fault_addr, 48));
 
             had_exception = true;
             change_state(thread->op_ready_to_writeback_list);
@@ -1387,7 +1387,7 @@ bool AtomOp::can_commit()
  */
 int AtomOp::writeback()
 {
-    ATOMOPLOG1("writeback/commit ", num_uops_used, " uops");
+    ATOMOPLOG1("writeback/commit " << num_uops_used << " uops");
 
     if(config.checker_enabled && !thread->ctx.kernel_mode && som) {
         setup_checker(thread->ctx.cpu_index);
@@ -1487,8 +1487,8 @@ void AtomOp::update_reg_mem()
              */
             while(thread->storebuf.peek() != buf) {
                 StoreBufferEntry* tbuf = thread->storebuf.pophead();
-                ATOMOPLOG2("Ignoring store to ", hexstring(tbuf->addr,48),
-                        " value ", hexstring(tbuf->data,64));
+                ATOMOPLOG2("Ignoring store to " << hexstring(tbuf->addr,48) <<
+                        " value " << hexstring(tbuf->data,64));
             }
 
             if(uops[i].internal) {
@@ -1511,9 +1511,9 @@ void AtomOp::update_reg_mem()
                 }
             }
 
-            ATOMOPLOG3("Commting Store ", i);
+            ATOMOPLOG3("Commting Store " << i);
 
-            ATOMOPLOG1("Stroing to ", hexstring(buf->virtaddr,64), " data ",
+            ATOMOPLOG1("Stroing to " << hexstring(buf->virtaddr,64) << " data " <<
                     hexstring(buf->data,64));
             thread->storebuf.commit(*buf);
         }
@@ -1533,11 +1533,11 @@ void AtomOp::writeback_eom()
     TransOp& last_uop = uops[last_idx];
     assert(last_uop.eom);
 
-    ATOMOPLOG3("Commit EOM uop: ", last_uop);
-    ATOMOPLOG3("ctx eip: ", hexstring(thread->ctx.eip,48));
+    ATOMOPLOG3("Commit EOM uop: " << last_uop);
+    ATOMOPLOG3("ctx eip: " << hexstring(thread->ctx.eip,48));
 
     if(last_uop.rd == REG_rip) {
-        ATOMOPLOG3("Setting rip: ", arch_reg_names[last_uop.rd]);
+        ATOMOPLOG3("Setting rip: " << arch_reg_names[last_uop.rd]);
 
         if(!isclass(last_uop.opcode, OPCLASS_BARRIER)) {
             assert(dest_register_values[last_idx]);
@@ -1545,7 +1545,7 @@ void AtomOp::writeback_eom()
 
         thread->ctx.eip = dest_register_values[last_idx];
     } else {
-        ATOMOPLOG3("Adding bytes: ", last_uop.bytes);
+        ATOMOPLOG3("Adding bytes: " << last_uop.bytes);
         thread->ctx.eip += last_uop.bytes;
     }
 
@@ -1557,7 +1557,7 @@ void AtomOp::writeback_eom()
         thread->st_branch_predictions.updates++;
     }
 
-    ATOMOPLOG2("Commited.. new eip:0x", hexstring(thread->ctx.eip, 48));
+    ATOMOPLOG2("Commited.. new eip:0x" << hexstring(thread->ctx.eip, 48));
 
 #ifdef TRACE_RIP
     ptl_rip_trace << "commit_rip: ",
@@ -1651,11 +1651,11 @@ ostream& AtomOp::print(ostream& os) const
         return os;
     }
 
-    os << " a-op ",
-       " th ", (int)thread->threadid,
-       " uuid ", intstring(uuid, 16),
-       " rip 0x", hexstring(rip, 48), " ",
-       padstring(current_state_list->name, -24), " ";
+    os << " a-op " <<
+       " th " << (int)thread->threadid <<
+       " uuid " << intstring(uuid, 16) <<
+       " rip 0x" << hexstring(rip, 48) << " " <<
+       padstring(current_state_list->name, -24) << " ";
 
     os << "[";
     if(is_branch) os << "br|";
@@ -1670,18 +1670,18 @@ ostream& AtomOp::print(ostream& os) const
     if(som) os << "SOM ";
     if(eom) os << "EOM ";
 
-    os << "(", execution_cycles, " cyc)";
+    os << "(" << execution_cycles << " cyc)";
 
     foreach(i, num_uops_used) {
         const TransOp &op = uops[i];
         nameof(name, op);
         os << "\n     ";
-        os << padstring(name, -12), " ";
-        os << padstring(arch_reg_names[dest_registers[i]], -6), " = ";
+        os << padstring(name, -12) << " ";
+        os << padstring(arch_reg_names[dest_registers[i]], -6) << " = ";
 
-        os << padstring(arch_reg_names[op.ra], -6) , " ";
-        os << padstring(arch_reg_names[op.rb], -6) , " ";
-        os << padstring(arch_reg_names[op.rc], -6) , " ";
+        os << padstring(arch_reg_names[op.ra], -6) << " ";
+        os << padstring(arch_reg_names[op.rb], -6) << " ";
+        os << padstring(arch_reg_names[op.rc], -6) << " ";
         name.reset();
     }
 
@@ -1932,8 +1932,8 @@ bool AtomThread::fetch_from_icache()
         if(!ctx.try_handle_fault(fetchrip, 2)) {
             itlb_exception = true;
             itlb_exception_addr = fetchrip.rip;
-            ATOMTHLOG1("ITLB Execption addr ",
-                    hexstring(itlb_exception_addr,48), " fetchrip ",
+            ATOMTHLOG1("ITLB Execption addr " <<
+                    hexstring(itlb_exception_addr,48) << " fetchrip " <<
                     hexstring(fetchrip.rip,48));
             return false;
         }
@@ -2010,8 +2010,8 @@ bool AtomThread::fetch_check_current_bb()
                 // Its a page fault in I-Cache
                 itlb_exception = true;
                 itlb_exception_addr = ctx.exec_fault_addr;
-                ATOMTHLOG1("ITLB Execption addr ",
-                        hexstring(itlb_exception_addr,48), " fetchrip ",
+                ATOMTHLOG1("ITLB Execption addr " <<
+                        hexstring(itlb_exception_addr,48) << " fetchrip " <<
                         hexstring(fetchrip.rip,48));
             }
         }
@@ -2110,7 +2110,7 @@ itlb_walk_finish:
  */
 void AtomThread::dtlb_walk()
 {
-    ATOMTHLOG2("DTLB Walk [level:", dtlb_walk_level);
+    ATOMTHLOG2("DTLB Walk [level:" << dtlb_walk_level);
 
     if(!dtlb_walk_level) {
 
@@ -2322,7 +2322,7 @@ bool AtomThread::issue()
  */
 void AtomThread::redirect_fetch(W64 rip)
 {
-    ATOMTHLOG1("RIP redirected to ", (void*)rip);
+    ATOMTHLOG1("RIP redirected to " << (void*)rip);
 
     // Before we clear fetchq, update branch predictor
     foreach_backward(core.fetchq, i) {
@@ -2357,8 +2357,8 @@ void AtomThread::redirect_fetch(W64 rip)
         }
     }
 
-    ATOMTHLOG3("Redirect to fetchrip:0x", hexstring(fetchrip.rip,48),
-            " .. ctx.eip:0x", hexstring(ctx.eip,48));
+    ATOMTHLOG3("Redirect to fetchrip:0x" << hexstring(fetchrip.rip,48) <<
+            " .. ctx.eip:0x" << hexstring(ctx.eip,48));
 }
 
 /**
@@ -2420,7 +2420,7 @@ bool AtomThread::dcache_wakeup(void *arg)
     if(buf_entry.op == NULL || buf_entry.op->rip != req_rip) {
         /* Requested entry is not present at the head of dispatch queue so
          * ignore this memory access callback */
-        ATOMTHLOG2("Ignoring memory callback for RIP ",
+        ATOMTHLOG2("Ignoring memory callback for RIP " <<
                 HEXADDR(req_rip));
         return true;
     }
@@ -2557,8 +2557,8 @@ bool AtomThread::writeback()
     bool ret_value = false;
 
     if(sim_cycle > (last_commit_cycle + 1024*1024)) {
-        ptl_logfile << "Core has not progressed since cycle ",
-                    last_commit_cycle, " dumping all information\n";
+        ptl_logfile << "Core has not progressed since cycle " <<
+                    last_commit_cycle << " dumping all information\n";
         core.machine.dump_state(ptl_logfile);
         ptl_logfile << flush;
         assert(0);
@@ -2684,7 +2684,7 @@ bool AtomThread::commit_queue()
         }
     }
 
-    ATOMTHLOG3("After AtomOp-x86 inst Commit Ctx is\n", ctx);
+    ATOMTHLOG3("After AtomOp-x86 inst Commit Ctx is\n" << ctx);
 
     if(commit_result == COMMIT_BARRIER) {
         return handle_barrier();
@@ -2740,8 +2740,8 @@ bool AtomThread::handle_exception()
             goto handle_page_fault;
 handle_page_fault:
             {
-                ATOMTHLOG1("Page fault: ", exception_names[ctx.exception],
-                        " addr: ", hexstring(ctx.page_fault_addr, 48));
+                ATOMTHLOG1("Page fault: " << exception_names[ctx.exception] <<
+                        " addr: " << hexstring(ctx.page_fault_addr, 48));
 
                 int old_exception = 0;
                 assert(ctx.page_fault_addr != 0);
@@ -2782,9 +2782,9 @@ bool AtomThread::handle_interrupt()
     ctx.event_upcall();
     handle_interrupt_at_next_eom = 0;
 
-    ATOMTHLOG1("Handling interrupt ", ctx.interrupt_request, " exit ",
-            ctx.exit_request, " elfags ", hexstring(ctx.eflags,32),
-            " handle-interrupt ", ctx.handle_interrupt);
+    ATOMTHLOG1("Handling interrupt " << ctx.interrupt_request << " exit " <<
+            ctx.exit_request << " elfags " << hexstring(ctx.eflags,32) <<
+            " handle-interrupt " << ctx.handle_interrupt);
     return true;
 }
 
@@ -2802,7 +2802,7 @@ bool AtomThread::handle_barrier()
         flush_pipeline();
     }
 
-    ATOMTHLOG1("Executing Assist Function ", assist_name(assist));
+    ATOMTHLOG1("Executing Assist Function " << assist_name(assist));
 
     bool flush_required = assist(ctx);
 
@@ -2913,7 +2913,7 @@ W64 AtomThread::read_reg(W16 reg)
         return temp_registers[reg - REG_temp8 + 7];
     }
 
-    ATOMTHLOG1("Reading register ", arch_reg_names[reg],
+    ATOMTHLOG1("Reading register " << arch_reg_names[reg] <<
             " from RF");
     return ctx.get(reg);
 }
@@ -2936,35 +2936,35 @@ void AtomThread::flush_mem_locks()
 
 ostream& AtomThread::print(ostream& os) const
 {
-    os << "Thread: ", (int)threadid;
+    os << "Thread: " << (int)threadid;
     os << " stats: ";
 
     if(waiting_for_icache_miss) os << "icache_miss|";
-    if(itlb_exception) os << "itlb_miss(", itlb_walk_level, ")|";
-    if(dtlb_walk_level) os << "dtlb_miss(", dtlb_walk_level, ")|";
+    if(itlb_exception) os << "itlb_miss(" << itlb_walk_level << ")|";
+    if(dtlb_walk_level) os << "dtlb_miss(" << dtlb_walk_level << ")|";
     if(stall_frontend) os << "frontend_stall|";
-    if(pause_counter) os << "pause(", pause_counter, ")|";
+    if(pause_counter) os << "pause(" << pause_counter << ")|";
 
     os << "\n";
 
     os << " Atom-Ops:\n";
     foreach(i, NUM_ATOM_OPS_PER_THREAD) {
-        os << "[", intstring(i,2), "]", atomOps[i], "\n";
+        os << "[" << intstring(i,2) << "]" << atomOps[i] << "\n";
     }
 
     os << " Dispatch Queue:\n";
     foreach_forward(dispatchq, i) {
-        os << "  ", dispatchq[i], endl;
+        os << "  " << dispatchq[i] << endl;
     }
 
     os << " Store Buffer:\n";
     foreach_forward(storebuf, i) {
-        os << "  ", storebuf[i], endl;
+        os << "  " << storebuf[i] << endl;
     }
 
     os << " Commit Buffer:\n";
     foreach_forward(commitbuf, i) {
-        os << "  ", commitbuf[i], endl;
+        os << "  " << commitbuf[i] << endl;
     }
 
     return os;
@@ -3107,8 +3107,8 @@ void AtomCore::set_forward(W8 reg, W64 data)
     ForwardEntry* buf = forwardbuf.select((W16)reg);
     buf->data = data;
 
-    ATOMCORELOG("Forwarding Reg ", arch_reg_names[reg],
-            " with data:0x", hexstring(data,64));
+    ATOMCORELOG("Forwarding Reg " << arch_reg_names[reg] <<
+            " with data:0x" << hexstring(data,64));
 }
 
 /**
@@ -3118,7 +3118,7 @@ void AtomCore::set_forward(W8 reg, W64 data)
  */
 void AtomCore::clear_forward(W8 reg)
 {
-    ATOMCORELOG("Clearing forwarding reg ", arch_reg_names[reg]);
+    ATOMCORELOG("Clearing forwarding reg " << arch_reg_names[reg]);
     forwardbuf.invalidate((W16)reg);
 }
 
@@ -3136,7 +3136,7 @@ bool AtomCore::runcycle(void* none)
 
     assert(running_thread);
 
-    ATOMCORELOG("Cycle: ", sim_cycle);
+    ATOMCORELOG("Cycle: " << sim_cycle);
 
     running_thread->handle_interrupt_at_next_eom =
         running_thread->ctx.check_events();
@@ -3224,7 +3224,7 @@ void AtomCore::try_thread_switch()
         running_thread = threads[next_id];
         in_thread_switch = false;
 
-        ATOMCORELOG("Switching to thread ", next_id);
+        ATOMCORELOG("Switching to thread " << next_id);
     }
 }
 
@@ -3343,8 +3343,8 @@ void AtomCore::check_ctx_changes()
 
         if(threads[i]->ctx.eip != threads[i]->ctx.old_eip) {
             // IP Address has changed, so flush the pipeline
-            ATOMCORELOG("Thread flush old_eip: ",
-                    HEXADDR(threads[i]->ctx.old_eip), " new-eip: ",
+            ATOMCORELOG("Thread flush old_eip: " <<
+                    HEXADDR(threads[i]->ctx.old_eip) << " new-eip: " <<
                     HEXADDR(threads[i]->ctx.eip));
             threads[i]->flush_pipeline();
         }
@@ -3358,15 +3358,15 @@ void AtomCore::check_ctx_changes()
 
 ostream& AtomCore::print(ostream& os) const
 {
-    os << "Atom-Core: ", int(get_coreid()), endl;
+    os << "Atom-Core: " << int(get_coreid()) << endl;
 
     os << " Fetch Queue:\n";
     foreach_forward(fetchq, i) {
-        os << "  ", fetchq[i], endl;
+        os << "  " << fetchq[i] << endl;
     }
 
     foreach(i, threadcount) {
-        os << *threads[i], endl;
+        os << *threads[i] << endl;
     }
 
     return os;
