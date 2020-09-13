@@ -937,7 +937,7 @@ namespace OOO_CORE_MODEL {
         }
 
         int flush_virt(Waddr virtaddr, W64 threadid) {
-          return invalidate(tagof(virtaddr, threadid));
+          return this->invalidate(tagof(virtaddr, threadid));
         }
       };
 
