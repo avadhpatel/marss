@@ -122,8 +122,8 @@ def CheckAudioDriver(context, drv, hdr, lib, exp):
     #include <%s>
     int main(void) { %s }
     """ % (hdr, exp)
-    print check_aud_src
-    print type(context)
+    print (check_aud_src)
+    print (type(context))
     context.AppendLIBS(lib)
     res = context.TryRun(check_aud_src, '.cpp')[0]
     context.Result(res)
