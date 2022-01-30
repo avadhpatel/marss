@@ -10,16 +10,16 @@
 #define _GLOBALS_H_
 
 
-// #define fullsys_debug   cerr << "fullsys_debug: cycle ", sim_cycle, " in ", __FILE__, ":", __LINE__, " (", __PRETTY_FUNCTION__, ")"
+// #define fullsys_debug   cerr << "fullsys_debug: cycle " << sim_cycle << " in " << __FILE__ << ":" << __LINE__ << " (" << __PRETTY_FUNCTION__ << ")"
 // //#define USE_MSDEBUG logable(5)
 // #define USE_MSDEBUG config.memory_log
-// #define msdebug if(USE_MSDEBUG) ptl_logfile << " CYC ", sim_cycle, " ", __PRETTY_FUNCTION__, "(): \n"; if(USE_MSDEBUG) ptl_logfile
+// #define msdebug if(USE_MSDEBUG) ptl_logfile << " CYC " << sim_cycle << " " << __PRETTY_FUNCTION__ << "(): \n"; if(USE_MSDEBUG) ptl_logfile
 
 // #define mstest assert(0)
 // #define msdebug1 if(USE_MSDEBUG) ptl_logfile
 
 // debug segmentation fault
-// #define msdebug cerr << " CYC ", sim_cycle, " ", __PRETTY_FUNCTION__, "(): \n"; cerr
+// #define msdebug cerr << " CYC " << sim_cycle << " " << __PRETTY_FUNCTION__ << "(): \n"; cerr
 // #define msdebug1  cerr
 
 
@@ -30,9 +30,9 @@ extern "C" {
 #include <math.h>
 
 
-#define fullsys_debug   cerr << "fullsys_debug: cycle ", sim_cycle, " in ", __FILE__, ":", __LINE__, " (", __PRETTY_FUNCTION__, ")"
+#define fullsys_debug   cerr << "fullsys_debug: cycle " << sim_cycle << " in " << __FILE__ << ":" << __LINE__ << " (" << __PRETTY_FUNCTION__ << ")"
 #define USE_MSDEBUG (logable(5))
-#define msdebug if(USE_MSDEBUG) ptl_logfile << " CYC ", sim_cycle, " ", __PRETTY_FUNCTION__, "(): \n"; if(USE_MSDEBUG) ptl_logfile
+#define msdebug if(USE_MSDEBUG) ptl_logfile << " CYC " << sim_cycle << " " << __PRETTY_FUNCTION__ << "(): \n"; if(USE_MSDEBUG) ptl_logfile
 #define msdebug1 if(USE_MSDEBUG) ptl_logfile
 #define ENABLE_SMT
 
@@ -409,8 +409,6 @@ static inline T cmpxchg(T& mem, T newv, T cmpv) {
 }
 
 static inline void cpu_pause() { asm volatile("pause" : : : "memory"); }
-
-static inline void prefetch(const void* x) { asm volatile("prefetcht0 (%0)" : : "r" (x)); }
 
 static inline void cpuid(int op, W32& eax, W32& ebx, W32& ecx, W32& edx) {
 	asm("cpuid" : "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx) : "0" (op));

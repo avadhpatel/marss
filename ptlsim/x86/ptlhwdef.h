@@ -1164,10 +1164,10 @@ struct Context: public CPUX86State {
 ostream& operator <<(ostream& os, const Context& ctx);
 
 static inline ostream& operator <<(ostream& os, const SegmentCache& seg) {
-	os << " selector [", seg.selector, "]";
-	os << " base [", seg.base, "]";
-	os << " limit [", seg.limit, "]";
-	os << " flags [", seg.flags, "]";
+	os << " selector [" << seg.selector << "]";
+	os << " base [" << seg.base << "]";
+	os << " limit [" << seg.limit << "]";
+	os << " flags [" << seg.flags << "]";
 	return os;
 }
 

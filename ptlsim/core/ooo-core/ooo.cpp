@@ -335,15 +335,15 @@ void OooCore::init_generic() {
 
 template <typename T>
 static void OOO_CORE_MODEL::print_list_of_state_lists(ostream& os, const ListOfStateLists& lol, const char* title) {
-    os << title, ":", endl;
+    os << title << ":" << endl;
     foreach (i, lol.count) {
         StateList& list = *lol[i];
-        os << list.name, " (", list.count, " entries):", endl;
+        os << list.name << " (" << list.count << " entries):" << endl;
         int n = 0;
         T* obj;
         foreach_list_mutable(list, obj, entry, nextentry) {
             if ((n % 16) == 0) os << " ";
-            os << " ", intstring(obj->index(), -3);
+            os << " " << intstring(obj->index(), -3);
             if (((n % 16) == 15) || (n == list.count-1)) os << endl;
             n++;
         }
@@ -400,9 +400,9 @@ PhysicalRegister* PhysicalRegisterFile::alloc(W8 threadid, int r) {
  * @return the output stream
  */
 ostream& PhysicalRegisterFile::print(ostream& os) const {
-    os << "PhysicalRegisterFile<", name, ", rfid ", rfid, ", size ", size, ">:", endl;
+    os << "PhysicalRegisterFile<" << name << ", rfid " << rfid << ", size " << size << ">:" << endl;
     foreach (i, size) {
-        os << (*this)[i], endl;
+        os << (*this)[i] << endl;
     }
     return os;
 }
@@ -456,10 +456,10 @@ namespace OOO_CORE_MODEL {
     ostream& operator <<(ostream& os, const PhysicalRegister& physreg) {
         stringbuf sb;
         print_value_and_flags(sb, physreg.data, physreg.flags);
-        os << "TH ", physreg.threadid, " rfid ", physreg.rfid;
-        os << "  r", intstring(physreg.index(), -3), " state ", padstring(physreg.get_state_list().name, -12), " ", sb;
-        if (physreg.rob) os << " rob ", physreg.rob->index(), " (uuid ", physreg.rob->uop.uuid, ")";
-        os << " refcount ", physreg.refcount;
+        os << "TH " << physreg.threadid << " rfid " << physreg.rfid;
+        os << "  r" << intstring(physreg.index(), -3) << " state " << padstring(physreg.get_state_list().name, -12) << " " << sb;
+        if (physreg.rob) os << " rob " << physreg.rob->index() << " (uuid " << physreg.rob->uop.uuid << ")";
+        os << " refcount " << physreg.refcount;
 
         return os;
     }
@@ -468,7 +468,7 @@ namespace OOO_CORE_MODEL {
 ostream& RegisterRenameTable::print(ostream& os) const {
     foreach (i, TRANSREG_COUNT) {
         if ((i % 8) == 0) os << " ";
-        os << " ", padstring(arch_reg_names[i], -6), " r", intstring((*this)[i]->index(), -3), " | ";
+        os << " " << padstring(arch_reg_names[i], -6) << " r" << intstring((*this)[i]->index(), -3) << " | ";
         if (((i % 8) == 7) || (i == TRANSREG_COUNT-1)) os << endl;
     }
     return os;
@@ -572,9 +572,9 @@ bool OooCore::runcycle(void* none) {
         }
     }
 
-    MYDEBUG << " ISSUE_QUEUE_SIZE ", ISSUE_QUEUE_SIZE, " issueq_all.count ", issueq_all.count, " issueq_all.shared_free_entries ",
-            issueq_all.shared_free_entries, " total_issueq_reserved_free ", total_issueq_reserved_free,
-            " reserved_iq_entries ", reserved_iq_entries, " total_issueq_count ", total_issueq_count, endl;
+    MYDEBUG << " ISSUE_QUEUE_SIZE " << ISSUE_QUEUE_SIZE << " issueq_all.count " << issueq_all.count << " issueq_all.shared_free_entries " <<
+            issueq_all.shared_free_entries << " total_issueq_reserved_free " << total_issueq_reserved_free <<
+            " reserved_iq_entries " << reserved_iq_entries << " total_issueq_count " << total_issueq_count << endl;
 
     assert (total_issueq_count == issueq_all.count);
     assert((ISSUE_QUEUE_SIZE - issueq_all.count) == (issueq_all.shared_free_entries + total_issueq_reserved_free));
@@ -588,7 +588,7 @@ bool OooCore::runcycle(void* none) {
             assert(thread);
 
             stats = thread->stats_;
-            MYDEBUG << " TH[", thread->threadid, "] issueq_count[", cluster, "] ", thread->issueq_count[cluster], endl;
+            MYDEBUG << " TH[" << thread->threadid << "] issueq_count[" << cluster << "] " << thread->issueq_count[cluster] << endl;
             assert(thread->issueq_count[cluster] >=0);
             total_issueq_count += thread->issueq_count[cluster];
             if(thread->issueq_count[cluster] < reserved_iq_entries_per_thread){
@@ -600,9 +600,10 @@ bool OooCore::runcycle(void* none) {
         issueq_operation_on_cluster_with_result((*this), cluster, issueq_count, count);
         int issueq_shared_free_entries = 0;
         issueq_operation_on_cluster_with_result((*this), cluster, issueq_shared_free_entries, shared_free_entries);
-        MYDEBUG << " cluster[", cluster, "] ISSUE_QUEUE_SIZE ", ISSUE_QUEUE_SIZE, " issueq[" , cluster, "].count ", issueq_count, " issueq[" , cluster, "].shared_free_entries ",
-                issueq_shared_free_entries, " total_issueq_reserved_free ", total_issueq_reserved_free,
-                " reserved_iq_entries ", reserved_iq_entries[cluster], " total_issueq_count ", total_issueq_count, endl;
+        MYDEBUG << " cluster[" << cluster << "] ISSUE_QUEUE_SIZE " << ISSUE_QUEUE_SIZE << " issueq[" << cluster << "].count " <<
+           issueq_count << " issueq[" << cluster << "].shared_free_entries " <<
+                issueq_shared_free_entries << " total_issueq_reserved_free " << total_issueq_reserved_free <<
+                " reserved_iq_entries " << reserved_iq_entries[cluster] << " total_issueq_count " << total_issueq_count << endl;
         assert (total_issueq_count == issueq_count);
         assert((ISSUE_QUEUE_SIZE - issueq_count) == (issueq_shared_free_entries + total_issueq_reserved_free));
 
@@ -655,7 +656,7 @@ bool OooCore::runcycle(void* none) {
         ptl_logfile << "OooCore::run():context after commit\n";
         ptl_logfile << flush;
         foreach(x, threadcount) {
-            ptl_logfile << threads[x]->ctx, endl;
+            ptl_logfile << threads[x]->ctx << endl;
         }
     }
 
@@ -782,8 +783,8 @@ bool OooCore::runcycle(void* none) {
         if unlikely (!thread->ctx.running) continue;
         int rc = commitrc[i];
         if (logable(9)) {
-            ptl_logfile << "OooCore::run():result check thread[",
-            i, "] rc[", rc, "]\n";
+            ptl_logfile << "OooCore::run():result check thread[" <<
+            i << "] rc[" << rc << "]\n";
         }
 
         if likely ((rc == COMMIT_RESULT_OK) | (rc == COMMIT_RESULT_NONE)) {
@@ -799,7 +800,11 @@ bool OooCore::runcycle(void* none) {
         switch (rc) {
             case COMMIT_RESULT_SMC:
                 {
-                    if (logable(3)) ptl_logfile << "Potentially cross-modifying SMC detected: global flush required (cycle ", sim_cycle, ", ", total_insns_committed, " commits)", endl, flush;
+                    if (logable(3)) 
+                    {
+                      ptl_logfile << "Potentially cross-modifying SMC detected: global flush required (cycle " <<
+                        sim_cycle << ", " << total_insns_committed << " commits)" << endl << flush;
+                    }
 
                     /*
                      *  DO NOT GLOBALLY FLUSH! It will cut off the other thread(s) in the
@@ -837,7 +842,8 @@ bool OooCore::runcycle(void* none) {
                 {
                     if (logable(3) && thread->current_basic_block &&
                             thread->current_basic_block->rip) {
-                        ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in exception handling at rip ", thread->current_basic_block->rip, endl, flush;
+                        ptl_logfile << " [vcpu " << thread->ctx.cpu_index << "] in exception handling at rip " 
+                          << thread->current_basic_block->rip << endl << flush;
                     }
                     exiting = !thread->handle_exception();
                     break;
@@ -846,7 +852,8 @@ bool OooCore::runcycle(void* none) {
                 {
                     if (logable(3) && thread->current_basic_block &&
                             thread->current_basic_block->rip) {
-                        ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in barrier handling at rip ", thread->current_basic_block->rip, endl, flush;
+                        ptl_logfile << " [vcpu " << thread->ctx.cpu_index << "] in barrier handling at rip " 
+                          << thread->current_basic_block->rip << endl << flush;
                     }
                     exiting = !thread->handle_barrier();
                     break;
@@ -855,7 +862,8 @@ bool OooCore::runcycle(void* none) {
                 {
                     if (logable(3) && thread->current_basic_block &&
                             thread->current_basic_block->rip) {
-                        ptl_logfile << " [vcpu ", thread->ctx.cpu_index, "] in interrupt handling at rip ", thread->current_basic_block->rip, endl, flush;
+                        ptl_logfile << " [vcpu " << thread->ctx.cpu_index << "] in interrupt handling at rip "
+                          << thread->current_basic_block->rip << endl << flush;
                     }
                     exiting = 1;
                     thread->handle_interrupt();
@@ -863,7 +871,8 @@ bool OooCore::runcycle(void* none) {
                 }
             case COMMIT_RESULT_STOP:
                 {
-                    if (logable(3)) ptl_logfile << " COMMIT_RESULT_STOP, flush_pipeline().",endl;
+                    if (logable(3)) 
+                        ptl_logfile << " COMMIT_RESULT_STOP, flush_pipeline()." << endl;
                     thread->flush_pipeline();
                     thread->stall_frontend = 1;
                     /* Wait for other cores to sync up, so don't exit right away */
@@ -905,10 +914,10 @@ bool OooCore::runcycle(void* none) {
         ThreadContext* thread = threads[i];
         if (logable(9)) {
             stringbuf sb;
-            sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
-               sim_cycle, ", ", total_insns_committed,  " user commits: ",
-               (sim_cycle - thread->last_commit_at_cycle), " cycles;", endl;
-            ptl_logfile << sb, flush;
+            sb << "[vcpu " << thread->ctx.cpu_index << "] thread " << thread->threadid << ": WARNING: At cycle " <<
+               sim_cycle << ", " << total_insns_committed << " user commits: " <<
+               (sim_cycle - thread->last_commit_at_cycle) << " cycles;" << endl;
+            ptl_logfile << sb << flush;
         }
     }
 
@@ -918,11 +927,11 @@ bool OooCore::runcycle(void* none) {
 
         if unlikely ((sim_cycle - thread->last_commit_at_cycle) > (W64)1024*1024*threadcount) {
             stringbuf sb;
-            sb << "[vcpu ", thread->ctx.cpu_index, "] thread ", thread->threadid, ": WARNING: At cycle ",
-               sim_cycle, ", ", total_insns_committed,  " user commits: no instructions have committed for ",
-               (sim_cycle - thread->last_commit_at_cycle), " cycles; the pipeline could be deadlocked", endl;
-            ptl_logfile << sb, flush;
-            cerr << sb, flush;
+            sb << "[vcpu " << thread->ctx.cpu_index << "] thread " << thread->threadid << ": WARNING: At cycle " <<
+               sim_cycle << ", " << total_insns_committed << " user commits: no instructions have committed for " <<
+               (sim_cycle - thread->last_commit_at_cycle) << " cycles; the pipeline could be deadlocked" << endl;
+            ptl_logfile << sb << flush;
+            cerr << sb << flush;
             machine.dump_state(ptl_logfile);
             ptl_logfile.flush();
             exiting = 1;
@@ -1019,23 +1028,35 @@ stringbuf& ReorderBufferEntry::get_operand_info(stringbuf& sb, int operand) cons
     PhysicalRegister& physreg = *operands[operand];
     ReorderBufferEntry& sourcerob = *physreg.rob;
 
-    sb << "r", physreg.index();
-    if (PHYS_REG_FILE_COUNT > 1) sb << "@", getcore().physregfiles[physreg.rfid].name;
+    sb << "r" << physreg.index();
+    if (PHYS_REG_FILE_COUNT > 1) sb << "@" << getcore().physregfiles[physreg.rfid].name;
 
     switch (physreg.state) {
         case PHYSREG_WRITTEN:
-            sb << " (written)"; break;
+            sb << " (written)";
+            break;
         case PHYSREG_BYPASS:
-            sb << " (ready)"; break;
+            sb << " (ready)"; 
+            break;
         case PHYSREG_WAITING:
-            sb << " (wait rob ", sourcerob.index(), " uuid ", sourcerob.uop.uuid, ")"; break;
-        case PHYSREG_ARCH: break;
-                           if (physreg.index() == PHYS_REG_NULL)  sb << " (zero)"; else sb << " (arch ", arch_reg_names[physreg.archreg], ")"; break;
+            sb << " (wait rob " << sourcerob.index() << " uuid " << sourcerob.uop.uuid << ")"; 
+            break;
+        case PHYSREG_ARCH:
+           if (physreg.index() == PHYS_REG_NULL)  
+           {
+             sb << " (zero)"; 
+           }
+           else 
+           {
+             sb << " (arch " << arch_reg_names[physreg.archreg] << ")"; 
+           }
+           break;
         case PHYSREG_PENDINGFREE:
-                           sb << " (pending free for ", arch_reg_names[physreg.archreg], ")"; break;
+            sb << " (pending free for " << arch_reg_names[physreg.archreg] << ")";
+            break;
         default:
-                           /* Cannot be in free state! */
-                           sb << " (FREE)"; break;
+          /* Cannot be in free state! */
+          sb << " (FREE)"; break;
     }
 
     return sb;
@@ -1045,12 +1066,13 @@ ThreadContext& ReorderBufferEntry::getthread() const { return *core->threads[thr
 
 issueq_tag_t ReorderBufferEntry::get_tag() {
     int mask = ((1 << MAX_THREADS_BIT) - 1) << MAX_ROB_IDX_BIT;
-    if (logable(100)) ptl_logfile << " get_tag() thread ", hexstring(threadid, 8), " rob idx ", hexstring(idx, 16), " mask ", hexstring(mask, 32), endl;
+    if (logable(100)) ptl_logfile << " get_tag() thread " << hexstring(threadid, 8) << " rob idx " << 
+        hexstring(idx, 16) << " mask " << hexstring(mask, 32) << endl;
 
     assert(!(idx & mask));
     assert(!(threadid >> MAX_THREADS_BIT));
     issueq_tag_t rc = (idx | (threadid << MAX_ROB_IDX_BIT));
-    if (logable(100)) ptl_logfile <<  " tag ", hexstring(rc, 16), endl;
+    if (logable(100)) ptl_logfile <<  " tag " << hexstring(rc, 16) << endl;
     return rc;
 }
 
@@ -1069,17 +1091,17 @@ ostream& ReorderBufferEntry::print(ostream& os) const {
     get_operand_info(rcinfo, 2);
 
     if(!current_state_list || !physreg){
-        os << " rob ", intstring(index(), -3), " uuid ", intstring(uop.uuid, 16), " is not valid. ";
+        os << " rob " << intstring(index(), -3) << " uuid " << intstring(uop.uuid, 16) << " is not valid. ";
         return os;
     }
-    os << "rob ", intstring(index(), -3), " uuid ", intstring(uop.uuid, 16), " rip 0x", hexstring(uop.rip, 48), " ",
-       padstring(current_state_list->name, -24), " ", (uop.som ? "SOM" : "   "), " ", (uop.eom ? "EOM" : "   "),
-       " @ ", padstring((cluster >= 0) ? clusters[cluster].name : "???", -4), " ",
-       padstring(name, -12), " r", intstring(physreg->index(), -3), " ", padstring(arch_reg_names[uop.rd], -6);
+    os << "rob " << intstring(index(), -3) << " uuid " << intstring(uop.uuid, 16) << " rip 0x" << hexstring(uop.rip, 48) << " " <<
+       padstring(current_state_list->name, -24) << " " << (uop.som ? "SOM" : "   ") << " " << (uop.eom ? "EOM" : "   ") <<
+       " @ " << padstring((cluster >= 0) ? clusters[cluster].name : "???", -4) << " " <<
+       padstring(name, -12) << " r" << intstring(physreg->index(), -3) << " " << padstring(arch_reg_names[uop.rd], -6);
     if (isload(uop.opcode)){
-        if(lsq) os << " ld", intstring(lsq->index(), -3);
+        if(lsq) os << " ld" << intstring(lsq->index(), -3);
     }else if (isstore(uop.opcode)){
-        if(lsq) os << " st", intstring(lsq->index(), -3);
+        if(lsq) os << " st" << intstring(lsq->index(), -3);
     }else os << "      ";
 
     os << " = ";
@@ -1095,7 +1117,7 @@ ostream& ReorderBufferEntry::print(ostream& os) const {
  * @param os output stream
  */
 void ThreadContext::print_rob(ostream& os) {
-    os << "ROB head ", ROB.head, " to tail ", ROB.tail, " (", ROB.count, " entries):", endl;
+    os << "ROB head " << ROB.head << " to tail " << ROB.tail << " (" << ROB.count << " entries):" << endl;
     foreach_forward(ROB, i) {
         ReorderBufferEntry& rob = ROB[i];
         rob.print(os);
@@ -1110,31 +1132,31 @@ void ThreadContext::print_rob(ostream& os) {
  * @param os output stream
  */
 void ThreadContext::print_lsq(ostream& os) {
-    os << "LSQ head ", LSQ.head, " to tail ", LSQ.tail, " (", LSQ.count, " entries):", endl, flush;
+    os << "LSQ head " << LSQ.head << " to tail " << LSQ.tail << " (" << LSQ.count << " entries):" << endl << flush;
     foreach_forward(LSQ, i) {
         assert(i < LSQ_SIZE);
         LoadStoreQueueEntry& lsq = LSQ[i];
-        os << "  ", lsq, endl;
+        os << "  " << lsq << endl;
     }
 }
 
 void ThreadContext::print_rename_tables(ostream& os) {
-    os << "SpecRRT:", endl;
+    os << "SpecRRT:" << endl;
     os << specrrt;
-    os << "CommitRRT:", endl;
+    os << "CommitRRT:" << endl;
     os << commitrrt;
 }
 
 void OooCore::print_smt_state(ostream& os) {
-    os << "Print SMT statistics:", endl;
+    os << "Print SMT statistics:" << endl;
 
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
-        os << "Thread ", i, ":", endl,
-           "  total_uops_committed ", thread->total_uops_committed, " iterations ", iterations, endl,
-           "  uipc ", double(thread->total_uops_committed) / double(iterations), endl,
-           "  total_insns_committed ",  thread->total_insns_committed, " iterations ", iterations, endl,
-           "  ipc ", double(thread->total_insns_committed) / double(iterations), endl;
+        os << "Thread " << i << ":" << endl <<
+           "  total_uops_committed " << thread->total_uops_committed << " iterations " << iterations << endl <<
+           "  uipc " << double(thread->total_uops_committed) / double(iterations) << endl <<
+           "  total_insns_committed " <<  thread->total_insns_committed << " iterations " << iterations << endl <<
+           "  ipc " << double(thread->total_insns_committed) / double(iterations) << endl;
     }
 }
 
@@ -1144,14 +1166,14 @@ void OooCore::print_smt_state(ostream& os) {
  * @param os output stream
  */
 void ThreadContext::dump_smt_state(ostream& os) {
-    os << "SMT per-thread state for t", threadid, ":", endl;
-    os << "Fetchrip: ", hexstring(fetchrip, 64), endl;
+    os << "SMT per-thread state for t" << threadid << ":" << endl;
+    os << "Fetchrip: " << hexstring(fetchrip, 64) << endl;
 
     print_rename_tables(os);
     print_rob(os);
     print_lsq(os);
-    os << "ITLB: \n", itlb, endl;
-    os << "DTLB: \n", dtlb, endl;
+    os << "ITLB: \n" << itlb << endl;
+    os << "DTLB: \n" << dtlb << endl;
     os << flush;
 }
 
@@ -1162,7 +1184,7 @@ void ThreadContext::dump_smt_state(ostream& os) {
  * state
  */
 void OooCore::dump_state(ostream& os) {
-    os << "dump_state for core[",get_coreid(),"]: SMT common structures:", endl;
+    os << "dump_state for core[" << get_coreid() << "]: SMT common structures:" << endl;
 
     print_list_of_state_lists<PhysicalRegister>(os, physreg_states, "Physical register states");
     foreach (i, PHYS_REG_FILE_COUNT) {
@@ -1170,13 +1192,13 @@ void OooCore::dump_state(ostream& os) {
     }
 
     print_list_of_state_lists<ReorderBufferEntry>(os, rob_states, "ROB entry states");
-    os << "Issue Queues:", endl;
+    os << "Issue Queues:" << endl;
     foreach_issueq(print(os));
     // caches.print(os);
 
-    os << "Unaligned predictor:", endl;
-    os << "  ", unaligned_predictor.popcount(), " unaligned bits out of ", UNALIGNED_PREDICTOR_SIZE, " bits", endl;
-    os << "  Raw data: ", unaligned_predictor, endl;
+    os << "Unaligned predictor:" << endl;
+    os << "  " << unaligned_predictor.popcount() << " unaligned bits out of " << UNALIGNED_PREDICTOR_SIZE << " bits" << endl;
+    os << "  Raw data: " << unaligned_predictor << endl;
 
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
@@ -1227,18 +1249,18 @@ void OooCore::check_refcounts() {
         PhysicalRegisterFile& physregs = physregfiles[rfid];
         foreach (i, physregs.size) {
             if unlikely (physregs[i].refcount != refcounts[rfid][i]) {
-                ptl_logfile << "ERROR: r", i, " refcount is ", physregs[i].refcount, " but should be ", refcounts[rfid][i], endl;
+                ptl_logfile << "ERROR: r" << i << " refcount is " << physregs[i].refcount << " but should be " << refcounts[rfid][i] << endl;
 
                 foreach_forward(ROB, r) {
                     ReorderBufferEntry& rob = ROB[r];
                     foreach (j, MAX_OPERANDS) {
-                        if ((rob.operands[j]->index() == i) & (rob.operands[j]->rfid == rfid)) ptl_logfile << "  ROB ", r, " operand ", j, endl;
+                        if ((rob.operands[j]->index() == i) & (rob.operands[j]->rfid == rfid)) ptl_logfile << "  ROB " << r << " operand " << j << endl;
                     }
                 }
 
                 foreach (j, TRANSREG_COUNT) {
-                    if ((commitrrt[j]->index() == i) & (commitrrt[j]->rfid == rfid)) ptl_logfile << "  CommitRRT ", arch_reg_names[j], endl;
-                    if ((specrrt[j]->index() == i) & (specrrt[j]->rfid == rfid)) ptl_logfile << "  SpecRRT ", arch_reg_names[j], endl;
+                    if ((commitrrt[j]->index() == i) & (commitrrt[j]->rfid == rfid)) ptl_logfile << "  CommitRRT " << arch_reg_names[j] << endl;
+                    if ((specrrt[j]->index() == i) & (specrrt[j]->rfid == rfid)) ptl_logfile << "  SpecRRT " << arch_reg_names[j] << endl;
                 }
 
                 errors = 1;
@@ -1275,7 +1297,7 @@ void OooCore::check_rob() {
                 assert(inrange(rob->index(), 0, ROB_SIZE-1));
                 assert(rob->current_state_list == &list);
                 if (!((rob->current_state_list != &thread->rob_free_list) ? rob->entry_valid : (!rob->entry_valid))) {
-                    ptl_logfile << "ROB ", rob->index(), " list = ", rob->current_state_list->name, " entry_valid ", rob->entry_valid, endl, flush;
+                    ptl_logfile << "ROB " << rob->index() << " list = " << rob->current_state_list->name << " entry_valid " << rob->entry_valid << endl << flush;
                     dump_state(ptl_logfile);
                     assert(false);
                 }
@@ -1292,21 +1314,21 @@ void OooCore::check_rob() {
  * @return Output stream
  */
 ostream& LoadStoreQueueEntry::print(ostream& os) const {
-    os << (store ? "st" : "ld"), intstring(index(), -3), " ";
-    os << "uuid ", intstring(rob->uop.uuid, 10), " ";
-    os << "rob ", intstring(rob->index(), -3), " ";
-    os << "r", intstring(rob->physreg->index(), -3);
-    if (PHYS_REG_FILE_COUNT > 1) os << "@", core->physregfiles[rob->physreg->rfid].name;
+    os << (store ? "st" : "ld") << intstring(index(), -3) << " ";
+    os << "uuid " << intstring(rob->uop.uuid, 10) << " ";
+    os << "rob " << intstring(rob->index(), -3) << " ";
+    os << "r" << intstring(rob->physreg->index(), -3);
+    if (PHYS_REG_FILE_COUNT > 1) os << "@" << core->physregfiles[rob->physreg->rfid].name;
     os << " ";
     if (invalid) {
-        os << "< Invalid: fault 0x", hexstring(data, 8), " > ";
+        os << "< Invalid: fault 0x" << hexstring(data, 8) << " > ";
     } else {
         if (datavalid)
             os << bytemaskstring((const byte*)&data, bytemask, 8);
         else os << "<    Data Invalid     >";
         os << " @ ";
         if (addrvalid)
-            os << "0x", hexstring(physaddr << 3, 48);
+            os << "0x" << hexstring(physaddr << 3, 48);
         else os << "< Addr Inval >";
     }
     return os;
@@ -1345,30 +1367,30 @@ bool ThreadContext::handle_barrier() {
     }
 
     if (logable(1)) {
-        ptl_logfile << "[vcpu ", ctx.cpu_index, "] Barrier (#", assistid, " -> ", (void*)assist, " ", assist_name(assist), " called from ",
-                    (RIPVirtPhys(ctx.reg_selfrip).update(ctx)), "; return to ", (void*)(Waddr)ctx.reg_nextrip,
-                    ") at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl, flush;
+        ptl_logfile << "[vcpu " << ctx.cpu_index << "] Barrier (#" << assistid << " -> " << (void*)assist << " " << assist_name(assist) << " called from " <<
+                    (RIPVirtPhys(ctx.reg_selfrip).update(ctx)) << "; return to " << (void*)(Waddr)ctx.reg_nextrip <<
+                    ") at " << sim_cycle << " cycles, " << total_insns_committed << " commits" << endl << flush;
     }
 
-    if (logable(6)) ptl_logfile << "Calling assist function at ", (void*)assist, "...", endl, flush;
+    if (logable(6)) ptl_logfile << "Calling assist function at " << (void*)assist << "..." << endl << flush;
 
     thread_stats.assists[assistid]++;
 
     if (logable(6)) {
-        ptl_logfile << "Before assist:", endl, ctx, endl;
+        ptl_logfile << "Before assist:" << endl << ctx << endl;
     }
 
     bool flush_required = assist(ctx);
 
     if (logable(6)) {
-        ptl_logfile << "Done with assist", endl;
-        ptl_logfile << "New state:", endl;
+        ptl_logfile << "Done with assist" << endl;
+        ptl_logfile << "New state:" << endl;
         ptl_logfile << ctx;
     }
 
     /* Flush again, but restart at possibly modified rip */
     if(flush_required) {
-        if (logable(6)) ptl_logfile << " handle_barrier, flush_pipeline again.",endl;
+        if (logable(6)) ptl_logfile << " handle_barrier, flush_pipeline again." << endl;
         flush_pipeline();
         if(config.checker_enabled) {
             clear_checker();
@@ -1389,12 +1411,12 @@ bool ThreadContext::handle_barrier() {
 bool ThreadContext::handle_exception() {
     /* Release resources of everything in the pipeline: */
     core_to_external_state();
-    if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline.",endl;
+    if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline." << endl;
     flush_pipeline();
 
     if (logable(4)) {
-        ptl_logfile << "[vcpu ", ctx.cpu_index, "] Exception ", exception_name(ctx.exception), " called from rip ", (void*)(Waddr)ctx.eip,
-                    " at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl, flush;
+        ptl_logfile << "[vcpu " << ctx.cpu_index << "] Exception " << exception_name(ctx.exception) << " called from rip " << (void*)(Waddr)ctx.eip <<
+                    " at " << sim_cycle << " cycles, " << total_insns_committed << " commits" << endl << flush;
     }
 
     /*
@@ -1418,8 +1440,8 @@ bool ThreadContext::handle_exception() {
      */
     if (ctx.exception == EXCEPTION_SkipBlock) {
         ctx.eip = chk_recovery_rip;
-        if (logable(6)) ptl_logfile << "SkipBlock pseudo-exception: skipping to ", (void*)(Waddr)ctx.eip, endl, flush;
-        if (logable(3)) ptl_logfile << " EXCEPTION_SkipBlock, flush_pipeline.",endl;
+        if (logable(6)) ptl_logfile << "SkipBlock pseudo-exception: skipping to " << (void*)(Waddr)ctx.eip << endl << flush;
+        if (logable(3)) ptl_logfile << " EXCEPTION_SkipBlock, flush_pipeline." << endl;
         flush_pipeline();
         return true;
     }
@@ -1448,9 +1470,9 @@ bool ThreadContext::handle_exception() {
 handle_page_fault:
             {
                 if (logable(10))
-                    ptl_logfile << "Page fault exception address: ",
-                                hexstring(exception_address, 64),
-                                " is_write: ", write_exception, endl, ctx, endl;
+                    ptl_logfile << "Page fault exception address: " <<
+                                hexstring(exception_address, 64) <<
+                                " is_write: " << write_exception << endl << ctx << endl;
                 assert(ctx.page_fault_addr != 0);
                 int old_exception = ctx.exception_index;
                 ctx.handle_interrupt = 1;
@@ -1476,7 +1498,7 @@ handle_page_fault:
             ctx.page_fault_addr = ctx.eip;
             break;
         default:
-            ptl_logfile << "Unsupported internal exception type ", exception_name(ctx.exception), endl, flush;
+            ptl_logfile << "Unsupported internal exception type " << exception_name(ctx.exception) << endl << flush;
             assert(false);
     }
 
@@ -1491,7 +1513,7 @@ handle_page_fault:
     ctx.propagate_x86_exception(ctx.exception_index, ctx.error_code, ctx.page_fault_addr);
 
     /* Flush again, but restart at modified rip */
-    if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline again.",endl;
+    if (logable(3)) ptl_logfile << " handle_exception, flush_pipeline again." << endl;
     flush_pipeline();
 
     return true;
@@ -1506,11 +1528,11 @@ handle_page_fault:
 bool ThreadContext::handle_interrupt() {
     /* Release resources of everything in the pipeline: */
     core_to_external_state();
-    if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline.",endl;
+    if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline." << endl;
 
     if (logable(6)) {
-        ptl_logfile << "[vcpu ", threadid, "] interrupts pending at ", sim_cycle, " cycles, ", total_insns_committed, " commits", endl, flush;
-        ptl_logfile << "Context at interrupt:", endl;
+        ptl_logfile << "[vcpu " << threadid << "] interrupts pending at " << sim_cycle << " cycles, " << total_insns_committed << " commits" << endl << flush;
+        ptl_logfile << "Context at interrupt:" << endl;
         ptl_logfile << ctx;
         ptl_logfile.flush();
     }
@@ -1518,13 +1540,13 @@ bool ThreadContext::handle_interrupt() {
     ctx.event_upcall();
 
     if (logable(6)) {
-        ptl_logfile <<  "[vcpu ", threadid, "] after interrupt redirect:", endl;
+        ptl_logfile <<  "[vcpu " << threadid << "] after interrupt redirect:" << endl;
         ptl_logfile << ctx;
         ptl_logfile.flush();
     }
 
     /* Flush again, but restart at modified rip */
-    if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline again.",endl;
+    if (logable(3)) ptl_logfile << " handle_interrupt, flush_pipeline again." << endl;
 
     /* update the stats */
     if(ctx.exit_request) {
@@ -1547,12 +1569,12 @@ void PhysicalRegister::fill_operand_info(PhysicalRegisterOperandInfo& opinfo) {
 }
 
 ostream& OOO_CORE_MODEL::operator <<(ostream& os, const PhysicalRegisterOperandInfo& opinfo) {
-    os << "[r", opinfo.physreg, " ", short_physreg_state_names[opinfo.state], " ";
+    os << "[r" << opinfo.physreg << " " << short_physreg_state_names[opinfo.state] << " ";
     switch (opinfo.state) {
         case PHYSREG_WAITING:
         case PHYSREG_BYPASS:
         case PHYSREG_WRITTEN:
-            os << "rob ", opinfo.rob, " uuid ", opinfo.uuid; break;
+            os << "rob " << opinfo.rob << " uuid " << opinfo.uuid; break;
         case PHYSREG_ARCH:
         case PHYSREG_PENDINGFREE:
             os << arch_reg_names[opinfo.archreg]; break;
@@ -1579,11 +1601,11 @@ void OooCore::check_ctx_changes()
         ctx.handle_interrupt = 0;
 
         if(logable(4))
-            ptl_logfile << " Ctx[", ctx.cpu_index, "] eflags: ", (void*)ctx.eflags, endl;
+            ptl_logfile << " Ctx[" << ctx.cpu_index << "] eflags: " << (void*)ctx.eflags << endl;
         if(ctx.eip != ctx.old_eip) {
             if(logable(5))
-                ptl_logfile << "Old_eip: ", (void*)(ctx.old_eip), " New_eip: " ,
-                            (void*)(ctx.eip), endl;
+                ptl_logfile << "Old_eip: " << (void*)(ctx.old_eip) << " New_eip: " <<
+                            (void*)(ctx.eip) << endl;
 
             /* IP address is changed, so flush the pipeline */
             threads[i]->flush_pipeline();

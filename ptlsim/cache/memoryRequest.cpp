@@ -66,7 +66,7 @@ void MemoryRequest::init(W8 coreId,
 	if(history) delete history;
 	history = new stringbuf();
 
-	memdebug("Init ", *this, endl);
+	memdebug("Init " << *this << endl);
 }
 
 void MemoryRequest::init(MemoryRequest *request)
@@ -85,7 +85,7 @@ void MemoryRequest::init(MemoryRequest *request)
 	if(history) delete history;
 	history = new stringbuf();
 
-	memdebug("Init ", *this, endl);
+	memdebug("Init " << *this << endl);
 }
 
 bool MemoryRequest::is_same(W8 coreid,
@@ -165,6 +165,6 @@ void RequestPool::garbage_collection()
 			cleaned++;
 		}
 	}
-	memdebug("number of Request cleaned by garbageCollector is: ",
-		   cleaned,	endl);
+	memdebug("number of Request cleaned by garbageCollector is: " <<
+		   cleaned <<	endl);
 }

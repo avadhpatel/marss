@@ -72,11 +72,11 @@ namespace SwitchInterconnect {
                 return os;
             }
 
-            os << "request[", *request, "] ";
-            os << "source[", source->get_name(), "] ";
-            os << "dest[", dest->get_name(), "] ";
-            os << "inuse[", in_use, "] ";
-            os << "annuled[", annuled, "]";
+            os << "request[" << *request << "] ";
+            os << "source[" << source->get_name() << "] ";
+            os << "dest[" << dest->get_name() << "] ";
+            os << "inuse[" << in_use << "] ";
+            os << "annuled[" << annuled << "]";
             return os;
         }
     };
@@ -151,23 +151,23 @@ namespace SwitchInterconnect {
             bool send_complete_cb(void *arg);
 
             void print(ostream& os) const {
-                os << "--Switch-Interconnect: ", get_name(), endl;
+                os << "--Switch-Interconnect: " << get_name() << endl;
                 foreach (i, controllers.count()) {
                     ControllerQueue *cq = controllers[i];
-                    os << "Controller ", cq->controller->get_name(), " ";
-                    os << "busy: ", cq->recv_busy, " Queue:", endl;
+                    os << "Controller " << cq->controller->get_name() << " ";
+                    os << "busy: " << cq->recv_busy << " Queue:" << endl;
                     os << cq->queue;
                 }
                 os << "--End-Switch-Interconnect\n";
             }
 
             void print_map(ostream& os) {
-                os << "Switch Interconnect: ", get_name(), endl;
-                os << "\tconnected to: ", endl;
+                os << "Switch Interconnect: " << get_name() << endl;
+                os << "\tconnected to: " << endl;
 
                 foreach (i, controllers.count()) {
-                    os << "\t\tcontroller[", i, "]: ";
-                    os << controllers[i]->controller->get_name(), endl;
+                    os << "\t\tcontroller[" << i << "]: ";
+                    os << controllers[i]->controller->get_name() << endl;
                 }
             }
     };

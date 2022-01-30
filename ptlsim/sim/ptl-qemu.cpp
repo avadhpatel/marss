@@ -101,8 +101,8 @@ static void save_core_dump(char* dump, W64 dump_size,
     df.flush();
     df.close();
 
-    ptl_logfile << "Core dump received from VM is saved in ",
-                filename, " with signal ", signum, endl;
+    ptl_logfile << "Core dump received from VM is saved in " <<
+                filename << " with signal " << signum << endl;
 }
 
 static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
@@ -251,7 +251,7 @@ static void ptlcall_mmio_write(CPUX86State* cpu, W64 offset, W64 value,
                 break;
             }
         default :
-            cout << "PTLCALL type unknown : ", calltype, endl;
+            cout << "PTLCALL type unknown : " << calltype << endl;
             cpu->regs[REG_rax] = -EINVAL;
     }
 }
@@ -408,8 +408,8 @@ int ptl_cpuid(uint32_t index, uint32_t count, uint32_t *eax, uint32_t *ebx,
 void create_checkpoint(const char* chk_name)
 {
     if (!config.quiet)
-        cout << "MARSSx86::Creating checkpoint ",
-             chk_name, endl;
+        cout << "MARSSx86::Creating checkpoint " <<
+             chk_name << endl;
 
     QDict *checkpoint_dict = qdict_new();
     qdict_put_obj(checkpoint_dict, "name", QOBJECT(
@@ -417,7 +417,7 @@ void create_checkpoint(const char* chk_name)
     do_savevm(cur_mon, checkpoint_dict);
 
     if (!config.quiet)
-        cout << "MARSSx86::Checkpoint ", chk_name,
+        cout << "MARSSx86::Checkpoint " << chk_name <<
              " created\n";
 }
 
@@ -428,8 +428,8 @@ void ptl_check_ptlcall_queue() {
         switch(pending_call_type) {
             case PTLCALL_ENQUEUE:
                 {
-                    if (!config.quiet) cout << "MARSSx86::Command received : ",
-                         pending_command_str, endl;
+                    if (!config.quiet) cout << "MARSSx86::Command received : " <<
+                         pending_command_str << endl;
                     ptl_machine_configure(pending_command_str);
                     break;
                 }
@@ -616,8 +616,8 @@ int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorC
     setup_qemu_switch_all_ctx(*this);
 
     if(logable(10))
-        ptl_logfile << "Copying from userspace ", bytes, " bytes from ",
-                    source, endl;
+        ptl_logfile << "Copying from userspace " << bytes << " bytes from " <<
+                    source << endl;
 
     int exception = 0;
     int mmio = 0;
@@ -631,13 +631,13 @@ int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorC
                 source, 2, mmu_index, 1);
         cr[2] = cr2;
         if(logable(10))
-            ptl_logfile << "page fault while reading code fault:", fail,
-                        " source_addr:", (void*)(source),
-                        " eip:", (void*)(eip), " fail: ", fail, endl;
+            ptl_logfile << "page fault while reading code fault:" << fail <<
+                        " source_addr:" << (void*)(source) <<
+                        " eip:" << (void*)(eip) << " fail: " << fail << endl;
         if (fail != 0) {
             if(logable(10))
-                ptl_logfile << "Unable to read code from ",
-                            hexstring(source, 64), endl;
+                ptl_logfile << "Unable to read code from " <<
+                            hexstring(source, 64) << endl;
             setup_ptlsim_switch_all_ctx(*this);
             /*
              * restore the exception index as it will be
@@ -661,9 +661,9 @@ int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorC
         else if(kernel_mode) data = ldub_kernel(source_b);
         else data = ldub_user(source_b);
         if(logable(109)) {
-            ptl_logfile << "[", hexstring((W8)(data), 8),
-                        "-", hexstring((W8)(ldub_code(source_b)), 8),
-                        "@", (void*)(source_b), "] ";
+            ptl_logfile << "[" << hexstring((W8)(data), 8) <<
+                        "-" << hexstring((W8)(ldub_code(source_b)), 8) <<
+                        "@" << (void*)(source_b) << "] ";
         }
         target_b[n] = data;
         source_b++;
@@ -686,13 +686,13 @@ int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorC
                 source + n, 2, mmu_index, 1);
         cr[2] = cr2;
         if(logable(10))
-            ptl_logfile << "page fault while reading code fault:", fail,
-                        " source_addr:", (void*)(source + n),
-                        " eip:", (void*)(eip), endl;
+            ptl_logfile << "page fault while reading code fault:" << fail <<
+                        " source_addr:" << (void*)(source + n) <<
+                        " eip:" << (void*)(eip) << endl;
         if (fail != 0) {
             if(logable(10))
-                ptl_logfile << "Unable to read code from ",
-                            hexstring(source + n, 64), endl;
+                ptl_logfile << "Unable to read code from " <<
+                            hexstring(source + n, 64) << endl;
             setup_ptlsim_switch_all_ctx(*this);
             /*
              * restore the exception index as it will be
@@ -713,9 +713,9 @@ int Context::copy_from_vm(void* target, Waddr source, int bytes, PageFaultErrorC
         else if(kernel_mode) data = ldub_kernel(source_b);
         else data = ldub_user(source_b);
         if(logable(109)) {
-            ptl_logfile << "[", hexstring((W8)(data), 8),
-                        "-", hexstring((W8)(ldub_code(source_b)), 8),
-                        "@", (void*)(source_b), "] ";
+            ptl_logfile << "[" << hexstring((W8)(data), 8) <<
+                        "-" << hexstring((W8)(ldub_code(source_b)), 8) <<
+                        "@" << (void*)(source_b) << "] ";
         }
         target_b[n] = data;
         source_b++;
@@ -780,15 +780,15 @@ Waddr Context::check_and_translate(Waddr virtaddr, int sizeshift, bool store, bo
     }
 	Waddr host_virtaddr;
     if(logable(10)) {
-        ptl_logfile << "mmu_index:", mmu_index, " index:", index,
-                    " virtaddr:", hexstring(virtaddr, 64),
-                    " tlb_addr:", hexstring(tlb_addr, 64),
-                    " virtpage:", hexstring(
-                            (virtaddr & TARGET_PAGE_MASK), 64),
-                    " tlbpage:", hexstring(
-                            (tlb_addr & TARGET_PAGE_MASK), 64),
-                    " addend:", hexstring(
-                            tlb_table[mmu_index][index].addend, 64),
+        ptl_logfile << "mmu_index:" << mmu_index << " index:" << index <<
+                    " virtaddr:" << hexstring(virtaddr, 64) <<
+                    " tlb_addr:" << hexstring(tlb_addr, 64) <<
+                    " virtpage:" << hexstring(
+                            (virtaddr & TARGET_PAGE_MASK), 64) <<
+                    " tlbpage:" << hexstring(
+                            (tlb_addr & TARGET_PAGE_MASK), 64) <<
+                    " addend:" << hexstring(
+                            tlb_table[mmu_index][index].addend, 64) <<
                     endl;
     }
     if likely ((virtaddr & TARGET_PAGE_MASK) ==
@@ -847,15 +847,15 @@ bool Context::is_mmio_addr(Waddr virtaddr, bool store) {
     }
 
     if(logable(10)) {
-        ptl_logfile << "mmio mmu_index:", mmu_index, " index:", index,
-                    " virtaddr:", hexstring(virtaddr, 64),
-                    " tlb_addr:", hexstring(tlb_addr, 64),
-                    " virtpage:", hexstring(
-                            (virtaddr & TARGET_PAGE_MASK), 64),
-                    " tlbpage:", hexstring(
-                            (tlb_addr & TARGET_PAGE_MASK), 64),
-                    " addend:", hexstring(
-                            tlb_table[mmu_index][index].addend, 64),
+        ptl_logfile << "mmio mmu_index:" << mmu_index << " index:" << index <<
+                    " virtaddr:" << hexstring(virtaddr, 64) <<
+                    " tlb_addr:" << hexstring(tlb_addr, 64) <<
+                    " virtpage:" << hexstring(
+                            (virtaddr & TARGET_PAGE_MASK), 64) <<
+                    " tlbpage:" << hexstring(
+                            (tlb_addr & TARGET_PAGE_MASK), 64) <<
+                    " addend:" << hexstring(
+                            tlb_table[mmu_index][index].addend, 64) <<
                     endl;
     }
     if likely ((virtaddr & TARGET_PAGE_MASK) ==
@@ -931,8 +931,8 @@ int copy_from_user_phys_prechecked(void* target, Waddr source, int bytes, Waddr&
 
 void Context::propagate_x86_exception(byte exception, W32 errorcode , Waddr virtaddr ) {
     if(logable(2))
-        ptl_logfile << "Propagating exception from simulation at eip: ",
-                    this->eip, " cycle: ", sim_cycle, endl;
+        ptl_logfile << "Propagating exception from simulation at eip: " <<
+                    this->eip << " cycle: " << sim_cycle << endl;
     setup_qemu_switch_all_ctx(*this);
     ptl_stable_state = 1;
     handle_interrupt = 1;
@@ -996,13 +996,13 @@ W64 Context::loadvirt(Waddr virtaddr, int sizeshift) {
     }
 
     if(logable(10) && mmio)
-        ptl_logfile << "MMIO READ addr: ", hexstring(virtaddr, 64),
-                    " data: ", hexstring(data, 64), " size: ",
-                    sizeshift, endl;
+        ptl_logfile << "MMIO READ addr: " << hexstring(virtaddr, 64) <<
+                    " data: " << hexstring(data, 64) << " size: " <<
+                    sizeshift << endl;
     else if(logable(10))
-        ptl_logfile << "Context::loadvirt addr[", hexstring(addr, 64),
-                    "] data[", hexstring(data, 64), "] origaddr[",
-                    hexstring(virtaddr, 64), "]\n";
+        ptl_logfile << "Context::loadvirt addr[" << hexstring(addr, 64) <<
+                    "] data[" << hexstring(data, 64) << "] origaddr[" <<
+                    hexstring(virtaddr, 64) << "]\n";
 
     setup_ptlsim_switch_all_ctx(*this);
 
@@ -1039,10 +1039,10 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
         }
 
         if(logable(10))
-            ptl_logfile << "Context::internal_loadphys addr[",
-                        hexstring(addr, 64), "] data[",
-                        hexstring(data, 64), "] sizeshift[", sizeshift,
-                        "] ", endl;
+            ptl_logfile << "Context::internal_loadphys addr[" <<
+                        hexstring(addr, 64) << "] data[" <<
+                        hexstring(data, 64) << "] sizeshift[" << sizeshift <<
+                        "] " << endl;
         return data;
     }
 
@@ -1053,9 +1053,9 @@ W64 Context::loadphys(Waddr addr, bool internal, int sizeshift) {
     data = ldq_raw((uint8_t*)addr);
 
     if(logable(10))
-        ptl_logfile << "Context::loadphys addr[", hexstring(addr, 64),
-                    "] data[", hexstring(data, 64), "] origaddr[",
-                    hexstring(orig_addr, 64), "]\n";
+        ptl_logfile << "Context::loadphys addr[" << hexstring(addr, 64) <<
+                    "] data[" << hexstring(data, 64) << "] origaddr[" <<
+                    hexstring(orig_addr, 64) << "]\n";
     setup_ptlsim_switch_all_ctx(*this);
     return data;
 }
@@ -1065,9 +1065,9 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
     Waddr paddr = floor(virtaddr, 8);
 
     if(logable(10))
-        ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
-                    " with bytemask ", bytemask, " data: ", hexstring(
-                            data, 64), endl;
+        ptl_logfile << "Trying to write to addr: " << hexstring(paddr, 64) <<
+                    " with bytemask " << bytemask << " data: " << hexstring(
+                            data, 64) << endl;
 
     if(is_mmio_addr(virtaddr, 1)) {
         switch(sizeshift) {
@@ -1087,9 +1087,9 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
                     stq_kernel(virtaddr, data);
         }
         if(logable(10))
-            ptl_logfile << "MMIO WRITE addr: ", hexstring(virtaddr, 64),
-                        " data: ", hexstring(data, 64), " size: ",
-                        sizeshift, endl;
+            ptl_logfile << "MMIO WRITE addr: " << hexstring(virtaddr, 64) <<
+                        " data: " << hexstring(data, 64) << " size: " <<
+                        sizeshift << endl;
         return data;
     }
 
@@ -1113,8 +1113,8 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
             break;
     }
     if(logable(10))
-        ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
-                    "] data[", hexstring(data, 64), "]\n";
+        ptl_logfile << "Context::storemask addr[" << hexstring(paddr, 64) <<
+                    "] data[" << hexstring(data, 64) << "]\n";
     //#define CHECK_STORE
 #ifdef CHECK_STORE
     W64 data_r = 0;
@@ -1139,7 +1139,7 @@ W64 Context::storemask_virt(Waddr virtaddr, W64 data, byte bytemask, int sizeshi
     }
     if((W64)data != data_r) {
         ptl_logfile << "Stored data does not match..\n";
-        ptl_logfile << "Data: ", (void*)data, " Data_r: ", (void*)data_r, endl, flush;
+        ptl_logfile << "Data: " << (void*)data << " Data_r: " << (void*)data_r << endl << flush;
         assert_fail(__STRING(0), __FILE__, __LINE__,
                 __PRETTY_FUNCTION__);
     }
@@ -1180,7 +1180,7 @@ void Context::check_store_virt(Waddr virtaddr, W64 data, byte bytemask, int size
     if((data & mask) != (data_r & mask)) {
         // ptl_logfile << "Checker ctx\n", *checker_context, endl;
         ptl_logfile << "Stored data does not match..\n";
-        ptl_logfile << "Data: ", (void*)data, " Data_r: ", (void*)data_r, endl, flush;
+        ptl_logfile << "Data: " << (void*)data << " Data_r: " << (void*)data_r << endl << flush;
         assert_fail(__STRING(0), __FILE__, __LINE__,
                 __PRETTY_FUNCTION__);
     }
@@ -1191,10 +1191,10 @@ W64 Context::store_internal(Waddr addr, W64 data, byte bytemask) {
     W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask],
             old_data, data);
     if(logable(10))
-        ptl_logfile << "Context::store_internal addr[",
-                    hexstring(addr, 64), "] old_data[",
-                    hexstring(old_data, 64), "] new_data[",
-                    hexstring(merged_data, 64), "]\n";
+        ptl_logfile << "Context::store_internal addr[" <<
+                    hexstring(addr, 64) << "] old_data[" <<
+                    hexstring(old_data, 64) << "] new_data[" <<
+                    hexstring(merged_data, 64) << "]\n";
     *(W64*)(addr) = merged_data;
     return merged_data;
 }
@@ -1203,21 +1203,21 @@ W64 Context::storemask(Waddr paddr, W64 data, byte bytemask) {
     W64 old_data = 0;
     setup_qemu_switch_all_ctx(*this);
     if(logable(10))
-        ptl_logfile << "Trying to write to addr: ", hexstring(paddr, 64),
-                    " with bytemask ", bytemask, " data: ", hexstring(
-                            data, 64), endl;
+        ptl_logfile << "Trying to write to addr: " << hexstring(paddr, 64) <<
+                    " with bytemask " << bytemask << " data: " << hexstring(
+                            data, 64) << endl;
     old_data = ldq_raw((uint8_t*)paddr);
     W64 merged_data = mux64(expand_8bit_to_64bit_lut[bytemask], old_data, data);
     if(logable(10))
-        ptl_logfile << "Context::storemask addr[", hexstring(paddr, 64),
-                    "] data[", hexstring(merged_data, 64), "]\n";
+        ptl_logfile << "Context::storemask addr[" << hexstring(paddr, 64) <<
+                    "] data[" << hexstring(merged_data, 64) << "]\n";
     stq_raw((uint8_t*)paddr, merged_data);
 #ifdef CHECK_STORE
     W64 new_data = 0;
     new_data = ldq_raw((uint8_t*)paddr);
-    ptl_logfile << "Context::storemask store-check: addr[",
-                hexstring(paddr, 64), "] data[", hexstring(new_data,
-                        64), "]\n";
+    ptl_logfile << "Context::storemask store-check: addr[" <<
+                hexstring(paddr, 64) << "] data[" << hexstring(new_data,
+                        64) << "]\n";
     assert(new_data == merged_data);
 #endif
     return data;
@@ -1228,11 +1228,11 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
 
     if(kernel_mode) {
         if(logable(5))
-            ptl_logfile << "Page fault in kernel mode...", endl, flush;
+            ptl_logfile << "Page fault in kernel mode..." << endl << flush;
     }
 
     if(logable(5)) {
-        ptl_logfile << "Context before page fault handling:\n", *this, endl;
+        ptl_logfile << "Context before page fault handling:\n" << *this << endl;
     }
 
     exception_is_int = 0;
@@ -1245,7 +1245,7 @@ void Context::handle_page_fault(Waddr virtaddr, int is_write) {
 
     if(kernel_mode) {
         if(logable(5))
-            ptl_logfile << "Page fault in kernel mode...handled", endl,
+            ptl_logfile << "Page fault in kernel mode...handled" << endl <<
                         flush;
     }
 
@@ -1259,7 +1259,7 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
     setup_qemu_switch_all_ctx(*this);
 
     if(logable(10))
-        ptl_logfile << "Trying to fill tlb for addr: ", (void*)virtaddr, endl;
+        ptl_logfile << "Trying to fill tlb for addr: " << (void*)virtaddr << endl;
 
     W64 cr2 = cr[2];
     int mmu_index = cpu_mmu_index((CPUState*)this);
@@ -1270,7 +1270,7 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
     setup_ptlsim_switch_all_ctx(*this);
     if(fault) {
         if(logable(10))
-            ptl_logfile << "Fault for addr: ", (void*)virtaddr, endl, flush;
+            ptl_logfile << "Fault for addr: " << (void*)virtaddr << endl << flush;
 
         error_code = 0;
         exception_index = -1;
@@ -1279,7 +1279,7 @@ bool Context::try_handle_fault(Waddr virtaddr, int store) {
     }
 
     if(logable(10))
-        ptl_logfile << "Tlb fill for addr: ", (void*)virtaddr, endl, flush;
+        ptl_logfile << "Tlb fill for addr: " << (void*)virtaddr << endl << flush;
 
     return true;
 }

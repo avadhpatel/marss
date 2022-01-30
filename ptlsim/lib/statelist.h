@@ -21,16 +21,16 @@
 #define foreach_list_mutable_linktype(L, obj, entry, nextentry, linktype) \
   linktype* entry; \
   linktype* nextentry; \
-  for (entry = (L).next, nextentry = entry->next, prefetch(entry->next), obj = (typeof(obj))entry; \
-    entry != &(L); entry = nextentry, nextentry = entry->next, prefetch(nextentry), obj = (typeof(obj))entry)
+  for (entry = (L).next, nextentry = entry->next, obj = (typeof(obj))entry; \
+    entry != &(L); entry = nextentry, nextentry = entry->next, obj = (typeof(obj))entry)
 
 #define foreach_list_mutable(L, obj, entry, nextentry) foreach_list_mutable_linktype(L, obj, entry, nextentry, selfqueuelink)
 
 #define foreach_list_mutable_linktype_backwards(L, obj, entry, preventry, linktype) \
   linktype* entry; \
   linktype* preventry; \
-  for (entry = (L).prev, preventry = entry->prev, prefetch(entry->prev), obj = (typeof(obj))entry; \
-    entry != &(L); entry = preventry, preventry = entry->prev, prefetch(preventry), obj = (typeof(obj))entry)
+  for (entry = (L).prev, preventry = entry->prev, obj = (typeof(obj))entry; \
+    entry != &(L); entry = preventry, preventry = entry->prev, obj = (typeof(obj))entry)
 
 #define foreach_list_mutable_backwards(L, obj, entry, preventry) foreach_list_mutable_linktype_backwards(L, obj, entry, preventry, selfqueuelink)
 
@@ -117,7 +117,7 @@
     void checkvalid();
 
     ostream& print(ostream& os) const{
-      os << " (", count, " entries):";
+      os << " (" << count << " entries):";
 
       selfqueuelink* obj;
       foreach_list_mutable(*this, obj, entry, nextentry) {
@@ -129,7 +129,7 @@
     }
 
     ostream& print(ostream& os, const W64& tag) const{
-      os << " tag: ", (void*)tag, " ";
+      os << " tag: " << (void*)tag << " ";
       print(os);
       return os;
     }
@@ -145,7 +145,7 @@ struct FixStateListObject : public selfqueuelink
 	bool free;
 
 	ostream& print(ostream& os) const {
-		os << "idx[", idx, "]";
+		os << "idx[" << idx << "]";
 		return os;
 	}
 };
@@ -225,9 +225,9 @@ struct FixStateList
 	}
 
 	void print_all(ostream& os) {
-		os << "used list: ", endl;
+		os << "used list: " << endl;
 		usedList_.print(os);
-		os << "free list: ", endl;
+		os << "free list: " << endl;
 		freeList_.print(os);
 	}
 

@@ -61,7 +61,7 @@ bool CPUController::handle_interconnect_cb(void *arg)
 {
 	Message *message = (Message*)arg;
 
-	memdebug("Received message in controller: ", get_name(), endl);
+	memdebug("Received message in controller: " << get_name() << endl);
 
 	// ignore the evict message
 	if unlikely (message->request->get_type() == MEMORY_OP_EVICT)
@@ -135,7 +135,7 @@ bool CPUController::is_icache_buffer_hit(MemoryRequest *request)
 	assert(request->is_instruction());
 	lineAddress = request->get_physical_address() >> icacheLineBits_;
 
-	memdebug("ICache Line Address is : ", lineAddress, endl);
+	memdebug("ICache Line Address is : " << lineAddress << endl);
 
 	CPUControllerBufferEntry* entry;
 	foreach_list_mutable(icacheBuffer_.list(), entry, entry_t,
@@ -207,7 +207,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
          * index value so it can wakeup this entry when
          * dependent entry is handled.
          */
-		memdebug("Dependent entry is: ", *dependentEntry, endl);
+		memdebug("Dependent entry is: " << *dependentEntry << endl);
 		dependentEntry->depends = queueEntry->idx;
         queueEntry->waitFor = dependentEntry->idx;
 		queueEntry->cycles = -1;
@@ -228,7 +228,7 @@ int CPUController::access_fast_path(Interconnect *interconnect,
 			cache_access_cb(queueEntry);
 		}
 	}
-	memdebug("Added Queue Entry: ", *queueEntry, endl);
+	memdebug("Added Queue Entry: " << *queueEntry << endl);
 	return -1;
 }
 
@@ -292,8 +292,8 @@ void CPUController::wakeup_dependents(CPUControllerQueueEntry *queueEntry)
 
 void CPUController::finalize_request(CPUControllerQueueEntry *queueEntry)
 {
-	memdebug("Controller: ", get_name(), " Finalizing entry: ",
-			*queueEntry, endl);
+	memdebug("Controller: " << get_name() << " Finalizing entry: " <<
+			*queueEntry << endl);
 	MemoryRequest *request = queueEntry->request;
 
 	int req_latency = sim_cycle - request->get_init_cycles();
@@ -393,7 +393,7 @@ bool CPUController::queue_access_cb(void *arg)
          * index value so it can wakeup this entry when
          * dependent entry is handled.
          */
-		memdebug("Dependent entry is: ", *dependentEntry, endl);
+		memdebug("Dependent entry is: " << *dependentEntry << endl);
 		dependentEntry->depends = queueEntry->idx;
         queueEntry->waitFor = dependentEntry->idx;
 		queueEntry->cycles = -1;
@@ -412,7 +412,7 @@ bool CPUController::queue_access_cb(void *arg)
 		cache_access_cb(queueEntry);
 	}
 
-	memdebug("Added Queue Entry: ", *queueEntry, endl);
+	memdebug("Added Queue Entry: " << *queueEntry << endl);
 
 	return true;
 }

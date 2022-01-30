@@ -134,18 +134,18 @@ int P2PInterconnect::access_fast_path(Controller *controller,
  */
 void P2PInterconnect::print_map(ostream &os)
 {
-	os << "Interconnect: " , get_name(), endl;
-	os << "\tconntected to:", endl;
+	os << "Interconnect: " << get_name() << endl;
+	os << "\tconntected to:" << endl;
 
 	if(controllers_[0] == NULL)
-		os << "\t\tcontroller-1: None", endl;
+		os << "\t\tcontroller-1: None" << endl;
 	else
-		os << "\t\tcontroller-1: ", controllers_[0]->get_name(), endl;
+		os << "\t\tcontroller-1: " << controllers_[0]->get_name() << endl;
 
 	if(controllers_[1] == NULL)
-		os << "\t\tcontroller-2: None", endl;
+		os << "\t\tcontroller-2: None" << endl;
 	else
-		os << "\t\tcontroller-2: ", controllers_[1]->get_name(), endl;
+		os << "\t\tcontroller-2: " << controllers_[1]->get_name() << endl;
 }
 
 bool P2PInterconnect::send_request(Controller *sender,

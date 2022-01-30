@@ -263,12 +263,12 @@ bool BusInterconnect::data_broadcast_completed_cb(void *arg)
 
 void BusInterconnect::print_map(ostream& os)
 {
-	os << "Bus Interconnect: ", get_name(), endl;
-	os << "\tconnected to: ", endl;
+	os << "Bus Interconnect: " << get_name() << endl;
+	os << "\tconnected to: " << endl;
 
 	foreach(i, controllers.count()) {
-		os << "\t\tcontroller[i]: ",
-			controllers[i]->controller->get_name(), endl;
+		os << "\t\tcontroller[i]: " <<
+			controllers[i]->controller->get_name() << endl;
 	}
 }
 

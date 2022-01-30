@@ -150,16 +150,16 @@ class MemoryRequest: public selfqueuelink
 
 		ostream& print(ostream& os) const
 		{
-			os << "Memory Request: core[", coreId_, "] ";
-			os << "thread[", threadId_, "] ";
-			os << "address[0x", hexstring(physicalAddress_, 48), "] ";
-			os << "robid[", robId_, "] ";
-			os << "init-cycle[", cycles_, "] ";
-			os << "ref-counter[", refCounter_, "] ";
-			os << "op-type[", memory_op_names[opType_], "] ";
-			os << "isData[", isData_, "] ";
-			os << "ownerUUID[", ownerUUID_, "] ";
-			os << "ownerRIP[", (void*)ownerRIP_, "] ";
+			os << "Memory Request: core[" << coreId_ << "] ";
+			os << "thread[" << threadId_ << "] ";
+			os << "address[0x" << hexstring(physicalAddress_, 48) << "] ";
+			os << "robid[" << robId_ << "] ";
+			os << "init-cycle[" << cycles_ << "] ";
+			os << "ref-counter[" << refCounter_ << "] ";
+			os << "op-type[" << memory_op_names[opType_] << "] ";
+			os << "isData[" << isData_ << "] ";
+			os << "ownerUUID[" << ownerUUID_ << "] ";
+			os << "ownerRIP[" << (void*)ownerRIP_ << "] ";
 			os << "History[ " << *history << "] ";
             if(coreSignal_) {
                 os << "Signal[ " << coreSignal_->get_name() << "] ";
@@ -200,24 +200,24 @@ class RequestPool: public array<MemoryRequest,REQUEST_POOL_SIZE>
 		}
 
 		void print(ostream& os) {
-			os << "Request pool : size[", size_, "]\n";
-			os << "used requests : count[", usedRequestsList_.count,
-			   "]\n", flush;
+			os << "Request pool : size[" << size_ << "]\n";
+			os << "used requests : count[" << usedRequestsList_.count <<
+			   "]\n" << flush;
 
 			MemoryRequest *usedReq;
 			foreach_list_mutable(usedRequestsList_, usedReq, \
 					entry, nextentry) {
 				assert(usedReq);
-				os << *usedReq , endl, flush;
+				os << *usedReq << endl << flush;
 			}
 
-			os << "free request : count[", freeRequestList_.count,
-			   "]\n", flush;
+			os << "free request : count[" << freeRequestList_.count <<
+			   "]\n" << flush;
 
 			MemoryRequest *freeReq;
 			foreach_list_mutable(freeRequestList_, freeReq, \
 					entry_, nextentry_) {
-				os << *freeReq, endl, flush;
+				os << *freeReq << endl << flush;
 			}
 
 			os << "---- End: Request pool\n";

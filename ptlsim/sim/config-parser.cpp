@@ -25,7 +25,7 @@ static void unescape_string(stringbuf& str)
 }
 
 ostream& ConfigurationParserBase::printusage(const void* baseptr, ostream& os) const {
-  os << "Options are:", endl;
+  os << "Options are:" << endl;
   ConfigurationOption* option = options;
   int maxlength = 0;
   while (option) {
@@ -37,12 +37,12 @@ ostream& ConfigurationParserBase::printusage(const void* baseptr, ostream& os) c
   while (option) {
     void* variable = (baseptr) ? ((void*)(option->offset)) : NULL;
     if (option->type == OPTION_TYPE_SECTION) {
-      os << option->description, ":", endl;
+      os << option->description << ":" << endl;
       option = option->next;
       continue;
     }
 
-    os << "  -", padstring(option->name, -maxlength), " ", option->description, " ";
+    os << "  -" << padstring(option->name, -maxlength) << " " << option->description << " ";
 
 	if (!variable) {
 		option = option->next;
@@ -70,7 +70,7 @@ ostream& ConfigurationParserBase::printusage(const void* baseptr, ostream& os) c
     default:
       assert(false);
     }
-    os << "]", endl;
+    os << "]" << endl;
     option = option->next;
   }
   os << endl;
@@ -97,7 +97,7 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
           found = true;
           void* variable = (void*)(option->offset);
           if ((option->type != OPTION_TYPE_NONE) && (option->type != OPTION_TYPE_BOOL) && (i == (argc+1))) {
-            cerr << "Warning: missing value for option '", argv[i-1], "'", endl;
+            cerr << "Warning: missing value for option '" << argv[i-1] << "'" << endl;
             break;
           }
           switch (option->type) {
@@ -107,7 +107,7 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
             char* p = (i < argc) ? argv[i] : NULL;
             int len = (p) ? strlen(p) : 0;
             if (!len) {
-              cerr << "Warning: option ", argv[i-1], " had no argument; ignoring", endl;
+              cerr << "Warning: option " << argv[i-1] << " had no argument; ignoring" << endl;
               break;
             }
 
@@ -133,7 +133,7 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
             }
             W64 v = (isinf) ? infinity : strtoull(p, &endp, 0);
             if ((!isinf) && (endp[0] != 0)) {
-              cerr << "Warning: invalid value '", p, "' for option ", argv[i-1], "; ignoring", endl;
+              cerr << "Warning: invalid value '" << p << "' for option " << argv[i-1] << "; ignoring" << endl;
             }
             v *= multiplier;
             *((W64*)variable) = v;
@@ -143,7 +143,7 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
           }
           case OPTION_TYPE_FLOAT:
             if (i >= argc) {
-              cerr << "Warning: option ", argv[i-1], " had no argument; ignoring", endl;
+              cerr << "Warning: option " << argv[i-1] << " had no argument; ignoring" << endl;
               break;
             }
             *((double*)variable) = atof(argv[i++]);
@@ -154,7 +154,7 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
             break;
           case OPTION_TYPE_STRING: {
             if (i >= argc) {
-              cerr << "Warning: option ", argv[i-1], " had no argument; ignoring", endl;
+              cerr << "Warning: option " << argv[i-1] << " had no argument; ignoring" << endl;
               break;
             }
             stringbuf& sb = *((stringbuf*)variable);
@@ -171,7 +171,7 @@ int ConfigurationParserBase::parse(void* baseptr, int argc, char* argv[]) {
         option = option->next;
       }
       if (!found) {
-        cerr << "Warning: invalid option '", (inrange(i-1, 0, argc-1) ? argv[i-1] : "<missing>"), "'", endl;
+        cerr << "Warning: invalid option '" << (inrange(i-1, 0, argc-1) ? argv[i-1] : "<missing>") << "'" << endl;
         i++;
       }
     } else {
@@ -224,7 +224,7 @@ int ConfigurationParserBase::parse(void* baseptr, char* argstr) {
 			}
 			if (!found_end_quoted_string)
 			{
-				cerr << "ERROR, could not find end of quoted string starting with " << argv[i] <<"\n", flush;
+				cerr << "ERROR, could not find end of quoted string starting with " << argv[i] <<"\n" << flush;
 				exit(-1);
 			}
 
@@ -240,7 +240,7 @@ int ConfigurationParserBase::parse(void* baseptr, char* argstr) {
 }
 
 ostream& ConfigurationParserBase::print(const void* baseptr, ostream& os) const {
-  os << "Active parameters:", endl;
+  os << "Active parameters:" << endl;
 
   ConfigurationOption* option = options;
   while (option) {
@@ -250,7 +250,7 @@ ostream& ConfigurationParserBase::print(const void* baseptr, ostream& os) const 
       option = option->next;
       continue;
     }
-    os << "  -", padstring(option->name, -12), " ";
+    os << "  -" << padstring(option->name, -12) << " ";
     switch (option->type) {
     case OPTION_TYPE_NONE:
     case OPTION_TYPE_SECTION:
@@ -262,9 +262,9 @@ ostream& ConfigurationParserBase::print(const void* baseptr, ostream& os) const 
       } else if (v == infinity) {
         os << "infinity";
       } else if ((v % 1000000000LL) == 0) {
-        os << (v / 1000000000LL), " G";
+        os << (v / 1000000000LL) << " G";
       } else if ((v % 1000000LL) == 0) {
-        os << (v / 1000000LL), " M";
+        os << (v / 1000000LL) << " M";
       } else {
         os << v;
       }
@@ -295,7 +295,7 @@ void expand_command_list(dynarray<char*>& list, int argc, char** argv, int depth
   stringbuf line;
 
   if (depth >= 1024) {
-    cerr << "Warning: excessive depth (infinite recursion?) while expanding command list", endl;
+    cerr << "Warning: excessive depth (infinite recursion?) while expanding command list" << endl;
     return;
   }
 
@@ -320,7 +320,7 @@ void expand_command_list(dynarray<char*>& list, int argc, char** argv, int depth
     char* listfile = includes[i];
     ifstream is(listfile);
     if (!is) {
-      cerr << "Warning: cannot open command list file '", listfile, "'", endl;
+      cerr << "Warning: cannot open command list file '" << listfile << "'" << endl;
       continue;
     }
 

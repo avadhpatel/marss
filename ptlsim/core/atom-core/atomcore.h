@@ -30,25 +30,25 @@
 #define ATOMLOG2(...) if(logable(ATOM_BASE_LL+1)) { ptl_logfile << __VA_ARGS__ ; }
 #define ATOMLOG3(...) if(logable(ATOM_BASE_LL+4)) { ptl_logfile << __VA_ARGS__ ; }
 
-#define ATOMCORELOG(...) ATOMLOG1("Core:", get_coreid(), " ", __VA_ARGS__, endl)
-#define ATOMTHLOG1(...) ATOMLOG1("Core:", core.get_coreid(), \
-        " Th:", threadid, " ", __VA_ARGS__, endl)
-#define ATOMTHLOG2(...) ATOMLOG2("Core:", core.get_coreid(), \
-        " Th:", threadid, " ", __VA_ARGS__, endl)
-#define ATOMTHLOG3(...) ATOMLOG3("Core:", core.get_coreid(), \
-        " Th:", threadid, " ", __VA_ARGS__, endl)
+#define ATOMCORELOG(...) ATOMLOG1("Core:" << get_coreid() << " " << __VA_ARGS__ << endl)
+#define ATOMTHLOG1(...) ATOMLOG1("Core:" << core.get_coreid() << \
+        " Th:" << threadid << " " << __VA_ARGS__ << endl)
+#define ATOMTHLOG2(...) ATOMLOG2("Core:" << core.get_coreid() << \
+        " Th:" << threadid << " " << __VA_ARGS__ << endl)
+#define ATOMTHLOG3(...) ATOMLOG3("Core:" << core.get_coreid() << \
+        " Th:" << threadid << " " << __VA_ARGS__ << endl)
 
-#define ATOMOPLOG1(...) ATOMLOG1("Core:", thread->core.get_coreid(), \
-        " Th:", thread->threadid, " AtomOp:0x", hexstring(rip,48), \
-        " [", uuid, "] ", __VA_ARGS__, endl)
-#define ATOMOPLOG2(...) ATOMLOG2("Core:", thread->core.get_coreid(), \
-        " Th:", thread->threadid, " AtomOp:0x", hexstring(rip,48), \
-        " [", uuid, "] ", __VA_ARGS__, endl)
-#define ATOMOPLOG3(...) ATOMLOG3("Core:", thread->core.get_coreid(), \
-        " Th:", thread->threadid, " AtomOp:0x", hexstring(rip,48), \
-        " [", uuid, "] ", __VA_ARGS__, endl)
+#define ATOMOPLOG1(...) ATOMLOG1("Core:" << thread->core.get_coreid() << \
+        " Th:" << thread->threadid << " AtomOp:0x" << hexstring(rip,48) << \
+        " [" << uuid << "] " << __VA_ARGS__ << endl)
+#define ATOMOPLOG2(...) ATOMLOG2("Core:" << thread->core.get_coreid() << \
+        " Th:" << thread->threadid << " AtomOp:0x" << hexstring(rip,48) << \
+        " [" << uuid << "] " << __VA_ARGS__ << endl)
+#define ATOMOPLOG3(...) ATOMLOG3("Core:" << thread->core.get_coreid() << \
+        " Th:" << thread->threadid << " AtomOp:0x" << hexstring(rip,48) << \
+        " [" << uuid << "] " << __VA_ARGS__ << endl)
 
-#define ATOMCERR(...) ; //cout << __VA_ARGS__, endl;
+#define ATOMCERR(...) ; //cout << __VA_ARGS__ << endl;
 
 #define HEXADDR(addr) hexstring(addr,48)
 #define HEXDATA(data) hexstring(data,64)
@@ -435,11 +435,11 @@ namespace ATOM_CORE_MODEL {
             W64 oldtag = -1;
             int way = base_t::select(tag, oldtag);
             if (logable(6)) {
-                ptl_logfile << "TLB insertion of virt page ",
-                            (void*)(Waddr)addr, " (virt addr ",
-                            (void*)(Waddr)(addr), ") into way ", way, ": ",
+                ptl_logfile << "TLB insertion of virt page " <<
+                            (void*)(Waddr)addr << " (virt addr " <<
+                            (void*)(Waddr)(addr) << ") into way " << way << ": " <<
                             ((oldtag != tag) ? "evicted old entry" :
-                             "already present"), endl;
+                             "already present") << endl;
             }
             return (oldtag != InvalidTag<W64>::INVALID);
         }
@@ -633,10 +633,10 @@ namespace ATOM_CORE_MODEL {
 
         ostream& print(ostream& os) const
         {
-            os << "  [", index_, "] ";
-            os << "a-op uuid: ", op->uuid, " ";
+            os << "  [" << index_ << "] ";
+            os << "a-op uuid: " << op->uuid << " ";
             os << bytemaskstring((const byte*)&data, bytemask, 8);
-            os << " @ ", hexstring(addr, 48);
+            os << " @ " << hexstring(addr, 48);
             return os;
         }
 
@@ -682,7 +682,7 @@ namespace ATOM_CORE_MODEL {
 
         ostream& print(ostream& os) const
         {
-            os << "a-op uuid: ", op->uuid;
+            os << "a-op uuid: " << op->uuid;
             return os;
         }
 

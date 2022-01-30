@@ -52,8 +52,8 @@ namespace Memory {
         void invalidate() { reset(); }
 
         void print(ostream& os) const {
-            os << "Cacheline: tag[", (void*)tag, "] ";
-            os << "state[", state, "] ";
+            os << "Cacheline: tag[" << (void*)tag << "] ";
+            os << "state[" << state << "] ";
         }
     };
 

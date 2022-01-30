@@ -46,7 +46,7 @@
 #ifdef DEBUG_MEMORY
 #ifdef DEBUG_WITH_FILE_NAME
 #define memdebug(...) if(logable(5) || logMem) { \
-  ptl_logfile << __FILE__, ":", __LINE__,":\t", \
+  ptl_logfile << __FILE__ << ":" << __LINE__ <<":\t" << \
   __VA_ARGS__ ; ptl_logfile.flush(); }
 #else
 #define memdebug(...) if(logable(5) || logMem) { \
@@ -120,7 +120,7 @@ namespace Memory {
           os << "Signal:" << signal_->get_name() << " ";
         os << "Clock:" << clock_ << " ";
         os << "arg:" << arg_ ;
-        os << ">" << endl, flush;
+        os << ">" << endl << flush;
         return os;
       }
 

@@ -44,14 +44,14 @@ bool OooCore::icache_wakeup(void *arg) {
     Memory::MemoryRequest *request = (Memory::MemoryRequest*)arg;
 
     W64 physaddr = request->get_physical_address();
-    if(logable(99)) ptl_logfile << " icache_wakeup addr ", (void*) physaddr, endl;
+    if(logable(99)) ptl_logfile << " icache_wakeup addr " << (void*) physaddr << endl;
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
         if unlikely (thread
                 && thread->waiting_for_icache_fill
                 && thread->waiting_for_icache_fill_physaddr ==
                 floor(physaddr, ICACHE_FETCH_GRANULARITY)) {
-            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wakeup of physaddr ", (void*)(Waddr)physaddr, endl;
+            if (logable(6)) ptl_logfile << "[vcpu " << thread->ctx.cpu_index << "] i-cache wakeup of physaddr " << (void*)(Waddr)physaddr << endl;
             thread->waiting_for_icache_fill = 0;
             thread->waiting_for_icache_fill_physaddr = 0;
             if unlikely (thread->itlb_walk_level > 0) {
@@ -59,8 +59,8 @@ bool OooCore::icache_wakeup(void *arg) {
                 thread->itlbwalk();
             }
         }else{
-            if (logable(6)) ptl_logfile << "[vcpu ", thread->ctx.cpu_index, "] i-cache wait ", (void*)thread->waiting_for_icache_fill_physaddr,
-                " delivered ", (void*) physaddr,endl;
+            if (logable(6)) ptl_logfile << "[vcpu " << thread->ctx.cpu_index << "] i-cache wait " << (void*)thread->waiting_for_icache_fill_physaddr <<
+                " delivered " << (void*) physaddr << endl;
         }
     }
 
@@ -83,7 +83,7 @@ bool ThreadContext::probeitlb(Waddr icache_addr) {
     if(!itlb.probe(icache_addr, threadid)) {
 
         if(logable(6)) {
-            ptl_logfile << "itlb miss addr: ", (void*)icache_addr, endl;
+            ptl_logfile << "itlb miss addr: " << (void*)icache_addr << endl;
         }
 
         itlb_walk_level = ctx.page_table_level_count();
@@ -103,14 +103,14 @@ bool ThreadContext::probeitlb(Waddr icache_addr) {
  */
 void ThreadContext::itlbwalk() {
     if(logable(6)) {
-        ptl_logfile << "itlbwalk cycle ", sim_cycle, " tlb_walk_level: ",
-                    itlb_walk_level, " virtaddr: ", (void*)(W64(fetchrip)), endl;
+        ptl_logfile << "itlbwalk cycle " << sim_cycle << " tlb_walk_level: " <<
+                    itlb_walk_level << " virtaddr: " << (void*)(W64(fetchrip)) << endl;
     }
 
     if unlikely (!itlb_walk_level) {
 itlb_walk_finish:
         if(logable(6)) {
-            ptl_logfile << "itlbwalk finished for virtaddr: ", (void*)(W64(fetchrip)), endl;
+            ptl_logfile << "itlbwalk finished for virtaddr: " << (void*)(W64(fetchrip)) << endl;
         }
         itlb_walk_level = 0;
         itlb.insert(fetchrip, threadid);
@@ -209,7 +209,7 @@ void ThreadContext::annul_fetchq() {
  */
 void OooCore::flush_pipeline() {
     /* Clear per-thread state: */
-    if (logable(3)) ptl_logfile << "flush_pipeline all.",endl;
+    if (logable(3)) ptl_logfile << "flush_pipeline all." << endl;
     foreach (i, threadcount) {
         ThreadContext* thread = threads[i];
         thread->flush_pipeline();
@@ -224,7 +224,7 @@ void OooCore::flush_pipeline() {
  * their initial state, and resume from the state saved in ctx.commitarf.
  */
 void ThreadContext::flush_pipeline() {
-    if (logable(3)) ptl_logfile << " core[", core.get_coreid(),"] TH[", threadid, "] flush_pipeline()",endl;
+    if (logable(3)) ptl_logfile << " core[" << core.get_coreid() << "] TH[" << threadid << "] flush_pipeline()" << endl;
 
     core.machine.memoryHierarchyPtr->flush(core.get_coreid());
 
@@ -307,7 +307,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
     }
 
     if(logable(10))
-        ptl_logfile << "realrip:", hexstring(realrip, 48), " csbase:", ctx.segs[R_CS].base,
+        ptl_logfile << "realrip:" << hexstring(realrip, 48) << " csbase:" << ctx.segs[R_CS].base <<
                     endl;
     fetchrip = realrip;
     fetchrip.update(ctx);
@@ -326,7 +326,7 @@ void ThreadContext::reset_fetch_unit(W64 realrip) {
  */
 void ThreadContext::invalidate_smc() {
     if unlikely (smc_invalidate_pending) {
-        if (logable(5)) ptl_logfile << "SMC invalidate pending on ", smc_invalidate_rvp, endl;
+        if (logable(5)) ptl_logfile << "SMC invalidate pending on " << smc_invalidate_rvp << endl;
         bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnlo, INVALIDATE_REASON_SMC);
         if unlikely (smc_invalidate_rvp.mfnlo != smc_invalidate_rvp.mfnhi) bbcache[ctx.cpu_index].invalidate_page(smc_invalidate_rvp.mfnhi, INVALIDATE_REASON_SMC);
         smc_invalidate_pending = 0;
@@ -439,10 +439,11 @@ void ThreadContext::redispatch_deadlock_recovery() {
     thread_stats.dispatch.redispatch.deadlock_flushes++;
     /* don't want to reset the counter for no commit in this case */
     W64 previous_last_commit_at_cycle = last_commit_at_cycle;
-    if (logable(3)) ptl_logfile << " redispatch_deadlock_recovery, flush_pipeline.",endl;
+    if (logable(3)) ptl_logfile << " redispatch_deadlock_recovery, flush_pipeline." << endl;
     flush_pipeline();
     last_commit_at_cycle = previous_last_commit_at_cycle; /* so we can exit after no commit after deadlock recovery a few times in a roll */
-    ptl_logfile << "[vcpu ", ctx.cpu_index, "] thread ", threadid, ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() ", previous_last_commit_at_cycle, endl;
+    ptl_logfile << "[vcpu " << ctx.cpu_index << "] thread " << threadid <<
+       ": reset thread.last_commit_at_cycle to be before redispatch_deadlock_recovery() " << previous_last_commit_at_cycle << endl;
     /*
     //
     // This is a more selective scheme than the full pipeline flush.
@@ -550,7 +551,7 @@ bool ThreadContext::fetch() {
 
         if unlikely ((!current_basic_block) || (current_basic_block_transop_index >= current_basic_block->count)) {
             if(logable(10))
-                ptl_logfile << "Trying to fech code from rip: ", fetchrip, endl;
+                ptl_logfile << "Trying to fech code from rip: " << fetchrip << endl;
 
             fetchrip.update(ctx);
             if(fetch_or_translate_basic_block(fetchrip) == NULL) {
@@ -588,7 +589,7 @@ bool ThreadContext::fetch() {
             // test if icache is available:
             bool cache_available = core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, true/* icache */);
             if(!cache_available){
-                msdebug << " icache can not read core:", core.get_coreid(), " threadid ", threadid, endl;
+                msdebug << " icache can not read core:" << core.get_coreid() << " threadid " << threadid << endl;
                 thread_stats.fetch.stop.icache_stalled++;
                 break;
             }
@@ -691,7 +692,7 @@ bool ThreadContext::fetch() {
              */
             if unlikely (bits((W64)fetchrip, 43, (64 - 43)) != bits(predrip, 43, (64-43))) {
                 if(logable(10))
-                    ptl_logfile << "Predrip[", predrip, "] and fetchrip[", (W64)fetchrip, "] address space is different\n";
+                    ptl_logfile << "Predrip[" << predrip << "] and fetchrip[" << (W64)fetchrip << "] address space is different\n";
                 predrip = transop.riptaken;
                 redirectrip = 0;
             } else {
@@ -1267,7 +1268,11 @@ int ReorderBufferEntry::select_cluster() {
     foreach (i, MAX_CLUSTERS) { cluster_operand_tally[i] = 0; }
     foreach (i, MAX_OPERANDS) {
         PhysicalRegister& r = *operands[i];
+#if 0
         if ((&r) && ((r.state == PHYSREG_WAITING) || (r.state == PHYSREG_BYPASS)) && (r.rob->cluster >= 0)) cluster_operand_tally[r.rob->cluster]++;
+#endif
+        if (((r.state == PHYSREG_WAITING) || (r.state == PHYSREG_BYPASS)) && (r.rob->cluster >= 0)) 
+          cluster_operand_tally[r.rob->cluster]++;
     }
 
     assert(executable_on_cluster);
@@ -1635,13 +1640,14 @@ void ThreadContext::flush_mem_lock_release_list(int start) {
                 ctx.cpu_index);
 
         if (!lock) {
-            ptl_logfile << "ERROR: thread ", ctx.cpu_index, ": attempted to release queued lock #", i, " for physaddr ", (void*)lockaddr, ": lock was ", lock, endl;
+            ptl_logfile << "ERROR: thread " << ctx.cpu_index << ": attempted to release queued lock #" << i << 
+              " for physaddr " << (void*)lockaddr << ": lock was " << lock << endl;
             assert(false);
         }
 
         if(logable(8)) {
-            ptl_logfile << "Releasing mem lock of addr: ", lockaddr,
-                        " from cpu: ", ctx.cpu_index, endl;
+            ptl_logfile << "Releasing mem lock of addr: " << lockaddr <<
+                        " from cpu: " << ctx.cpu_index << endl;
         }
 
         core.memoryHierarchy->invalidate_lock(lockaddr, ctx.cpu_index);
@@ -1853,17 +1859,17 @@ int ReorderBufferEntry::commit() {
             }
 
         if(logable(5)) {
-            ptl_logfile << "Can't Commit ROB entry: ", *this, " because subrob: ",
-                        *cant_commit_subrob, endl;
+            ptl_logfile << "Can't Commit ROB entry: " << *this << " because subrob: " <<
+                        *cant_commit_subrob << endl;
         }
         return COMMIT_RESULT_NONE;
     }
 
     if(logable(5)) {
-        ptl_logfile << "Committing ROB entry: ", *this,
-                    " destreg_value:", hexstring(physreg->data, 64),
-                    " destflags: ", hexstring(physreg->flags, 16),
-                    " flagmask: ", hexstring(uop.setflags, 16),
+        ptl_logfile << "Committing ROB entry: " << *this <<
+                    " destreg_value:" << hexstring(physreg->data, 64) << 
+                    " destflags: " << hexstring(physreg->flags, 16) <<
+                    " flagmask: " << hexstring(uop.setflags, 16) <<
                     endl;
     }
 
@@ -1878,7 +1884,7 @@ int ReorderBufferEntry::commit() {
 
     /* check if we can access dcache for store */
     if(st && !core.memoryHierarchy->is_cache_available(core.get_coreid(), threadid, false/* icache */)){
-        msdebug << " dcache can not write. core:", core.get_coreid(), " threadid ", threadid, endl;
+        msdebug << " dcache can not write. core:" << core.get_coreid() << " threadid " << threadid << endl;
         thread.thread_stats.commit.result.dcache_stall++;
         return COMMIT_RESULT_NONE;
     }
@@ -1895,8 +1901,8 @@ int ReorderBufferEntry::commit() {
         }
 
         if(logable(10)) {
-            ptl_logfile << "ROB Commit failed because Exception ",
-                        ctx.exception, endl, flush;
+            ptl_logfile << "ROB Commit failed because Exception " <<
+                        ctx.exception << endl << flush;
         }
 
         return COMMIT_RESULT_EXCEPTION;
@@ -2043,7 +2049,7 @@ int ReorderBufferEntry::commit() {
 #endif
 
     if (logable(10)) {
-        ptl_logfile << "ROB Commit RIP check...\n", flush;
+        ptl_logfile << "ROB Commit RIP check...\n" << flush;
     }
 
     if(ctx.get_cs_eip() != uop.rip.rip) {
@@ -2061,7 +2067,7 @@ int ReorderBufferEntry::commit() {
     }
 
     if (logable(10)) {
-        ptl_logfile << "ROB Commit RIP check Done...\n", flush;
+        ptl_logfile << "ROB Commit RIP check Done...\n" << flush;
     }
 
     /*
@@ -2092,12 +2098,12 @@ int ReorderBufferEntry::commit() {
             assert(isbranch(uop.opcode));
 
             if(logable(10))
-                ptl_logfile << "destination is REG_rip : ", physreg->data, endl, flush;
+                ptl_logfile << "destination is REG_rip : " << physreg->data << endl << flush;
 
             if(uop.riptaken != physreg->data) {
                 if(logable(6)) {
-                    ptl_logfile << "branch misprediction: assumed-rip: ",
-                                uop.riptaken, " actual-rip: ", physreg->data,
+                    ptl_logfile << "branch misprediction: assumed-rip: " <<
+                                uop.riptaken << " actual-rip: " << physreg->data <<
                                 endl;
                 }
                 /* Annul the remaining ROB entries and fetch new code */
@@ -2272,17 +2278,17 @@ int ReorderBufferEntry::commit() {
         thread.total_insns_committed++;
 
 #ifdef TRACE_RIP
-            ptl_rip_trace << "commit_rip: ",
-                          hexstring(uop.rip.rip, 64), " \t",
-                          "simcycle: ", sim_cycle, "\tkernel: ",
-                          uop.rip.kernel, endl;
+            ptl_rip_trace << "commit_rip: " <<
+                          hexstring(uop.rip.rip, 64) << " \t" <<
+                          "simcycle: " << sim_cycle << "\tkernel: " <<
+                          uop.rip.kernel << endl;
 #endif
         // if(uop.rip.rip > 0x7f0000000000)
         // per_core_event_update(core.coreid, insns_in_mode.userlib++);
     }
 
     if (logable(10)) {
-        ptl_logfile << "ROB Commit Done...\n", flush;
+        ptl_logfile << "ROB Commit Done...\n" << flush;
     }
 
     total_uops_committed++;
@@ -2301,7 +2307,7 @@ int ReorderBufferEntry::commit() {
     }
 
     if unlikely (uop_is_eom & thread.stop_at_next_eom) {
-        ptl_logfile << "[vcpu ", thread.ctx.cpu_index, "] Stopping at cycle ", sim_cycle, " (", total_insns_committed, " commits)", endl;
+        ptl_logfile << "[vcpu " << thread.ctx.cpu_index << "] Stopping at cycle " << sim_cycle << " (" << total_insns_committed << " commits)" << endl;
         return COMMIT_RESULT_STOP;
     }
 
