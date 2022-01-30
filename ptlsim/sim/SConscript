@@ -18,9 +18,9 @@ def machine_builder_func(env, m_name):
     # for this machine is met or not
     min_c = 0
     max_c = env['num_cpus']
-    if config['machine'][m_name].has_key('min_contexts'):
+    if 'min_contexts' in config['machine'][m_name]:
         min_c = config['machine'][m_name]['min_contexts']
-    if config['machine'][m_name].has_key('max_contexts'):
+    if 'max_contexts' in config['machine'][m_name]:
         max_c = config['machine'][m_name]['max_contexts']
 
     if min_c > env['num_cpus']:

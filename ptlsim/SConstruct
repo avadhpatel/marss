@@ -32,6 +32,7 @@ optimization_defs += '-fno-rtti -funroll-loops -fstrict-aliasing '
 
 env.Append(CCFLAGS = ' -fdiagnostics-color=always ')
 env.Append(CCFLAGS = ' -std=gnu++11 ')
+#env.Append(CCFLAGS = ' -std=c++11 ')
 
 GCC_VERSION = subprocess.Popen([env['CC'], '-dumpversion'],
 				stdout=subprocess.PIPE).communicate()[0].strip()
@@ -42,9 +43,9 @@ if int(debug):
     if int(debug) == 1:
     	env.Append(CCFLAGS = '-g')
     elif int(debug) == 2: #For more detailed debugging information
-		env.Append(CCFLAGS = '-ggdb3')
-		env.Append(CCFLAGS = '-g3')
-		env.Append(CCFLAGS = '-O0')
+        env.Append(CCFLAGS = '-ggdb3')
+        env.Append(CCFLAGS = '-g3')
+        env.Append(CCFLAGS = '-O0')
 
     # Enable tests
     env.Append(CCFLAGS = '-DENABLE_TESTS')
