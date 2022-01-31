@@ -87,10 +87,10 @@ def _check_config(config):
 def _check_required_key(req_objs, obj_key, obj, filename, objName=None):
     req_obj = req_objs[obj_key]
     for key in req_obj:
-        if type(key) == dict:
+        if isinstance(key, dict):
             for key1,val1 in key.items():
                 _check_required_key(key, key1, obj[key1], filename, objName)
-        elif key not in obj:
+        elif obj.get(key) is None:
             errmsg = "\nERROR:\n"
             errmsg += "\tFile: %s\n" % filename
             errmsg += "\tConfiguration: %s\n" % obj_key
@@ -120,7 +120,7 @@ def _parse_file(filename,
     try:
         with open(filename, 'r') as fl:
             for doc in yaml.load_all(fl):
-                if 'import' in doc:
+                if doc.get('import') is not None:
                     [_parse_file(_full_filename(filename, import_file), config)
                             for import_file in doc['import']]
                 _merge_docs(config, doc, filename)
@@ -151,10 +151,10 @@ def _merge_docs(base, new, filename):
     '''Merge contents of new into base'''
     for key in _required_keys['config']:
         _debug("Key : %s" % key)
-        if key in new:
+        if new.get(key) is not None:
             for name,obj in new[key].items():
 
-                if name in base[key]:
+                if base[key].get(name) is not None:
                     err_st = "Found 2nd defination of module %s type %s" % (
                             name, key)
                     err_st += "\nFirst Defination in file: %s" % (
@@ -163,7 +163,7 @@ def _merge_docs(base, new, filename):
                             os.path.abspath(filename))
                     _error(err_st)
 
-                if 'base' in obj:
+                if obj.get('base') is not None:
                     _merge_obj_parms(new[key], obj)
 
                 _check_required_key(_required_keys, key, obj, filename, name)
@@ -179,14 +179,14 @@ def _merge_params(conf):
 def _merge_obj_parms(keyObj, obj):
     '''Merge params of given object under 'key'.'''
 
-    if '_params_merged' in obj:
+    if obj.get('_params_merged') is not None:
         _debug("Found Obj with params merged: %s" % str(obj))
         return
 
     base_name = obj['base']
     base = _get_base_obj(keyObj, base_name)
     if base and base != obj:
-        if '_params_merged' not in base:
+        if base.get('_params_merged') is None:
             _merge_obj_parms(keyObj, base)
         params = copy.copy(base['params'])
         params.update(obj['params'])

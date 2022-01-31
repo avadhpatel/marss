@@ -8,7 +8,7 @@
 try:
     import yaml
 except (ImportError, NotImplementedError):
-    import os,sys
+    import sys
     sys.path.append("./ptlsim/lib/python")
     import yaml
 
@@ -17,7 +17,6 @@ try:
 except:
     from yaml import Loader
 
-import os
 import sys
 from optparse import OptionParser, OptionGroup
 
@@ -346,7 +345,7 @@ def read_config(config_filename):
 
 def check_config(config, options):
     type_conf = config[options.type]
-    if options.type != "cache" and not type_conf.has_key(options.name):
+    if options.type != "cache" and type_conf.get(options.name) is None:
         _error("Invalid configuration name.")
 
 def get_requested_type_config(config, config_type):
@@ -354,7 +353,7 @@ def get_requested_type_config(config, config_type):
 
 def get_param_string(key, val):
     ret_str = "#define %s " % key
-    if type(val) == str:
+    if isinstance(val, str):
         ret_str += "\"%s\"" % val
     else:
         ret_str += "%s" % val
@@ -362,10 +361,7 @@ def get_param_string(key, val):
 
 def write_params_file(config, options):
     obj_conf = config[options.type][options.name]
-    if obj_conf.has_key("params"):
-        params = obj_conf["params"]
-    else:
-        params = {}
+    params = obj_conf.get('params', {})
 
     with open(options.output, 'w') as out_file:
         out_file.write(auto_gen_header % obj_conf["_file"])
@@ -387,9 +383,9 @@ def write_machine_headers(out_file):
     out_file.write(machine_namespaces)
 
 def write_option_logic(st, of, name, opt, val):
-    if type(val) == str:
+    if isinstance(val, str):
         val = '"%s"' % val
-    elif type(val) == bool:
+    elif isinstance(val, bool):
         val = '%s' % str(val).lower()
     of.write(st % (name, opt, val))
 
@@ -402,11 +398,11 @@ def get_cache_cfg(config, name):
 def write_core_logic(config, m_conf, of):
     of.write(machine_core_loop_start)
     for core in m_conf["cores"]:
-        assert config["core"].has_key(core["type"]), \
+        assert config["core"].get(core["type"]) is not None, \
                 "Can't find core configuration %s" % core["type"]
         core_cfg = config["core"][core["type"]]
 
-        if core.has_key("option"):
+        if core.get("option") is not None:
             for key,val in core["option"].items():
                 write_option_logic(machine_core_option_add, of,
                         core["name_prefix"], key, val)
@@ -417,7 +413,7 @@ def write_core_logic(config, m_conf, of):
 
 def write_cont_logic(config, m_conf, of, n1, n2):
     for cache in m_conf[n1]:
-        assert config[n2].has_key(cache["type"]), \
+        assert config[n2].get(cache["type"]) is not None, \
                 "Can't find cache configuration %s" % \
                 cache["type"]
         cache_cfg = config[n2][cache["type"]]
@@ -430,12 +426,12 @@ def write_cont_logic(config, m_conf, of, n1, n2):
 
         if cache["insts"] == "$NUMCORES":
             of.write(machine_for_each_core_loop_i)
-        elif type(cache["insts"]) == int or cache["insts"].isdigit():
+        elif isinstance(cache['insts'], int) or cache["insts"].isdigit():
             of.write(machine_for_each_num_loop_i %
                     int(cache["insts"]))
 
         # Check if there are any options to add
-        if cache.has_key("option"):
+        if cache.get("option") is not None:
             for key,val in cache["option"].items():
                 write_option_logic(machine_option_add_i, of, name_pfx,
                         key, val)
@@ -496,7 +492,7 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_connection_def % (base,
                     int_name))
 
-                if interconn.has_key("option"):
+                if interconn.get("option") is not None:
                     for key,val in interconn["option"].items():
                         write_option_logic(machine_option_add_i, of, int_name,
                                 key, val)
@@ -514,14 +510,16 @@ def write_interconn_logic(config, m_conf, of):
                     if 'core' in cont:
                         write_core_cache_bits = True
                         core_cont_conn_type = conn_type
+                    else:
+                        cache_cont = cont
 
                 if write_core_cache_bits:
                     if core_cont_conn_type == 'INTERCONN_TYPE_I':
                         of.write(core_cont_set_icache_bits % (
-                            get_cache_line_size(config, m_conf, cont)))
+                            get_cache_line_size(config, m_conf, cache_cont)))
                     elif core_cont_conn_type == 'INTERCONN_TYPE_D':
                         of.write(core_cont_set_dcache_bits % (
-                            get_cache_line_size(config, m_conf, cont)))
+                            get_cache_line_size(config, m_conf, cache_cont)))
 
                 of.write(machine_loop_end)
 
@@ -531,7 +529,7 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_connection_def % (base,
                     int_name))
 
-                if interconn.has_key("option"):
+                if interconn.get("option") is not None:
                     for key,val in interconn["option"].items():
                         write_option_logic(machine_option_add_i, of, int_name,
                                 key, val)
@@ -555,7 +553,7 @@ def write_interconn_logic(config, m_conf, of):
                 of.write(machine_connection_def % (base,
                     int_name))
 
-                if interconn.has_key("option"):
+                if interconn.get("option") is not None:
                     for key,val in interconn["option"].items():
                         write_option_logic(machine_option_add_i, of, int_name,
                                 key, val)
