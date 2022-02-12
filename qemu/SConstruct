@@ -22,6 +22,7 @@ env['CPPPATH'] = []
 env['CPPPATH'].append([".", "..", target_path, env['source_path']])
 env['CPPPATH'].append(target['dir'])
 env['CPPPATH'].append(ptlsim_inc_dir)
+env.Append(CCFLAGS = "-fno-strict-aliasing")
 env.Append(CCFLAGS = "-MMD -MP -DNEED_CPU_H")
 env.Append(CCFLAGS = "-DMARSS_QEMU")
 
@@ -40,7 +41,7 @@ if int(debug):
         env.Append(CCFLAGS = '-g3')
         env.Append(CCFLAGS = '-O0')
 else:
-    env.Append(CCFLAGS = '-O3 -march=native')
+    env.Append(CCFLAGS = '-O0 -march=native')
 
 google_perftools = ARGUMENTS.get('gperf', None)
 if google_perftools != None:
