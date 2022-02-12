@@ -28,7 +28,7 @@ env['CPPPATH'].append("%s/%s" % (qemu_dir, "fpu"))
 env['CPPPATH'].append("%s/%s" % (qemu_dir, "x86_64-softmmu"))
 
 optimization_defs = '-fno-trapping-math -fstack-protector -fno-exceptions '
-optimization_defs += '-fno-rtti -funroll-loops -fstrict-aliasing '
+optimization_defs += '-fno-rtti -fno-strict-aliasing '
 
 env.Append(CCFLAGS = ' -fdiagnostics-color=always ')
 env.Append(CCFLAGS = ' -std=gnu++11 ')
@@ -56,7 +56,7 @@ if int(debug):
     env['tests'] = True
 
 else:
-    env.Append(CCFLAGS = '-O3 -march=native')
+    env.Append(CCFLAGS = '-O0 -march=native')
     env.Append(CCFLAGS = '-DDISABLE_ASSERT')
     env.Append(CCFLAGS = '-DDISABLE_LOGGING')
     env.Append(CCFLAGS = optimization_defs)
