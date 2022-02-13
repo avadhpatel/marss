@@ -4,19 +4,7 @@
 #
 # Generate .h files from given configuration
 
-
-try:
-    import yaml
-except (ImportError, NotImplementedError):
-    import sys
-    sys.path.append("./ptlsim/lib/python")
-    import yaml
-
-try:
-    from yaml import CLoader as Loader
-except:
-    from yaml import Loader
-
+import json
 import sys
 from optparse import OptionParser, OptionGroup
 
@@ -341,7 +329,7 @@ def check_options(options, parser):
 
 def read_config(config_filename):
     with open(config_filename, 'r') as config_file:
-        return yaml.load(config_file)
+        return json.loads(config_file.read())
 
 def check_config(config, options):
     type_conf = config[options.type]

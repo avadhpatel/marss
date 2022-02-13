@@ -113,7 +113,7 @@ void ptl_machine_configure(const char* config_str);
  *                             returns the CPUX86Context* of that Context
  */
 struct CPUX86State;
-CPUX86State* ptl_create_new_context(void);
+struct CPUX86State* ptl_create_new_context(void);
 
 /*
  * ptl_reconfigure
@@ -238,7 +238,7 @@ void init_simpoints(void);
  *
  * @param ctx CPU Context
  */
-void set_next_simpoint(CPUX86State* ctx);
+void set_next_simpoint(struct CPUX86State* ctx);
 
 /**
  * @brief Indicate if Emualtion mode is running in fast-fwd mode or not

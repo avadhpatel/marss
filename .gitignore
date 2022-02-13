@@ -56,9 +56,5 @@ cscope.out
 .gdb_history
 gdb.txt
 
-# scons temporary/db files
-.sconf_temp*
-.sconsign.dblite
-
 # Any patch files
 *.patch
